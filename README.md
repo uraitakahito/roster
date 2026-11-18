@@ -50,13 +50,17 @@ Sustaining Engineer 役を起こす 1 行は、`/dependabot-triage` が自分の
 
 ## 信頼のダイアログ
 
-`--add-dir` の先が信頼されていないと、起動のときにも「Adding a new directory … trust?」のダイアログで止まる。信頼済みの folder の下なら出ない。新しい場所に置いたら、その folder で 1 度 Claude Code を起こして「Yes, I trust this folder」を選んでおく（信頼は残り、その下の全部に効く）。
+`--add-dir` の先が信頼されていないと、対話で起こしたときに「Adding a new directory … trust?」のダイアログで止まる（既定は No・`-p` では出ない）。
+
+- 信頼は、信頼した folder が git の repo ならその repo 全体に、そうでなければその下の全部に効く。**この repo は別の git の repo なので、信頼済みの folder の下に置いても信頼は及ばない**（信頼済みの folder の下の、git の repo でない folder では出なかった）。
+- 置いた場所ごとに、**この repo の folder で 1 度 Claude Code を対話で起こし**、「Yes, I trust this folder」を選んでおく。信頼は残る。
+- 起こした Sustaining Engineer 役がこのダイアログで止まると、題が替わらない。`/dependabot-triage` は Yes を押さずに閉じ、人に信頼を頼む。
 
 ## 移す手順
 
 1. 動いている Sustaining Engineer 役が 0 のときに行う。
 2. `mv <今の folder> <新しい folder>`（git の履歴ごと移る）。
-3. 新しい folder で 1 度 Claude Code を起こして信頼する（上の「信頼のダイアログ」）。
+3. 新しい folder で 1 度 Claude Code を対話で起こして信頼する（上の「信頼のダイアログ」。信頼は path に付くので、移すたびに要る）。
 4. TPM 役を起こす命令（Snippets など）の `--add-dir` の path を 1 か所替える。
 5. 動いている TPM 役は、起こし直すか `/add-dir <新しい folder>` を打つ。Sustaining Engineer 役の旗は skill が自分で求めるので直さない。
 

@@ -85,7 +85,7 @@ cmux workspace create --name "Sustaining <repo>#<PR>" --cwd <cwd> \
 - 自分の workspace は `cmux identify` の caller の `workspace_ref`。
 - 起動の命令は 1,024 バイトを超えると黙って実行されない。上の形を延ばさない。
 - **起こした後 90 秒の間に、`cmux workspace list` でその workspace の題が `Sustaining <repo>#<PR>` に替わったかを見る**（`/sustaining` の最初の手が題を替える）。替わらなければ `cmux read-screen --workspace <新しい workspace>` で画面を読む:
-  - `Adding a new directory` や `trust` のダイアログ: `<root>` が信頼されていない。`<root>` で 1 度 Claude Code を起こして信頼するよう Product Manager に頼む（README の「移す手順」）。その workspace は `close --force`。
+  - `Adding a new directory` や `trust` のダイアログ: `<root>` が信頼されていない（この repo は別の git の repo なので、信頼済みの folder の下に置いても信頼は及ばない）。**Yes は押さずに**その workspace を `close --force` し、`<root>` で 1 度 Claude Code を対話で起こして信頼するよう Product Manager に頼む（README の「信頼のダイアログ」）。
   - `Unknown command: /sustaining`: 旗か `<root>` の誤り。`close --force` して、命令を直して 1 度だけ起こし直す。2 回目も替わらなければ Product Manager に知らせる。
 - ほかの作業と順番がぶつかるとき（`rules.md` に書いてある物）は、起こすのを遅らせてよい。
 
