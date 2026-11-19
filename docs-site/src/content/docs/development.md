@@ -16,7 +16,7 @@ pnpm run build       # test/cli.test.ts は build 済みの dist/ を動かす�
 pnpm test            # Vitest
 ```
 
-`pnpm test` は build をしない。`cli/dist/` が無いと `cli/test/cli.test.ts` が「先に pnpm run build を打ってください」で落ちる。GitHub Actions でも同じ順に流す（`.github/workflows/test.yml`）。
+`pnpm test` は build をしない。`dist/` が無いと `test/cli.test.ts` が「先に pnpm run build を打ってください」で落ちる。GitHub Actions でも同じ順に流す（`.github/workflows/test.yml`）。
 
 ## 判定の道具
 
