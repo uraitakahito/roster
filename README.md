@@ -17,10 +17,10 @@ Claude Code の skill を、使う project の外に置く repo。使う側の�
 | skill | 呼ぶ人 | すること |
 |---|---|---|
 | `/tpm` | TPM 役（`bin/tpm` が起こす） | Product Manager を助け、課題ごとに Software Engineer 役・DevOps Engineer 役を起こす。起きたとき、Dependabot の設定があれば `/dependabot-triage` を呼ぶ |
-| `/se tpm=<surface> brief=<URL> [jira=<課題>]` | Software Engineer 役（TPM 役が起こす） | 課題 1 つを受け持つ。依頼書（Artifact）を読み、調査・提案・計画・実装・テストを worktree で進め、成果を Artifact と PR で出す |
-| `/devops tpm=<surface> [brief=<URL>] [jira=<課題>]` | DevOps Engineer 役（TPM 役が起こす） | Apple Container と Windmill のビルド・デプロイ・環境の整備。並べて動いている物に響く操作の前は TPM 役に相談する |
+| `/software-engineer tpm=<surface> brief=<URL> [jira=<課題>]` | Software Engineer 役（TPM 役が起こす） | 課題 1 つを受け持つ。依頼書（Artifact）を読み、調査・提案・計画・実装・テストを worktree で進め、成果を Artifact と PR で出す |
+| `/devops-engineer tpm=<surface> [brief=<URL>] [jira=<課題>]` | DevOps Engineer 役（TPM 役が起こす） | Apple Container と Windmill のビルド・デプロイ・環境の整備。並べて動いている物に響く操作の前は TPM 役に相談する |
 | `/dependabot-triage` | Technical Program Manager 役（TPM 役） | Dependabot の PR を集め、依存の版の公開から 72 時間を判定し、対象の PR ごとに Sustaining Engineer 役を起こす。merge と workspace を閉じるのも TPM 役。`一覧だけ` で表だけ |
-| `/sustaining <repo>#<PR> tpm=<workspace>` | Sustaining Engineer 役（TPM 役が起こす） | PR 1 本を受け持つ。72 時間の確かめ・直し・CI を緑に・TPM 役に merge を頼む |
+| `/sustaining-engineer <repo>#<PR> tpm=<workspace>` | Sustaining Engineer 役（TPM 役が起こす） | PR 1 本を受け持つ。72 時間の確かめ・直し・CI を緑に・TPM 役に merge を頼む |
 
 役のあいだの決まり（知らせの送り方と頭・サイドバーの `model` と `wait`・Product Manager への確かめ方・文書の食い違い・共有の環境・終わり方）は `.claude/skills/_shared/protocol.md` の 1 か所に書き、どの役もそれを読む。TPM 役が書く依頼書には、その課題だけのことを書く（ひな形は `.claude/skills/tpm/brief-template.md`）。
 
@@ -33,13 +33,13 @@ Claude Code の skill を、使う project の外に置く repo。使う側の�
 TPM 役を起こした folder に置くと、TPM 役が起こす役の既定を替えられる。無ければ `/tpm` の表の既定（Software Engineer 役は Opus 5.5・medium、DevOps Engineer 役は Opus 5.5・low、どちらも `bypassPermissions`）。
 
 ```json
-{ "se": { "model": "claude-opus-5-5", "effort": "high", "permissionMode": "bypassPermissions" },
-  "devops": { "model": "claude-opus-5-5", "effort": "low", "permissionMode": "bypassPermissions" } }
+{ "software-engineer": { "model": "claude-opus-5-5", "effort": "high", "permissionMode": "bypassPermissions" },
+  "devops-engineer": { "model": "claude-opus-5-5", "effort": "low", "permissionMode": "bypassPermissions" } }
 ```
 
 ### Dependabot の設定
 
-Dependabot の skill を使う project に次の 2 つを置く。無いと `/dependabot-triage` と `/sustaining` は止まる（`/tpm` は飛ばして先へ進む）。
+Dependabot の skill を使う project に次の 2 つを置く。無いと `/dependabot-triage` と `/sustaining-engineer` は止まる（`/tpm` は飛ばして先へ進む）。
 
 #### `.claude/dependabot/config.json`
 

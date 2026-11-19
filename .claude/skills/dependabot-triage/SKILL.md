@@ -1,6 +1,6 @@
 ---
 name: dependabot-triage
-description: TPM 役が Dependabot の PR を集め、依存の版の公開から 72 時間を判定し、対象の PR ごとに Sustaining Engineer 役（/sustaining）を起こす。merge と workspace を閉じるのも TPM 役。引数 `一覧だけ` なら判定の表を出すだけで誰も起こさない。設定は使う側の .claude/dependabot/ から読む。
+description: TPM 役が Dependabot の PR を集め、依存の版の公開から 72 時間を判定し、対象の PR ごとに Sustaining Engineer 役（/sustaining-engineer）を起こす。merge と workspace を閉じるのも TPM 役。引数 `一覧だけ` なら判定の表を出すだけで誰も起こさない。設定は使う側の .claude/dependabot/ から読む。
 ---
 
 # Dependabot の PR の振り分け（TPM 役が呼ぶ）
@@ -61,7 +61,7 @@ node "${CLAUDE_SKILL_DIR}/../_shared/release-age.mjs" <config.owner>/<repo> <PR>
 
 ## 3. 起こす
 
-「対象」の PR を次の順に並べ、いま動いている Sustaining Engineer 役（`cmux workspace list` の題が `Sustaining ` で始まる workspace）と合わせて上限に届くまで、1 本ずつ起こす。上限に届いたら、残りは表に「待ち」と書いて、誰かが終わるのを待つ。
+「対象」の PR を次の順に並べ、いま動いている Sustaining Engineer 役（`cmux workspace list` の題が `Sustaining Engineer ` で始まる workspace）と合わせて上限に届くまで、1 本ずつ起こす。上限に届いたら、残りは表に「待ち」と書いて、誰かが終わるのを待つ。
 
 1. CI が全部緑の PR（直しが無く、早く閉じられる）を先に。
 2. 次に、赤が試験や build の PR（直しが要る）。
@@ -78,16 +78,16 @@ realpath "${CLAUDE_SKILL_DIR}/../../.."
 起こす 1 行（`<root>` は上の出力・`<cwd>` は `config.cwd`、無ければ `${CLAUDE_PROJECT_DIR}`）:
 
 ```sh
-cmux workspace create --name "Sustaining <repo>#<PR>" --cwd <cwd> \
-  --command 'claude --model <config.model> --effort <config.effort> --permission-mode <config.permissionMode> --add-dir <root> -- "/sustaining <repo>#<PR> tpm=<自分の workspace>"'
+cmux workspace create --name "Sustaining Engineer <repo>#<PR>" --cwd <cwd> \
+  --command 'claude --model <config.model> --effort <config.effort> --permission-mode <config.permissionMode> --add-dir <root> -- "/sustaining-engineer <repo>#<PR> tpm=<自分の workspace>"'
 ```
 
-- **`--add-dir <root>` の後の `--` を落とさない。** `--add-dir` は後ろの語もまとめて folder として読むので、`--` が無いと `/sustaining …` が依頼として渡らない。
+- **`--add-dir <root>` の後の `--` を落とさない。** `--add-dir` は後ろの語もまとめて folder として読むので、`--` が無いと `/sustaining-engineer …` が依頼として渡らない。
 - 自分の workspace は `cmux identify` の caller の `workspace_ref`。
 - 起動の命令は 1,024 バイトを超えると黙って実行されない。上の形を延ばさない。
-- **起こした後 90 秒の間に、`cmux sidebar-state --workspace <新しい workspace>` に `wait=作業中: …` の行が出たかを見る**（`/sustaining` の最初の手が `wait` を出す。題は起こすときに `--name` で付けてあるので、題では見分けられない）。出なければ `cmux read-screen --workspace <新しい workspace>` で画面を読む:
+- **起こした後 90 秒の間に、`cmux sidebar-state --workspace <新しい workspace>` に `wait=作業中: …` の行が出たかを見る**（`/sustaining-engineer` の最初の手が `wait` を出す。題は起こすときに `--name` で付けてあるので、題では見分けられない）。出なければ `cmux read-screen --workspace <新しい workspace>` で画面を読む:
   - `Adding a new directory` や `trust` のダイアログ: `<root>` が信頼されていない（この repo は別の git の repo なので、信頼済みの folder の下に置いても信頼は及ばない）。**Yes は押さずに**その workspace を `close --force` し、`<root>` で 1 度 Claude Code を対話で起こして信頼するよう Product Manager に頼む（README の「信頼のダイアログ」）。
-  - `Unknown command: /sustaining`: 旗か `<root>` の誤り。`close --force` して、命令を直して 1 度だけ起こし直す。2 回目も `wait` が出なければ Product Manager に知らせる。
+  - `Unknown command: /sustaining-engineer`: 旗か `<root>` の誤り。`close --force` して、命令を直して 1 度だけ起こし直す。2 回目も `wait` が出なければ Product Manager に知らせる。
 - ほかの作業と順番がぶつかるとき（`rules.md` に書いてある物）は、起こすのを遅らせてよい。
 
 ## 4. 受ける
@@ -100,14 +100,14 @@ Sustaining Engineer 役から届く知らせ:
 | 【相談(TPM)】 | 答える。Product Manager の判断が要るなら、Product Manager に聞いてから答える。 |
 | 【PM への依頼】 | URL の Artifact を自分の workspace で開き（`cmux open <URL> --workspace <自分の workspace>`）、Product Manager に見せる。答えを【PM の回答】で返す。 |
 | 【まだ】 | 時間の【まだ】なら表の「待ち」に戻し、その workspace は 5 と同じに閉じる。`rebase に … 分応じない` の【まだ】なら、もう一度待たせるか、worktree で `origin/main` を merge させるかを決めて返す。 |
-| 【作り直し】 | group の PR が閉じて新しい番号で作り直された。表の行を新しい番号に替え、同じ Sustaining Engineer 役に新しい番号で続けさせる（workspace の題も `Sustaining <repo>#<新>` に替えさせる）。判定は変わらない。 |
+| 【作り直し】 | group の PR が閉じて新しい番号で作り直された。表の行を新しい番号に替え、同じ Sustaining Engineer 役に新しい番号で続けさせる（workspace の題も `Sustaining Engineer <repo>#<新>` に替えさせる）。判定は変わらない。 |
 | 【終わり】 | 5 へ。 |
 
 返事を送った後は、届いたかを見る（protocol.md の「知らせの送り方」）。
 
 ### `@dependabot rebase` の注意（TPM 役が知っておくこと）
 
-Sustaining Engineer 役の手順（`${CLAUDE_SKILL_DIR}/../sustaining/SKILL.md` の 4a）と同じ要点。
+Sustaining Engineer 役の手順（`${CLAUDE_SKILL_DIR}/../sustaining-engineer/SKILL.md` の 4a）と同じ要点。
 
 - 応じた印は 👍。時間は決まっていない（実測で 20 分無反応のことがある）。Sustaining Engineer 役は `config.rebaseWaitMinutes` 分待って越えたら【まだ】か【相談(TPM)】を送ってくる。
 - group の PR は閉じて新しい番号で作り直されることがある。判定は変わらないので、**新しい番号で引き継ぐ**（【作り直し】）。

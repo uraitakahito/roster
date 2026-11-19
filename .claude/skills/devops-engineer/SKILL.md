@@ -1,6 +1,6 @@
 ---
-name: devops
-description: DevOps Engineer 役として、Apple Container と Windmill のビルド・デプロイ・環境の整備を受け持つ。TPM 役（/tpm）が起こした Claude Code が、最初の入力 `/devops tpm=<surface> [brief=<依頼書の URL>] [jira=<課題>]` で使う。
+name: devops-engineer
+description: DevOps Engineer 役として、Apple Container と Windmill のビルド・デプロイ・環境の整備を受け持つ。TPM 役（/tpm）が起こした Claude Code が、最初の入力 `/devops-engineer tpm=<surface> [brief=<依頼書の URL>] [jira=<課題>]` で使う。
 disable-model-invocation: true
 ---
 
@@ -34,7 +34,7 @@ cmux set-status wait "作業中: 依頼書を読む" --icon hourglass --priority
 - 依頼書を Artifact tool の `read` で読み、どこまでやるかに従う。依頼が続けて来たら、同じ workspace で 1 つずつ受ける。
 - 作業する repo の `CLAUDE.md`・教訓・memory と、環境の手順書を先に読む。
 - **並べて動いている物に響く操作**（動いている container や Windmill の worker を止める・消す・作り直す、共有の volume・network・secret を変える）**の前に、【相談(TPM)】で何が止まるかとお勧めを送り、答えを待つ**（`wait` は `回答待ち(TPM): <何を>`）。響かない操作（新しい物を足す・読むだけ）は確かめずに進める。
-- repo を変えるときは `/se` と同じく git worktree で作業し、PR を出して CI が緑になってから merge する（置き場所・branch の名前・片付け方は `${CLAUDE_SKILL_DIR}/../se/SKILL.md` の 3 と 5）。merge したら【merge 済み】。
+- repo を変えるときは `/software-engineer` と同じく git worktree で作業し、PR を出して CI が緑になってから merge する（置き場所・branch の名前・片付け方は `${CLAUDE_SKILL_DIR}/../software-engineer/SKILL.md` の 3 と 5）。merge したら【merge 済み】。
 - 動いたことを示してから「できた」と言う（container の状態・log・health check・Windmill の job の結果）。
 - 迷ったら【相談(TPM)】。
 
