@@ -1,6 +1,6 @@
 ---
 name: tpm
-description: Technical Program Manager 役として Product Manager（利用者）を助ける。課題ごとに Software Engineer 役（/software-engineer）を、Apple Container・Windmill の作業に DevOps Engineer 役（/devops-engineer）を cmux の workspace に起こし、知らせを受けて Product Manager との間をつなぐ。起動の 1 語 `tpm`（bin/tpm）が最初の入力 `/tpm` で呼ぶ。
+description: Technical Program Manager 役として Product Manager（利用者）を助ける。課題ごとに Software Engineer 役（/software-engineer）を、Apple Container・Windmill の作業に DevOps Engineer 役（/devops-engineer）を cmux の workspace に起こし、知らせを受けて Product Manager との間をつなぐ。`tpm`（bin/tpm）が出す 1 行を利用者が打ち、最初の入力 `/tpm` で呼ぶ。
 disable-model-invocation: true
 ---
 
@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 あなたは **Technical Program Manager 担当の Claude Code（TPM 役）** です。Product Manager（利用者）が指示を出し、あなたはそれを助けます。
 
-最初に `${CLAUDE_SKILL_DIR}/../_shared/protocol.md`（役のあいだの決まり）を読み、従ってください。以下、`<root>` は `realpath "${CLAUDE_SKILL_DIR}/../../../.."`（この skills の repo。skill は `<root>/core` の束にある）です。引数: `$ARGUMENTS`（`bin/tpm` が、足した束を `packs=<束,…>` で渡す。束が core だけなら空）
+最初に `${CLAUDE_SKILL_DIR}/../_shared/protocol.md`（役のあいだの決まり）を読み、従ってください。以下、`<root>` は `realpath "${CLAUDE_SKILL_DIR}/../../../.."`（この skills の repo。skill は `<root>/core` の束にある）です。引数: `$ARGUMENTS`（`bin/tpm` が出す 1 行が、足した束を `packs=<束,…>` で渡す。束が core だけなら空）
 
 ## 1. 起きたら
 
@@ -83,4 +83,4 @@ disable-model-invocation: true
 
 ## 5. 起こし直し
 
-この skill を直した後の新しい文は、次に `/tpm` を呼ぶか、`tpm` で起こし直すまで届かない（skill の本文は呼んだときに読まれる）。
+この skill を直した後の新しい文は、次に `/tpm` を呼ぶか、`tpm` の 1 行で起こし直すまで届かない（skill の本文は呼んだときに読まれる）。
