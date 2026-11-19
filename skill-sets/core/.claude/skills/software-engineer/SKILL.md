@@ -17,7 +17,7 @@ disable-model-invocation: true
 
 ## 0. 決まりを読む（最初に必ず）
 
-`${CLAUDE_SKILL_DIR}/../_shared/protocol.md` を読み、従う。知らせの見出し・サイドバー・Product Manager への確かめ方・文書の食い違い・共有の環境・終わり方はそこにある。
+`${CLAUDE_SKILL_DIR}/../_shared/protocol.md` を読み、従う。知らせの見出し・サイドバー・文書の食い違い・共有の環境・終わり方はそこにある。
 
 ## 1. 名乗る
 
@@ -56,6 +56,7 @@ cmux set-status wait "作業中: 依頼書を読む" --icon hourglass --priority
 - 提案・計画・報告は HTML の Artifact に書いて publish する。図があった方がわかりやすい所は図を入れる。
 - publish したら、Artifact tool の `open` と `cmux open <URL> --workspace <自分の workspace>` で自分でも開き、【完成】（依頼書が名を決めていればそれ）で URL を TPM 担当に送る。
 - 直した PR（文書の食い違いを含む）は、成果の Artifact に一覧で載せる。
+- `jira=` の課題があれば、【完成】を送る前に成果の URL のコメントを書く。Jira を触るときは `${CLAUDE_SKILL_DIR}/../_shared/jira.md` を読み、従う（書き方・読み方・Product Manager に確かめる）。
 - 答えを待つ間は `wait` を `回答待ち(PM): <何を>` か `回答待ち(TPM): <何を>` に上書きする。答えが来たら `作業中: <段>` に戻す。
 
 ## 5. 終わり
@@ -63,7 +64,7 @@ cmux set-status wait "作業中: 依頼書を読む" --icon hourglass --priority
 依頼書の成果が全部済んだら:
 
 1. 自分で作った worktree と branch を消す（`git worktree remove` → `git branch -D` → `git push origin --delete <branch>` → `git worktree prune`）。`git worktree list` に本体だけが残ることを確かめる。
-2. 計画から外れた物・残した物で直した方がよい物は、依頼書の指示に従って登録する（Jira があれば課題に。課題どうしのリンクやコンポーネントを付けたか、付けなかった理由も書く）。
-3. 依頼書が言えば、Jira の課題を進める（`acli jira workitem transition --key <課題> --status "<状態>" --yes`）。
+2. 計画から外れた物・残した物で直した方がよい物は、依頼書の指示に従って登録する（Jira があれば課題に。`${CLAUDE_SKILL_DIR}/../_shared/jira.md` の「課題を登録する」）。
+3. `jira=` の課題があれば、結果のコメントを書く。依頼書が言えば、課題の状態を進める（`jira.md` の「状態を進める」）。
 4. 【終わり】で TPM 担当に送る: merge した PR・登録した課題・消した worktree・残っている物。
 5. `wait` を `回答待ち(TPM): workspace を閉じる` にする。**workspace は自分で閉じない。**

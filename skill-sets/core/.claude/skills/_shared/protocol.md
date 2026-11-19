@@ -22,7 +22,7 @@ cmux --json agent inbox --surface <相手の surface> --limit 3     # 届いた�
 | 見出し | いつ | 本文 |
 |---|---|---|
 | 【相談(TPM)】 | TPM 担当に決めてほしいことがある | 困っていること・試したこと・案とお勧め |
-| 【PM への確認】 | Product Manager に決めてほしいことを Jira に書いた（下の「Product Manager に確かめる」） | コメントの URL と各項目の題 |
+| 【PM への確認】 | Product Manager に決めてほしいことを Jira に書いた（jira.md の「Product Manager に確かめる」） | コメントの URL と各項目の題 |
 | 【PM への依頼】 | Product Manager に頼むことを Artifact に書いた | Artifact の URL と要点 |
 | 【DevOps への依頼】 | Apple Container・Windmill など共有の環境で DevOps Engineer 担当の手が要る | 何を・なぜ・急ぎか |
 | 【ドキュメント修正】 | 文書やコメントの食い違いを直した PR を merge した | PR の URL と一言 |
@@ -51,20 +51,9 @@ Dependabot の PR だけで使う見出し（【merge の依頼】【まだ】�
   - 待つ時間に限りがあれば添える: `回答待ち(TPM): merge（14:30 まで）`
 - **`/model`・`/effort` は打たない**（新しい session の既定まで書き換わる）。model と effort は起動の旗で決まる。
 
-## Product Manager に確かめる
+## Jira
 
-文書やコメントの食い違い**以外**で Product Manager に決めてほしいことは、Jira の課題にタスクリストで書く。
-
-1. 課題にコメントを足す。確かめたいことを 1 項目ずつ ADF の `taskList`（`taskItem` の `state` は `TODO`）で書き、各項目に選択肢とお勧めを添える。
-   ```sh
-   acli jira workitem comment create --key <課題> --body-file <ADF の JSON>
-   acli jira workitem comment list --key <課題> --json      # 足したコメントの id
-   ```
-2. URL は `https://<site>/browse/<課題>?focusedCommentId=<id>`。`<site>` は `acli jira auth status` の `Site`。
-3. その URL を自分の workspace で開き（`cmux open <URL> --workspace <自分の workspace>`）、【PM への確認】で TPM 担当に送る。`wait` は `回答待ち(PM): <何を>`。
-4. 答えが来たら、項目の `state` を `DONE` にして `acli jira workitem comment update --key <課題> --id <id> --body-adf <ADF の JSON>`。お勧めと違う答えは、返信のコメントに書く。
-
-Jira の課題が無い依頼では、同じ中身を Artifact に書いて【PM への依頼】で送る。
+Jira の課題にコメントを書く・読む・Product Manager に確かめる・状態を進める・課題を登録するときは、同じ folder の `jira.md` を読み、従う。
 
 ## 文書の食い違い
 
