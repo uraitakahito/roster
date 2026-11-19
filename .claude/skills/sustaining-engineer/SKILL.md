@@ -1,6 +1,6 @@
 ---
-name: sustaining
-description: Sustaining Engineer 役として、Dependabot の PR 1 本を受け持つ（72 時間の確かめ・直し・CI を緑に・TPM 役に merge を頼む）。TPM 役の /dependabot-triage が起こした Claude Code が、最初の入力 `/sustaining <repo>#<PR> tpm=<workspace>` で使う。
+name: sustaining-engineer
+description: Sustaining Engineer 役として、Dependabot の PR 1 本を受け持つ（72 時間の確かめ・直し・CI を緑に・TPM 役に merge を頼む）。TPM 役の /dependabot-triage が起こした Claude Code が、最初の入力 `/sustaining-engineer <repo>#<PR> tpm=<workspace>` で使う。
 ---
 
 # Sustaining Engineer 役（Dependabot の PR 1 本）
@@ -30,14 +30,14 @@ description: Sustaining Engineer 役として、Dependabot の PR 1 本を受け
 
 ```sh
 cmux identify                     # caller の workspace_ref と surface_ref が自分
-cmux workspace rename <自分の workspace> --title "Sustaining <repo>#<PR>"
+cmux workspace rename <自分の workspace> --title "Sustaining Engineer <repo>#<PR>"
 cmux set-status model "<config.modelLabel>" --icon sparkle --priority 90
 cmux set-status wait "作業中: 読む" --icon hourglass --priority 80
 ```
 
 - **この 4 行が最初の手。** TPM 役は、サイドバーに `wait=作業中: …` が出たかで、この skill が読まれて動き出したことを確かめる（題は TPM 役が起こすときに付けてあるので、題では見分けられない）。
 - サイドバーの `wait` の書き方と、`/model`・`/effort` を打たないことは protocol.md の「サイドバー」。
-- 相手への `--from` は `"Sustaining <repo>#<PR>"`。
+- 相手への `--from` は `"Sustaining Engineer <repo>#<PR>"`。
 
 ## 2. 読む
 
@@ -87,7 +87,7 @@ node "${CLAUDE_SKILL_DIR}/../_shared/release-age.mjs" <config.owner>/<repo> <PR>
 CI が全部緑で、3 の判定が 0 のとき:
 
 ```sh
-cmux agent message <tpm> --from "Sustaining <repo>#<PR>" -- "【merge の依頼】<PR の URL>／CI: 緑／公開から <最も新しい版の hours> 時間（eligibleAt <時刻>・depsSource <diff か commit-message>）／変えた物: <無し か 足した commit・別の PR>"
+cmux agent message <tpm> --from "Sustaining Engineer <repo>#<PR>" -- "【merge の依頼】<PR の URL>／CI: 緑／公開から <最も新しい版の hours> 時間（eligibleAt <時刻>・depsSource <diff か commit-message>）／変えた物: <無し か 足した commit・別の PR>"
 cmux set-status wait "回答待ち(TPM): merge" --icon hourglass --priority 80
 ```
 

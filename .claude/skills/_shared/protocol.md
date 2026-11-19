@@ -1,6 +1,6 @@
 # 役のあいだの決まり（どの役も読む）
 
-TPM 役（`/tpm`）・Software Engineer 役（`/se`）・DevOps Engineer 役（`/devops`）・Sustaining Engineer 役（`/sustaining`）が共通に従う決まり。依頼主は Product Manager（利用者）。返答と報告は日本語で書く。
+TPM 役（`/tpm`）・Software Engineer 役（`/software-engineer`）・DevOps Engineer 役（`/devops-engineer`）・Sustaining Engineer 役（`/sustaining-engineer`）が共通に従う決まり。依頼主は Product Manager（利用者）。返答と報告は日本語で書く。
 
 ## 知らせの送り方
 
@@ -30,7 +30,7 @@ cmux --json agent inbox --surface <相手の surface> --limit 3     # 届いた�
 | 【完成】 | 依頼書の成果（提案・計画などの Artifact）を publish した。依頼書が【計画完成】など別の名を決めていればそれを使う | URL と要点 |
 | 【終わり】 | 依頼が全部終わった | merge した PR・登録した課題・消した worktree・残っている物 |
 
-Dependabot の PR だけで使う頭（【merge の依頼】【まだ】【作り直し】）は `/sustaining` と `/dependabot-triage` に書いてある。
+Dependabot の PR だけで使う頭（【merge の依頼】【まだ】【作り直し】）は `/sustaining-engineer` と `/dependabot-triage` に書いてある。
 
 ### TPM 役から
 

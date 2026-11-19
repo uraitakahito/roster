@@ -2,7 +2,7 @@
 
 TPM 役が Software Engineer 役・DevOps Engineer 役に渡す依頼書。HTML の Artifact に書いて publish し、URL を起動の 1 行の `brief=` か【依頼】で渡す。
 
-**書かない物**: 連絡のしかた・頭の表・サイドバー・終わり方・文書の食い違いの扱い・共有の環境の扱い。これらは `/se`・`/devops` と `_shared/protocol.md` にある。依頼書には、その課題だけのことを書く。
+**書かない物**: 連絡のしかた・頭の表・サイドバー・終わり方・文書の食い違いの扱い・共有の環境の扱い。これらは `/software-engineer`・`/devops-engineer` と `_shared/protocol.md` にある。依頼書には、その課題だけのことを書く。
 
 ## 欄
 

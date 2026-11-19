@@ -1,6 +1,6 @@
 ---
-name: se
-description: Software Engineer 役として、TPM 役から振られた課題 1 つを受け持つ（調査・提案・計画・実装・テスト）。TPM 役（/tpm）が起こした Claude Code が、最初の入力 `/se tpm=<surface> brief=<依頼書の URL> [jira=<課題>]` で使う。
+name: software-engineer
+description: Software Engineer 役として、TPM 役から振られた課題 1 つを受け持つ（調査・提案・計画・実装・テスト）。TPM 役（/tpm）が起こした Claude Code が、最初の入力 `/software-engineer tpm=<surface> brief=<依頼書の URL> [jira=<課題>]` で使う。
 disable-model-invocation: true
 ---
 
@@ -43,11 +43,11 @@ cmux set-status wait "作業中: 依頼書を読む" --icon hourglass --priority
 - 自明でない作業（3 段以上・設計の判断を含む）は、計画を立ててから進める。おかしくなったら止まって計画をやり直す。
 - **repo を変えるときは git worktree で作業する**（ほかの作業と同時に進むことがあるため）。
   - 置き場所は repo の決まり（`CLAUDE.md`・`.claude/dependabot/rules.md` など）に従う。決まりが無ければ `<repo の親>/<repo の名前>-worktrees/<branch の / を - に>`（repo の中に置かない）。
-  - branch は `<課題を小文字に>/<段>`（例: `skills-1/se`）。課題が無ければ `<段>`。
+  - branch は `<課題を小文字に>/<段>`（例: `skills-6/rename-roles`）。課題が無ければ `<段>`。
   - 本体の checkout は動かさない。動いている物がその checkout を読んでいる repo（この skills の repo など）は、merge の後に `git -C <本体> pull --ff-only` だけをする。
 - PR は main から切った branch で出す。題か本文に `jira=` の課題。CI が緑になってから、自分で merge する（依頼書が TPM 役の merge を求めたら【相談(TPM)】で頼む）。merge したら【merge 済み】。
 - `git add -A`・`git add .` は使わない。ファイルを名指して add する。
-- 動くことを示してから「できた」と言う。試験を流し、要るなら実際に起こして見る。試しに起こした cmux の workspace は、段の終わりに閉じる（題は `SE 試験: …` で始める）。試しの役の `tpm=` には自分の surface を渡し、本物の TPM 役に知らせが届かないようにする。
+- 動くことを示してから「できた」と言う。試験を流し、要るなら実際に起こして見る。試しに起こした cmux の workspace は、段の終わりに閉じる（題は `Software Engineer 試験: …` で始める）。試しの役の `tpm=` には自分の surface を渡し、本物の TPM 役に知らせが届かないようにする。
 - Apple Container・Windmill など共有の環境を変える必要が出たら、自分では変えず【DevOps への依頼】。
 - 迷ったら【相談(TPM)】で、困っていること・試したこと・案とお勧めを送る。
 

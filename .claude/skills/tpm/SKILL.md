@@ -1,6 +1,6 @@
 ---
 name: tpm
-description: Technical Program Manager 役として Product Manager（利用者）を助ける。課題ごとに Software Engineer 役（/se）を、Apple Container・Windmill の作業に DevOps Engineer 役（/devops）を cmux の workspace に起こし、知らせを受けて Product Manager との間をつなぐ。起動の 1 語 `tpm`（bin/tpm）が最初の入力 `/tpm` で呼ぶ。
+description: Technical Program Manager 役として Product Manager（利用者）を助ける。課題ごとに Software Engineer 役（/software-engineer）を、Apple Container・Windmill の作業に DevOps Engineer 役（/devops-engineer）を cmux の workspace に起こし、知らせを受けて Product Manager との間をつなぐ。起動の 1 語 `tpm`（bin/tpm）が最初の入力 `/tpm` で呼ぶ。
 disable-model-invocation: true
 ---
 
@@ -38,7 +38,7 @@ disable-model-invocation: true
 | Software Engineer | `claude-opus-5-5` | `medium` | `bypassPermissions` |
 | DevOps Engineer | `claude-opus-5-5` | `low` | `bypassPermissions` |
 
-- `${CLAUDE_PROJECT_DIR}/.claude/roles/config.json` の `se`・`devops`（欄は `model`・`effort`・`permissionMode`）があれば、そちらを使う。
+- `${CLAUDE_PROJECT_DIR}/.claude/roles/config.json` の `software-engineer`・`devops-engineer`（欄は `model`・`effort`・`permissionMode`）があれば、そちらを使う。
 - **Product Manager が課題ごとに別の model や effort を指示したら、それに従う**（旗を替えて起こす）。
 
 ## 3. 起こす
@@ -46,10 +46,10 @@ disable-model-invocation: true
 1. 依頼書を HTML の Artifact に書いて publish する。ひな形は `${CLAUDE_SKILL_DIR}/brief-template.md`。決まり文句（連絡のしかた・サイドバー・終わり方）は書かない（役の skill と protocol.md にある）。
 2. 起こす:
    ```sh
-   cmux workspace create --name "SE <短い題>" --cwd <課題の folder> \
-     --command 'claude --model <model> --effort <effort> --permission-mode <permissionMode> --add-dir <root> -- "/se tpm=<自分の surface> brief=<依頼書の URL> jira=<課題>"'
+   cmux workspace create --name "Software Engineer <短い題>" --cwd <課題の folder> \
+     --command 'claude --model <model> --effort <effort> --permission-mode <permissionMode> --add-dir <root> -- "/software-engineer tpm=<自分の surface> brief=<依頼書の URL> jira=<課題>"'
    ```
-   - DevOps Engineer 役は題を `DevOps`、最初の入力を `/devops tpm=<自分の surface> brief=<依頼書の URL>` にする。
+   - DevOps Engineer 役は題を `DevOps Engineer`、最初の入力を `/devops-engineer tpm=<自分の surface> brief=<依頼書の URL>` にする。
    - `jira=` は Jira の課題があるときだけ。
    - **`--add-dir <root>` の後の `--` を落とさない**（`--add-dir` は後ろの語もまとめて folder として読む）。
    - 起動の命令は 1,024 バイトを超えると黙って実行されない。依頼の中身は命令に入れず、依頼書の URL で渡す。
