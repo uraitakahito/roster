@@ -1,15 +1,15 @@
 #!/usr/bin/env node
-// Dependabot の PR 1 本について、上げる依存の版が公開から決めた時間（既定 72 時間・`--hours` で替える）を過ぎたかを判定する。
+// Dependabot の PR 1 本について、上げる依存の version が公開から決めた時間（既定 72 時間・`--hours` で替える）を過ぎたかを判定する。
 //
 //   node release-age.mjs <owner>/<repo> <PR 番号> [--hours <時間>] [--now <ISO 時刻>]
 //
 // 判定の決まり:
-//   - 数えるのは「依存の版の公開から」。PR の作成からではない。
-//   - group の PR は、中の版のうち いちばん新しい公開 から数える。
-//   - 公開の時刻を読めない版が 1 つでもあれば「判定できない」。
+//   - 数えるのは「依存の version の公開から」。PR の作成からではない。
+//   - group の PR は、中の version のうち いちばん新しい公開 から数える。
+//   - 公開の時刻を読めない version が 1 つでもあれば「判定できない」。
 //
-// 読む物: PR の差分（lockfile・workflow）で新しく入る版（依存の依存も含む）と、PR の枝の名前
-// （dependabot/npm_and_yarn/… など）。差分から版が取れないときだけ、Dependabot が書いた commit の
+// 読む物: PR の差分（lockfile・workflow）で新しく入る version（依存の依存も含む）と、PR の枝の名前
+// （dependabot/npm_and_yarn/… など）。差分から version が取れないときだけ、Dependabot が書いた commit の
 // 本文の `updated-dependencies:` に戻る（本文は作り直しで古くなるので、先には使わない）。
 // 公開の時刻は npm は `npm view <名前> time --json`、
 // GitHub Actions は Release の published_at（無ければ tag の commit の日付）。
@@ -60,16 +60,16 @@ export function ecosystemFromBranch(ref) {
 }
 
 /**
- * PR の差分（`gh pr diff` の字）から、この PR で新しく入る版を読む。
+ * PR の差分（`gh pr diff` の字）から、この PR で新しく入る version を読む。
  * commit の本文の `updated-dependencies` は、group の PR が作り直されると古いまま残る
- * （実例: 本文は @astrojs/starlight 0.42.11、差分は 0.43.1）。版は差分から取る。
+ * （実例: 本文は @astrojs/starlight 0.42.11、差分は 0.43.1）。version は差分から取る。
  *
  * 読む物（足された行 `+` だけ）:
  *   - pnpm-lock.yaml: 2 字下げの `'name@version':`・`name@version:`（packages と snapshots の鍵）
  *   - package-lock.json: `"node_modules/<name>": {` の下の `"version": "x"`
  *   - yarn.lock: berry の `resolution: "name@npm:x"`、classic の見出しの下の `version "x"`
- *   - GitHub Actions の workflow: `uses: owner/repo@<ref> # v1.2.3`（コメントの版、無ければ ref）
- * 依存の依存（lockfile にだけ出る版）も数える。新しく入る版はどれも、悪意のある版でありうるため。
+ *   - GitHub Actions の workflow: `uses: owner/repo@<ref> # v1.2.3`（コメントの version、無ければ ref）
+ * 依存の依存（lockfile にだけ出る version）も数える。新しく入る version はどれも、悪意のある version でありうるため。
  */
 export function versionsFromDiff(diff) {
   const out = new Map();
@@ -118,7 +118,7 @@ export function versionsFromDiff(diff) {
   return [...out.values()];
 }
 
-/** Dependabot の commit を古い順に読み、同じ名前は後の commit の版で上書きする。 */
+/** Dependabot の commit を古い順に読み、同じ名前は後の commit の version で上書きする。 */
 export function depsFromCommits(commits) {
   const byName = new Map();
   for (const c of commits) {
@@ -166,7 +166,7 @@ function run(cmd, args) {
   return execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
-const npmTimes = new Map(); // 同じ名前の版が lockfile に何度も出るので、名前ごとに 1 回だけ引く
+const npmTimes = new Map(); // 同じ名前の version が lockfile に何度も出るので、名前ごとに 1 回だけ引く
 
 export function realLookup(ecosystem, name, version) {
   if (ecosystem === 'npm') {
@@ -216,7 +216,7 @@ async function main(argv) {
   const ref = run('gh', ['api', `repos/${full}/pulls/${pr}`, '-q', '.head.ref']).trim();
   const commits = JSON.parse(run('gh', ['api', `repos/${full}/pulls/${pr}/commits`, '--paginate', '-q', '[.[] | {author: (.author.login // ""), message: .commit.message}]']));
   const ecosystem = ecosystemFromBranch(ref);
-  // 版は差分から取る。差分が読めない（大きすぎる等）か、差分に版が 1 つも無いときだけ commit の本文に戻る。
+  // version は差分から取る。差分が読めない（大きすぎる等）か、差分に version が 1 つも無いときだけ commit の本文に戻る。
   let deps;
   let depsSource = 'diff';
   try {

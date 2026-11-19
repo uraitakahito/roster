@@ -1,6 +1,6 @@
 ---
 name: dependabot-triage
-description: TPM 役が Dependabot の PR を集め、依存の版の公開から 72 時間を判定し、対象の PR ごとに Sustaining Engineer 役（/sustaining-engineer）を起こす。merge と workspace を閉じるのも TPM 役。引数 `dry-run` なら判定の表を出すだけで誰も起こさない。設定は使う側の .claude/dependabot/ から読む。
+description: TPM 役が Dependabot の PR を集め、依存の version の公開から 72 時間を判定し、対象の PR ごとに Sustaining Engineer 役（/sustaining-engineer）を起こす。merge と workspace を閉じるのも TPM 役。引数 `dry-run` なら判定の表を出すだけで誰も起こさない。設定は使う側の .claude/dependabot/ から読む。
 ---
 
 # Dependabot の PR の振り分け（TPM 役が呼ぶ）
@@ -8,7 +8,7 @@ description: TPM 役が Dependabot の PR を集め、依存の版の公開か�
 呼ぶのは **Technical Program Manager 担当の Claude Code（TPM 役）** です。引数: `$ARGUMENTS`
 
 - `dry-run`: 1・2 だけをして表を出し、誰も起こさない。
-- `上限=<n>`: 同時に動かす Sustaining Engineer 役の数（既定は `config.maxConcurrent`）。
+- `max=<n>`: 同時に動かす Sustaining Engineer 役の数（既定は `config.maxConcurrent`）。
 - 何も無ければ 1〜3 をして、4・5 は報告が来たら行う。
 
 ## 0. 設定を読む（最初に必ず）
@@ -22,7 +22,7 @@ description: TPM 役が Dependabot の PR を集め、依存の版の公開か�
 決まり:
 
 - 対象は `config.owner` の `config.repos` の repo だけ。
-- 時間（`config.hours`・既定 72）は **依存の版の公開から** 数える。group の PR は中のいちばん新しい版の公開から。版は PR の差分から読み、依存の依存も数える。
+- 時間（`config.hours`・既定 72）は **依存の version の公開から** 数える。group の PR は中のいちばん新しい version の公開から。version は PR の差分から読み、依存の依存も数える。
 - 届かない PR は、Sustaining Engineer 役を起こさず、表に「いつ対象になるか」を出して次の回に回す。
 - merge は TPM 役の権限で決める。workspace は、merge と【終わり】の報告を受け取った後に TPM 役が閉じる。
 
@@ -51,7 +51,7 @@ node "${CLAUDE_SKILL_DIR}/../_shared/release-age.mjs" <config.owner>/<repo> <PR>
 |---|---|
 | repo#PR | |
 | 種類 | npm・github-actions・docker など |
-| 公開から | いちばん新しい版の公開から今までの時間（eligibleAt − `config.hours` から計算） |
+| 公開から | いちばん新しい version の公開から今までの時間（eligibleAt − `config.hours` から計算） |
 | eligibleAt | |
 | CI | pass・fail・skipping の数 |
 | 赤の check | fail の check の名前（audit だけの赤か、試験や build の赤かを見分ける） |

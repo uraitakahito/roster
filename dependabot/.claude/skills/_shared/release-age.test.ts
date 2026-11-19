@@ -75,12 +75,12 @@ test('引用符に包まれた名前（@ で始まる）は引用符を外す', 
   expect(parseUpdatedDependencies(msg)).toEqual([{ name: '@vitest/ui', version: '5.1.0' }]);
 });
 
-test('pnpm-lock の差分から、新しく入る版を読む（依存の依存も・消えた版と変わらない行は読まない）', () => {
+test('pnpm-lock の差分から、新しく入る version を読む（依存の依存も・消えた version と変わらない行は読まない）', () => {
   const got = versionsFromDiff(pnpmDiff).map(d => `${d.name}@${d.version}`).sort();
   expect(got).toEqual(['@astrojs/starlight@0.43.1', '@babel/parser@7.29.14', 'astro@7.4.12']);
 });
 
-test('作り直しで本文が古い PR は、差分の版（新しい方）で数えて まだ になる', async () => {
+test('作り直しで本文が古い PR は、差分の version（新しい方）で数えて まだ になる', async () => {
   // 本文の 0.42.11 は 100 時間前、差分の 0.43.1 は 10 時間前の公開。本文で数えると対象になってしまう入力。
   const now = T0 + 100 * H;
   const lookup = fixed({
@@ -121,7 +121,7 @@ test('yarn.lock の差分を読む（berry と classic）', () => {
   expect(versionsFromDiff(classic).map(d => `${d.name}@${d.version}`)).toEqual(['@scope/x@1.0.1']);
 });
 
-test('workflow の uses をコメントの版で読む', () => {
+test('workflow の uses をコメントの version で読む', () => {
   const diff = `+++ b/.github/workflows/ci.yml
 -      - uses: reviewdog/action-actionlint@cfa6 # v1.80.8
 +      - uses: reviewdog/action-actionlint@ae85 # v1.84.1
@@ -142,7 +142,7 @@ test('枝の名前から種類を決める', () => {
   expect(ecosystemFromBranch('fix/foo')).toBe('other');
 });
 
-test('Dependabot でない commit は読まず、後の commit の版で上書きする', () => {
+test('Dependabot でない commit は読まず、後の commit の version で上書きする', () => {
   const deps = depsFromCommits([
     { author: 'dependabot[bot]', message: single },
     { author: 'someone', message: single.replace('1.1.22', '9.9.9') },
@@ -164,7 +164,7 @@ test('72 時間ちょうどで対象・1 分前は まだ', async () => {
 });
 
 test('group は いちばん新しい公開 から数える', async () => {
-  // 古い版は 100 時間前・新しい版は 50 時間前。古い方で数えると対象になってしまう入力。
+  // 古い version は 100 時間前・新しい version は 50 時間前。古い方で数えると対象になってしまう入力。
   const now = T0 + 100 * H;
   const deps = [{ name: 'old', version: '1.0.0' }, { name: 'new', version: '2.0.0' }];
   const lookup = fixed({ 'old@1.0.0': new Date(T0).toISOString(), 'new@2.0.0': new Date(T0 + 50 * H).toISOString() });
@@ -173,7 +173,7 @@ test('group は いちばん新しい公開 から数える', async () => {
   expect(r.eligibleAt).toBe(new Date(T0 + 122 * H).toISOString());
 });
 
-test('公開の時刻を読めない版が 1 つでもあれば 判定できない', async () => {
+test('公開の時刻を読めない version が 1 つでもあれば 判定できない', async () => {
   const deps = [{ name: 'a', version: '1.0.0' }, { name: 'b', version: '1.0.0' }];
   const r = await judge({ deps, ecosystem: 'npm', now: T0 + 1000 * H, lookup: fixed({ 'a@1.0.0': new Date(T0).toISOString() }) });
   expect(r.eligible).toBe('undetermined');
