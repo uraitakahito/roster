@@ -23,8 +23,6 @@ cd </your/workspace> # あなたが作業する場所
 /foo/bar/skills/bin/tpm --verbose <folder>    # その folder で起こす 1 行を出す
 ```
 
-`--verbose`（`-v`）は、読んだ config と skill セットごとの skill を stderr に出す。
-
 `tpm` は claude を起こさない。自分の場所からこの repo を求め、folder の `.claude/roles/config.json` の `skill-sets` を確かめて、次の 1 行を出すだけ。それを写して打つ。
 
 ```sh
@@ -38,7 +36,7 @@ cd <folder> && claude --model claude-opus-5-5 --effort medium --permission-mode 
 
 ### `--add-dir` の先の skill セット
 
-skill は skill セット（skill set）に分けてあり、`--add-dir` で足した skill セットの skill だけが出る。
+skill は skill セットに分けてあり、`--add-dir` で足した skill セットの skill だけが使える。
 
 | skill セット | folder | skill |
 |---|---|---|
@@ -54,7 +52,7 @@ core はいつも足す。追加の skill セットは、起こす folder の `.
 | `/tpm` | Product Manager | TPM | Product Manager を助け、課題ごとに担当者を割り当てる |
 | `/software-engineer tpm=<surface> brief=<URL> [jira=<課題>]` | TPM | Software Engineer | 課題 1 つを受け持つ。依頼書（Artifact）を読み、調査・提案・計画・実装・テストを worktree で進め、成果を Artifact と PR で出す |
 | `/devops-engineer tpm=<surface> [brief=<URL>] [jira=<課題>]` | TPM | DevOps Engineer | Apple Container と Windmill のビルド・デプロイ・環境の整備。課題間のconflict等は TPM 担当に相談する |
-| `/dependabot-triage` | TPM | TPM | Dependabot の PR を集め、依存の版の公開から 72 時間を判定し、対象の PR ごとに Sustaining Engineer 担当を起こす。merge と workspace を閉じるのも TPM 担当。`一覧だけ` で表だけ |
+| `/dependabot-triage` | TPM | TPM | Dependabot の PR を集め、依存のversionの公開から 72 時間を判定し、対象の PR ごとに Sustaining Engineer 担当を起こす。merge と workspace を閉じるのも TPM 担当。`一覧だけ` で表だけ |
 | `/sustaining-engineer <repo>#<PR> tpm=<workspace>` | TPM | Sustaining Engineer | PR 1 本を受け持つ。72 時間の確かめ・直し・CI を緑に・TPM 担当に merge を頼む |
 
 ## 担当のあいだの決まり
