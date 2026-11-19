@@ -2,7 +2,17 @@
 
 Claude Code の skill を、使う project の外に置く repo。使う側のセッションは `--add-dir` でこの repo を足して読む。旗を付けたセッションにだけ skill が出るので、ほかの作業のセッションには出ない。
 
-## 中の skill
+## skillで呼び出される担当者
+
+| 担当 | 人間かAIか |
+|---|---|
+| `Product Manager` | 人間 |
+| `Technical Program Manager` | AI |
+| `Software Engineer` | AI |
+| `DevOps Engineer` | AI |
+| `Sustaining Engineer` | AI |
+
+## skill
 
 | skill | 呼ぶ人 | すること |
 |---|---|---|
