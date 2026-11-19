@@ -28,7 +28,7 @@ sequenceDiagram
     TPM->>SE: 【TPM の宛先】（新しい workspace）
   end
   opt 迷ったとき・決めてほしいとき
-    SE->>TPM: 【相談(TPM)】【PM への確認】【PM への依頼】
+    SE->>TPM: 【相談(TPM)】【PM への依頼】
     TPM->>PM: 確かめる
     TPM->>SE: 【PM の回答】
   end
