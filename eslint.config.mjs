@@ -32,10 +32,4 @@ export default defineConfig(
       '@stylistic/semi': ['error', 'always'],
     },
   },
-
-  // .mjs（release-age.mjs）は型を付けていないので、型つきの規則を外す。
-  {
-    files: ['**/*.mjs'],
-    extends: [tseslint.configs.disableTypeChecked],
-  },
 );
