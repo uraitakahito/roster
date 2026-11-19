@@ -14,7 +14,7 @@
   "//scripts": {
     "check": "build の後に scripts/check-refs.mjs で原稿と repo の食い違いを見る。astro build は .md のページの中で何が落ちても exit 0 で終わるため、CI はいつも check を流す。",
     "format": "Prettier（既定の設定）で docs-site の code（astro.config.ts・src/ の .ts・scripts/）を整える。原稿の .md は見ない（表や日本語の折り返しを Prettier に崩させない）。",
-    "format:check": "format の対象が整っているかだけを見る。PR の検査（site.yml）が流す。"
+    "format:check": "format の対象が整っているかを見て、scripts/check-md-json.mjs で repo の md の中の ```json の塊（JSON として読めるか・Prettier の --parser json の形か）を見る。md の本文は Prettier に掛けない。PR の検査（site.yml）が流す。"
   },
   "scripts": {
     "dev": "astro dev",
@@ -22,7 +22,7 @@
     "preview": "astro preview",
     "check": "astro build && node scripts/check-refs.mjs",
     "format": "prettier --write astro.config.ts 'src/**/*.ts' scripts",
-    "format:check": "prettier --check astro.config.ts 'src/**/*.ts' scripts"
+    "format:check": "prettier --check astro.config.ts 'src/**/*.ts' scripts && node scripts/check-md-json.mjs"
   },
   "dependencies": {
     "@astrojs/starlight": "^0.43.1",
