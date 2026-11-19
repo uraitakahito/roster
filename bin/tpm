@@ -3,8 +3,10 @@
 #
 #   tpm [--print] [folder]
 #
-# folder を渡さなければ、今いる folder で起こす。この script の 1 つ上（skills の repo）を
-# --add-dir で足し、最初の入力を /tpm にする。symlink から呼んでも repo は正しく求まる。
+# folder を渡さなければ、今いる folder で起こす。この script の 1 つ上（skills の repo）の
+# core の束をいつも --add-dir で足し、folder の .claude/roles/config.json の packs に
+# 書いた束（例: ["dependabot"]）も足す。最初の入力は /tpm（束があれば /tpm packs=<束,…>）。
+# symlink から呼んでも repo は正しく求まる。
 # --print は起こさずに、移る folder と命令を 1 行ずつ出す（試験用）。
 set -eu
 
@@ -26,9 +28,35 @@ fi
 dir=$(cd "$dir" && pwd -P)
 root=$(cd "$(dirname "$(realpath "$0")")/.." && pwd -P)
 
+# packs を 1 行に 1 つずつ出す。ファイルや欄が無ければ何も出さない。誤りなら exit 1。
+packs=$(node -e '
+const fs = require("fs");
+const [file, root] = process.argv.slice(1);
+const fail = (m) => { process.stderr.write(`tpm: ${m}\n`); process.exit(1); };
+if (!fs.existsSync(file)) process.exit(0);
+let config;
+try { config = JSON.parse(fs.readFileSync(file, "utf8")); } catch (e) { fail(`${file} を JSON として読めません: ${e.message}`); }
+const packs = config?.packs;
+if (packs === undefined) process.exit(0);
+if (!Array.isArray(packs) || !packs.every((p) => typeof p === "string" && /^[a-z0-9-]+$/.test(p)))
+  fail(`${file} の packs は束の名前（英小文字・数字・-）の配列にしてください`);
+const names = [...new Set(packs.filter((p) => p !== "core"))];
+for (const p of names) if (!fs.existsSync(`${root}/${p}/.claude/skills`)) fail(`pack がありません: ${p}`);
+if (names.length) console.log(names.join("\n"));
+' "$dir/.claude/roles/config.json" "$root")
+
+set -- "$root/core"
+list=
+for p in $packs; do
+  set -- "$@" "$root/$p"
+  list=${list:+$list,}$p
+done
+first=/tpm
+[ -n "$list" ] && first="/tpm packs=$list"
+
 # --add-dir は後ろの語もまとめて folder として読むので、/tpm の前に -- が要る。
 set -- claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions \
-  --add-dir "$root" -- /tpm
+  --add-dir "$@" -- "$first"
 
 if [ $print -eq 1 ]; then
   printf '%s\n' "$dir" "$*"
