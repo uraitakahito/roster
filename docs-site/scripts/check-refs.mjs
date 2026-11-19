@@ -8,6 +8,7 @@
 // 3. README のドキュメントの URL が、astro.config.ts の site ＋ base と同じ
 // 4. skill（core/・dependabot/ の *.md）が名指す原稿が在り、「」で名指した見出しがその原稿に在る
 // 5. configuration.md の「`.claude/dependabot/config.json`」の表の欄と、skill が使う config.<欄> が両方向で揃う
+// 6. 画面の絵（src/assets/screens/）と本文の参照が両方向で揃う
 //
 // 4 と 5 が要るのは、skill が Pages ではなく原稿の Markdown を読むため。原稿の見出しや表を
 // 直したときに、skill の読む先が無くなるのを止める。
@@ -124,6 +125,19 @@ if (!section) {
   for (const k of configFields) if (!documented.has(k)) errors.push(`configuration.md: skill が使う config.${k} が表に無い`);
   for (const k of documented) if (!configFields.has(k)) errors.push(`configuration.md: 表の欄 ${k} を使う skill が無い`);
 }
+
+// 6. 画面の絵
+const SCREENS = join(SITE_DIR, "src", "assets", "screens");
+const screens = existsSync(SCREENS) ? readdirSync(SCREENS).filter((f) => !f.startsWith(".")) : [];
+const used = new Set();
+for (const p of all) {
+  for (const m of prose(p.text).matchAll(/!\[[^\]]*\]\(([^)\s]+)\)/g)) {
+    const target = join(dirname(p.file), m[1]);
+    if (!existsSync(target)) errors.push(`${relative(REPO, p.file)}: 絵が無い: ${m[1]}`);
+    else if (dirname(target) === SCREENS) used.add(relative(SCREENS, target));
+  }
+}
+for (const f of screens) if (!used.has(f)) errors.push(`docs-site/src/assets/screens/${f}: どの本文も使っていない`);
 
 if (errors.length > 0) {
   for (const e of errors) console.error(`✗ ${e}`);

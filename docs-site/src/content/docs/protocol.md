@@ -7,6 +7,12 @@ description: 担当どうしの連絡の決まりは protocol.md の 1 か所に
 
 TPM 担当が書く依頼書には、その課題だけのことを書く（ひな形は `core/.claude/skills/tpm/brief-template.md`）。
 
+## サイドバー
+
+各担当は、cmux のサイドバーの自分の workspace に `model` と `wait` の 2 つだけを出す。`wait` は「今、誰が何を待っているか」を 1 つだけ出し、状況が変わるたびに上書きする（字の形は `protocol.md` の「サイドバー」）。
+
+![cmux のサイドバー。workspace の題の下に、model（Opus 5.5 · medium）と wait（回答待ち(TPM): merge（14:30 まで））が並ぶ](../../assets/screens/sidebar.webp)
+
 ## 見出しの流れ
 
 担当どうしは、`cmux agent message` で見出しの付いた知らせを送り合う。Software Engineer 担当の 1 つの課題では、おおよそ次の順に流れる（見出しの一覧と中身は `protocol.md`）。
