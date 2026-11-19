@@ -1,6 +1,6 @@
-# 役のあいだの決まり（どの役も読む）
+# 担当のあいだの決まり（どの担当も読む）
 
-TPM 役（`/tpm`）・Software Engineer 役（`/software-engineer`）・DevOps Engineer 役（`/devops-engineer`）・Sustaining Engineer 役（`/sustaining-engineer`）が共通に従う決まり。依頼主は Product Manager（利用者）。返答と報告は日本語で書く。
+TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・DevOps Engineer 担当（`/devops-engineer`）・Sustaining Engineer 担当（`/sustaining-engineer`）が共通に従う決まり。依頼主は Product Manager（利用者）。返答と報告は日本語で書く。
 
 ## 知らせの送り方
 
@@ -10,21 +10,21 @@ cmux --json agent inbox --surface <相手の surface> --limit 3     # 届いた�
 ```
 
 - 知らせは相手の hook から届く（打ち込みとぶつからない）。返事は、届いた知らせに書かれた `--reply-to <id>` で返してよい。
-- 送った後は inbox で `delivered` になったかを見る。`queued` のまま相手が入力待ちなら、TPM 役が `cmux send` で打ち込む。
+- 送った後は inbox で `delivered` になったかを見る。`queued` のまま相手が入力待ちなら、TPM 担当が `cmux send` で打ち込む。
 - `--mark-read` は付けない（`--surface` 無しで打つと、全部の宛先を既読にする）。
 - 自分の surface と workspace は `cmux identify` の `caller`。
-- **Product Manager に直接聞かない。** Product Manager とのやりとりは、すべて TPM 役を通す。
+- **Product Manager に直接聞かない。** Product Manager とのやりとりは、すべて TPM 担当を通す。
 
 ## 見出し
 
-### TPM 役へ
+### TPM 担当へ
 
 | 見出し | いつ | 本文 |
 |---|---|---|
-| 【相談(TPM)】 | TPM 役に決めてほしいことがある | 困っていること・試したこと・案とお勧め |
+| 【相談(TPM)】 | TPM 担当に決めてほしいことがある | 困っていること・試したこと・案とお勧め |
 | 【PM への確認】 | Product Manager に決めてほしいことを Jira に書いた（下の「Product Manager に確かめる」） | コメントの URL と各項目の題 |
 | 【PM への依頼】 | Product Manager に頼むことを Artifact に書いた | Artifact の URL と要点 |
-| 【DevOps への依頼】 | Apple Container・Windmill など共有の環境で DevOps Engineer 役の手が要る | 何を・なぜ・急ぎか |
+| 【DevOps への依頼】 | Apple Container・Windmill など共有の環境で DevOps Engineer 担当の手が要る | 何を・なぜ・急ぎか |
 | 【ドキュメント修正】 | 文書やコメントの食い違いを直した PR を merge した | PR の URL と一言 |
 | 【merge 済み】 | 自分の PR を 1 本 merge した | PR の URL と一言 |
 | 【完成】 | 依頼書の成果（提案・計画などの Artifact）を publish した。依頼書が【計画完成】など別の名を決めていればそれを使う | URL と要点 |
@@ -32,7 +32,7 @@ cmux --json agent inbox --surface <相手の surface> --limit 3     # 届いた�
 
 Dependabot の PR だけで使う見出し（【merge の依頼】【まだ】【作り直し】）は `/sustaining-engineer` と `/dependabot-triage` に書いてある。
 
-### TPM 役から
+### TPM 担当から
 
 | 見出し | 中身 |
 |---|---|
@@ -46,7 +46,7 @@ Dependabot の PR だけで使う見出し（【merge の依頼】【まだ】�
 - `model`: `cmux set-status model "<model> · <effort>" --icon sparkle --priority 90`。字は `Opus 5.5 · medium` の形。
 - `wait`: 「今、誰が何を待っているか」を 1 つだけ。状況が変わるたびに `cmux set-status wait "<字>" --icon hourglass --priority 80` で上書きし、前の表示を残さない。
   - Product Manager の答えを待つ: `回答待ち(PM): <何を>`
-  - TPM 役の答えを待つ: `回答待ち(TPM): <何を>`
+  - TPM 担当の答えを待つ: `回答待ち(TPM): <何を>`
   - 自分が動いている: `作業中: <段>`
   - 待つ時間に限りがあれば添える: `回答待ち(TPM): merge（14:30 まで）`
 - **`/model`・`/effort` は打たない**（新しい session の既定まで書き換わる）。model と effort は起動の旗で決まる。
@@ -61,7 +61,7 @@ Dependabot の PR だけで使う見出し（【merge の依頼】【まだ】�
    acli jira workitem comment list --key <課題> --json      # 足したコメントの id
    ```
 2. URL は `https://<site>/browse/<課題>?focusedCommentId=<id>`。`<site>` は `acli jira auth status` の `Site`。
-3. その URL を自分の workspace で開き（`cmux open <URL> --workspace <自分の workspace>`）、【PM への確認】で TPM 役に送る。`wait` は `回答待ち(PM): <何を>`。
+3. その URL を自分の workspace で開き（`cmux open <URL> --workspace <自分の workspace>`）、【PM への確認】で TPM 担当に送る。`wait` は `回答待ち(PM): <何を>`。
 4. 答えが来たら、項目の `state` を `DONE` にして `acli jira workitem comment update --key <課題> --id <id> --body-adf <ADF の JSON>`。お勧めと違う答えは、返信のコメントに書く。
 
 Jira の課題が無い依頼では、同じ中身を Artifact に書いて【PM への依頼】で送る。
@@ -72,9 +72,9 @@ Jira の課題が無い依頼では、同じ中身を Artifact に書いて【PM
 
 ## 共有の環境
 
-Apple Container・Windmill など、並べて動いている物に響く環境は、DevOps Engineer 役のほかは変えない。要るときは【DevOps への依頼】で TPM 役に送る。
+Apple Container・Windmill など、並べて動いている物に響く環境は、DevOps Engineer 担当のほかは変えない。要るときは【DevOps への依頼】で TPM 担当に送る。
 
 ## 終わり方
 
-- 自分の workspace は自分で閉じない。【終わり】を送った後、`wait` を `回答待ち(TPM): workspace を閉じる` にする。TPM 役が報告を受けてから閉じる。
+- 自分の workspace は自分で閉じない。【終わり】を送った後、`wait` を `回答待ち(TPM): workspace を閉じる` にする。TPM 担当が報告を受けてから閉じる。
 - 自分で作った worktree と branch は、merge の後に消す（`git worktree list` に本体だけが残ること）。
