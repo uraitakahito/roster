@@ -13,7 +13,7 @@ description: TPM 役が Dependabot の PR を集め、依存の版の公開か�
 
 ## 0. 設定を読む（最初に必ず）
 
-- `${CLAUDE_SKILL_DIR}/../../../../core/.claude/skills/_shared/protocol.md`（役のあいだの決まり。知らせの送り方・見出し・サイドバー）
+- `${CLAUDE_SKILL_DIR}/../../../../core/.claude/skills/_shared/protocol.md`（役のあいだの決まり。連絡の仕方・見出し・サイドバー）
 - `${CLAUDE_PROJECT_DIR}/.claude/dependabot/config.json`（欄は repo の README の表。以下 `config.<欄>` と書く）
 - `${CLAUDE_PROJECT_DIR}/.claude/dependabot/rules.md`（この project の決まり。**この skill の手順より先に従う**）
 
@@ -103,7 +103,7 @@ Sustaining Engineer 役から届く知らせ:
 | 【作り直し】 | group の PR が閉じて新しい番号で作り直された。表の行を新しい番号に替え、同じ Sustaining Engineer 役に新しい番号で続けさせる（workspace の題も `Sustaining Engineer <repo>#<新>` に替えさせる）。判定は変わらない。 |
 | 【終わり】 | 5 へ。 |
 
-返事を送った後は、届いたかを見る（protocol.md の「知らせの送り方」）。
+返事を送った後は、届いたかを見る（protocol.md の「連絡の仕方」）。
 
 ### `@dependabot rebase` の注意（TPM 役が知っておくこと）
 
