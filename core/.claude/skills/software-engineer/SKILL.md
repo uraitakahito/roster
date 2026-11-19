@@ -17,7 +17,7 @@ disable-model-invocation: true
 
 ## 0. 決まりを読む（最初に必ず）
 
-`${CLAUDE_SKILL_DIR}/../_shared/protocol.md` を読み、従う。知らせの頭・サイドバー・Product Manager への確かめ方・文書の食い違い・共有の環境・終わり方はそこにある。
+`${CLAUDE_SKILL_DIR}/../_shared/protocol.md` を読み、従う。知らせの見出し・サイドバー・Product Manager への確かめ方・文書の食い違い・共有の環境・終わり方はそこにある。
 
 ## 1. 名乗る
 

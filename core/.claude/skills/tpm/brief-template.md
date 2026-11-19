@@ -2,7 +2,7 @@
 
 TPM 役が Software Engineer 役・DevOps Engineer 役に渡す依頼書。HTML の Artifact に書いて publish し、URL を起動の 1 行の `brief=` か【依頼】で渡す。
 
-**書かない物**: 連絡のしかた・頭の表・サイドバー・終わり方・文書の食い違いの扱い・共有の環境の扱い。これらは `/software-engineer`・`/devops-engineer` と `_shared/protocol.md` にある。依頼書には、その課題だけのことを書く。
+**書かない物**: 連絡のしかた・見出しの表・サイドバー・終わり方・文書の食い違いの扱い・共有の環境の扱い。これらは `/software-engineer`・`/devops-engineer` と `_shared/protocol.md` にある。依頼書には、その課題だけのことを書く。
 
 ## 欄
 
@@ -14,10 +14,10 @@ TPM 役が Software Engineer 役・DevOps Engineer 役に渡す依頼書。HTML 
 | 前提 | その課題だけの決まり（破壊的でよいか・後方互換を考えるか・触ってはいけない物・使う model の指示） |
 | 材料 | 読む物（貼られた文・ファイル・URL）。長い文は `<pre>` でそのまま |
 | TPM が知っていること | 調べ済みのこと・試して駄目だったこと |
-| 成果の形 | 何を出せば終わりか（Artifact・PR・Jira の課題）と、そのとき送る頭（既定は【完成】・【終わり】） |
+| 成果の形 | 何を出せば終わりか（Artifact・PR・Jira の課題）と、そのとき送る見出し（既定は【完成】・【終わり】） |
 
 ## 書き方
 
-- 1 段の読む列。見出しと短い文。図は要る所だけ。
+- 1 段の読む列。節の題と短い文。図は要る所だけ。
 - 決まった言い回しより、その課題の具体（ファイル名・コマンド・数）を書く。
 - Product Manager の答えが要ることが先にわかっていれば、「Product Manager に確かめること」として依頼書に書き、Software Engineer 役に Jira のタスクリストにさせる（protocol.md の「Product Manager に確かめる」）。
