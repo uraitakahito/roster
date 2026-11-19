@@ -104,6 +104,6 @@ cmux set-status wait "回答待ち(TPM): merge" --icon hourglass --priority 80
 TPM 担当から merge 済みの知らせを受けたら:
 
 1. 4 で作った worktree があれば消す。
-2. TPM 担当に `【終わり】<PR の URL>／merge の commit／残した物（課題に登録した物があれば番号）` を送る。
+2. TPM 担当に `【終わり】<PR の URL>／merge の commit／残した物` を送る。
 3. `cmux set-status wait "回答待ち(TPM): workspace を閉じる" --icon hourglass --priority 80`。
 4. **workspace は自分で閉じない。** TPM 担当が報告を受け取った後に閉じる。

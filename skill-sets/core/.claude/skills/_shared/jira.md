@@ -1,6 +1,6 @@
 # Jira を触るときの決まり（TPM・Software Engineer・DevOps Engineer 担当が読む）
 
-Jira の課題にコメントを書く・読む・Product Manager に確かめる・状態を進める・課題を登録するときに読む。命令は `acli`。Sustaining Engineer 担当は Jira を触らない。
+Jira の課題にコメントを書く・読む・Product Manager に確かめる・状態を進めるときに読む。命令は `acli`。Sustaining Engineer 担当は Jira を触らない。
 
 ## 誰が・いつ書くか
 
@@ -87,15 +87,3 @@ Software Engineer 担当が【片付け】を受けたら、課題を `完了` �
 ```sh
 acli jira workitem transition --key <課題> --status "完了" --yes
 ```
-
-## 課題を登録する
-
-計画から外れた物・残した物で直した方がよい物は、【片付け】を受けたら課題にして元の課題にリンクする。担当の交代のための【片付け】では登録しない（【終わり】に書き、次の担当が引き継ぐ）。
-
-```sh
-acli jira workitem create --project <project> --type タスク --summary "<題>" --description "<説明>"
-acli jira workitem link create --out <新しい課題> --in <元の課題> --type Relates --yes   # 種類は acli jira workitem link type
-```
-
-- コンポーネントは acli では付けられない。要るときは【終わり】に「付けたいコンポーネント」として書く。
-- 課題どうしのリンクを付けたか、付けなかった理由も【終わり】に書く。
