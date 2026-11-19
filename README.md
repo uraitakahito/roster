@@ -21,6 +21,40 @@ core はいつも足す。ほかの束は、起こす folder の `.claude/roles/
 | `DevOps Engineer` | AI |
 | `Sustaining Engineer` | AI |
 
+## 起動のしかた
+
+Claude Code のセッションに、使う側の project の folder で `--add-dir` でこの repo の core を足す。
+
+```sh
+cd <どこか>
+claude --dangerously-skip-permissions --remote-control --add-dir /Users/takahito/projects/skills/core
+```
+
+その後、 `/tpm` を打つ。
+
+または、TPM 役は `bin/tpm` で起こす。1 度だけ PATH の通った所に symlink を張る。
+
+```sh
+ln -s <この repo の folder>/bin/tpm ~/.local/bin/tpm
+tpm              # 今いる folder で TPM 役を起こす
+tpm <folder>     # その folder で起こす
+```
+
+`bin/tpm` は自分の場所からこの repo を求め、起こした folder の `.claude/roles/config.json` の `packs` を読んで、次を起こした folder で実行する（`tpm --print` で命令だけを出す）。
+
+```sh
+# packs が無い（既定）
+claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --add-dir <repo>/core -- /tpm
+# "packs": ["dependabot"]
+claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --add-dir <repo>/core <repo>/dependabot -- "/tpm packs=dependabot"
+```
+
+**最初の入力は `--` の後に置く**（`--add-dir` は後ろの語もまとめて folder として読むため）。`/tpm` は `packs=` に `dependabot` があり、起こした folder に `.claude/dependabot/config.json` があるときだけ `/dependabot-triage` を呼ぶ。`packs` が読めない・無い束を書いた、のときは起こさずに止まる。
+
+ほかの役を起こす 1 行は、`/tpm`（Software Engineer・DevOps Engineer 役）と `/dependabot-triage`（Sustaining Engineer 役）が自分の場所（`${CLAUDE_SKILL_DIR}/../../../..`）から組む（Software Engineer・DevOps Engineer 役は `--add-dir <repo>/core`、Sustaining Engineer 役は `--add-dir <repo>/core <repo>/dependabot`）ので、人は打たない。起こした後、サイドバーに `wait=作業中: …` が出たか（`cmux sidebar-state --workspace <workspace>`）で、skill が読まれたことを確かめる。題は起こすときに `--name` で付けるので、見分けに使えない。
+
+動いているセッションに途中から足すときは `/add-dir <この repo の folder>/core`（Dependabot の束も要るなら `<この repo の folder>/dependabot` も）。信頼していない folder だとダイアログが出るので、↓ と Enter で「Yes, add it」を選ぶ。
+
 ## skill
 
 | skill | 呼ぶ人 | すること |
@@ -75,31 +109,6 @@ Dependabot の skill を使う project では、`.claude/roles/config.json` の 
 #### `.claude/dependabot/rules.md`
 
 その project の決まりを文で書く。skill はこれを手順より先に読み、従う。例: 読むべき memory や教訓・worktree を置く場所・共有の環境を変える操作を誰に頼むか・audit の赤を除外している勧告と課題の番号・使ってはいけない語。
-
-## 起動のしかた
-
-TPM 役は `bin/tpm` で起こす。1 度だけ PATH の通った所に symlink を張る。
-
-```sh
-ln -s <この repo の folder>/bin/tpm ~/.local/bin/tpm
-tpm              # 今いる folder で TPM 役を起こす
-tpm <folder>     # その folder で起こす
-```
-
-`bin/tpm` は自分の場所からこの repo を求め、起こした folder の `.claude/roles/config.json` の `packs` を読んで、次を起こした folder で実行する（`tpm --print` で命令だけを出す）。
-
-```sh
-# packs が無い（既定）
-claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --add-dir <repo>/core -- /tpm
-# "packs": ["dependabot"]
-claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --add-dir <repo>/core <repo>/dependabot -- "/tpm packs=dependabot"
-```
-
-**最初の入力は `--` の後に置く**（`--add-dir` は後ろの語もまとめて folder として読むため）。`/tpm` は `packs=` に `dependabot` があり、起こした folder に `.claude/dependabot/config.json` があるときだけ `/dependabot-triage` を呼ぶ。`packs` が読めない・無い束を書いた、のときは起こさずに止まる。
-
-ほかの役を起こす 1 行は、`/tpm`（Software Engineer・DevOps Engineer 役）と `/dependabot-triage`（Sustaining Engineer 役）が自分の場所（`${CLAUDE_SKILL_DIR}/../../../..`）から組む（Software Engineer・DevOps Engineer 役は `--add-dir <repo>/core`、Sustaining Engineer 役は `--add-dir <repo>/core <repo>/dependabot`）ので、人は打たない。起こした後、サイドバーに `wait=作業中: …` が出たか（`cmux sidebar-state --workspace <workspace>`）で、skill が読まれたことを確かめる。題は起こすときに `--name` で付けるので、見分けに使えない。
-
-動いているセッションに途中から足すときは `/add-dir <この repo の folder>/core`（Dependabot の束も要るなら `<この repo の folder>/dependabot` も）。信頼していない folder だとダイアログが出るので、↓ と Enter で「Yes, add it」を選ぶ。
 
 ## 信頼のダイアログ
 
