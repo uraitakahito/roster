@@ -1,7 +1,5 @@
 # skills
 
-Claude Code の skill を、使う project の外に置く repo。使う側のセッションは `--add-dir` でこの repo を足して読む。旗を付けたセッションにだけ skill が出るので、ほかの作業のセッションには出ない。
-
 skill は束（pack）に分けてあり、`--add-dir` で足した束の skill だけが出る。
 
 | 束 | folder | skill |
@@ -23,29 +21,15 @@ core はいつも足す。ほかの束は、起こす folder の `.claude/roles/
 
 ## 起動のしかた
 
-Claude Code のセッションに、使う側の project の folder で `--add-dir` でこの repo の core を足す。
+`bin/tpm` が出す 1 行を写して打つ。
 
 ```sh
-cd <どこか>
-claude --dangerously-skip-permissions --remote-control --add-dir /Users/takahito/projects/skills/core
-```
-
-その後、 `/tpm` を打つ。Dependabot の束も使うなら `--add-dir` に `/Users/takahito/projects/skills/dependabot` も足し、`/tpm packs=dependabot` と打つ（`/tpm` は引数の `packs=` で足した束を知るので、束を足しても `/tpm` だけでは `/dependabot-triage` を呼ばない）。
-
-または、`bin/tpm` が出す 1 行を写して打つ。`bin/tpm` は TypeScript で書いてあり、build したもの（`dist/`）を動かす。1 度だけ依存を入れて build し、PATH の通った所に symlink を張る。
-
-```sh
-cd <この repo の folder>
+cd </foo/bar/skills> # skillsの置き場所
 pnpm install --frozen-lockfile
 pnpm run build
-ln -s <この repo の folder>/bin/tpm ~/.local/bin/tpm
-```
-
-build は自動ではしない。pull した後や `src/` を変えた後は、`tpm` を使う前に `pnpm run build` を打ち直す。
-
-```sh
-tpm              # 今いる folder で TPM 役を起こす 1 行を出す
-tpm <folder>     # その folder で起こす 1 行を出す
+cd </your/workspace> # あなたが作業する場所
+/foo/bar/skills/bin/tpm              # 今いる folder で TPM 役を起こす 1 行を出す
+/foo/bar/skills/bin/tpm <folder>     # その folder で起こす 1 行を出す
 ```
 
 `tpm` は claude を起こさない。自分の場所からこの repo を求め、folder の `.claude/roles/config.json` の `packs` を確かめて、次の 1 行を出すだけ。それを写して打つ。
