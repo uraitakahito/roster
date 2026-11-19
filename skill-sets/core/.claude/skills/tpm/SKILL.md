@@ -73,7 +73,7 @@ disable-model-invocation: true
 | 見出し | すること |
 |---|---|
 | 【相談(TPM)】 | 答える。Product Manager の判断が要るなら、Product Manager に聞いてから答える |
-| 【PM への確認】【PM への依頼】 | URL を自分の workspace で開き（`cmux open <URL> --workspace <自分の workspace>`）、Product Manager に見せる。答えを【PM の回答】で返す |
+| 【PM への依頼】 | URL を自分の workspace で開き（`cmux open <URL> --workspace <自分の workspace>`）、Product Manager に見せる。答えを【PM の回答】で返す |
 | 【DevOps への依頼】 | DevOps Engineer 担当に依頼書を書いて回す（いなければ起こす） |
 | 【ドキュメント修正】【merge 済み】 | 受け取ったと返す（Jira のコメントは担当が書く） |
 | 【完成】 | Artifact を自分の workspace で開き、Product Manager に見せ、「続きをこの担当に頼むか、この課題を終えるか」を聞く。続けるなら新しい依頼書（3 の 1 のとおり書く）を同じ担当に【依頼】で送り、終えるなら【片付け】を送る（担当が Jira の課題を `完了` にし、残した物を課題にする） |

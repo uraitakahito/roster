@@ -18,7 +18,7 @@ Jira の課題にコメントを書く・読む・Product Manager に確かめ�
 
 - 1 行目は `【<種類>】<担当>: <一言>`。担当は `Software Engineer`・`TPM`・`DevOps Engineer`。Jira の書き手はいつも Product Manager のアカウント（acli が Product Manager の認証で書く）なので、担当は字で書く。
 - 2 行目から、要点を 1 点 1 段落で 3 つまで。中身は Artifact に書き、コメントには写さない。
-- 段落（`paragraph`）だけで書く。箇条書き（`bulletList`・`orderedList`）は使わない。`taskList` は「確認」のときだけ。
+- 段落（`paragraph`）だけで書く。箇条書き（`bulletList`・`orderedList`）と `taskList` は使わない。
 - リンクは、URL をそのまま字にして `link` の mark を付ける（字も `href` も URL）。PR も `#30` ではなく URL で書き、merge したら「（merge 済み）」を添える。
 
 ひな形（種類で変わるのは 1 行目だけ）:
@@ -67,19 +67,18 @@ acli jira workitem view <課題> --fields comment --json                        
 ```
 
 - **読むのは `workitem view --fields comment --json` だけ。** ADF をそのまま返す。足したコメントの id は `.fields.comment.comments[-1].id`。
-- `acli jira workitem comment list --json` は使わない。ADF を平らな字にするので、リンクの `href` が消え、`bulletList` と `taskList` は丸ごと消える。
+- `acli jira workitem comment list --json` は使わない。ADF を平らな字にするので、リンクの `href` が消え、`bulletList` などのリストは丸ごと消える。
 - JSON は `python3 -m json.tool <ファイル>` で確かめてから書く。
 
 ## Product Manager に確かめる
 
-文書やコメントの食い違い**以外**で Product Manager に決めてほしいことは、Jira の課題にタスクリストで書く。
+文書やコメントの食い違い**以外**で Product Manager に決めてほしいことは、HTML の Artifact（確認の Artifact）に書いて【PM への依頼】で送る。Jira の課題があってもなくても同じ。Jira のコメントには中身を写さない。
 
-1. 課題に「確認」のコメントを足す。1 行目の段落の後に、確かめたいことを 1 項目ずつ ADF の `taskList`（`taskItem` の `state` は `TODO`、`localId` は課題の中で一意）で書き、各項目に選択肢とお勧めを添える。
-2. id を `workitem view` で取り、URL を `https://<site>/browse/<課題>?focusedCommentId=<id>` にする。`<site>` は `acli jira auth status` の `Site`。
-3. その URL を自分の workspace で開き（`cmux open <URL> --workspace <自分の workspace>`）、【PM への確認】で TPM 担当に送る。`wait` は `回答待ち(PM): <何を>`。
-4. 答えが来たら、項目の `state` を `DONE` にして `comment update --body-adf` で直す。お勧めと違う答えは、別のコメントに書く。
-
-Jira の課題が無い依頼では、同じ中身を Artifact に書いて【PM への依頼】で送る。
+1. 確認の Artifact を作る。項目ごとに、背景・選択肢・お勧めとその訳を書き、比べる物は表か図にする。
+2. publish し、自分の workspace で開く（`cmux open <URL> --workspace <自分の workspace>`）。
+3. Jira の課題があれば「確認」のコメントを足す。1 行目の後に、Artifact の URL と、項目の題を 1 項目 1 段落で書く。
+4. 【PM への依頼】で URL と各項目の題を TPM 担当に送る。`wait` は `回答待ち(PM): <何を>`。
+5. 答えは【PM の回答】で来る。Jira の課題があれば、TPM 担当が「決定」のコメントを書いてある。
 
 ## 状態を進める
 

@@ -23,8 +23,7 @@ cmux --json agent inbox --surface <相手の workspace か surface> --limit 3   
 | 見出し | いつ | 本文 |
 |---|---|---|
 | 【相談(TPM)】 | TPM 担当に決めてほしいことがある | 困っていること・試したこと・案とお勧め |
-| 【PM への確認】 | Product Manager に決めてほしいことを Jira に書いた（jira.md の「Product Manager に確かめる」） | コメントの URL と各項目の題 |
-| 【PM への依頼】 | Product Manager に頼むことを Artifact に書いた | Artifact の URL と要点 |
+| 【PM への依頼】 | Product Manager に決めてほしいこと・頼むことを Artifact に書いた（jira.md の「Product Manager に確かめる」） | Artifact の URL と各項目の題（頼むことなら要点） |
 | 【DevOps への依頼】 | Apple Container・Windmill など共有の環境で DevOps Engineer 担当の手が要る | 何を・なぜ・急ぎか |
 | 【ドキュメント修正】 | 文書やコメントの食い違いを直した PR を merge した | PR の URL と一言 |
 | 【merge 済み】 | 自分の PR を 1 本 merge した | PR の URL と一言 |
