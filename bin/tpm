@@ -1,0 +1,38 @@
+#!/bin/sh
+# TPM 役の Claude Code を起こす。
+#
+#   tpm [--print] [folder]
+#
+# folder を渡さなければ、今いる folder で起こす。この script の 1 つ上（skills の repo）を
+# --add-dir で足し、最初の入力を /tpm にする。symlink から呼んでも repo は正しく求まる。
+# --print は起こさずに、移る folder と命令を 1 行ずつ出す（試験用）。
+set -eu
+
+print=0
+if [ "${1:-}" = "--print" ]; then
+  print=1
+  shift
+fi
+if [ $# -gt 1 ]; then
+  echo "使い方: tpm [--print] [folder]" >&2
+  exit 2
+fi
+
+dir=${1:-$PWD}
+if [ ! -d "$dir" ]; then
+  echo "tpm: folder がありません: $dir" >&2
+  exit 1
+fi
+dir=$(cd "$dir" && pwd -P)
+root=$(cd "$(dirname "$(realpath "$0")")/.." && pwd -P)
+
+# --add-dir は後ろの語もまとめて folder として読むので、/tpm の前に -- が要る。
+set -- claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions \
+  --add-dir "$root" -- /tpm
+
+if [ $print -eq 1 ]; then
+  printf '%s\n' "$dir" "$*"
+  exit 0
+fi
+cd "$dir"
+exec "$@"
