@@ -2,18 +2,19 @@
   "//": [
     "package.json にコメントを書く方法の議論:",
     "https://stackoverflow.com/questions/14221579/how-do-i-add-comments-to-package-json-for-npm-install",
-    "`//<項目>` のキー（`//scripts` など）に、すぐ下の <項目> の説明を、同じ名前をキーにして書く。npm はこれらのキーを使わない。"
+    "`//<項目>` のキー（`//scripts` など）に、すぐ下の <項目> の説明を、同じ名前をキーにして書く。pnpm はこれらのキーを使わない。"
   ],
   "name": "skills",
   "version": "1.0.0",
   "private": true,
+  "packageManager": "pnpm@11.26.0",
   "type": "module",
   "engines": {
     "node": ">=26"
   },
   "//scripts": {
     "build": "src/ を dist/ に書き出し（設定は tsconfig.build.json）、bin/tpm の symlink の先の dist/cli.js に実行権を付ける。ほかの script は build を呼ばないので、clone・pull・src/ を変えた後に人が打つ。",
-    "test": "Vitest を監視せずに 1 回だけ実行する（設定は vitest.config.ts）。test/cli.test.ts は build 済みの dist/ を動かすので、先に `npm run build` が要る。",
+    "test": "Vitest を監視せずに 1 回だけ実行する（設定は vitest.config.ts）。test/cli.test.ts は build 済みの dist/ を動かすので、先に `pnpm run build` が要る。",
     "lint": "ESLint で repo 全体を検査する（設定は eslint.config.mjs）。",
     "typecheck": "tsc で src・test・設定の型だけを検査し、何も書き出さない（設定は tsconfig.json）。Vitest は型を検査しないので、型の誤りはこれで見つける。"
   },

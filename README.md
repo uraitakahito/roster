@@ -36,12 +36,12 @@ claude --dangerously-skip-permissions --remote-control --add-dir /Users/takahito
 
 ```sh
 cd <この repo の folder>
-npm ci
-npm run build
+pnpm install --frozen-lockfile
+pnpm run build
 ln -s <この repo の folder>/bin/tpm ~/.local/bin/tpm
 ```
 
-build は自動ではしない。pull した後や `src/` を変えた後は、`tpm` を使う前に `npm run build` を打ち直す。
+build は自動ではしない。pull した後や `src/` を変えた後は、`tpm` を使う前に `pnpm run build` を打ち直す。
 
 ```sh
 tpm              # 今いる folder で TPM 役を起こす 1 行を出す
@@ -132,17 +132,17 @@ Dependabot の skill を使う project では、`.claude/roles/config.json` の 
 1. TPM 役のほかに動いている役（Software Engineer・DevOps Engineer・Sustaining Engineer）が 0 のときに行う。
 2. `mv <今の folder> <新しい folder>`（git の履歴ごと移る）。
 3. 新しい folder で 1 度 Claude Code を対話で起こして信頼する（上の「信頼のダイアログ」。信頼は path に付くので、移すたびに要る）。
-4. 新しい folder で `npm ci` と `npm run build` を打ち、`~/.local/bin/tpm` の symlink を張り直す（`ln -sf <新しい folder>/bin/tpm ~/.local/bin/tpm`）。
+4. 新しい folder で `pnpm install --frozen-lockfile` と `pnpm run build` を打ち、`~/.local/bin/tpm` の symlink を張り直す（`ln -sf <新しい folder>/bin/tpm ~/.local/bin/tpm`）。
 5. 動いている TPM 役は、起こし直すか `/add-dir <新しい folder>/core`（束を足していれば、その束の folder も）を打つ。ほかの役を起こす旗は `/tpm` と `/dependabot-triage` が自分の場所から求めるので直さない。
 
 ## 試験
 
 ```sh
-npm ci
-npm run typecheck   # 型の検査（tsc）
-npm run lint        # ESLint
-npm run build       # test/cli.test.ts は build 済みの dist/ を動かすので、試験の前に打つ
-npm test            # Vitest
+pnpm install --frozen-lockfile
+pnpm run typecheck   # 型の検査（tsc）
+pnpm run lint        # ESLint
+pnpm run build       # test/cli.test.ts は build 済みの dist/ を動かすので、試験の前に打つ
+pnpm test            # Vitest
 ```
 
-`npm test` は build をしない。`dist/` が無いと `test/cli.test.ts` が「先に npm run build を打ってください」で落ちる。GitHub Actions でも同じ順に流す（`.github/workflows/test.yml`）。
+`pnpm test` は build をしない。`dist/` が無いと `test/cli.test.ts` が「先に pnpm run build を打ってください」で落ちる。GitHub Actions でも同じ順に流す（`.github/workflows/test.yml`）。
