@@ -1,0 +1,80 @@
+# 役のあいだの決まり（どの役も読む）
+
+TPM 役（`/tpm`）・Software Engineer 役（`/se`）・DevOps Engineer 役（`/devops`）・Sustaining Engineer 役（`/sustaining`）が共通に従う決まり。依頼主は Product Manager（利用者）。返答と報告は日本語で書く。
+
+## 知らせの送り方
+
+```sh
+cmux agent message <相手の surface か workspace> --from "<自分の workspace の題>" -- "【頭】本文"
+cmux --json agent inbox --surface <相手の surface> --limit 3     # 届いたかを見る
+```
+
+- 知らせは相手の hook から届く（打ち込みとぶつからない）。返事は、届いた知らせに書かれた `--reply-to <id>` で返してよい。
+- 送った後は inbox で `delivered` になったかを見る。`queued` のまま相手が入力待ちなら、TPM 役が `cmux send` で打ち込む。
+- `--mark-read` は付けない（`--surface` 無しで打つと、全部の宛先を既読にする）。
+- 自分の surface と workspace は `cmux identify` の `caller`。
+- **Product Manager に直接聞かない。** Product Manager とのやりとりは、すべて TPM 役を通す。
+
+## 頭
+
+### TPM 役へ
+
+| 頭 | いつ | 本文 |
+|---|---|---|
+| 【相談(TPM)】 | TPM 役に決めてほしいことがある | 困っていること・試したこと・案とお勧め |
+| 【PM への確認】 | Product Manager に決めてほしいことを Jira に書いた（下の「Product Manager に確かめる」） | コメントの URL と項目の見出し |
+| 【PM への依頼】 | Product Manager に頼むことを Artifact に書いた | Artifact の URL と要点 |
+| 【DevOps への依頼】 | Apple Container・Windmill など共有の環境で DevOps Engineer 役の手が要る | 何を・なぜ・急ぎか |
+| 【ドキュメント修正】 | 文書やコメントの食い違いを直した PR を merge した | PR の URL と一言 |
+| 【merge 済み】 | 自分の PR を 1 本 merge した | PR の URL と一言 |
+| 【完成】 | 依頼書の成果（提案・計画などの Artifact）を publish した。依頼書が【計画完成】など別の名を決めていればそれを使う | URL と要点 |
+| 【終わり】 | 依頼が全部終わった | merge した PR・登録した課題・消した worktree・残っている物 |
+
+Dependabot の PR だけで使う頭（【merge の依頼】【まだ】【作り直し】）は `/sustaining` と `/dependabot-triage` に書いてある。
+
+### TPM 役から
+
+| 頭 | 中身 |
+|---|---|
+| 【依頼】 | 新しい依頼書の URL。Artifact tool の `read` で読み、それに従う |
+| 【PM の回答】 | Product Manager の答え。待ちの表示を作業中に戻して続ける |
+| 【連絡】 | 知っておくこと（Jira の番号など）。返事は要らない |
+
+## サイドバー
+
+- 使う鍵は **`model` と `wait` の 2 つだけ**。新しい鍵を作らない（作ると表示が増える）。
+- `model`: `cmux set-status model "<model> · <effort>" --icon sparkle --priority 90`。字は `Opus 5.5 · medium` の形。
+- `wait`: 「今、誰が何を待っているか」を 1 つだけ。状況が変わるたびに `cmux set-status wait "<字>" --icon hourglass --priority 80` で上書きし、前の表示を残さない。
+  - Product Manager の答えを待つ: `回答待ち(PM): <何を>`
+  - TPM 役の答えを待つ: `回答待ち(TPM): <何を>`
+  - 自分が動いている: `作業中: <段>`
+  - 待つ時間に限りがあれば添える: `回答待ち(TPM): merge（14:30 まで）`
+- **`/model`・`/effort` は打たない**（新しい session の既定まで書き換わる）。model と effort は起動の旗で決まる。
+
+## Product Manager に確かめる
+
+文書やコメントの食い違い**以外**で Product Manager に決めてほしいことは、Jira の課題にタスクリストで書く。
+
+1. 課題にコメントを足す。確かめたいことを 1 項目ずつ ADF の `taskList`（`taskItem` の `state` は `TODO`）で書き、各項目に選択肢とお勧めを添える。
+   ```sh
+   acli jira workitem comment create --key <課題> --body-file <ADF の JSON>
+   acli jira workitem comment list --key <課題> --json      # 足したコメントの id
+   ```
+2. URL は `https://<site>/browse/<課題>?focusedCommentId=<id>`。`<site>` は `acli jira auth status` の `Site`。
+3. その URL を自分の workspace で開き（`cmux open <URL> --workspace <自分の workspace>`）、【PM への確認】で TPM 役に送る。`wait` は `回答待ち(PM): <何を>`。
+4. 答えが来たら、項目の `state` を `DONE` にして `acli jira workitem comment update --key <課題> --id <id> --body-adf <ADF の JSON>`。お勧めと違う答えは、返信のコメントに書く。
+
+Jira の課題が無い依頼では、同じ中身を Artifact に書いて【PM への依頼】で送る。
+
+## 文書の食い違い
+
+調べている途中で文書やコメントの食い違いを見つけたら、お勧めの直し方で直し、PR を merge まで自分で進める（Product Manager の確認は要らない）。worktree で作業し、PR の題か本文に Jira の番号を入れる。merge したら【ドキュメント修正】で知らせ、成果の Artifact にも一覧で載せる。文書とコードが食い違うときは、コードの方に合わせる。
+
+## 共有の環境
+
+Apple Container・Windmill など、並べて動いている物に響く環境は、DevOps Engineer 役のほかは変えない。要るときは【DevOps への依頼】で TPM 役に送る。
+
+## 終わり方
+
+- 自分の workspace は自分で閉じない。【終わり】を送った後、`wait` を `回答待ち(TPM): workspace を閉じる` にする。TPM 役が報告を受けてから閉じる。
+- 自分で作った worktree と branch は、merge の後に消す（`git worktree list` に本体だけが残ること）。
