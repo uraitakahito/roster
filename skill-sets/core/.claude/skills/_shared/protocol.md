@@ -28,7 +28,7 @@ cmux --json agent inbox --surface <相手の surface> --limit 3     # 届いた�
 | 【ドキュメント修正】 | 文書やコメントの食い違いを直した PR を merge した | PR の URL と一言 |
 | 【merge 済み】 | 自分の PR を 1 本 merge した | PR の URL と一言 |
 | 【完成】 | 依頼書の成果（提案・計画などの Artifact）を publish した。依頼書が【計画完成】など別の名を決めていればそれを使う | URL と要点 |
-| 【終わり】 | 【片付け】を受けて片付けた（Sustaining Engineer 担当は PR を merge した後。`/sustaining-engineer`） | merge した PR・登録した課題・消した worktree・残っている物 |
+| 【終わり】 | 【片付け】を受けて片付けた（Sustaining Engineer 担当は PR を merge した後。`/sustaining-engineer`） | 成果の Artifact の URL・merge した PR・登録した課題・消した worktree・残っている物 |
 
 Dependabot の PR だけで使う見出し（【merge の依頼】【まだ】【作り直し】）は `/sustaining-engineer` と `/dependabot-triage` に書いてある。
 
@@ -58,7 +58,7 @@ Jira の課題にコメントを書く・読む・Product Manager に確かめ�
 
 ## 文書の食い違い
 
-調べている途中で文書やコメントの食い違いを見つけたら、お勧めの直し方で直し、PR を merge まで自分で進める（Product Manager の確認は要らない）。worktree で作業し、PR の題か本文に課題の鍵（Jira の番号か `t-<短い名>`）を入れる。merge したら【ドキュメント修正】で知らせ、成果の Artifact にも一覧で載せる。文書とコードが食い違うときは、コードの方に合わせる。
+TPM 担当は自分で直さず、課題として Software Engineer 担当に回す（`/tpm` の 2）。ほかの担当は、調べている途中で文書やコメントの食い違いを見つけたら、お勧めの直し方で直し、PR を merge まで自分で進める（Product Manager の確認は要らない）。worktree で作業し、PR の題か本文に課題の鍵（Jira の番号か `t-<短い名>`）を入れる。merge したら【ドキュメント修正】で知らせ、成果の Artifact にも一覧で載せる。文書とコードが食い違うときは、コードの方に合わせる。
 
 ## 共有の環境
 
