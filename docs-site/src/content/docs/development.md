@@ -17,7 +17,7 @@ pnpm test            # Vitest
 
 ## 判定の道具
 
-Dependabot の PR の判定の道具は `dependabot/.claude/skills/_shared/release-age.mjs`（`node release-age.mjs <owner>/<repo> <PR> [--hours <時間>] [--now <ISO 時刻>]`）。version は PR の差分（pnpm-lock・package-lock・yarn.lock・workflow の `uses:`）から読み、依存の依存も数える。終了コードは 0 対象・10 まだ・20 判定できない・1 道具の誤り。
+Dependabot の PR の判定の道具は `src/release-age.ts`（`node src/release-age.ts <owner>/<repo> <PR> [--hours <時間>] [--now <ISO 時刻>]`）。version は PR の差分（pnpm-lock・package-lock・yarn.lock・workflow の `uses:`）から読み、依存の依存も数える。終了コードは 0 対象・10 まだ・20 判定できない・1 道具の誤り。
 
 ## この docs
 

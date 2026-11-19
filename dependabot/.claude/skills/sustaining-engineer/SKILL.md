@@ -47,7 +47,7 @@ cmux set-status wait "作業中: 読む" --icon hourglass --priority 80
 ## 3. 72 時間を確かめる
 
 ```sh
-node "${CLAUDE_SKILL_DIR}/../_shared/release-age.mjs" <config.owner>/<repo> <PR> --hours <config.hours>
+node "${CLAUDE_SKILL_DIR}/../../../../src/release-age.ts" <config.owner>/<repo> <PR> --hours <config.hours>
 ```
 
 | 終了コード | 意味 | すること |

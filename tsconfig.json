@@ -1,4 +1,5 @@
-// 型の検査（pnpm run typecheck）と ESLint の型つき規則が使う。src・test・dependabot の skill セットの TypeScript（release-age の型と試験）・設定をまとめて見て、何も書き出さない。
+// 型の検査（pnpm run typecheck）と ESLint の型つき規則が使う。src・test・設定をまとめて見て、何も書き出さない。
+// erasableSyntaxOnly: src/release-age.ts は skill が node で直に動かす（Node は消せる型しか扱えない）ので、enum など消せない書き方を止める。
 // 書き出しは tsconfig.build.json（pnpm run build）。
 {
   "compilerOptions": {
@@ -11,7 +12,8 @@
     "verbatimModuleSyntax": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
+    "erasableSyntaxOnly": true,
     "noEmit": true
   },
-  "include": ["src", "test", "dependabot/.claude/skills/**/*.ts", "dependabot/.claude/skills/**/*.mts", "*.config.ts"]
+  "include": ["src", "test", "*.config.ts"]
 }

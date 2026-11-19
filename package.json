@@ -13,10 +13,10 @@
     "node": ">=26"
   },
   "//scripts": {
-    "build": "src/ を dist/ に書き出し（設定は tsconfig.build.json）、bin/tpm の symlink の先の dist/cli.js に実行権を付ける。ほかの script は build を呼ばないので、clone・pull・src/ を変えた後に人が打つ。",
+    "build": "src/ を dist/ に書き出し（src/release-age.ts は除く。設定は tsconfig.build.json）、bin/tpm の symlink の先の dist/cli.js に実行権を付ける。ほかの script は build を呼ばないので、clone・pull・src/ を変えた後に人が打つ。",
     "test": "Vitest を監視せずに 1 回だけ実行する（設定は vitest.config.ts）。test/cli.test.ts は build 済みの dist/ を動かすので、先に `pnpm run build` が要る。",
     "lint": "ESLint で repo を検査する。docs-site/ は別の project なので見ない（設定は eslint.config.mjs）。",
-    "typecheck": "tsc で src・test・dependabot の skill セットの TypeScript・設定の型だけを検査し、何も書き出さない（設定は tsconfig.json）。Vitest は型を検査しないので、型の誤りはこれで見つける。"
+    "typecheck": "tsc で src・test・設定の型だけを検査し、何も書き出さない（設定は tsconfig.json）。Vitest は型を検査しないので、型の誤りはこれで見つける。"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && chmod +x dist/cli.js",
