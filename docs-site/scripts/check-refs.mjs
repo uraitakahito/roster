@@ -39,7 +39,9 @@ function pages() {
       const p = join(dir, e.name);
       if (e.isDirectory()) walk(p);
       else if (/\.mdx?$/.test(e.name)) {
-        const slug = relative(DOCS, p).replace(/\.mdx?$/, "").replace(/(^|\/)index$/, "");
+        const slug = relative(DOCS, p)
+          .replace(/\.mdx?$/, "")
+          .replace(/(^|\/)index$/, "");
         out.push({ file: p, slug, text: readFileSync(p, "utf8") });
       }
     }
@@ -60,7 +62,8 @@ const slugs = new Set(all.map((p) => p.slug));
 for (const p of all) {
   for (const m of prose(p.text).matchAll(/\]\((\/[^)\s]*)\)/g)) {
     const path = m[1].split(/[?#]/)[0].replace(/^\/|\/$/g, "");
-    if (!slugs.has(path)) errors.push(`${relative(REPO, p.file)}: リンク先のページが無い: ${m[1]}`);
+    if (!slugs.has(path))
+      errors.push(`${relative(REPO, p.file)}: リンク先のページが無い: ${m[1]}`);
   }
 }
 
@@ -69,19 +72,35 @@ for (const p of all) {
 //    在るかは手元の folder でなく git から求める。追跡する物と、まだ add していない新しい物（.gitignore の外）だけを
 //    数え、手元だけの cli/dist/・node_modules/ などは数えない（数えると手元では通り、CI で落ちる）
 //    symlink はその物を見る（cli/bin/tpm は build 前は在らない cli/dist/cli.js を指す）
-const tracked = execFileSync("git", ["ls-files"], { cwd: REPO, encoding: "utf8" }).split("\n").filter(Boolean);
-const committable = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], { cwd: REPO, encoding: "utf8" })
+const tracked = execFileSync("git", ["ls-files"], {
+  cwd: REPO,
+  encoding: "utf8",
+})
   .split("\n")
   .filter(Boolean);
-const known = new Set(committable.flatMap((f) => f.split("/").map((_, i, parts) => parts.slice(0, i + 1).join("/"))));
+const committable = execFileSync(
+  "git",
+  ["ls-files", "--cached", "--others", "--exclude-standard"],
+  { cwd: REPO, encoding: "utf8" },
+)
+  .split("\n")
+  .filter(Boolean);
+const known = new Set(
+  committable.flatMap((f) =>
+    f.split("/").map((_, i, parts) => parts.slice(0, i + 1).join("/")),
+  ),
+);
 const inRepo = (path) => known.has(path.replace(/\/$/, ""));
-const topDirs = new Set(committable.filter((f) => f.includes("/")).map((f) => f.split("/")[0]));
+const topDirs = new Set(
+  committable.filter((f) => f.includes("/")).map((f) => f.split("/")[0]),
+);
 for (const p of all) {
   for (const m of prose(p.text).matchAll(/`([^`\n]+)`/g)) {
     const code = m[1].replace(/:\d+(-\d+)?$/, "");
     if (/[<>*\s$]/.test(code) || !code.includes("/")) continue;
     if (!topDirs.has(code.split("/")[0])) continue;
-    if (!inRepo(code)) errors.push(`${relative(REPO, p.file)}: 名指した path が無い: ${code}`);
+    if (!inRepo(code))
+      errors.push(`${relative(REPO, p.file)}: 名指した path が無い: ${code}`);
   }
 }
 
@@ -91,22 +110,37 @@ const site = config.match(/^\s*site:\s*"([^"]+)"/m)?.[1];
 const base = config.match(/^\s*base:\s*"([^"]+)"/m)?.[1];
 const url = `${site}${base}/`;
 const readme = readFileSync(join(REPO, "README.md"), "utf8");
-const urls = [...readme.matchAll(/https:\/\/uraitakahito\.github\.io\/[^\s)>]*/g)].map((m) => m[0]);
+const urls = [
+  ...readme.matchAll(/https:\/\/uraitakahito\.github\.io\/[^\s)>]*/g),
+].map((m) => m[0]);
 if (!site || !base) errors.push("astro.config.ts: site か base が読めない");
-else if (urls.length === 0) errors.push(`README.md: ドキュメントの URL（${url}）が無い`);
+else if (urls.length === 0)
+  errors.push(`README.md: ドキュメントの URL（${url}）が無い`);
 for (const u of urls) {
-  if (!u.startsWith(url)) errors.push(`README.md: URL が astro.config.ts の site ＋ base（${url}）と違う: ${u}`);
+  if (!u.startsWith(url))
+    errors.push(
+      `README.md: URL が astro.config.ts の site ＋ base（${url}）と違う: ${u}`,
+    );
 }
 
 // 4. skill が名指す原稿と見出し
 const DOCS_IN_REPO = "docs-site/src/content/docs/";
 const skillFiles = tracked.filter((f) => /^skill-sets\/.*\.md$/.test(f));
 const headings = (text) =>
-  new Set([...prose(text).matchAll(/^#{2,6}\s+(.+?)\s*$/gm)].map((m) => m[1].replace(/（[^）]*）$/, "")));
+  new Set(
+    [...prose(text).matchAll(/^#{2,6}\s+(.+?)\s*$/gm)].map((m) =>
+      m[1].replace(/（[^）]*）$/, ""),
+    ),
+  );
 const configFields = new Set();
 for (const f of skillFiles) {
   const text = readFileSync(join(REPO, f), "utf8");
-  for (const m of text.matchAll(new RegExp(`${DOCS_IN_REPO.replaceAll("/", "\\/")}([\\w-]+\\.md)\`?(?:\\s*の「(.+?)」)?`, "g"))) {
+  for (const m of text.matchAll(
+    new RegExp(
+      `${DOCS_IN_REPO.replaceAll("/", "\\/")}([\\w-]+\\.md)\`?(?:\\s*の「(.+?)」)?`,
+      "g",
+    ),
+  )) {
     const page = join(DOCS, m[1]);
     if (!existsSync(page)) {
       errors.push(`${f}: 名指した原稿が無い: ${DOCS_IN_REPO}${m[1]}`);
@@ -116,34 +150,51 @@ for (const f of skillFiles) {
       errors.push(`${f}: ${DOCS_IN_REPO}${m[1]} に見出し「${m[2]}」が無い`);
     }
   }
-  for (const m of text.matchAll(/config\.([a-zA-Z]+)/g)) if (m[1] !== "json") configFields.add(m[1]);
+  for (const m of text.matchAll(/config\.([a-zA-Z]+)/g))
+    if (m[1] !== "json") configFields.add(m[1]);
 }
 
 // 5. config.json の欄。見出しの下の最初の表の 1 列目を読む
 const CONFIG_HEADING = "`.claude/dependabot/config.json`";
 const configuration = readFileSync(join(DOCS, "configuration.md"), "utf8");
-const section = configuration.split(/^#{2,6}\s+/m).find((s) => s.startsWith(`${CONFIG_HEADING}\n`));
+const section = configuration
+  .split(/^#{2,6}\s+/m)
+  .find((s) => s.startsWith(`${CONFIG_HEADING}\n`));
 if (!section) {
   errors.push(`configuration.md: 見出し「${CONFIG_HEADING}」が無い`);
 } else {
-  const rows = section.split("\n").filter((l) => l.startsWith("|")).slice(2);
-  const documented = new Set(rows.map((l) => l.split("|")[1].trim().replace(/^`|`$/g, "")));
-  for (const k of configFields) if (!documented.has(k)) errors.push(`configuration.md: skill が使う config.${k} が表に無い`);
-  for (const k of documented) if (!configFields.has(k)) errors.push(`configuration.md: 表の欄 ${k} を使う skill が無い`);
+  const rows = section
+    .split("\n")
+    .filter((l) => l.startsWith("|"))
+    .slice(2);
+  const documented = new Set(
+    rows.map((l) => l.split("|")[1].trim().replace(/^`|`$/g, "")),
+  );
+  for (const k of configFields)
+    if (!documented.has(k))
+      errors.push(`configuration.md: skill が使う config.${k} が表に無い`);
+  for (const k of documented)
+    if (!configFields.has(k))
+      errors.push(`configuration.md: 表の欄 ${k} を使う skill が無い`);
 }
 
 // 6. 画面の絵
 const SCREENS = join(SITE_DIR, "src", "assets", "screens");
-const screens = existsSync(SCREENS) ? readdirSync(SCREENS).filter((f) => !f.startsWith(".")) : [];
+const screens = existsSync(SCREENS)
+  ? readdirSync(SCREENS).filter((f) => !f.startsWith("."))
+  : [];
 const used = new Set();
 for (const p of all) {
   for (const m of prose(p.text).matchAll(/!\[[^\]]*\]\(([^)\s]+)\)/g)) {
     const target = join(dirname(p.file), m[1]);
-    if (!existsSync(target)) errors.push(`${relative(REPO, p.file)}: 絵が無い: ${m[1]}`);
+    if (!existsSync(target))
+      errors.push(`${relative(REPO, p.file)}: 絵が無い: ${m[1]}`);
     else if (dirname(target) === SCREENS) used.add(relative(SCREENS, target));
   }
 }
-for (const f of screens) if (!used.has(f)) errors.push(`docs-site/src/assets/screens/${f}: どの本文も使っていない`);
+for (const f of screens)
+  if (!used.has(f))
+    errors.push(`docs-site/src/assets/screens/${f}: どの本文も使っていない`);
 
 // 7. skill の中の相対パス。${CLAUDE_SKILL_DIR} は SKILL.md の在る folder
 //    realpath "${CLAUDE_SKILL_DIR}/…" は <root> を求める書き方なので、repo の一番上と同じかを見る
@@ -151,12 +202,18 @@ const REPO_REAL = realpathSync(REPO);
 for (const f of tracked.filter((t) => t.endsWith("/SKILL.md"))) {
   const skillDir = join(REPO, dirname(f));
   const text = readFileSync(join(REPO, f), "utf8");
-  for (const m of text.matchAll(/(realpath\s+"?)?\$\{CLAUDE_SKILL_DIR\}(\/[^\s"'`）)]*)/g)) {
+  for (const m of text.matchAll(
+    /(realpath\s+"?)?\$\{CLAUDE_SKILL_DIR\}(\/[^\s"'`）)]*)/g,
+  )) {
     const target = join(skillDir, m[2]);
     if (!existsSync(target)) {
-      errors.push(`${f}: \${CLAUDE_SKILL_DIR}${m[2]} の先が無い（${relative(REPO, target) || "."}）`);
+      errors.push(
+        `${f}: \${CLAUDE_SKILL_DIR}${m[2]} の先が無い（${relative(REPO, target) || "."}）`,
+      );
     } else if (m[1] && realpathSync(target) !== REPO_REAL) {
-      errors.push(`${f}: realpath "\${CLAUDE_SKILL_DIR}${m[2]}" が repo の一番上でなく ${relative(REPO, target)} を指す`);
+      errors.push(
+        `${f}: realpath "\${CLAUDE_SKILL_DIR}${m[2]}" が repo の一番上でなく ${relative(REPO, target)} を指す`,
+      );
     }
   }
 }
@@ -166,12 +223,16 @@ const SHARED = "skill-sets/core/.claude/skills/_shared/";
 const shared = new Map(
   tracked
     .filter((t) => t.startsWith(SHARED) && t.endsWith(".md"))
-    .map((t) => [t.slice(SHARED.length), headings(readFileSync(join(REPO, t), "utf8"))]),
+    .map((t) => [
+      t.slice(SHARED.length),
+      headings(readFileSync(join(REPO, t), "utf8")),
+    ]),
 );
 for (const f of skillFiles) {
   const text = readFileSync(join(REPO, f), "utf8");
   for (const m of text.matchAll(/([\w-]+\.md)`?\s*の「(.+?)」/g)) {
-    if (shared.has(m[1]) && !shared.get(m[1]).has(m[2])) errors.push(`${f}: ${SHARED}${m[1]} に見出し「${m[2]}」が無い`);
+    if (shared.has(m[1]) && !shared.get(m[1]).has(m[2]))
+      errors.push(`${f}: ${SHARED}${m[1]} に見出し「${m[2]}」が無い`);
   }
 }
 
