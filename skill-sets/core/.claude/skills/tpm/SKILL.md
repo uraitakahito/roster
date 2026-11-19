@@ -46,7 +46,7 @@ disable-model-invocation: true
 | DevOps Engineer | `claude-opus-5-5` | `low` | `bypassPermissions` |
 
 - `${CLAUDE_PROJECT_DIR}/.claude/roles/config.json` の `software-engineer`・`devops-engineer`（欄は `model`・`effort`・`permissionMode`）があれば、そちらを使う。
-- **Product Manager が課題ごとに別の model や effort を指示したら、それに従う**（旗を替えて起こす）。その課題の担当が既にいれば、替えると背景を知らない新しい担当になることを Product Manager に伝え、それでも替えるかを確かめる。替えるなら、前の担当に【片付け】を送り、【終わり】（成果の URL が載る）を受けて閉じてから、その URL を頭書きに書いた依頼書で新しい担当を起こす（同じ鍵の題が 2 つ並ばないように）。
+- **Product Manager が課題ごとに別の model や effort を指示したら、それに従う**（旗を替えて起こす）。その課題の担当が既にいれば、替えると背景を知らない新しい担当になることを Product Manager に伝え、それでも替えるかを確かめる。替えるなら、前の担当に「担当の交代」と書いた【片付け】を送り（担当は課題を `完了` にしない）、【終わり】（成果の URL が載る）を受けて閉じてから、その URL を頭書きに書いた依頼書で新しい担当を起こす（同じ鍵の題が 2 つ並ばないように）。
 
 ## 3. 起こす
 
@@ -76,7 +76,7 @@ disable-model-invocation: true
 | 【PM への確認】【PM への依頼】 | URL を自分の workspace で開き（`cmux open <URL> --workspace <自分の workspace>`）、Product Manager に見せる。答えを【PM の回答】で返す |
 | 【DevOps への依頼】 | DevOps Engineer 担当に依頼書を書いて回す（いなければ起こす） |
 | 【ドキュメント修正】【merge 済み】 | 受け取ったと返す（Jira のコメントは担当が書く） |
-| 【完成】 | Artifact を自分の workspace で開き、Product Manager に見せ、「続きをこの担当に頼むか、この課題を終えるか」を聞く。続けるなら新しい依頼書（3 の 1 のとおり書く）を同じ担当に【依頼】で送り、終えるなら【片付け】を送る |
+| 【完成】 | Artifact を自分の workspace で開き、Product Manager に見せ、「続きをこの担当に頼むか、この課題を終えるか」を聞く。続けるなら新しい依頼書（3 の 1 のとおり書く）を同じ担当に【依頼】で送り、終えるなら【片付け】を送る（担当が Jira の課題を `完了` にし、残した物を課題にする） |
 | 【終わり】 | （【片付け】の返事として来る）報告を Product Manager に伝え、`cmux workspace close <その workspace> --force` で閉じる（中で Claude Code が動いているので `--force` が要る） |
 
 - **【片付け】を送るのは、Product Manager が「この課題は終わり」と言ったときと、model を替えて担当を替えるとき（2 の「起こす担当の既定」）だけ。** Software Engineer 担当と DevOps Engineer 担当は、【片付け】が来るまで自分から【終わり】を送らない。`wait` が `回答待ち(TPM): 次の依頼` のまま残っている担当がいたら、続きがあるかを Product Manager に聞く。
