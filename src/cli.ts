@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // tpm [-v|--verbose] [folder]
 //
-// TPM 役の Claude Code を起こす 1 行を出す（起こすのは、それを写して打つ利用者）。
+// TPM 担当の Claude Code を起こす 1 行を出す（起こすのは、それを写して打つ利用者）。
 // folder を渡さなければ今いる folder。追加の skill セットは folder の .claude/roles/config.json の skill-sets で選ぶ。
 // --verbose なら、読んだ config・追加の skill セット・skill セットごとの skill を stderr に出す（stdout は 1 行のまま）。
 // bin/tpm は dist/cli.js への symlink。Node は main を realpath で解くので、symlink から呼んでも repo は正しく求まる。
@@ -31,7 +31,7 @@ function resolveFolder(folder: string): string {
 function main(argv: string[]): void {
   const program = new Command()
     .name('tpm')
-    .description('TPM 役の Claude Code を起こす 1 行を出す')
+    .description('TPM 担当の Claude Code を起こす 1 行を出す')
     .argument('[folder]', '起こす folder（既定は今いる folder）')
     .option('-v, --verbose', '読んだ config・追加の skill セット・skill セットごとの skill を stderr に出す')
     .exitOverride((err: CommanderError) => {

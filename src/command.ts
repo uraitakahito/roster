@@ -10,7 +10,7 @@ export function shellQuote(word: string): string {
 }
 
 /**
- * dir に移って TPM 役の claude を起こす 1 行を返す。
+ * dir に移って TPM 担当の claude を起こす 1 行を返す。
  * core と追加の skill セットを --add-dir で足し、最初の入力は /tpm（追加の skill セットがあれば /tpm skill-sets=<名前,…>）。
  * --add-dir は後ろの語もまとめて folder として読むので、最初の入力の前に -- を置く。
  */
