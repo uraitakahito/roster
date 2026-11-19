@@ -12,6 +12,8 @@ Claude Code の skill を、使う project の外に置く repo。使う側の�
 | `/dependabot-triage` | Technical Program Manager 役（TPM 役） | Dependabot の PR を集め、依存の版の公開から 72 時間を判定し、対象の PR ごとに Sustaining Engineer 役を起こす。merge と workspace を閉じるのも TPM 役。`一覧だけ` で表だけ |
 | `/sustaining <repo>#<PR> tpm=<workspace>` | Sustaining Engineer 役（TPM 役が起こす） | PR 1 本を受け持つ。72 時間の確かめ・直し・CI を緑に・TPM 役に merge を頼む |
 
+役のあいだの決まり（知らせの送り方と頭・サイドバーの `model` と `wait`・Product Manager への確かめ方・文書の食い違い・共有の環境・終わり方）は `.claude/skills/_shared/protocol.md` の 1 か所に書き、どの役もそれを読む。TPM 役が書く依頼書には、その課題だけのことを書く（ひな形は `.claude/skills/tpm/brief-template.md`）。
+
 判定の道具は `.claude/skills/_shared/release-age.mjs`（`node release-age.mjs <owner>/<repo> <PR> [--hours <時間>] [--now <ISO 時刻>]`）。版は PR の差分（pnpm-lock・package-lock・yarn.lock・workflow の `uses:`）から読み、依存の依存も数える。終了コードは 0 対象・10 まだ・20 判定できない・1 道具の誤り。
 
 ## 使う側の設定
@@ -61,7 +63,7 @@ tpm <folder>     # その folder で起こす
 
 `bin/tpm` は自分の場所からこの repo を求め、`claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --add-dir <この repo の folder> -- /tpm` を起こした folder で実行する（`tpm --print` で命令だけを出す）。**最初の入力は `--` の後に置く**（`--add-dir` は後ろの語もまとめて folder として読むため）。起こした folder に `.claude/dependabot/config.json` があれば、`/tpm` が起きたときに `/dependabot-triage` を呼ぶ。
 
-Sustaining Engineer 役を起こす 1 行は、`/dependabot-triage` が自分の場所（`${CLAUDE_SKILL_DIR}/../../..`）から組むので、人は打たない。起こした後、サイドバーに `wait=作業中: …` が出たか（`cmux sidebar-state --workspace <workspace>`）で、skill が読まれたことを確かめる。題は起こすときに `--name` で付けるので、見分けに使えない。
+ほかの役を起こす 1 行は、`/tpm`（Software Engineer・DevOps Engineer 役）と `/dependabot-triage`（Sustaining Engineer 役）が自分の場所（`${CLAUDE_SKILL_DIR}/../../..`）から組むので、人は打たない。起こした後、サイドバーに `wait=作業中: …` が出たか（`cmux sidebar-state --workspace <workspace>`）で、skill が読まれたことを確かめる。題は起こすときに `--name` で付けるので、見分けに使えない。
 
 動いているセッションに途中から足すときは `/add-dir <この repo の folder>`。信頼していない folder だとダイアログが出るので、↓ と Enter で「Yes, add it」を選ぶ。
 
@@ -71,15 +73,16 @@ Sustaining Engineer 役を起こす 1 行は、`/dependabot-triage` が自分の
 
 - 信頼は、信頼した folder が git の repo ならその repo 全体に、そうでなければその下の全部に効く。**この repo は別の git の repo なので、信頼済みの folder の下に置いても信頼は及ばない**（信頼済みの folder の下の、git の repo でない folder では出なかった）。
 - 置いた場所ごとに、**この repo の folder で 1 度 Claude Code を対話で起こし**、「Yes, I trust this folder」を選んでおく。信頼は残る。
-- 起こした Sustaining Engineer 役がこのダイアログで止まると、サイドバーに `wait` が出ない。`/dependabot-triage` は Yes を押さずに閉じ、人に信頼を頼む。
+- 起こした役がこのダイアログで止まると、サイドバーに `wait` が出ない。`/tpm` と `/dependabot-triage` は Yes を押さずに閉じ、人に信頼を頼む。
+- 信頼済みのこの repo の git worktree（repo の隣の folder）を `--add-dir` で足しても、ダイアログは出なかった。起こす folder（cwd）が信頼されていないと、cwd の方でダイアログが出る。
 
 ## 移す手順
 
-1. 動いている Sustaining Engineer 役が 0 のときに行う。
+1. TPM 役のほかに動いている役（Software Engineer・DevOps Engineer・Sustaining Engineer）が 0 のときに行う。
 2. `mv <今の folder> <新しい folder>`（git の履歴ごと移る）。
 3. 新しい folder で 1 度 Claude Code を対話で起こして信頼する（上の「信頼のダイアログ」。信頼は path に付くので、移すたびに要る）。
 4. `~/.local/bin/tpm` の symlink を張り直す（`ln -sf <新しい folder>/bin/tpm ~/.local/bin/tpm`）。
-5. 動いている TPM 役は、起こし直すか `/add-dir <新しい folder>` を打つ。Sustaining Engineer 役の旗は skill が自分で求めるので直さない。
+5. 動いている TPM 役は、起こし直すか `/add-dir <新しい folder>` を打つ。ほかの役を起こす旗は `/tpm` と `/dependabot-triage` が自分の場所から求めるので直さない。
 
 ## 試験
 

@@ -13,6 +13,7 @@ description: TPM 役が Dependabot の PR を集め、依存の版の公開か�
 
 ## 0. 設定を読む（最初に必ず）
 
+- `${CLAUDE_SKILL_DIR}/../_shared/protocol.md`（役のあいだの決まり。知らせの送り方・頭・サイドバー）
 - `${CLAUDE_PROJECT_DIR}/.claude/dependabot/config.json`（欄は repo の README の表。以下 `config.<欄>` と書く）
 - `${CLAUDE_PROJECT_DIR}/.claude/dependabot/rules.md`（この project の決まり。**この skill の手順より先に従う**）
 
@@ -96,19 +97,19 @@ Sustaining Engineer 役から届く知らせ:
 | 頭 | すること |
 |---|---|
 | 【merge の依頼】 | CI が緑か（`gh pr checks`）、`release-age.mjs` がまだ 0 か、差分が依頼のとおりかを自分で見てから `gh pr merge <PR> --repo <config.owner>/<repo> --<config.mergeMethod>`（repo の作法が違えばそれに従う）。merge の commit を返す。 |
-| 【相談】 | 答える。Product Manager の判断が要るなら、Artifact を自分の workspace で開いて Product Manager に出す。 |
-| 【利用者への依頼】 | Sustaining Engineer 役が、Product Manager に決めてほしい中身を Artifact に書き、TPM 役の workspace に開いてある。Product Manager に見せ、答えを Sustaining Engineer 役に返す。 |
+| 【相談(TPM)】 | 答える。Product Manager の判断が要るなら、Product Manager に聞いてから答える。 |
+| 【PM への依頼】 | URL の Artifact を自分の workspace で開き（`cmux open <URL> --workspace <自分の workspace>`）、Product Manager に見せる。答えを【PM の回答】で返す。 |
 | 【まだ】 | 時間の【まだ】なら表の「待ち」に戻し、その workspace は 5 と同じに閉じる。`rebase に … 分応じない` の【まだ】なら、もう一度待たせるか、worktree で `origin/main` を merge させるかを決めて返す。 |
 | 【作り直し】 | group の PR が閉じて新しい番号で作り直された。表の行を新しい番号に替え、同じ Sustaining Engineer 役に新しい番号で続けさせる（workspace の題も `Sustaining <repo>#<新>` に替えさせる）。判定は変わらない。 |
 | 【終わり】 | 5 へ。 |
 
-返事を送った後は `cmux --json agent inbox --surface <相手の surface> --limit 3` で届いたかを見る。入力待ちで queued のままなら `cmux send` で打ち込む。
+返事を送った後は、届いたかを見る（protocol.md の「知らせの送り方」）。
 
 ### `@dependabot rebase` の注意（TPM 役が知っておくこと）
 
 Sustaining Engineer 役の手順（`${CLAUDE_SKILL_DIR}/../sustaining/SKILL.md` の 4a）と同じ要点。
 
-- 応じた印は 👍。時間は決まっていない（実測で 20 分無反応のことがある）。Sustaining Engineer 役は `config.rebaseWaitMinutes` 分待って越えたら【まだ】か【相談】を送ってくる。
+- 応じた印は 👍。時間は決まっていない（実測で 20 分無反応のことがある）。Sustaining Engineer 役は `config.rebaseWaitMinutes` 分待って越えたら【まだ】か【相談(TPM)】を送ってくる。
 - group の PR は閉じて新しい番号で作り直されることがある。判定は変わらないので、**新しい番号で引き継ぐ**（【作り直し】）。
 - rebase で audit がいまの勧告の DB で流れ直し、緑の PR が赤になることがある。新しい勧告で audit が赤の間は、衝突していない PR を rebase させない。
 - 人が commit を足した PR は Dependabot がもう rebase しない（`[dependabot skip]` の印の commit なら上書きされる）。その PR では rebase を打たせず、worktree で `origin/main` を merge して push させる（force push はしない）。

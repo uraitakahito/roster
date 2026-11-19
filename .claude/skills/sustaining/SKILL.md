@@ -17,12 +17,14 @@ description: Sustaining Engineer 役として、Dependabot の PR 1 本を受け
 
 ## 0. 設定を読む（最初に必ず）
 
+`${CLAUDE_SKILL_DIR}/../_shared/protocol.md`（役のあいだの決まり）を読み、従う。知らせの送り方・頭・サイドバー・Product Manager への確かめ方はそこにある。
+
 使う側の project の設定を読む。無ければ「この project には `.claude/dependabot/` の設定が無い」と画面に書いて止まる。
 
 - `${CLAUDE_PROJECT_DIR}/.claude/dependabot/config.json`（欄は repo の README の表。以下 `config.<欄>` と書く）
 - `${CLAUDE_PROJECT_DIR}/.claude/dependabot/rules.md`（この project の決まり。**この skill の手順より先に従う**）
 
-この skill の folder（`${CLAUDE_SKILL_DIR}` の 3 つ上の repo）は**直さない**。直したい所を見つけたら TPM 役に【相談】で知らせる。
+この skill の folder（`${CLAUDE_SKILL_DIR}` の 3 つ上の repo）は**直さない**（protocol.md の「文書の食い違い」の例外）。直したい所を見つけたら TPM 役に【相談(TPM)】で知らせる。
 
 ## 1. 名乗る
 
@@ -34,11 +36,7 @@ cmux set-status wait "作業中: 読む" --icon hourglass --priority 80
 ```
 
 - **この 4 行が最初の手。** TPM 役は、サイドバーに `wait=作業中: …` が出たかで、この skill が読まれて動き出したことを確かめる（題は TPM 役が起こすときに付けてあるので、題では見分けられない）。
-- **サイドバーの待ちの表示は鍵 `wait` の 1 つだけ**を使い、状況が変わるたびに上書きする。前の表示を残さない。
-  - TPM 役の答えを待つ: `回答待ち(TPM): <何を>`
-  - Product Manager の答えを待つ: `回答待ち(PM): <何を>`
-  - 作業中: `作業中: <段>`
-- model と effort は起動の旗で決まっている。**`/model`・`/effort` は打たない**（利用者の既定まで書き換わる）。
+- サイドバーの `wait` の書き方と、`/model`・`/effort` を打たないことは protocol.md の「サイドバー」。
 - 相手への `--from` は `"Sustaining <repo>#<PR>"`。
 
 ## 2. 読む
@@ -56,8 +54,8 @@ node "${CLAUDE_SKILL_DIR}/../_shared/release-age.mjs" <config.owner>/<repo> <PR>
 |---|---|---|
 | 0 | 対象（いちばん新しい版の公開から `config.hours` 時間を過ぎた） | 先へ進む |
 | 10 | まだ | TPM 役に「【まだ】eligibleAt」を送り、止まる（直さない） |
-| 20 | 判定できない（Docker など・時刻が読めない） | TPM 役に「【相談】判定できない・出力の JSON」を送り、`回答待ち(TPM): 72 時間の判定` |
-| 1 | 道具の誤り | 出力を添えて TPM 役に【相談】 |
+| 20 | 判定できない（Docker など・時刻が読めない） | TPM 役に「【相談(TPM)】判定できない・出力の JSON」を送り、`回答待ち(TPM): 72 時間の判定` |
+| 1 | 道具の誤り | 出力を添えて TPM 役に【相談(TPM)】 |
 
 - 時間は **依存の版の公開から** 数える（PR の作成からではない）。版は PR の差分（lockfile・workflow）から読み、依存の依存も数える。
 - 出力の `depsSource` が `commit-message` なら、差分から版が取れず Dependabot の commit の本文に戻った。本文は PR の作り直しで古いことがあるので、merge を頼む前に差分を目で見る。
@@ -79,7 +77,7 @@ node "${CLAUDE_SKILL_DIR}/../_shared/release-age.mjs" <config.owner>/<repo> <PR>
 
 1. **衝突なら、まず数分待つ。** Dependabot は衝突を頼まれなくても自分で rebase する（公式「By default, Dependabot automatically rebases pull requests to resolve any conflicts」）。
 2. **人が commit を足した PR では `@dependabot rebase` を打たない。** Dependabot は余分な commit のある PR をもう rebase しない（公式。`[dependabot skip]` などの印の commit なら上書きされる）。打っても空振りする。代わりに worktree で `git merge origin/main` して push する（**force push はしない**）。
-3. **打ったら、応じた印 👍 を待つ。** 時間は決まっていない（公式は「several minutes」。実測では 1 回目 20 分無反応・2 回目 4 分、10 分無反応のこともあった）。**待つのは `config.rebaseWaitMinutes` 分まで。** 越えたら TPM 役に `【まだ】rebase に <分> 分応じない` か `【相談】` を送る。待つ間は `作業中: rebase を待つ（<打った時刻>）`。
+3. **打ったら、応じた印 👍 を待つ。** 時間は決まっていない（公式は「several minutes」。実測では 1 回目 20 分無反応・2 回目 4 分、10 分無反応のこともあった）。**待つのは `config.rebaseWaitMinutes` 分まで。** 越えたら TPM 役に `【まだ】rebase に <分> 分応じない` か `【相談(TPM)】` を送る。待つ間は `作業中: rebase を待つ（<打った時刻>）`。
 4. **rebase で緑が赤になることがある。** audit がいまの勧告の DB で流れ直すため。新しい勧告で audit が赤の間は、衝突していない PR は rebase しない。
 5. **group の PR は閉じて新しい番号で作り直されることがある**（docs には無い・実測）。72 時間は版の公開から数えるので判定は変わらない。作り直されたら、新しい番号を TPM 役に `【作り直し】旧 #N → 新 #M` で知らせ、新しい PR で 3 からやり直す。
 6. merge されないまま 30 日たった PR は、Dependabot がもう rebase しない（公式）。
@@ -93,12 +91,12 @@ cmux agent message <tpm> --from "Sustaining <repo>#<PR>" -- "【merge の依頼�
 cmux set-status wait "回答待ち(TPM): merge" --icon hourglass --priority 80
 ```
 
-送った後に `cmux --json agent inbox --surface <自分の surface> --limit 3` で届いたかを見る。`--mark-read` は付けない（`--surface` 無しで打つと全部の宛先を既読にする）。
+送った後に届いたかを見る（protocol.md の「知らせの送り方」）。
 
 ## 6. 困ったら
 
-- 迷ったら、TPM 役に `【相談】<何に困っているか・試したこと・案と推し>` を送り、`回答待ち(TPM): <何を>`。
-- Product Manager の判断が要るときは、中身を書いた HTML の Artifact を作り、`cmux browser open <URL> --workspace <tpm>` で TPM 役の workspace に開いてから、TPM 役に `【利用者への依頼】<URL と要点>` を送る。`回答待ち(PM): <何を>`。
+- 迷ったら、TPM 役に `【相談(TPM)】<何に困っているか・試したこと・案と推し>` を送り、`回答待ち(TPM): <何を>`。
+- Product Manager の判断が要るときは、中身を書いた HTML の Artifact を作り、TPM 役に `【PM への依頼】<URL と要点>` を送る（開くのは TPM 役）。`回答待ち(PM): <何を>`。
 - 段の区切り（PR を出す前・merge を頼む前）に `cmux --json agent inbox --surface <自分の surface> --state queued` を見る。
 
 ## 7. 終わり
