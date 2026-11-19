@@ -29,11 +29,14 @@ description: TPM 担当が Dependabot の PR を集め、依存の version の�
 ## 1. 集める
 
 ```sh
-gh search prs --author app/dependabot --state open --owner <config.owner> --limit 100 \
+args=()
+for r in <config.repos>; do args+=(--repo "<config.owner>/$r"); done
+gh search prs --author app/dependabot --state open "${args[@]}" --limit 100 \
   --json repository,number,title,createdAt,url
 ```
 
-`config.repos` に無い repo の PR は捨てる。
+- 配列で組む（文字列にまとめると zsh が 1 語で渡し、`unknown flag` になる）。
+- 100 本返ったら、表の下に「上限の 100 本に届いた。残りは次の回」と書く。
 
 ## 2. 判定する
 
