@@ -21,7 +21,7 @@
 // 4 と 5 が要るのは、skill が Pages ではなく原稿の Markdown を読むため。原稿の見出しや表を
 // 直したときに、skill の読む先が無くなるのを止める。
 import { execFileSync } from "node:child_process";
-import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -66,18 +66,16 @@ for (const p of all) {
 
 // 2. repo の path の名指し。一番上の folder（隠しも含む）で始まる code だけを見る。
 //    <…>・*・空白・$ を含む物は形の説明なので見ない。末尾の :<行> は落とす
-//    一番上の folder は git が追跡する物から求める（手元だけの dist/・node_modules/ などを数えない）
+//    在るかは手元の folder でなく git から求める。追跡する物と、まだ add していない新しい物（.gitignore の外）だけを
+//    数え、手元だけの cli/dist/・node_modules/ などは数えない（数えると手元では通り、CI で落ちる）
 //    symlink はその物を見る（cli/bin/tpm は build 前は在らない cli/dist/cli.js を指す）
-const inRepo = (path) => {
-  try {
-    lstatSync(join(REPO, path));
-    return true;
-  } catch {
-    return false;
-  }
-};
 const tracked = execFileSync("git", ["ls-files"], { cwd: REPO, encoding: "utf8" }).split("\n").filter(Boolean);
-const topDirs = new Set(tracked.filter((f) => f.includes("/")).map((f) => f.split("/")[0]));
+const committable = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], { cwd: REPO, encoding: "utf8" })
+  .split("\n")
+  .filter(Boolean);
+const known = new Set(committable.flatMap((f) => f.split("/").map((_, i, parts) => parts.slice(0, i + 1).join("/"))));
+const inRepo = (path) => known.has(path.replace(/\/$/, ""));
+const topDirs = new Set(committable.filter((f) => f.includes("/")).map((f) => f.split("/")[0]));
 for (const p of all) {
   for (const m of prose(p.text).matchAll(/`([^`\n]+)`/g)) {
     const code = m[1].replace(/:\d+(-\d+)?$/, "");
