@@ -19,9 +19,11 @@ cd </foo/bar/skills> # skillsの置き場所
 pnpm install --frozen-lockfile
 pnpm run build
 cd </your/workspace> # あなたが作業する場所
-/foo/bar/skills/bin/tpm              # 今いる folder で TPM 担当を起こす 1 行を出す
-/foo/bar/skills/bin/tpm <folder>     # その folder で起こす 1 行を出す
+/foo/bar/skills/bin/tpm --verbose             # 今いる folder で TPM 担当を起こす 1 行を出す
+/foo/bar/skills/bin/tpm --verbose <folder>    # その folder で起こす 1 行を出す
 ```
+
+`--verbose`（`-v`）は、読んだ config と skill セットごとの skill を stderr に出す。
 
 `tpm` は claude を起こさない。自分の場所からこの repo を求め、folder の `.claude/roles/config.json` の `skill-sets` を確かめて、次の 1 行を出すだけ。それを写して打つ。
 
@@ -33,19 +35,6 @@ cd <folder> && claude --model claude-opus-5-5 --effort medium --permission-mode 
 ```
 
 **最初の入力は `--` の後に置く**（`--add-dir` は後ろの語もまとめて folder として読むため）。
-
-`-v`・`--verbose` を付けると、読んだ config と追加の skill セット、skill セットごとの skill を stderr に出す。stdout は上の 1 行のまま。
-
-```sh
-$ /foo/bar/skills/bin/tpm -v
-tpm: folder      /your/workspace（今いる folder）
-tpm: repo        /foo/bar/skills
-tpm: config      /your/workspace/.claude/roles/config.json（あり）
-tpm: skill-sets  dependabot（config の skill-sets から。core と重なりは除いた）
-tpm: core        /foo/bar/skills/core → /devops-engineer /software-engineer /tpm
-tpm: dependabot  /foo/bar/skills/dependabot → /dependabot-triage /sustaining-engineer
-cd /your/workspace && claude ...
-```
 
 ### `--add-dir` の先の skill セット
 
