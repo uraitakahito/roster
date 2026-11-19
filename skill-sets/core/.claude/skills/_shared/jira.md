@@ -10,7 +10,7 @@ Jira の課題にコメントを書く・読む・Product Manager に確かめ�
 | Software Engineer | 文書の食い違いを直した PR を merge したら 1 件 | `文書の修正` |
 | Software Engineer | Product Manager に決めてほしいことがある（下の「Product Manager に確かめる」） | `確認` |
 | TPM | Product Manager が決めたら 1 件。【PM の回答】を返す前に | `決定` |
-| DevOps Engineer | 依頼書が言うときだけ | 依頼書が言う物 |
+| DevOps Engineer | 依頼 1 つが済んだら 1 件。【完成】を送る前に | `結果` |
 
 どれも、依頼に Jira の課題（`jira=`）があるときだけ。依頼書に「Jira にコメントを足す」と書かれていなくても、上の表のとおりに書く。
 
@@ -58,15 +58,15 @@ Jira の課題が無い依頼では、同じ中身を Artifact に書いて【PM
 
 ## 状態を進める
 
-依頼書が言うときだけ進める。
+Software Engineer 担当が【片付け】を受けたら、課題を `完了` にする。TPM 担当は、Product Manager がこの課題を終えると決めてから【片付け】を送る。担当の交代のための【片付け】では進めない。ほかの時にも進めない。
 
 ```sh
-acli jira workitem transition --key <課題> --status "<状態>" --yes
+acli jira workitem transition --key <課題> --status "完了" --yes
 ```
 
 ## 課題を登録する
 
-計画から外れた物・残した物で直した方がよい物は、依頼書の指示に従って課題にする。
+計画から外れた物・残した物で直した方がよい物は、【片付け】を受けたら課題にして元の課題にリンクする。担当の交代のための【片付け】では登録しない（【終わり】に書き、次の担当が引き継ぐ）。
 
 ```sh
 acli jira workitem create --project <project> --type タスク --summary "<題>" --description "<説明>"
