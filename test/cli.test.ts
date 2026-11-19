@@ -1,4 +1,4 @@
-// build 済みの dist/cli.js を bin/tpm（symlink）経由で動かす。先に npm run build が要る。
+// build 済みの dist/cli.js を bin/tpm（symlink）経由で動かす。先に pnpm run build が要る。
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -25,7 +25,7 @@ const folder = (text: string | null): string => {
 
 beforeAll(() => {
   if (!existsSync(join(root, 'dist', 'cli.js'))) {
-    throw new Error('dist/cli.js がありません。先に npm run build を打ってください');
+    throw new Error('dist/cli.js がありません。先に pnpm run build を打ってください');
   }
   scratch = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-test-')));
 });

@@ -1,4 +1,4 @@
-// release-age.mjs の型。skill は release-age.mjs を npm install なしで node で直に呼ぶので JS のまま置き、
+// release-age.mjs の型。skill は release-age.mjs を pnpm install なしで node で直に呼ぶので JS のまま置き、
 // TypeScript の試験（release-age.test.ts）から import するための型だけをここに書く。
 
 export interface Dependency {
