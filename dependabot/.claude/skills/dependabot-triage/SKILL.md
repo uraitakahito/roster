@@ -14,7 +14,7 @@ description: Product Manager が言ったときに TPM 担当が Dependabot の 
 ## 0. 設定を読む（最初に必ず）
 
 - `${CLAUDE_SKILL_DIR}/../../../../core/.claude/skills/_shared/protocol.md`（担当のあいだの決まり。連絡の仕方・見出し・サイドバー）
-- `${CLAUDE_PROJECT_DIR}/.claude/dependabot/config.json`（欄は repo の README の表。以下 `config.<欄>` と書く）
+- `${CLAUDE_PROJECT_DIR}/.claude/dependabot/config.json`（欄は `${CLAUDE_SKILL_DIR}/../../../../docs-site/src/content/docs/configuration.md` の「`.claude/dependabot/config.json`」の表。以下 `config.<欄>` と書く）
 - `${CLAUDE_PROJECT_DIR}/.claude/dependabot/rules.md`（この project の決まり。**この skill の手順より先に従う**）
 
 無ければ「この project には `.claude/dependabot/` の設定が無い」と言って止まる。
@@ -89,7 +89,7 @@ cmux workspace create --name "Sustaining Engineer <repo>#<PR>" --cwd <cwd> \
 - 自分の workspace は `cmux identify` の caller の `workspace_ref`。
 - 起動の命令は 1,024 バイトを超えると黙って実行されない。上の形を延ばさない。
 - **起こした後 90 秒の間に、`cmux sidebar-state --workspace <新しい workspace>` に `wait=作業中: …` の行が出たかを見る**（`/sustaining-engineer` の最初の手が `wait` を出す。題は起こすときに `--name` で付けてあるので、題では見分けられない）。出なければ `cmux read-screen --workspace <新しい workspace>` で画面を読む:
-  - `Adding a new directory` や `trust` のダイアログ: `<root>` が信頼されていない（この repo は別の git の repo なので、信頼済みの folder の下に置いても信頼は及ばない）。**Yes は押さずに**その workspace を `close --force` し、`<root>` で 1 度 Claude Code を対話で起こして信頼するよう Product Manager に頼む（README の「信頼のダイアログ」）。
+  - `Adding a new directory` や `trust` のダイアログ: `<root>` が信頼されていない（この repo は別の git の repo なので、信頼済みの folder の下に置いても信頼は及ばない）。**Yes は押さずに**その workspace を `close --force` し、`<root>` で 1 度 Claude Code を対話で起こして信頼するよう Product Manager に頼む（`${CLAUDE_SKILL_DIR}/../../../../docs-site/src/content/docs/getting-started.md` の「信頼のダイアログ」）。
   - `Unknown command: /sustaining-engineer`: 旗か `<root>` の誤り。`close --force` して、命令を直して 1 度だけ起こし直す。2 回目も `wait` が出なければ Product Manager に知らせる。
 - ほかの作業と順番がぶつかるとき（`rules.md` に書いてある物）は、起こすのを遅らせてよい。
 
