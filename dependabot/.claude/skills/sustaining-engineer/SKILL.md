@@ -17,7 +17,7 @@ description: Sustaining Engineer 役として、Dependabot の PR 1 本を受け
 
 ## 0. 設定を読む（最初に必ず）
 
-`${CLAUDE_SKILL_DIR}/../../../../core/.claude/skills/_shared/protocol.md`（役のあいだの決まり）を読み、従う。知らせの送り方・頭・サイドバー・Product Manager への確かめ方はそこにある。
+`${CLAUDE_SKILL_DIR}/../../../../core/.claude/skills/_shared/protocol.md`（役のあいだの決まり）を読み、従う。知らせの送り方・見出し・サイドバー・Product Manager への確かめ方はそこにある。
 
 使う側の project の設定を読む。無ければ「この project には `.claude/dependabot/` の設定が無い」と画面に書いて止まる。
 

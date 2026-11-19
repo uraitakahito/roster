@@ -5,7 +5,7 @@ TPM 役（`/tpm`）・Software Engineer 役（`/software-engineer`）・DevOps E
 ## 知らせの送り方
 
 ```sh
-cmux agent message <相手の surface か workspace> --from "<自分の workspace の題>" -- "【頭】本文"
+cmux agent message <相手の surface か workspace> --from "<自分の workspace の題>" -- "【見出し】本文"
 cmux --json agent inbox --surface <相手の surface> --limit 3     # 届いたかを見る
 ```
 
@@ -15,14 +15,14 @@ cmux --json agent inbox --surface <相手の surface> --limit 3     # 届いた�
 - 自分の surface と workspace は `cmux identify` の `caller`。
 - **Product Manager に直接聞かない。** Product Manager とのやりとりは、すべて TPM 役を通す。
 
-## 頭
+## 見出し
 
 ### TPM 役へ
 
-| 頭 | いつ | 本文 |
+| 見出し | いつ | 本文 |
 |---|---|---|
 | 【相談(TPM)】 | TPM 役に決めてほしいことがある | 困っていること・試したこと・案とお勧め |
-| 【PM への確認】 | Product Manager に決めてほしいことを Jira に書いた（下の「Product Manager に確かめる」） | コメントの URL と項目の見出し |
+| 【PM への確認】 | Product Manager に決めてほしいことを Jira に書いた（下の「Product Manager に確かめる」） | コメントの URL と各項目の題 |
 | 【PM への依頼】 | Product Manager に頼むことを Artifact に書いた | Artifact の URL と要点 |
 | 【DevOps への依頼】 | Apple Container・Windmill など共有の環境で DevOps Engineer 役の手が要る | 何を・なぜ・急ぎか |
 | 【ドキュメント修正】 | 文書やコメントの食い違いを直した PR を merge した | PR の URL と一言 |
@@ -30,11 +30,11 @@ cmux --json agent inbox --surface <相手の surface> --limit 3     # 届いた�
 | 【完成】 | 依頼書の成果（提案・計画などの Artifact）を publish した。依頼書が【計画完成】など別の名を決めていればそれを使う | URL と要点 |
 | 【終わり】 | 依頼が全部終わった | merge した PR・登録した課題・消した worktree・残っている物 |
 
-Dependabot の PR だけで使う頭（【merge の依頼】【まだ】【作り直し】）は `/sustaining-engineer` と `/dependabot-triage` に書いてある。
+Dependabot の PR だけで使う見出し（【merge の依頼】【まだ】【作り直し】）は `/sustaining-engineer` と `/dependabot-triage` に書いてある。
 
 ### TPM 役から
 
-| 頭 | 中身 |
+| 見出し | 中身 |
 |---|---|
 | 【依頼】 | 新しい依頼書の URL。Artifact tool の `read` で読み、それに従う |
 | 【PM の回答】 | Product Manager の答え。待ちの表示を作業中に戻して続ける |

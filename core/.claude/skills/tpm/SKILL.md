@@ -67,9 +67,9 @@ disable-model-invocation: true
 
 ## 4. 知らせを受ける
 
-頭の一覧は protocol.md。受けたときにすること:
+見出しの一覧は protocol.md。受けたときにすること:
 
-| 頭 | すること |
+| 見出し | すること |
 |---|---|
 | 【相談(TPM)】 | 答える。Product Manager の判断が要るなら、Product Manager に聞いてから答える |
 | 【PM への確認】【PM への依頼】 | URL を自分の workspace で開き（`cmux open <URL> --workspace <自分の workspace>`）、Product Manager に見せる。答えを【PM の回答】で返す |

@@ -13,7 +13,7 @@ description: TPM 役が Dependabot の PR を集め、依存の版の公開か�
 
 ## 0. 設定を読む（最初に必ず）
 
-- `${CLAUDE_SKILL_DIR}/../../../../core/.claude/skills/_shared/protocol.md`（役のあいだの決まり。知らせの送り方・頭・サイドバー）
+- `${CLAUDE_SKILL_DIR}/../../../../core/.claude/skills/_shared/protocol.md`（役のあいだの決まり。知らせの送り方・見出し・サイドバー）
 - `${CLAUDE_PROJECT_DIR}/.claude/dependabot/config.json`（欄は repo の README の表。以下 `config.<欄>` と書く）
 - `${CLAUDE_PROJECT_DIR}/.claude/dependabot/rules.md`（この project の決まり。**この skill の手順より先に従う**）
 
@@ -94,7 +94,7 @@ cmux workspace create --name "Sustaining Engineer <repo>#<PR>" --cwd <cwd> \
 
 Sustaining Engineer 役から届く知らせ:
 
-| 頭 | すること |
+| 見出し | すること |
 |---|---|
 | 【merge の依頼】 | CI が緑か（`gh pr checks`）、`release-age.mjs` がまだ 0 か、差分が依頼のとおりかを自分で見てから `gh pr merge <PR> --repo <config.owner>/<repo> --<config.mergeMethod>`（repo の作法が違えばそれに従う）。merge の commit を返す。 |
 | 【相談(TPM)】 | 答える。Product Manager の判断が要るなら、Product Manager に聞いてから答える。 |
