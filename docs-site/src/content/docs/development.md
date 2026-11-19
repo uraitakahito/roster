@@ -5,7 +5,10 @@ description: 試験の流し方・Dependabot の判定の道具・この docs �
 
 ## 試験
 
+TypeScript の道具（`tpm` と判定の道具）は `cli/` の pnpm の project にある。試験は `cli/` で打つ。
+
 ```sh
+cd cli
 pnpm install --frozen-lockfile
 pnpm run typecheck   # 型の検査（tsc）
 pnpm run lint        # ESLint
@@ -17,11 +20,11 @@ pnpm test            # Vitest
 
 ## 判定の道具
 
-Dependabot の PR の判定の道具は `src/release-age.ts`（`node src/release-age.ts <owner>/<repo> <PR> [--hours <時間>] [--now <ISO 時刻>]`）。version は PR の差分（pnpm-lock・package-lock・yarn.lock・workflow の `uses:`）から読み、依存の依存も数える。終了コードは 0 対象・10 まだ・20 判定できない・1 道具の誤り。
+Dependabot の PR の判定の道具は `cli/src/release-age.ts`（`node cli/src/release-age.ts <owner>/<repo> <PR> [--hours <時間>] [--now <ISO 時刻>]`）。version は PR の差分（pnpm-lock・package-lock・yarn.lock・workflow の `uses:`）から読み、依存の依存も数える。終了コードは 0 対象・10 まだ・20 判定できない・1 道具の誤り。
 
 ## この docs
 
-原稿は `docs-site/src/content/docs/` の Markdown（Astro + Starlight）。`docs-site/` は root と別の pnpm の project で、依存と lockfile を自分で持つ。
+原稿は `docs-site/src/content/docs/` の Markdown（Astro + Starlight）。`docs-site/` は `cli/` と別の pnpm の project で、依存と lockfile を自分で持つ。
 
 ```sh
 pnpm --dir docs-site install --frozen-lockfile

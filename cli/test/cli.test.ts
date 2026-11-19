@@ -1,12 +1,14 @@
-// build 済みの dist/cli.js を bin/tpm（symlink）経由で動かす。先に pnpm run build が要る。
+// build 済みの cli/dist/cli.js を cli/bin/tpm（symlink）経由で動かす。先に pnpm run build が要る。
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, test } from 'vitest';
 
-const root = realpathSync(join(import.meta.dirname, '..'));
-const tpm = join(root, 'bin', 'tpm');
+/** cli/ の folder（bin/tpm と dist/ がある）と、その 1 つ上の repo。 */
+const cli = realpathSync(join(import.meta.dirname, '..'));
+const root = join(cli, '..');
+const tpm = join(cli, 'bin', 'tpm');
 const head = 'claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions';
 let scratch: string;
 
@@ -24,7 +26,7 @@ const folder = (text: string | null): string => {
 };
 
 beforeAll(() => {
-  if (!existsSync(join(root, 'dist', 'cli.js'))) {
+  if (!existsSync(join(cli, 'dist', 'cli.js'))) {
     throw new Error('dist/cli.js がありません。先に pnpm run build を打ってください');
   }
   scratch = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-test-')));
@@ -42,32 +44,32 @@ describe('tpm が出す 1 行', () => {
 
   test('config.json が無ければ core だけを --add-dir で足し、/tpm の前に -- を置く', () => {
     const d = folder(null);
-    expect(run(tpm, [d], scratch)).toBe(`cd ${d} && ${head} --add-dir ${root}/core -- /tpm`);
+    expect(run(tpm, [d], scratch)).toBe(`cd ${d} && ${head} --add-dir ${root}/skill-sets/core -- /tpm`);
   });
 
   test('skill-sets の欄が無ければ core だけ', () => {
     const d = folder('{ "software-engineer": { "effort": "high" } }');
-    expect(run(tpm, [d], scratch)).toBe(`cd ${d} && ${head} --add-dir ${root}/core -- /tpm`);
+    expect(run(tpm, [d], scratch)).toBe(`cd ${d} && ${head} --add-dir ${root}/skill-sets/core -- /tpm`);
   });
 
   test('skill-sets に書いた追加の skill セットも足す', () => {
     const d = folder('{ "skill-sets": ["dependabot"] }');
     expect(run(tpm, [d], scratch)).toBe(
-      `cd ${d} && ${head} --add-dir ${root}/core ${root}/dependabot -- /tpm`,
+      `cd ${d} && ${head} --add-dir ${root}/skill-sets/core ${root}/skill-sets/dependabot -- /tpm`,
     );
   });
 
   test('skill-sets の core と重なりは 1 度だけ足す', () => {
     const d = folder('{ "skill-sets": ["core", "dependabot", "dependabot"] }');
     expect(run(tpm, [d], scratch)).toBe(
-      `cd ${d} && ${head} --add-dir ${root}/core ${root}/dependabot -- /tpm`,
+      `cd ${d} && ${head} --add-dir ${root}/skill-sets/core ${root}/skill-sets/dependabot -- /tpm`,
     );
   });
 
   test('symlink から呼んでも repo を正しく求める', () => {
     const link = join(scratch, 'tpm-link');
     symlinkSync(tpm, link);
-    expect(run(link, [], scratch)).toMatch(new RegExp(`--add-dir ${root}/core -- /tpm$`));
+    expect(run(link, [], scratch)).toMatch(new RegExp(`--add-dir ${root}/skill-sets/core -- /tpm$`));
   });
 });
 
@@ -79,8 +81,8 @@ describe('--verbose', () => {
     expect(r.stdout.trimEnd()).toBe(run(tpm, [d], scratch));
     expect(r.stderr).toContain(`tpm: config      ${d}/.claude/roles/config.json（あり）\n`);
     expect(r.stderr).toContain('tpm: skill-sets  dependabot（');
-    expect(r.stderr).toMatch(/^tpm: core +\S+\/core → .*\/tpm/m);
-    expect(r.stderr).toMatch(/^tpm: dependabot +\S+\/dependabot → .*\/dependabot-triage/m);
+    expect(r.stderr).toMatch(/^tpm: core +\S+\/skill-sets\/core → .*\/tpm/m);
+    expect(r.stderr).toMatch(/^tpm: dependabot +\S+\/skill-sets\/dependabot → .*\/dependabot-triage/m);
   });
 
   test('旗が無ければ stderr に何も出さない', () => {

@@ -1,6 +1,5 @@
-# このファイルが在ることで、docs-site/ が root の workspace から外れ、自分の root になる
-# （無いと pnpm install が root の pnpm-lock.yaml と node_modules に入れる）。
-# 公開から 2 日（2880 分）たっていない version は入れない（root と同じ）。
+# docs-site/ は自分の root の pnpm の project。下の設定のために置く。
+# 公開から 2 日（2880 分）たっていない version は入れない（cli/ と同じ）。
 minimumReleaseAge: 2880
 
 # 上流が古い系列に縛っている依存を、勧告の修正版の系列へ上げる。

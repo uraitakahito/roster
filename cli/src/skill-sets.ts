@@ -43,9 +43,14 @@ function skillSetsField(config: unknown, configFile: string): string[] | undefin
   return skillSets as string[];
 }
 
-/** skill セットは repo の <name>/.claude/skills にある。無ければ誤り。 */
+/** skill セット name の folder（repo の skill-sets/<name>）。 */
+export function skillSetDir(root: string, name: string): string {
+  return join(root, 'skill-sets', name);
+}
+
+/** skill セットは skillSetDir の .claude/skills にある。無ければ誤り。 */
 function assertSkillSetExists(name: string, root: string): void {
-  if (!existsSync(join(root, name, '.claude', 'skills'))) {
+  if (!existsSync(join(skillSetDir(root, name), '.claude', 'skills'))) {
     throw new TpmError(`skill セットがありません: ${name}`);
   }
 }

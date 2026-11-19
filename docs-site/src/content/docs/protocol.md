@@ -3,9 +3,9 @@ title: 担当のあいだの決まり
 description: 担当どうしの連絡の決まりは protocol.md の 1 か所にある。依頼書のひな形の場所と、見出しの流れ
 ---
 
-「連絡の仕方と見出し・サイドバーの `model` と `wait`・Product Manager への確かめ方・文書の食い違い・共有の環境・終わり方」は `core/.claude/skills/_shared/protocol.md` の 1 か所に書き、どの担当もそれを読む。決まりの本文は、このページには写さない（skill が読む原本は `protocol.md`）。
+「連絡の仕方と見出し・サイドバーの `model` と `wait`・Product Manager への確かめ方・文書の食い違い・共有の環境・終わり方」は `skill-sets/core/.claude/skills/_shared/protocol.md` の 1 か所に書き、どの担当もそれを読む。決まりの本文は、このページには写さない（skill が読む原本は `protocol.md`）。
 
-TPM 担当が書く依頼書には、その課題だけのことを書く（ひな形は `core/.claude/skills/tpm/brief-template.md`）。
+TPM 担当が書く依頼書には、その課題だけのことを書く（ひな形は `skill-sets/core/.claude/skills/tpm/brief-template.md`）。
 
 ## サイドバー
 

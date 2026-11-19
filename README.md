@@ -10,6 +10,6 @@ https://uraitakahito.github.io/skills/
 ## 起動
 
 ```sh
-cd <skills の置き場所> && pnpm install --frozen-lockfile && pnpm run build
-<skills の置き場所>/bin/tpm <作業する folder>   # 出た 1 行を写して打つ
+cd <skills の置き場所> && pnpm --dir cli install --frozen-lockfile && pnpm --dir cli run build
+<skills の置き場所>/cli/bin/tpm <作業する folder>   # 出た 1 行を写して打つ
 ```

@@ -1,8 +1,7 @@
 {
   "//": [
-    "package.json にコメントを書く方法は root の package.json の // を参照。",
-    "docs の原稿（Astro + Starlight）だけの pnpm の project。docs-site/pnpm-workspace.yaml が在るので、",
-    "依存も lockfile もここに閉じ、root の node_modules と pnpm-lock.yaml には入らない。",
+    "package.json にコメントを書く方法は cli/package.json の // を参照。",
+    "docs の原稿（Astro + Starlight）だけの pnpm の project。依存も lockfile もここに閉じる。",
     "@astrojs/markdown-satteri と satteri: Astro 7.2 からの既定の Markdown 処理系。astro.config.ts が",
     "src/plugins/hast-rebase-links.ts を差し込むために、直接 import している。",
     "mermaid は 11 系: astro-mermaid が peer で ^10 || ^11 を要求する。",
