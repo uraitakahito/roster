@@ -1,14 +1,16 @@
 #!/usr/bin/env node
-// tpm [folder]
+// tpm [-v|--verbose] [folder]
 //
 // TPM 役の Claude Code を起こす 1 行を出す（起こすのは、それを写して打つ利用者）。
 // folder を渡さなければ今いる folder。束は folder の .claude/roles/config.json の packs で選ぶ。
+// --verbose なら、読んだ config・足す束・束ごとの skill を stderr に出す（stdout は 1 行のまま）。
 // bin/tpm は dist/cli.js への symlink。Node は main を realpath で解くので、symlink から呼んでも repo は正しく求まる。
 import { realpathSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { Command, CommanderError } from 'commander';
 import { buildCommand } from './command.js';
 import { readPacks, TpmError } from './packs.js';
+import { explain } from './verbose.js';
 
 /** この file は <repo>/dist/cli.js にある。 */
 const root = dirname(import.meta.dirname);
@@ -31,12 +33,17 @@ function main(argv: string[]): void {
     .name('tpm')
     .description('TPM 役の Claude Code を起こす 1 行を出す')
     .argument('[folder]', '起こす folder（既定は今いる folder）')
+    .option('-v, --verbose', '読んだ config・足す束・束ごとの skill を stderr に出す')
     .exitOverride((err: CommanderError) => {
       process.exit(err.exitCode === 0 ? 0 : EXIT_USAGE);
     })
-    .action((folder: string | undefined) => {
+    .action((folder: string | undefined, options: { verbose?: boolean }) => {
       const dir = resolveFolder(folder ?? process.cwd());
-      const packs = readPacks(join(dir, '.claude', 'roles', 'config.json'), root);
+      const configFile = join(dir, '.claude', 'roles', 'config.json');
+      const packs = readPacks(configFile, root);
+      if (options.verbose) {
+        for (const line of explain({ given: folder, dir, root, configFile, packs })) process.stderr.write(`tpm: ${line}\n`);
+      }
       console.log(buildCommand(dir, root, packs));
     });
 

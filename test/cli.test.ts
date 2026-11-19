@@ -71,6 +71,24 @@ describe('tpm が出す 1 行', () => {
   });
 });
 
+describe('--verbose', () => {
+  test.each([['--verbose'], ['-v']])('%s なら stderr に説明を出し、stdout は 1 行のまま', (flag) => {
+    const d = folder('{ "packs": ["dependabot"] }');
+    const r = spawnSync(tpm, [flag, d], { cwd: scratch, encoding: 'utf8' });
+    expect(r.status).toBe(0);
+    expect(r.stdout.trimEnd()).toBe(run(tpm, [d], scratch));
+    expect(r.stderr).toContain(`tpm: config  ${d}/.claude/roles/config.json（あり）\n`);
+    expect(r.stderr).toContain('tpm: packs   dependabot（');
+    expect(r.stderr).toMatch(/^tpm: core +\S+\/core → .*\/tpm/m);
+    expect(r.stderr).toMatch(/^tpm: dependabot +\S+\/dependabot → .*\/dependabot-triage/m);
+  });
+
+  test('旗が無ければ stderr に何も出さない', () => {
+    const r = spawnSync(tpm, [folder(null)], { cwd: scratch, encoding: 'utf8' });
+    expect(r.stderr).toBe('');
+  });
+});
+
 describe('誤りなら 1 行を出さずに止まる', () => {
   test.each([
     ['無い束', '{ "packs": ["nope"] }', /pack がありません: nope/],
