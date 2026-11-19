@@ -52,14 +52,14 @@ core はいつも足す。追加の skill セットは、起こす folder の `.
 | `/tpm` | Product Manager | TPM | Product Manager を助け、課題ごとに担当者を割り当てる |
 | `/software-engineer tpm=<surface> brief=<URL> [jira=<課題>]` | TPM | Software Engineer | 課題 1 つを受け持つ。依頼書（Artifact）を読み、調査・提案・計画・実装・テストを worktree で進め、成果を Artifact と PR で出す |
 | `/devops-engineer tpm=<surface> [brief=<URL>] [jira=<課題>]` | TPM | DevOps Engineer | Apple Container と Windmill のビルド・デプロイ・環境の整備。課題間のconflict等は TPM 担当に相談する |
-| `/dependabot-triage` | TPM | TPM | Dependabot の PR を集め、依存のversionの公開から 72 時間を判定し、対象の PR ごとに Sustaining Engineer 担当を起こす。merge と workspace を閉じるのも TPM 担当。`dry-run` で表だけ |
+| `/dependabot-triage` | TPM | TPM | Dependabot の PR を集め、依存の version の公開から 72 時間を判定し、対象の PR ごとに Sustaining Engineer 担当を起こす。merge と workspace を閉じるのも TPM 担当。`dry-run` で表だけ |
 | `/sustaining-engineer <repo>#<PR> tpm=<workspace>` | TPM | Sustaining Engineer | PR 1 本を受け持つ。72 時間の確かめ・直し・CI を緑に・TPM 担当に merge を頼む |
 
 ## 担当のあいだの決まり
 
 「連絡の仕方と見出し・サイドバーの `model` と `wait`・Product Manager への確かめ方・文書の食い違い・共有の環境・終わり方」は `core/.claude/skills/_shared/protocol.md` の 1 か所に書き、どの担当もそれを読む。TPM 担当が書く依頼書には、その課題だけのことを書く（ひな形は `core/.claude/skills/tpm/brief-template.md`）。
 
-判定の道具は `dependabot/.claude/skills/_shared/release-age.mjs`（`node release-age.mjs <owner>/<repo> <PR> [--hours <時間>] [--now <ISO 時刻>]`）。版は PR の差分（pnpm-lock・package-lock・yarn.lock・workflow の `uses:`）から読み、依存の依存も数える。終了コードは 0 対象・10 まだ・20 判定できない・1 道具の誤り。
+判定の道具は `dependabot/.claude/skills/_shared/release-age.mjs`（`node release-age.mjs <owner>/<repo> <PR> [--hours <時間>] [--now <ISO 時刻>]`）。version は PR の差分（pnpm-lock・package-lock・yarn.lock・workflow の `uses:`）から読み、依存の依存も数える。終了コードは 0 対象・10 まだ・20 判定できない・1 道具の誤り。
 
 ## 使う側の設定
 
@@ -90,7 +90,7 @@ Dependabot の skill を使う project では、`.claude/roles/config.json` の 
 | `repos` | 対象の repo の名前の配列（fork などは入れない） | `["app", "lib"]` |
 | `cwd` | Sustaining Engineer 担当を起こす folder（無ければ使う側の project の folder） | `"/path/to/workspace"` |
 | `maxConcurrent` | 同時に動かす Sustaining Engineer 担当の数 | `3` |
-| `hours` | 依存の版の公開から何時間たったら merge を検討するか | `72` |
+| `hours` | 依存の version の公開から何時間たったら merge を検討するか | `72` |
 | `model` | Sustaining Engineer 担当の model | `"claude-opus-5-5"` |
 | `effort` | Sustaining Engineer 担当の effort | `"medium"` |
 | `modelLabel` | サイドバーに出す字 | `"Opus 5.5 · medium"` |

@@ -52,13 +52,13 @@ node "${CLAUDE_SKILL_DIR}/../_shared/release-age.mjs" <config.owner>/<repo> <PR>
 
 | 終了コード | 意味 | すること |
 |---|---|---|
-| 0 | 対象（いちばん新しい版の公開から `config.hours` 時間を過ぎた） | 先へ進む |
+| 0 | 対象（いちばん新しい version の公開から `config.hours` 時間を過ぎた） | 先へ進む |
 | 10 | まだ | TPM 役に「【まだ】eligibleAt」を送り、止まる（直さない） |
 | 20 | 判定できない（Docker など・時刻が読めない） | TPM 役に「【相談(TPM)】判定できない・出力の JSON」を送り、`回答待ち(TPM): 72 時間の判定` |
 | 1 | 道具の誤り | 出力を添えて TPM 役に【相談(TPM)】 |
 
-- 時間は **依存の版の公開から** 数える（PR の作成からではない）。版は PR の差分（lockfile・workflow）から読み、依存の依存も数える。
-- 出力の `depsSource` が `commit-message` なら、差分から版が取れず Dependabot の commit の本文に戻った。本文は PR の作り直しで古いことがあるので、merge を頼む前に差分を目で見る。
+- 時間は **依存の version の公開から** 数える（PR の作成からではない）。version は PR の差分（lockfile・workflow）から読み、依存の依存も数える。
+- 出力の `depsSource` が `commit-message` なら、差分から version が取れず Dependabot の commit の本文に戻った。本文は PR の作り直しで古いことがあるので、merge を頼む前に差分を目で見る。
 
 ## 4. 直す（CI が赤のときだけ）
 
@@ -67,7 +67,7 @@ node "${CLAUDE_SKILL_DIR}/../_shared/release-age.mjs" <config.owner>/<repo> <PR>
 - Dependabot の PR に commit を足すか、別の PR にするかは、その repo の作法に従う（`git log` と最近の PR を見る）。
 - `@dependabot rebase` を打つ前に、下の 4a を読む。
 - `git add -A`・`git add .` は使わない。ファイルを名指して add する。
-- 直した後、もう一度 3 を流す（PR が作り直されて版が変わることがある）。
+- 直した後、もう一度 3 を流す（PR が作り直されて version が変わることがある）。
 - docs やコメントの食い違いを見つけたら、直して同じ PR か別の PR に入れ、報告に挙げる。
 - タグとリリースはしない（要るときは TPM 役に相談）。
 
@@ -79,7 +79,7 @@ node "${CLAUDE_SKILL_DIR}/../_shared/release-age.mjs" <config.owner>/<repo> <PR>
 2. **人が commit を足した PR では `@dependabot rebase` を打たない。** Dependabot は余分な commit のある PR をもう rebase しない（公式。`[dependabot skip]` などの印の commit なら上書きされる）。打っても空振りする。代わりに worktree で `git merge origin/main` して push する（**force push はしない**）。
 3. **打ったら、応じた印 👍 を待つ。** 時間は決まっていない（公式は「several minutes」。実測では 1 回目 20 分無反応・2 回目 4 分、10 分無反応のこともあった）。**待つのは `config.rebaseWaitMinutes` 分まで。** 越えたら TPM 役に `【まだ】rebase に <分> 分応じない` か `【相談(TPM)】` を送る。待つ間は `作業中: rebase を待つ（<打った時刻>）`。
 4. **rebase で緑が赤になることがある。** audit がいまの勧告の DB で流れ直すため。新しい勧告で audit が赤の間は、衝突していない PR は rebase しない。
-5. **group の PR は閉じて新しい番号で作り直されることがある**（docs には無い・実測）。72 時間は版の公開から数えるので判定は変わらない。作り直されたら、新しい番号を TPM 役に `【作り直し】旧 #N → 新 #M` で知らせ、新しい PR で 3 からやり直す。
+5. **group の PR は閉じて新しい番号で作り直されることがある**（docs には無い・実測）。72 時間は version の公開から数えるので判定は変わらない。作り直されたら、新しい番号を TPM 役に `【作り直し】旧 #N → 新 #M` で知らせ、新しい PR で 3 からやり直す。
 6. merge されないまま 30 日たった PR は、Dependabot がもう rebase しない（公式）。
 
 ## 5. merge を頼む
@@ -87,7 +87,7 @@ node "${CLAUDE_SKILL_DIR}/../_shared/release-age.mjs" <config.owner>/<repo> <PR>
 CI が全部緑で、3 の判定が 0 のとき:
 
 ```sh
-cmux agent message <tpm> --from "Sustaining Engineer <repo>#<PR>" -- "【merge の依頼】<PR の URL>／CI: 緑／公開から <最も新しい版の hours> 時間（eligibleAt <時刻>・depsSource <diff か commit-message>）／変えた物: <無し か 足した commit・別の PR>"
+cmux agent message <tpm> --from "Sustaining Engineer <repo>#<PR>" -- "【merge の依頼】<PR の URL>／CI: 緑／公開から <最も新しい version の hours> 時間（eligibleAt <時刻>・depsSource <diff か commit-message>）／変えた物: <無し か 足した commit・別の PR>"
 cmux set-status wait "回答待ち(TPM): merge" --icon hourglass --priority 80
 ```
 
