@@ -1,0 +1,40 @@
+name: site
+
+# docs-site の PR の検査。**公開はしない。**
+#
+# astro build だけでは守りにならない —— .md のページは中で何が落ちても exit 0 になる。
+# だから build と一緒に docs-site/scripts/check-refs.mjs を必ず通す（pnpm run check）。
+#
+# **paths で絞らない。** 検査は docs の外（README・core/・dependabot/ など）も読むので、
+# 絞ると、そちらだけを変えた PR で検査が走らない。
+#
+# main への push では走らせない。main の検査は、公開の docs.yml の中で同じ check を 1 回だけ流す。
+# fork の PR でも安全に走らせられるように、ここには deploy を置かない（contents: read だけ）。
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Docs sync guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      # root の package.json の packageManager を読む
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+          cache-dependency-path: docs-site/pnpm-lock.yaml
+      - run: pnpm --dir docs-site install --frozen-lockfile
+      - run: pnpm --dir docs-site run check

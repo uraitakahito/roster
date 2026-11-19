@@ -1,0 +1,34 @@
+{
+  "//": [
+    "package.json にコメントを書く方法は root の package.json の // を参照。",
+    "docs の原稿（Astro + Starlight）だけの pnpm の project。docs-site/pnpm-workspace.yaml が在るので、",
+    "依存も lockfile もここに閉じ、root の node_modules と pnpm-lock.yaml には入らない。",
+    "@astrojs/markdown-satteri と satteri: Astro 7.2 からの既定の Markdown 処理系。astro.config.ts が",
+    "src/plugins/hast-rebase-links.ts を差し込むために、直接 import している。",
+    "mermaid は 11 系: astro-mermaid が peer で ^10 || ^11 を要求する。",
+    "外す条件: astro-mermaid が、mermaid 12 を peer で受ける版を出したとき。"
+  ],
+  "name": "skills-docs-site",
+  "type": "module",
+  "private": true,
+  "packageManager": "pnpm@11.26.0",
+  "//scripts": {
+    "check": "build の後に scripts/check-refs.mjs で原稿と repo の食い違いを見る。astro build は .md のページの中で何が落ちても exit 0 で終わるため、CI はいつも check を流す。"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro build && node scripts/check-refs.mjs"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.43.1",
+    "astro": "^7.4.12",
+    "astro-mermaid": "^2.2.0",
+    "mermaid": "^11.17.2"
+  },
+  "devDependencies": {
+    "@astrojs/markdown-satteri": "^0.4.10",
+    "satteri": "^0.11.7"
+  }
+}

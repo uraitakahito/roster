@@ -7,7 +7,8 @@ import globals from 'globals';
 
 export default defineConfig(
   {
-    ignores: ['dist/**', 'node_modules/**', 'eslint.config.mjs'],
+    // docs-site/ は自分の依存と tsconfig を持つ別の project（Astro が検査する）
+    ignores: ['dist/**', 'node_modules/**', 'eslint.config.mjs', 'docs-site/**'],
   },
 
   eslint.configs.recommended,
