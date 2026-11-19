@@ -5,12 +5,13 @@ TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・De
 ## 連絡の仕方
 
 ```sh
-cmux agent message <相手の surface か workspace> --from "<自分の workspace の題>" -- "【見出し】本文"
-cmux --json agent inbox --surface <相手の surface> --limit 3     # 届いたかを見る
+cmux agent message <相手の workspace か surface> --from "<自分の workspace の題>" -- "【見出し】本文"
+cmux --json agent inbox --surface <相手の workspace か surface> --limit 3     # 届いたかを見る
 ```
 
 - 知らせは相手の hook から届く（打ち込みとぶつからない）。返事は、届いた知らせに書かれた `--reply-to <id>` で返してよい。
-- 送った後は inbox で `delivered` になったかを見る。`queued` のまま相手が入力待ちなら、TPM 担当が `cmux send` で打ち込む。
+- 宛先と `--surface` には、surface のほか workspace の ref（`workspace:12`）か題（完全一致か、ほかと重ならない頭の部分）を渡せる。workspace を渡すと、その中の選ばれている surface を指す。担当の workspace は surface が 1 つなので、surface を知らなくても `cmux workspace list` の workspace で足りる（起こし直した後も同じ）。同じ題の workspace が 2 つあると、題では `not_found` になる。
+- 送った後は inbox で `delivered` になったかを見る。`queued` のまま相手が入力待ちなら、TPM 担当が `cmux send --workspace <相手の workspace> "<本文>\r"` で打ち込む。
 - `--mark-read` は付けない（`--surface` 無しで打つと、全部の宛先を既読にする）。
 - 自分の surface と workspace は `cmux identify` の `caller`。
 - **Product Manager に直接聞かない。** Product Manager とのやりとりは、すべて TPM 担当を通す。
