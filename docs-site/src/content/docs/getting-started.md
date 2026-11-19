@@ -16,7 +16,7 @@ cd </your/workspace> # あなたが作業する場所
 /foo/bar/skills/bin/tpm --verbose <folder>    # その folder で起こす 1 行を出す
 ```
 
-`tpm` は claude を起こさない。自分の場所からこの repo を求め、folder の `.claude/roles/config.json` の `skill-sets` を確かめて、次の 1 行を出すだけ。それを写して打つ。
+`tpm` は claude を起こさない。folder の `.claude/roles/config.json` の `skill-sets` を確かめて、次の 1 行を出すだけ。それをそのまま打てばClaude Codeが適切に起動する。
 
 ```sh
 # skill-sets が無い（既定）
@@ -25,7 +25,7 @@ cd <folder> && claude --model claude-opus-5-5 --effort medium --permission-mode 
 cd <folder> && claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --add-dir <repo>/core <repo>/dependabot -- /tpm
 ```
 
-**最初の入力は `--` の後に置く**（`--add-dir` は後ろの語もまとめて folder として読むため）。最初の入力はいつも `/tpm`。`skill-sets` で変わるのは `--add-dir` だけ（[skill セット](/skill/#--add-dir-の先の-skill-セット)）。
+**最初の入力は `--` の後に置く**（`--add-dir` は後ろの語もまとめて folder として読むため）。
 
 ## 信頼のダイアログ
 
@@ -38,4 +38,3 @@ cd <folder> && claude --model claude-opus-5-5 --effort medium --permission-mode 
 - 信頼は、信頼した folder が git の repo ならその repo 全体に、そうでなければその下の全部に効く。**この repo は別の git の repo なので、信頼済みの folder の下に置いても信頼は及ばない**（信頼済みの folder の下の、git の repo でない folder では出なかった）。
 - 置いた場所ごとに、**この repo の folder で 1 度 Claude Code を対話で起こし**、「Yes, I trust this folder」を選んでおく。信頼は残る。
 - 起こした担当がこのダイアログで止まると、サイドバーに `wait` が出ない。`/tpm` と `/dependabot-triage` は Yes を押さずに閉じ、人に信頼を頼む。
-- 信頼済みのこの repo の git worktree（repo の隣の folder）を `--add-dir` で足しても、ダイアログは出なかった。起こす folder（cwd）が信頼されていないと、cwd の方でダイアログが出る。
