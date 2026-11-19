@@ -30,7 +30,7 @@ cd <どこか>
 claude --dangerously-skip-permissions --remote-control --add-dir /Users/takahito/projects/skills/core
 ```
 
-その後、 `/tpm` を打つ。
+その後、 `/tpm` を打つ。Dependabot の束も使うなら `--add-dir` に `/Users/takahito/projects/skills/dependabot` も足し、`/tpm packs=dependabot` と打つ（`/tpm` は引数の `packs=` で足した束を知るので、束を足しても `/tpm` だけでは `/dependabot-triage` を呼ばない）。
 
 または、TPM 役は `bin/tpm` で起こす。1 度だけ PATH の通った所に symlink を張る。
 
@@ -53,7 +53,7 @@ claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissio
 
 ほかの役を起こす 1 行は、`/tpm`（Software Engineer・DevOps Engineer 役）と `/dependabot-triage`（Sustaining Engineer 役）が自分の場所（`${CLAUDE_SKILL_DIR}/../../../..`）から組む（Software Engineer・DevOps Engineer 役は `--add-dir <repo>/core`、Sustaining Engineer 役は `--add-dir <repo>/core <repo>/dependabot`）ので、人は打たない。起こした後、サイドバーに `wait=作業中: …` が出たか（`cmux sidebar-state --workspace <workspace>`）で、skill が読まれたことを確かめる。題は起こすときに `--name` で付けるので、見分けに使えない。
 
-動いているセッションに途中から足すときは `/add-dir <この repo の folder>/core`（Dependabot の束も要るなら `<この repo の folder>/dependabot` も）。信頼していない folder だとダイアログが出るので、↓ と Enter で「Yes, add it」を選ぶ。
+動いているセッションに途中から足すときは `/add-dir <この repo の folder>/core`（Dependabot の束も要るなら `<この repo の folder>/dependabot` も）。信頼していない folder だとダイアログが出るので、↓ と Enter で「Yes, add it」を選ぶ。Dependabot の束を足した後に `/tpm` を打つときは `/tpm packs=dependabot` とする。
 
 ## skill
 
