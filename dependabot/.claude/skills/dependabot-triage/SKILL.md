@@ -1,13 +1,13 @@
 ---
 name: dependabot-triage
-description: TPM 役が Dependabot の PR を集め、依存の版の公開から 72 時間を判定し、対象の PR ごとに Sustaining Engineer 役（/sustaining-engineer）を起こす。merge と workspace を閉じるのも TPM 役。引数 `一覧だけ` なら判定の表を出すだけで誰も起こさない。設定は使う側の .claude/dependabot/ から読む。
+description: TPM 役が Dependabot の PR を集め、依存の版の公開から 72 時間を判定し、対象の PR ごとに Sustaining Engineer 役（/sustaining-engineer）を起こす。merge と workspace を閉じるのも TPM 役。引数 `dry-run` なら判定の表を出すだけで誰も起こさない。設定は使う側の .claude/dependabot/ から読む。
 ---
 
 # Dependabot の PR の振り分け（TPM 役が呼ぶ）
 
 呼ぶのは **Technical Program Manager 担当の Claude Code（TPM 役）** です。引数: `$ARGUMENTS`
 
-- `一覧だけ`: 1・2 だけをして表を出し、誰も起こさない。
+- `dry-run`: 1・2 だけをして表を出し、誰も起こさない。
 - `上限=<n>`: 同時に動かす Sustaining Engineer 役の数（既定は `config.maxConcurrent`）。
 - 何も無ければ 1〜3 をして、4・5 は報告が来たら行う。
 
@@ -57,7 +57,7 @@ node "${CLAUDE_SKILL_DIR}/../_shared/release-age.mjs" <config.owner>/<repo> <PR>
 | 赤の check | fail の check の名前（audit だけの赤か、試験や build の赤かを見分ける） |
 | 判定 | 対象・まだ・判定できない（null の依存の名前を添える）。`depsSource` が `commit-message` なら書き添える |
 
-`一覧だけ` ならここで終わる。
+`dry-run` ならここで終わる。
 
 ## 3. 起こす
 
