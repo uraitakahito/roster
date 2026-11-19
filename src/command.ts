@@ -11,12 +11,12 @@ export function shellQuote(word: string): string {
 
 /**
  * dir に移って TPM 役の claude を起こす 1 行を返す。
- * core と packs の束を --add-dir で足し、最初の入力は /tpm（束があれば /tpm packs=<束,…>）。
+ * core と追加の skill セットを --add-dir で足し、最初の入力は /tpm（追加の skill セットがあれば /tpm skill-sets=<名前,…>）。
  * --add-dir は後ろの語もまとめて folder として読むので、最初の入力の前に -- を置く。
  */
-export function buildCommand(dir: string, root: string, packs: string[]): string {
-  const addDirs = ['core', ...packs].map(p => join(root, p));
-  const first = packs.length ? `/tpm packs=${packs.join(',')}` : '/tpm';
+export function buildCommand(dir: string, root: string, skillSets: string[]): string {
+  const addDirs = ['core', ...skillSets].map(s => join(root, s));
+  const first = skillSets.length ? `/tpm skill-sets=${skillSets.join(',')}` : '/tpm';
   const claude = ['claude', ...CLAUDE_OPTIONS, '--add-dir', ...addDirs, '--', first];
   return `cd ${shellQuote(dir)} && ${claude.map(shellQuote).join(' ')}`;
 }

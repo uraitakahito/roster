@@ -23,40 +23,40 @@ cd </your/workspace> # あなたが作業する場所
 /foo/bar/skills/bin/tpm <folder>     # その folder で起こす 1 行を出す
 ```
 
-`tpm` は claude を起こさない。自分の場所からこの repo を求め、folder の `.claude/roles/config.json` の `packs` を確かめて、次の 1 行を出すだけ。それを写して打つ。
+`tpm` は claude を起こさない。自分の場所からこの repo を求め、folder の `.claude/roles/config.json` の `skill-sets` を確かめて、次の 1 行を出すだけ。それを写して打つ。
 
 ```sh
-# packs が無い（既定）
+# skill-sets が無い（既定）
 cd <folder> && claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --add-dir <repo>/core -- /tpm
-# "packs": ["dependabot"]
-cd <folder> && claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --add-dir <repo>/core <repo>/dependabot -- '/tpm packs=dependabot'
+# "skill-sets": ["dependabot"]
+cd <folder> && claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --add-dir <repo>/core <repo>/dependabot -- '/tpm skill-sets=dependabot'
 ```
 
 **最初の入力は `--` の後に置く**（`--add-dir` は後ろの語もまとめて folder として読むため）。
 
-`-v`・`--verbose` を付けると、読んだ config と足す束、束ごとの skill を stderr に出す。stdout は上の 1 行のまま。
+`-v`・`--verbose` を付けると、読んだ config と追加の skill セット、skill セットごとの skill を stderr に出す。stdout は上の 1 行のまま。
 
 ```sh
 $ /foo/bar/skills/bin/tpm -v
-tpm: folder  /your/workspace（今いる folder）
-tpm: repo    /foo/bar/skills
-tpm: config  /your/workspace/.claude/roles/config.json（あり）
-tpm: packs   dependabot（config の packs から。core と重なりは除いた）
+tpm: folder      /your/workspace（今いる folder）
+tpm: repo        /foo/bar/skills
+tpm: config      /your/workspace/.claude/roles/config.json（あり）
+tpm: skill-sets  dependabot（config の skill-sets から。core と重なりは除いた）
 tpm: core        /foo/bar/skills/core → /devops-engineer /software-engineer /tpm
 tpm: dependabot  /foo/bar/skills/dependabot → /dependabot-triage /sustaining-engineer
 cd /your/workspace && claude ...
 ```
 
-### `--add-dir` の先の束
+### `--add-dir` の先の skill セット
 
-skill は束（pack）に分けてあり、`--add-dir` で足した束の skill だけが出る。
+skill は skill セット（skill set）に分けてあり、`--add-dir` で足した skill セットの skill だけが出る。
 
-| 束 | folder | skill |
+| skill セット | folder | skill |
 |---|---|---|
 | core | `core/.claude/skills/` | `/tpm`・`/software-engineer`・`/devops-engineer`・`_shared/protocol.md` |
 | dependabot | `dependabot/.claude/skills/` | `/dependabot-triage`・`/sustaining-engineer`・`_shared/release-age.mjs` |
 
-core はいつも足す。ほかの束は、起こす folder の `.claude/roles/config.json` の `packs` に書いたときだけ足す（下の「使う側の設定」）。束は兄弟の folder に置く（入れ子にすると、外側の束を足したセッションが内側の束の folder を触ったときに、内側の skill まで見つかりうるため）。
+core はいつも足す。追加の skill セットは、起こす folder の `.claude/roles/config.json` の `skill-sets` に書いたときだけ足す（下の「使う側の設定」）。skill セットは兄弟の folder に置く（入れ子にすると、外側の skill セットを足したセッションが内側の skill セットの folder を触ったときに、内側の skill まで見つかりうるため）。
 
 ## skill
 
@@ -78,22 +78,22 @@ core はいつも足す。ほかの束は、起こす folder の `.claude/roles/
 
 ### `.claude/roles/config.json`（任意）
 
-TPM 担当を起こした folder に置くと、足す束と、TPM 担当が起こす担当の既定を替えられる。
+TPM 担当を起こした folder に置くと、追加の skill セットと、TPM 担当が起こす担当の既定を替えられる。
 
 | 欄 | 中身 | 無いとき |
 |---|---|---|
-| `packs` | core のほかに足す束の名前の配列（`bin/tpm` が読む） | core だけ |
+| `skill-sets` | core のほかに加える、追加の skill セットの名前の配列（`bin/tpm` が読む） | core だけ |
 | `software-engineer`・`devops-engineer` | 起こす担当の `model`・`effort`・`permissionMode`（`/tpm` が読む） | `/tpm` の表の既定（Software Engineer 担当は Opus 5.5・medium、DevOps Engineer 担当は Opus 5.5・low、どちらも `bypassPermissions`） |
 
 ```json
-{ "packs": ["dependabot"],
+{ "skill-sets": ["dependabot"],
   "software-engineer": { "model": "claude-opus-5-5", "effort": "high", "permissionMode": "bypassPermissions" },
   "devops-engineer": { "model": "claude-opus-5-5", "effort": "low", "permissionMode": "bypassPermissions" } }
 ```
 
 ### Dependabot の設定
 
-Dependabot の skill を使う project では、`.claude/roles/config.json` の `packs` に `"dependabot"` を書き、次の 2 つを置く。束を書かなければ、2 つを置いても `/tpm` は `/dependabot-triage` を呼ばない（読み込まれない）。束を書いても 2 つが無いと `/dependabot-triage` と `/sustaining-engineer` は止まる（`/tpm` は飛ばして先へ進む）。
+Dependabot の skill を使う project では、`.claude/roles/config.json` の `skill-sets` に `"dependabot"` を書き、次の 2 つを置く。skill セットを書かなければ、2 つを置いても `/tpm` は `/dependabot-triage` を呼ばない（読み込まれない）。skill セットを書いても 2 つが無いと `/dependabot-triage` と `/sustaining-engineer` は止まる（`/tpm` は飛ばして先へ進む）。
 
 #### `.claude/dependabot/config.json`
 
@@ -130,7 +130,7 @@ Dependabot の skill を使う project では、`.claude/roles/config.json` の 
 2. `mv <今の folder> <新しい folder>`（git の履歴ごと移る）。
 3. 新しい folder で 1 度 Claude Code を対話で起こして信頼する（上の「信頼のダイアログ」。信頼は path に付くので、移すたびに要る）。
 4. 新しい folder で `pnpm install --frozen-lockfile` と `pnpm run build` を打ち、`~/.local/bin/tpm` の symlink を張り直す（`ln -sf <新しい folder>/bin/tpm ~/.local/bin/tpm`）。
-5. 動いている TPM 担当は、起こし直すか `/add-dir <新しい folder>/core`（束を足していれば、その束の folder も）を打つ。ほかの担当を起こす旗は `/tpm` と `/dependabot-triage` が自分の場所から求めるので直さない。
+5. 動いている TPM 担当は、起こし直すか `/add-dir <新しい folder>/core`（追加の skill セットを足していれば、その skill セットの folder も）を打つ。ほかの担当を起こす旗は `/tpm` と `/dependabot-triage` が自分の場所から求めるので直さない。
 
 ## 試験
 

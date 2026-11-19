@@ -40,27 +40,27 @@ describe('tpm が出す 1 行', () => {
     expect(run(tpm, [d], root)).toMatch(new RegExp(`^cd ${d} && `));
   });
 
-  test('config.json が無ければ core の束だけを --add-dir で足し、/tpm の前に -- を置く', () => {
+  test('config.json が無ければ core だけを --add-dir で足し、/tpm の前に -- を置く', () => {
     const d = folder(null);
     expect(run(tpm, [d], scratch)).toBe(`cd ${d} && ${head} --add-dir ${root}/core -- /tpm`);
   });
 
-  test('packs の欄が無ければ core の束だけ', () => {
+  test('skill-sets の欄が無ければ core だけ', () => {
     const d = folder('{ "software-engineer": { "effort": "high" } }');
     expect(run(tpm, [d], scratch)).toBe(`cd ${d} && ${head} --add-dir ${root}/core -- /tpm`);
   });
 
-  test('packs に書いた束も足し、/tpm に packs= で渡す', () => {
-    const d = folder('{ "packs": ["dependabot"] }');
+  test('skill-sets に書いた追加の skill セットも足し、/tpm に skill-sets= で渡す', () => {
+    const d = folder('{ "skill-sets": ["dependabot"] }');
     expect(run(tpm, [d], scratch)).toBe(
-      `cd ${d} && ${head} --add-dir ${root}/core ${root}/dependabot -- '/tpm packs=dependabot'`,
+      `cd ${d} && ${head} --add-dir ${root}/core ${root}/dependabot -- '/tpm skill-sets=dependabot'`,
     );
   });
 
-  test('packs の core と重なりは 1 度だけ足す', () => {
-    const d = folder('{ "packs": ["core", "dependabot", "dependabot"] }');
+  test('skill-sets の core と重なりは 1 度だけ足す', () => {
+    const d = folder('{ "skill-sets": ["core", "dependabot", "dependabot"] }');
     expect(run(tpm, [d], scratch)).toBe(
-      `cd ${d} && ${head} --add-dir ${root}/core ${root}/dependabot -- '/tpm packs=dependabot'`,
+      `cd ${d} && ${head} --add-dir ${root}/core ${root}/dependabot -- '/tpm skill-sets=dependabot'`,
     );
   });
 
@@ -73,12 +73,12 @@ describe('tpm が出す 1 行', () => {
 
 describe('--verbose', () => {
   test.each([['--verbose'], ['-v']])('%s なら stderr に説明を出し、stdout は 1 行のまま', (flag) => {
-    const d = folder('{ "packs": ["dependabot"] }');
+    const d = folder('{ "skill-sets": ["dependabot"] }');
     const r = spawnSync(tpm, [flag, d], { cwd: scratch, encoding: 'utf8' });
     expect(r.status).toBe(0);
     expect(r.stdout.trimEnd()).toBe(run(tpm, [d], scratch));
-    expect(r.stderr).toContain(`tpm: config  ${d}/.claude/roles/config.json（あり）\n`);
-    expect(r.stderr).toContain('tpm: packs   dependabot（');
+    expect(r.stderr).toContain(`tpm: config      ${d}/.claude/roles/config.json（あり）\n`);
+    expect(r.stderr).toContain('tpm: skill-sets  dependabot（');
     expect(r.stderr).toMatch(/^tpm: core +\S+\/core → .*\/tpm/m);
     expect(r.stderr).toMatch(/^tpm: dependabot +\S+\/dependabot → .*\/dependabot-triage/m);
   });
@@ -91,10 +91,10 @@ describe('--verbose', () => {
 
 describe('誤りなら 1 行を出さずに止まる', () => {
   test.each([
-    ['無い束', '{ "packs": ["nope"] }', /pack がありません: nope/],
-    ['壊れた JSON', '{ packs: ', /JSON として読めません/],
-    ['配列でない packs', '{ "packs": "dependabot" }', /packs は束の名前/],
-    ['道を含む束の名前', '{ "packs": ["../x"] }', /packs は束の名前/],
+    ['無い skill セット', '{ "skill-sets": ["nope"] }', /skill セットがありません: nope/],
+    ['壊れた JSON', '{ skill-sets: ', /JSON として読めません/],
+    ['配列でない skill-sets', '{ "skill-sets": "dependabot" }', /skill-sets は skill セットの名前/],
+    ['道を含む skill セットの名前', '{ "skill-sets": ["../x"] }', /skill-sets は skill セットの名前/],
   ])('%s', (_, text, message) => {
     const r = runFailing([folder(text)]);
     expect(r.status).toBe(1);

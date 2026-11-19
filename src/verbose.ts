@@ -1,4 +1,4 @@
-// --verbose で stderr に出す説明。tpm が何をどこから読み、どの束の skill を足すかを並べる。
+// --verbose で stderr に出す説明。tpm が何をどこから読み、どの skill セットの skill を足すかを並べる。
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -9,12 +9,15 @@ export interface Resolved {
   dir: string
   root: string
   configFile: string
-  packs: string[]
+  skillSets: string[]
 }
 
-/** 束の folder の .claude/skills のうち、SKILL.md を持つ folder の名前を名前順に返す（_shared などは持たないので出ない）。 */
-export function listSkills(packDir: string): string[] {
-  const skills = join(packDir, '.claude', 'skills');
+/** 見出しの欄の幅（いちばん長い見出し skill-sets の 10 字）。 */
+const LABEL_WIDTH = 10;
+
+/** skill セットの folder の .claude/skills のうち、SKILL.md を持つ folder の名前を名前順に返す（_shared などは持たないので出ない）。 */
+export function listSkills(skillSetDir: string): string[] {
+  const skills = join(skillSetDir, '.claude', 'skills');
   return readdirSync(skills, { withFileTypes: true })
     .filter(e => e.isDirectory() && existsSync(join(skills, e.name, 'SKILL.md')))
     .map(e => e.name)
@@ -23,18 +26,19 @@ export function listSkills(packDir: string): string[] {
 
 /** 説明の行を返す（先頭の `tpm: ` は付けない）。 */
 export function explain(r: Resolved): string[] {
-  const packs = ['core', ...r.packs];
-  // 束の名前の欄は、上の行の見出し（folder など 6 字）とそろえる。
-  const width = Math.max(6, ...packs.map(p => p.length));
+  const skillSets = ['core', ...r.skillSets];
+  // skill セットの名前の欄は、上の行の見出しとそろえる。
+  const width = Math.max(LABEL_WIDTH, ...skillSets.map(s => s.length));
+  const line = (label: string, text: string): string => `${label.padEnd(width)}  ${text}`;
   return [
-    `folder  ${r.dir}（${r.given === undefined ? '今いる folder' : `渡された値: ${r.given}`}）`,
-    `repo    ${r.root}`,
-    `config  ${r.configFile}（${existsSync(r.configFile) ? 'あり' : 'なし'}）`,
-    `packs   ${r.packs.length ? `${r.packs.join(' ')}（config の packs から。core と重なりは除いた）` : 'なし（core だけ）'}`,
-    ...packs.map((p) => {
-      const dir = join(r.root, p);
+    line('folder', `${r.dir}（${r.given === undefined ? '今いる folder' : `渡された値: ${r.given}`}）`),
+    line('repo', r.root),
+    line('config', `${r.configFile}（${existsSync(r.configFile) ? 'あり' : 'なし'}）`),
+    line('skill-sets', r.skillSets.length ? `${r.skillSets.join(' ')}（config の skill-sets から。core と重なりは除いた）` : 'なし（core だけ）'),
+    ...skillSets.map((s) => {
+      const dir = join(r.root, s);
       const skills = listSkills(dir);
-      return `${p.padEnd(width)}  ${dir} → ${skills.length ? skills.map(s => `/${s}`).join(' ') : '（skill なし）'}`;
+      return line(s, `${dir} → ${skills.length ? skills.map(k => `/${k}`).join(' ') : '（skill なし）'}`);
     }),
   ];
 }

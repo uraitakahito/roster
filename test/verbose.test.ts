@@ -4,10 +4,10 @@ import { join } from 'node:path';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { explain, listSkills } from '../src/verbose.js';
 
-// 束 core（skill 2 つと _shared）と empty（skill なし）を持つ偽の repo を作る。
+// skill セット core（skill 2 つと _shared）と empty（skill なし）を持つ偽の repo を作る。
 let root: string;
-const skill = (pack: string, name: string, withSkillMd = true): void => {
-  const d = join(root, pack, '.claude', 'skills', name);
+const skill = (skillSet: string, name: string, withSkillMd = true): void => {
+  const d = join(root, skillSet, '.claude', 'skills', name);
   mkdirSync(d, { recursive: true });
   if (withSkillMd) writeFileSync(join(d, 'SKILL.md'), '');
 };
@@ -33,25 +33,25 @@ describe('listSkills', () => {
 
 describe('explain', () => {
   test('folder を渡さず config も無ければ、そう書き、core だけを並べる', () => {
-    expect(explain({ given: undefined, dir: '/w', root, configFile: '/w/nope.json', packs: [] })).toEqual([
-      'folder  /w（今いる folder）',
-      `repo    ${root}`,
-      'config  /w/nope.json（なし）',
-      'packs   なし（core だけ）',
-      `core    ${root}/core → /devops-engineer /tpm`,
+    expect(explain({ given: undefined, dir: '/w', root, configFile: '/w/nope.json', skillSets: [] })).toEqual([
+      'folder      /w（今いる folder）',
+      `repo        ${root}`,
+      'config      /w/nope.json（なし）',
+      'skill-sets  なし（core だけ）',
+      `core        ${root}/core → /devops-engineer /tpm`,
     ]);
   });
 
-  test('渡した値・config のあり・束ごとの skill を書く', () => {
+  test('渡した値・config のあり・skill セットごとの skill を書く', () => {
     const configFile = join(root, 'config.json');
     writeFileSync(configFile, '{}');
-    expect(explain({ given: '.', dir: '/w', root, configFile, packs: ['empty'] })).toEqual([
-      'folder  /w（渡された値: .）',
-      `repo    ${root}`,
-      `config  ${configFile}（あり）`,
-      'packs   empty（config の packs から。core と重なりは除いた）',
-      `core    ${root}/core → /devops-engineer /tpm`,
-      `empty   ${root}/empty → （skill なし）`,
+    expect(explain({ given: '.', dir: '/w', root, configFile, skillSets: ['empty'] })).toEqual([
+      'folder      /w（渡された値: .）',
+      `repo        ${root}`,
+      `config      ${configFile}（あり）`,
+      'skill-sets  empty（config の skill-sets から。core と重なりは除いた）',
+      `core        ${root}/core → /devops-engineer /tpm`,
+      `empty       ${root}/empty → （skill なし）`,
     ]);
   });
 });

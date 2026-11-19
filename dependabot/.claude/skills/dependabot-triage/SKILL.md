@@ -82,7 +82,7 @@ cmux workspace create --name "Sustaining Engineer <repo>#<PR>" --cwd <cwd> \
   --command 'claude --model <config.model> --effort <config.effort> --permission-mode <config.permissionMode> --add-dir <root>/core <root>/dependabot -- "/sustaining-engineer <repo>#<PR> tpm=<自分の workspace>"'
 ```
 
-- **`--add-dir <root>/core <root>/dependabot` の後の `--` を落とさない。** 2 つの束を両方足す（protocol.md は core の束、`/sustaining-engineer` は dependabot の束にある）。 `--add-dir` は後ろの語もまとめて folder として読むので、`--` が無いと `/sustaining-engineer …` が依頼として渡らない。
+- **`--add-dir <root>/core <root>/dependabot` の後の `--` を落とさない。** 2 つの skill セットを両方足す（protocol.md は core の skill セット、`/sustaining-engineer` は dependabot の skill セットにある）。 `--add-dir` は後ろの語もまとめて folder として読むので、`--` が無いと `/sustaining-engineer …` が依頼として渡らない。
 - 自分の workspace は `cmux identify` の caller の `workspace_ref`。
 - 起動の命令は 1,024 バイトを超えると黙って実行されない。上の形を延ばさない。
 - **起こした後 90 秒の間に、`cmux sidebar-state --workspace <新しい workspace>` に `wait=作業中: …` の行が出たかを見る**（`/sustaining-engineer` の最初の手が `wait` を出す。題は起こすときに `--name` で付けてあるので、題では見分けられない）。出なければ `cmux read-screen --workspace <新しい workspace>` で画面を読む:
