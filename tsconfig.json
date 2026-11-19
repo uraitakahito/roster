@@ -1,4 +1,4 @@
-// 型の検査（pnpm run typecheck）と ESLint の型つき規則が使う。src・test・設定をまとめて見て、何も書き出さない。
+// 型の検査（pnpm run typecheck）と ESLint の型つき規則が使う。src・test・dependabot の skill セットの TypeScript（release-age の型と試験）・設定をまとめて見て、何も書き出さない。
 // 書き出しは tsconfig.build.json（pnpm run build）。
 {
   "compilerOptions": {
