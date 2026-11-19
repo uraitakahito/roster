@@ -20,5 +20,6 @@ TPM 担当が Software Engineer 担当・DevOps Engineer 担当に渡す依頼�
 
 - 1 段の読む列。節の題と短い文。図は要る所だけ。
 - 決まった言い回しより、その課題の具体（ファイル名・コマンド・数）を書く。
+- Product Manager が言っていない前提（今の振る舞いを守る など）を足さない。「遅い」「手間」など改善の依頼なら、速くする案の前に「その処理がそもそも要るか」を問わせる。
 - Product Manager の答えが要ることが先にわかっていれば、「Product Manager に確かめること」として依頼書に書き、Software Engineer 担当に Jira のタスクリストにさせる（jira.md の「Product Manager に確かめる」）。
 - 「Jira に成果の URL のコメントを足す」は書かなくてよい。担当が jira.md の「誰が・いつ書くか」のとおりに書く。
