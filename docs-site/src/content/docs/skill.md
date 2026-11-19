@@ -19,7 +19,7 @@ skill セット `<名前>` の skill は `skill-sets/<名前>/.claude/skills/` �
 | skill | 起こす人 | 担当者 | すること |
 |---|---|---|---|
 | `/tpm` | Product Manager | TPM | Product Manager を助け、課題ごとに担当者を割り当てる |
-| `/software-engineer` `tpm=<surface>` `brief=<URL>` `[jira=<課題>]` | TPM | Software Engineer | 課題 1 つを受け持つ。依頼書（Artifact）を読み、調査・提案・計画・実装・テストを worktree で進め、成果を Artifact と PR で出す |
+| `/software-engineer` `tpm=<surface>` `brief=<URL>` `[jira=<課題>]` | TPM | Software Engineer | 課題 1 つを受け持つ。依頼書（Artifact）を読み、調査・提案・計画・実装・テストを worktree で進め、成果を Artifact と PR で出す。TPM 担当が【片付け】を送るまで、同じ課題の続きを同じ担当が受ける |
 | `/devops-engineer` `tpm=<surface>` `[brief=<URL>]` `[jira=<課題>]` | TPM | DevOps Engineer | Apple Container と Windmill のビルド・デプロイ・環境の整備。課題間のconflict等は TPM 担当に相談する |
 | `/dependabot-triage` | Product Manager が言ったとき、TPM | TPM | Dependabot の PR を集め、依存の version の公開から 72 時間を判定し、対象の PR ごとに Sustaining Engineer 担当を起こす。merge と workspace を閉じるのも TPM 担当。`dry-run` で表だけ |
 | `/sustaining-engineer` `<repo>#<PR>` `tpm=<workspace>` | TPM | Sustaining Engineer | PR 1 本を受け持つ。72 時間の確かめ・直し・CI を緑に・TPM 担当に merge を頼む |
