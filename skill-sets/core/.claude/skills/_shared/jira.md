@@ -24,13 +24,38 @@ Jira の課題にコメントを書く・読む・Product Manager に確かめ�
 ひな形（種類で変わるのは 1 行目だけ）:
 
 ```json
-{"type":"doc","version":1,"content":[
- {"type":"paragraph","content":[{"type":"text","text":"【計画】Software Engineer: 案 B の計画（PR 2 本）"}]},
- {"type":"paragraph","content":[
-  {"type":"text","text":"計画: "},
-  {"type":"text","text":"https://claude.ai/artifact/<id>","marks":[{"type":"link","attrs":{"href":"https://claude.ai/artifact/<id>"}}]}]},
- {"type":"paragraph","content":[{"type":"text","text":"<要点>"}]}
-]}
+{
+  "type": "doc",
+  "version": 1,
+  "content": [
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "【計画】Software Engineer: 案 B の計画（PR 2 本）"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        { "type": "text", "text": "計画: " },
+        {
+          "type": "text",
+          "text": "https://claude.ai/artifact/<id>",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": { "href": "https://claude.ai/artifact/<id>" }
+            }
+          ]
+        }
+      ]
+    },
+    { "type": "paragraph", "content": [{ "type": "text", "text": "<要点>" }] }
+  ]
+}
 ```
 
 ## 書く・直す・読む
