@@ -7,6 +7,7 @@ Claude Code の skill を、使う project の外に置く repo。使う側の�
 | skill | 呼ぶ人 | すること |
 |---|---|---|
 | `/tpm` | TPM 役（`bin/tpm` が起こす） | Product Manager を助け、課題ごとに Software Engineer 役・DevOps Engineer 役を起こす。起きたとき、Dependabot の設定があれば `/dependabot-triage` を呼ぶ |
+| `/se tpm=<surface> brief=<URL> [jira=<課題>]` | Software Engineer 役（TPM 役が起こす） | 課題 1 つを受け持つ。依頼書（Artifact）を読み、調査・提案・計画・実装・テストを worktree で進め、成果を Artifact と PR で出す |
 | `/dependabot-triage` | Technical Program Manager 役（TPM 役） | Dependabot の PR を集め、依存の版の公開から 72 時間を判定し、対象の PR ごとに Sustaining Engineer 役を起こす。merge と workspace を閉じるのも TPM 役。`一覧だけ` で表だけ |
 | `/sustaining <repo>#<PR> tpm=<workspace>` | Sustaining Engineer 役（TPM 役が起こす） | PR 1 本を受け持つ。72 時間の確かめ・直し・CI を緑に・TPM 役に merge を頼む |
 
