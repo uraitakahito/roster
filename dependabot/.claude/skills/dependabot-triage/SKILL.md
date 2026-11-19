@@ -1,19 +1,19 @@
 ---
 name: dependabot-triage
-description: TPM 役が Dependabot の PR を集め、依存の version の公開から 72 時間を判定し、対象の PR ごとに Sustaining Engineer 役（/sustaining-engineer）を起こす。merge と workspace を閉じるのも TPM 役。引数 `dry-run` なら判定の表を出すだけで誰も起こさない。設定は使う側の .claude/dependabot/ から読む。
+description: TPM 担当が Dependabot の PR を集め、依存の version の公開から 72 時間を判定し、対象の PR ごとに Sustaining Engineer 担当（/sustaining-engineer）を起こす。merge と workspace を閉じるのも TPM 担当。引数 `dry-run` なら判定の表を出すだけで誰も起こさない。設定は使う側の .claude/dependabot/ から読む。
 ---
 
-# Dependabot の PR の振り分け（TPM 役が呼ぶ）
+# Dependabot の PR の振り分け（TPM 担当が呼ぶ）
 
-呼ぶのは **Technical Program Manager 担当の Claude Code（TPM 役）** です。引数: `$ARGUMENTS`
+呼ぶのは **Technical Program Manager 担当の Claude Code（TPM 担当）** です。引数: `$ARGUMENTS`
 
 - `dry-run`: 1・2 だけをして表を出し、誰も起こさない。
-- `max=<n>`: 同時に動かす Sustaining Engineer 役の数（既定は `config.maxConcurrent`）。
+- `max=<n>`: 同時に動かす Sustaining Engineer 担当の数（既定は `config.maxConcurrent`）。
 - 何も無ければ 1〜3 をして、4・5 は報告が来たら行う。
 
 ## 0. 設定を読む（最初に必ず）
 
-- `${CLAUDE_SKILL_DIR}/../../../../core/.claude/skills/_shared/protocol.md`（役のあいだの決まり。連絡の仕方・見出し・サイドバー）
+- `${CLAUDE_SKILL_DIR}/../../../../core/.claude/skills/_shared/protocol.md`（担当のあいだの決まり。連絡の仕方・見出し・サイドバー）
 - `${CLAUDE_PROJECT_DIR}/.claude/dependabot/config.json`（欄は repo の README の表。以下 `config.<欄>` と書く）
 - `${CLAUDE_PROJECT_DIR}/.claude/dependabot/rules.md`（この project の決まり。**この skill の手順より先に従う**）
 
@@ -23,8 +23,8 @@ description: TPM 役が Dependabot の PR を集め、依存の version の公�
 
 - 対象は `config.owner` の `config.repos` の repo だけ。
 - 時間（`config.hours`・既定 72）は **依存の version の公開から** 数える。group の PR は中のいちばん新しい version の公開から。version は PR の差分から読み、依存の依存も数える。
-- 届かない PR は、Sustaining Engineer 役を起こさず、表に「いつ対象になるか」を出して次の回に回す。
-- merge は TPM 役の権限で決める。workspace は、merge と【終わり】の報告を受け取った後に TPM 役が閉じる。
+- 届かない PR は、Sustaining Engineer 担当を起こさず、表に「いつ対象になるか」を出して次の回に回す。
+- merge は TPM 担当の権限で決める。workspace は、merge と【終わり】の報告を受け取った後に TPM 担当が閉じる。
 
 ## 1. 集める
 
@@ -61,7 +61,7 @@ node "${CLAUDE_SKILL_DIR}/../_shared/release-age.mjs" <config.owner>/<repo> <PR>
 
 ## 3. 起こす
 
-「対象」の PR を次の順に並べ、いま動いている Sustaining Engineer 役（`cmux workspace list` の題が `Sustaining Engineer ` で始まる workspace）と合わせて上限に届くまで、1 本ずつ起こす。上限に届いたら、残りは表に「待ち」と書いて、誰かが終わるのを待つ。
+「対象」の PR を次の順に並べ、いま動いている Sustaining Engineer 担当（`cmux workspace list` の題が `Sustaining Engineer ` で始まる workspace）と合わせて上限に届くまで、1 本ずつ起こす。上限に届いたら、残りは表に「待ち」と書いて、誰かが終わるのを待つ。
 
 1. CI が全部緑の PR（直しが無く、早く閉じられる）を先に。
 2. 次に、赤が試験や build の PR（直しが要る）。
@@ -69,7 +69,7 @@ node "${CLAUDE_SKILL_DIR}/../_shared/release-age.mjs" <config.owner>/<repo> <PR>
 4. 同じ組の中は eligibleAt の古い順。
 5. 同じ repo の PR は 1 本ずつ（lockfile がぶつかる）。2 本目は 1 本目の merge の後に起こす。
 
-**この skills の repo の root** を先に求める（Sustaining Engineer 役にも同じ skill を読ませるため）:
+**この skills の repo の root** を先に求める（Sustaining Engineer 担当にも同じ skill を読ませるため）:
 
 ```sh
 realpath "${CLAUDE_SKILL_DIR}/../../../.."
@@ -92,7 +92,7 @@ cmux workspace create --name "Sustaining Engineer <repo>#<PR>" --cwd <cwd> \
 
 ## 4. 受ける
 
-Sustaining Engineer 役から届く知らせ:
+Sustaining Engineer 担当から届く知らせ:
 
 | 見出し | すること |
 |---|---|
@@ -100,16 +100,16 @@ Sustaining Engineer 役から届く知らせ:
 | 【相談(TPM)】 | 答える。Product Manager の判断が要るなら、Product Manager に聞いてから答える。 |
 | 【PM への依頼】 | URL の Artifact を自分の workspace で開き（`cmux open <URL> --workspace <自分の workspace>`）、Product Manager に見せる。答えを【PM の回答】で返す。 |
 | 【まだ】 | 時間の【まだ】なら表の「待ち」に戻し、その workspace は 5 と同じに閉じる。`rebase に … 分応じない` の【まだ】なら、もう一度待たせるか、worktree で `origin/main` を merge させるかを決めて返す。 |
-| 【作り直し】 | group の PR が閉じて新しい番号で作り直された。表の行を新しい番号に替え、同じ Sustaining Engineer 役に新しい番号で続けさせる（workspace の題も `Sustaining Engineer <repo>#<新>` に替えさせる）。判定は変わらない。 |
+| 【作り直し】 | group の PR が閉じて新しい番号で作り直された。表の行を新しい番号に替え、同じ Sustaining Engineer 担当に新しい番号で続けさせる（workspace の題も `Sustaining Engineer <repo>#<新>` に替えさせる）。判定は変わらない。 |
 | 【終わり】 | 5 へ。 |
 
 返事を送った後は、届いたかを見る（protocol.md の「連絡の仕方」）。
 
-### `@dependabot rebase` の注意（TPM 役が知っておくこと）
+### `@dependabot rebase` の注意（TPM 担当が知っておくこと）
 
-Sustaining Engineer 役の手順（`${CLAUDE_SKILL_DIR}/../sustaining-engineer/SKILL.md` の 4a）と同じ要点。
+Sustaining Engineer 担当の手順（`${CLAUDE_SKILL_DIR}/../sustaining-engineer/SKILL.md` の 4a）と同じ要点。
 
-- 応じた印は 👍。時間は決まっていない（実測で 20 分無反応のことがある）。Sustaining Engineer 役は `config.rebaseWaitMinutes` 分待って越えたら【まだ】か【相談(TPM)】を送ってくる。
+- 応じた印は 👍。時間は決まっていない（実測で 20 分無反応のことがある）。Sustaining Engineer 担当は `config.rebaseWaitMinutes` 分待って越えたら【まだ】か【相談(TPM)】を送ってくる。
 - group の PR は閉じて新しい番号で作り直されることがある。判定は変わらないので、**新しい番号で引き継ぐ**（【作り直し】）。
 - rebase で audit がいまの勧告の DB で流れ直し、緑の PR が赤になることがある。新しい勧告で audit が赤の間は、衝突していない PR を rebase させない。
 - 人が commit を足した PR は Dependabot がもう rebase しない（`[dependabot skip]` の印の commit なら上書きされる）。その PR では rebase を打たせず、worktree で `origin/main` を merge して push させる（force push はしない）。
