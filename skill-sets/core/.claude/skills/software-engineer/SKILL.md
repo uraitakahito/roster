@@ -1,6 +1,6 @@
 ---
 name: software-engineer
-description: Software Engineer 担当として、TPM 担当から振られた課題 1 つを受け持つ（調査・提案・計画・実装・テスト）。TPM 担当（/tpm）が起こした Claude Code が、最初の入力 `/software-engineer tpm=<surface> brief=<依頼書の URL> [jira=<課題>]` で使う。
+description: Software Engineer 担当として、TPM 担当から振られた課題 1 つを受け持つ（調査・提案・計画・実装・テスト）。TPM 担当（/tpm）が起こした Claude Code が、最初の入力 `/software-engineer tpm=<workspace> brief=<依頼書の URL> [jira=<課題>]` で使う。
 disable-model-invocation: true
 ---
 
@@ -10,7 +10,7 @@ disable-model-invocation: true
 
 引数: `$ARGUMENTS`
 
-- `tpm=<surface>`: TPM 担当の cmux の surface。知らせはここへ送る。
+- `tpm=<workspace>`: TPM 担当の cmux の workspace。知らせはここへ送る（【TPM の宛先】が来たら、そちらへ）。
 - `brief=<URL>`: 依頼書（Artifact）。
 - `jira=<課題>`: Jira の課題（あれば）。PR の題か本文に入れる。
 - `tpm=` か `brief=` が無ければ、何もせずにそのことを画面に書いて止まる。
@@ -47,7 +47,7 @@ cmux set-status wait "作業中: 依頼書を読む" --icon hourglass --priority
   - 本体の checkout は動かさない。動いている物がその checkout を読んでいる repo（この skills の repo など）は、merge の後に `git -C <本体> pull --ff-only` だけをする。
 - PR は main から切った branch で出す。題か本文に課題の鍵。CI が緑になってから、自分で merge する（依頼書が TPM 担当の merge を求めたら【相談(TPM)】で頼む）。merge したら【merge 済み】。
 - `git add -A`・`git add .` は使わない。ファイルを名指して add する。
-- 動くことを示してから「できた」と言う。試験を流し、要るなら実際に起こして見る。試しに起こした cmux の workspace は、段の終わりに閉じる（題は `Software Engineer 試験: …` で始める）。試しの担当の `tpm=` には自分の surface を渡し、本物の TPM 担当に知らせが届かないようにする。
+- 動くことを示してから「できた」と言う。試験を流し、要るなら実際に起こして見る。試しに起こした cmux の workspace は、段の終わりに閉じる（題は `Software Engineer 試験: …` で始める）。試しの担当の `tpm=` には自分の workspace を渡し、本物の TPM 担当に知らせが届かないようにする。
 - Apple Container・Windmill など共有の環境を変える必要が出たら、自分では変えず【DevOps への依頼】。
 - 迷ったら【相談(TPM)】で、困っていること・試したこと・案とお勧めを送る。
 
