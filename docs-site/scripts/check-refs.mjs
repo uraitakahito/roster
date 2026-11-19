@@ -9,11 +9,15 @@
 // 4. skill（core/・dependabot/ の *.md）が名指す原稿が在り、「」で名指した見出しがその原稿に在る
 // 5. configuration.md の「`.claude/dependabot/config.json`」の表の欄と、skill が使う config.<欄> が両方向で揃う
 // 6. 画面の絵（src/assets/screens/）と本文の参照が両方向で揃う
+// 7. skill（SKILL.md）の本文の ${CLAUDE_SKILL_DIR}/… の先が在り、realpath "${CLAUDE_SKILL_DIR}/…" が repo の一番上を指す
+//
+// 7 が要るのは、skill が自分の folder からの相対パスで repo の中の物を読むため。folder を移して
+// ../ の数がずれたときに、skill の読む先が無くなるのを止める。
 //
 // 4 と 5 が要るのは、skill が Pages ではなく原稿の Markdown を読むため。原稿の見出しや表を
 // 直したときに、skill の読む先が無くなるのを止める。
 import { execFileSync } from "node:child_process";
-import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -138,6 +142,22 @@ for (const p of all) {
   }
 }
 for (const f of screens) if (!used.has(f)) errors.push(`docs-site/src/assets/screens/${f}: どの本文も使っていない`);
+
+// 7. skill の中の相対パス。${CLAUDE_SKILL_DIR} は SKILL.md の在る folder
+//    realpath "${CLAUDE_SKILL_DIR}/…" は <root> を求める書き方なので、repo の一番上と同じかを見る
+const REPO_REAL = realpathSync(REPO);
+for (const f of tracked.filter((t) => t.endsWith("/SKILL.md"))) {
+  const skillDir = join(REPO, dirname(f));
+  const text = readFileSync(join(REPO, f), "utf8");
+  for (const m of text.matchAll(/(realpath\s+"?)?\$\{CLAUDE_SKILL_DIR\}(\/[^\s"'`）)]*)/g)) {
+    const target = join(skillDir, m[2]);
+    if (!existsSync(target)) {
+      errors.push(`${f}: \${CLAUDE_SKILL_DIR}${m[2]} の先が無い（${relative(REPO, target) || "."}）`);
+    } else if (m[1] && realpathSync(target) !== REPO_REAL) {
+      errors.push(`${f}: realpath "\${CLAUDE_SKILL_DIR}${m[2]}" が repo の一番上でなく ${relative(REPO, target)} を指す`);
+    }
+  }
+}
 
 if (errors.length > 0) {
   for (const e of errors) console.error(`✗ ${e}`);
