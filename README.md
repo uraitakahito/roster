@@ -1,5 +1,9 @@
 # skills
 
+## ドキュメント
+
+https://uraitakahito.github.io/skills/
+
 ## skillで呼び出される担当者
 
 | 担当 | 人間かAIか |

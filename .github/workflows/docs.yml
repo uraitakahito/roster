@@ -1,0 +1,50 @@
+name: docs
+
+# docs-site/ を GitHub Pages（https://uraitakahito.github.io/skills/）に出す。
+#
+# **main への push のたびに出す。** この repo にはタグが無く、main がそのまま使われる版なので、
+# 公開する docs も main の docs にする。github-pages の環境も、main からの deploy だけを許す。
+# PR の検査は site.yml（deploy を持たない）が見る。
+# 公開し直すときは gh workflow run docs.yml --ref main。
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 1 度に 1 つ。cancel-in-progress にしない —— 公開物の途中で止まった deploy は、
+# 待たされるより高くつく。
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and deploy to GitHub Pages
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      # root の package.json の packageManager を読む
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+          cache-dependency-path: docs-site/pnpm-lock.yaml
+      - run: pnpm --dir docs-site install --frozen-lockfile
+      # build ではなく check。build は .md では守りにならない（site.yml の註を参照）
+      - run: pnpm --dir docs-site run check
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs-site/dist
+      - id: deployment
+        uses: actions/deploy-pages@v5
