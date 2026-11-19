@@ -17,7 +17,7 @@ export default defineConfig({
     mermaid({ theme: "neutral" }),
     starlight({
       title: "skills",
-      // 表の中の code を折り返さない
+      // 表の中の code を、code の中では折り返さず、code の間で折り返す
       customCss: ["./src/styles/tables.css"],
       // 日本語だけ。root の locale を ja にすると、Starlight の画面の字（検索・目次など）も日本語になる
       defaultLocale: "root",
