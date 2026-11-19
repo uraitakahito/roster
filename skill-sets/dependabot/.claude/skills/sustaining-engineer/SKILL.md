@@ -10,7 +10,7 @@ description: Sustaining Engineer 担当として、Dependabot の PR 1 本を受
 引数: `$ARGUMENTS`
 
 - 1 つ目の語が受け持つ PR（`<repo>#<PR 番号>`）。
-- `tpm=<workspace>` が TPM 担当の cmux の workspace。
+- `tpm=<workspace>` が TPM 担当の cmux の workspace（【TPM の宛先】が来たら、そちらへ送る）。
 - 引数が足りなければ、何もせずにそのことを画面に書いて止まる。
 
 以下、`<repo>#<PR>` を「この PR」、`<tpm>` を TPM 担当の workspace と書きます。

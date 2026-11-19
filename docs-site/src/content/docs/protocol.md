@@ -24,6 +24,9 @@ sequenceDiagram
   participant SE as Software Engineer 担当
   PM->>TPM: 課題を頼む
   TPM->>SE: /software-engineer（依頼書の URL）
+  opt TPM 担当を起こし直したとき
+    TPM->>SE: 【TPM の宛先】（新しい workspace）
+  end
   opt 迷ったとき・決めてほしいとき
     SE->>TPM: 【相談(TPM)】【PM への確認】【PM への依頼】
     TPM->>PM: 確かめる

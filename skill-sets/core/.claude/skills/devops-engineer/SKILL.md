@@ -1,6 +1,6 @@
 ---
 name: devops-engineer
-description: DevOps Engineer 担当として、Apple Container と Windmill のビルド・デプロイ・環境の整備を受け持つ。TPM 担当（/tpm）が起こした Claude Code が、最初の入力 `/devops-engineer tpm=<surface> [brief=<依頼書の URL>] [jira=<課題>]` で使う。
+description: DevOps Engineer 担当として、Apple Container と Windmill のビルド・デプロイ・環境の整備を受け持つ。TPM 担当（/tpm）が起こした Claude Code が、最初の入力 `/devops-engineer tpm=<workspace> [brief=<依頼書の URL>] [jira=<課題>]` で使う。
 disable-model-invocation: true
 ---
 
@@ -10,7 +10,7 @@ disable-model-invocation: true
 
 引数: `$ARGUMENTS`
 
-- `tpm=<surface>`: TPM 担当の cmux の surface。知らせはここへ送る。無ければ、何もせずにそのことを画面に書いて止まる。
+- `tpm=<workspace>`: TPM 担当の cmux の workspace。知らせはここへ送る（【TPM の宛先】が来たら、そちらへ）。無ければ、何もせずにそのことを画面に書いて止まる。
 - `brief=<URL>`: 依頼書（Artifact）。無ければ依頼を待つ（下の 1）。
 - `jira=<課題>`: Jira の課題（あれば）。触るときは `${CLAUDE_SKILL_DIR}/../_shared/jira.md` を読み、従う。
 

@@ -26,6 +26,7 @@ disable-model-invocation: true
    ```
    - `${CLAUDE_PROJECT_DIR}/.claude/roles/config.json` があれば読む（下の「起こす担当の既定」）。無ければ既定のまま。
 3. 動いている担当を見る。`cmux workspace list` で、題が `Software Engineer <鍵>:` で始まる workspace と `DevOps Engineer` の workspace を探し、課題の鍵と workspace の対応を覚える（起こし直した後も、受け持ちの担当を取り違えないため。鍵は下の 2）。知らせを送るのも、inbox で届いたかを見るのも、この workspace で足りる（surface は要らない。protocol.md の「連絡の仕方」）。
+   - 見つけた担当（`Sustaining Engineer` で始まる workspace も）には、それぞれ【TPM の宛先】で自分の workspace を送る。担当は起こされたときの `tpm=` に知らせを送るので、別の workspace で起こし直すと宛先が古くなる。同じ workspace でも送る。
 4. `wait` を `回答待ち(PM): 指示` にして、Product Manager の指示を待つ。
 
 ## 2. 担当を分ける
@@ -53,10 +54,10 @@ disable-model-invocation: true
 2. 起こす:
    ```sh
    cmux workspace create --name "Software Engineer <鍵>: <短い題>" --cwd <課題の folder> \
-     --command 'claude --model <model> --effort <effort> --permission-mode <permissionMode> --add-dir <root>/skill-sets/core -- "/software-engineer tpm=<自分の surface> brief=<依頼書の URL> jira=<課題>"'
+     --command 'claude --model <model> --effort <effort> --permission-mode <permissionMode> --add-dir <root>/skill-sets/core -- "/software-engineer tpm=<自分の workspace> brief=<依頼書の URL> jira=<課題>"'
    ```
    - 題は `Software Engineer t-same-se: 計画と実装の担当` の形。2 の探し方はこの題に頼るので、起こした後に題を替えない。
-   - DevOps Engineer 担当は題を `DevOps Engineer`、最初の入力を `/devops-engineer tpm=<自分の surface> brief=<依頼書の URL>` にする。
+   - DevOps Engineer 担当は題を `DevOps Engineer`、最初の入力を `/devops-engineer tpm=<自分の workspace> brief=<依頼書の URL>` にする。
    - `jira=` は Jira の課題があるときだけ。
    - **`--add-dir <root>/skill-sets/core` の後の `--` を落とさない**（`--add-dir` は後ろの語もまとめて folder として読む）。
    - 起動の命令は 1,024 バイトを超えると黙って実行されない。依頼の中身は命令に入れず、依頼書の URL で渡す。
