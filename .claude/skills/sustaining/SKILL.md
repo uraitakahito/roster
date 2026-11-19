@@ -22,7 +22,7 @@ description: Sustaining Engineer 役として、Dependabot の PR 1 本を受け
 - `${CLAUDE_PROJECT_DIR}/.claude/dependabot/config.json`（欄は repo の README の表。以下 `config.<欄>` と書く）
 - `${CLAUDE_PROJECT_DIR}/.claude/dependabot/rules.md`（この project の決まり。**この skill の手順より先に従う**）
 
-この skill の folder（`${CLAUDE_SKILL_DIR}` の 2 つ上の repo）は**直さない**。直したい所を見つけたら TPM 役に【相談】で知らせる。
+この skill の folder（`${CLAUDE_SKILL_DIR}` の 3 つ上の repo）は**直さない**。直したい所を見つけたら TPM 役に【相談】で知らせる。
 
 ## 1. 名乗る
 
@@ -33,7 +33,7 @@ cmux set-status model "<config.modelLabel>" --icon sparkle --priority 90
 cmux set-status wait "作業中: 読む" --icon hourglass --priority 80
 ```
 
-- **題を替えるのは最初の手。** TPM 役は、題が替わったかで、この skill が読まれて動き出したことを確かめる。
+- **この 4 行が最初の手。** TPM 役は、サイドバーに `wait=作業中: …` が出たかで、この skill が読まれて動き出したことを確かめる（題は TPM 役が起こすときに付けてあるので、題では見分けられない）。
 - **サイドバーの待ちの表示は鍵 `wait` の 1 つだけ**を使い、状況が変わるたびに上書きする。前の表示を残さない。
   - TPM 役の答えを待つ: `回答待ち(TPM): <何を>`
   - Product Manager の答えを待つ: `回答待ち(PM): <何を>`

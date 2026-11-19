@@ -84,9 +84,9 @@ cmux workspace create --name "Sustaining <repo>#<PR>" --cwd <cwd> \
 - **`--add-dir <root>` の後の `--` を落とさない。** `--add-dir` は後ろの語もまとめて folder として読むので、`--` が無いと `/sustaining …` が依頼として渡らない。
 - 自分の workspace は `cmux identify` の caller の `workspace_ref`。
 - 起動の命令は 1,024 バイトを超えると黙って実行されない。上の形を延ばさない。
-- **起こした後 90 秒の間に、`cmux workspace list` でその workspace の題が `Sustaining <repo>#<PR>` に替わったかを見る**（`/sustaining` の最初の手が題を替える）。替わらなければ `cmux read-screen --workspace <新しい workspace>` で画面を読む:
+- **起こした後 90 秒の間に、`cmux sidebar-state --workspace <新しい workspace>` に `wait=作業中: …` の行が出たかを見る**（`/sustaining` の最初の手が `wait` を出す。題は起こすときに `--name` で付けてあるので、題では見分けられない）。出なければ `cmux read-screen --workspace <新しい workspace>` で画面を読む:
   - `Adding a new directory` や `trust` のダイアログ: `<root>` が信頼されていない（この repo は別の git の repo なので、信頼済みの folder の下に置いても信頼は及ばない）。**Yes は押さずに**その workspace を `close --force` し、`<root>` で 1 度 Claude Code を対話で起こして信頼するよう Product Manager に頼む（README の「信頼のダイアログ」）。
-  - `Unknown command: /sustaining`: 旗か `<root>` の誤り。`close --force` して、命令を直して 1 度だけ起こし直す。2 回目も替わらなければ Product Manager に知らせる。
+  - `Unknown command: /sustaining`: 旗か `<root>` の誤り。`close --force` して、命令を直して 1 度だけ起こし直す。2 回目も `wait` が出なければ Product Manager に知らせる。
 - ほかの作業と順番がぶつかるとき（`rules.md` に書いてある物）は、起こすのを遅らせてよい。
 
 ## 4. 受ける
@@ -97,6 +97,7 @@ Sustaining Engineer 役から届く知らせ:
 |---|---|
 | 【merge の依頼】 | CI が緑か（`gh pr checks`）、`release-age.mjs` がまだ 0 か、差分が依頼のとおりかを自分で見てから `gh pr merge <PR> --repo <config.owner>/<repo> --<config.mergeMethod>`（repo の作法が違えばそれに従う）。merge の commit を返す。 |
 | 【相談】 | 答える。Product Manager の判断が要るなら、Artifact を自分の workspace で開いて Product Manager に出す。 |
+| 【利用者への依頼】 | Sustaining Engineer 役が、Product Manager に決めてほしい中身を Artifact に書き、TPM 役の workspace に開いてある。Product Manager に見せ、答えを Sustaining Engineer 役に返す。 |
 | 【まだ】 | 時間の【まだ】なら表の「待ち」に戻し、その workspace は 5 と同じに閉じる。`rebase に … 分応じない` の【まだ】なら、もう一度待たせるか、worktree で `origin/main` を merge させるかを決めて返す。 |
 | 【作り直し】 | group の PR が閉じて新しい番号で作り直された。表の行を新しい番号に替え、同じ Sustaining Engineer 役に新しい番号で続けさせる（workspace の題も `Sustaining <repo>#<新>` に替えさせる）。判定は変わらない。 |
 | 【終わり】 | 5 へ。 |
