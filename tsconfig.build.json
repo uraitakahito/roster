@@ -1,0 +1,10 @@
+// npm run build が使う。src/ だけを dist/ に書き出す（bin/tpm は dist/cli.js への symlink）。
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "noEmit": false
+  },
+  "include": ["src"]
+}
