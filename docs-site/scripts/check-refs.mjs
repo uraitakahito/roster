@@ -10,9 +10,13 @@
 // 5. configuration.md の「`.claude/dependabot/config.json`」の表の欄と、skill が使う config.<欄> が両方向で揃う
 // 6. 画面の絵（src/assets/screens/）と本文の参照が両方向で揃う
 // 7. skill（SKILL.md）の本文の ${CLAUDE_SKILL_DIR}/… の先が在り、realpath "${CLAUDE_SKILL_DIR}/…" が repo の一番上を指す
+// 8. skill（skill-sets/ の *.md）が「protocol.md の「見出し」」の形で _shared/ の決まりの見出しを名指したら、その見出しが在る
 //
 // 7 が要るのは、skill が自分の folder からの相対パスで repo の中の物を読むため。folder を移して
 // ../ の数がずれたときに、skill の読む先が無くなるのを止める。
+//
+// 8 が要るのは、担当どうしの決まり（_shared/）の節を別のファイルへ移したときに、その節を名指す
+// skill の読む先が無くなるのを止めるため。
 //
 // 4 と 5 が要るのは、skill が Pages ではなく原稿の Markdown を読むため。原稿の見出しや表を
 // 直したときに、skill の読む先が無くなるのを止める。
@@ -156,6 +160,20 @@ for (const f of tracked.filter((t) => t.endsWith("/SKILL.md"))) {
     } else if (m[1] && realpathSync(target) !== REPO_REAL) {
       errors.push(`${f}: realpath "\${CLAUDE_SKILL_DIR}${m[2]}" が repo の一番上でなく ${relative(REPO, target)} を指す`);
     }
+  }
+}
+
+// 8. skill が名指す _shared/ の決まりの見出し。決まりのファイルは名だけで名指す（protocol.md の「連絡の仕方」）
+const SHARED = "skill-sets/core/.claude/skills/_shared/";
+const shared = new Map(
+  tracked
+    .filter((t) => t.startsWith(SHARED) && t.endsWith(".md"))
+    .map((t) => [t.slice(SHARED.length), headings(readFileSync(join(REPO, t), "utf8"))]),
+);
+for (const f of skillFiles) {
+  const text = readFileSync(join(REPO, f), "utf8");
+  for (const m of text.matchAll(/([\w-]+\.md)`?\s*の「(.+?)」/g)) {
+    if (shared.has(m[1]) && !shared.get(m[1]).has(m[2])) errors.push(`${f}: ${SHARED}${m[1]} に見出し「${m[2]}」が無い`);
   }
 }
 
