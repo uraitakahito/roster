@@ -13,9 +13,19 @@ TPM 担当を起こした folder に置くと、追加の skill セットと、T
 | `software-engineer`・`devops-engineer` | 起こす担当の `model`・`effort`・`permissionMode`（`/tpm` が読む） | `/tpm` の表の既定（Software Engineer 担当は Opus 5.5・medium、DevOps Engineer 担当は Opus 5.5・low、どちらも `bypassPermissions`） |
 
 ```json
-{ "skill-sets": ["dependabot"],
-  "software-engineer": { "model": "claude-opus-5-5", "effort": "high", "permissionMode": "bypassPermissions" },
-  "devops-engineer": { "model": "claude-opus-5-5", "effort": "low", "permissionMode": "bypassPermissions" } }
+{
+  "skill-sets": ["dependabot"],
+  "software-engineer": {
+    "model": "claude-opus-5-5",
+    "effort": "high",
+    "permissionMode": "bypassPermissions"
+  },
+  "devops-engineer": {
+    "model": "claude-opus-5-5",
+    "effort": "low",
+    "permissionMode": "bypassPermissions"
+  }
+}
 ```
 
 ## Dependabot の設定
