@@ -71,11 +71,12 @@ disable-model-invocation: true
 | 【相談(TPM)】 | 答える。Product Manager の判断が要るなら、Product Manager に聞いてから答える |
 | 【PM への確認】【PM への依頼】 | URL を自分の workspace で開き（`cmux open <URL> --workspace <自分の workspace>`）、Product Manager に見せる。答えを【PM の回答】で返す |
 | 【DevOps への依頼】 | DevOps Engineer 担当に依頼書を書いて回す（いなければ起こす） |
-| 【ドキュメント修正】【merge 済み】 | 受け取ったと返す。Jira の課題があれば、要るならコメントする |
+| 【ドキュメント修正】【merge 済み】 | 受け取ったと返す（Jira のコメントは担当が書く） |
 | 【完成】 | Artifact を自分の workspace で開き、Product Manager に見せる |
 | 【終わり】 | 報告を Product Manager に伝え、`cmux workspace close <その workspace> --force` で閉じる（中で Claude Code が動いているので `--force` が要る） |
 
 - 返事は、届いた知らせの `--reply-to <id>` で返す。返した後に inbox で届いたかを見る。
+- Product Manager が決めたら、Jira の課題があれば【PM の回答】を返す前に「決定」のコメントを書く。Jira を触るときは `${CLAUDE_SKILL_DIR}/../_shared/jira.md` を読み、従う。
 - Product Manager の答えを待つ間は `wait` を `回答待ち(PM): <何を>`、答えが来たら更新する。
 
 ## 5. 起こし直し

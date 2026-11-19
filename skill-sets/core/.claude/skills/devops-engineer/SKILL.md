@@ -12,7 +12,7 @@ disable-model-invocation: true
 
 - `tpm=<surface>`: TPM 担当の cmux の surface。知らせはここへ送る。無ければ、何もせずにそのことを画面に書いて止まる。
 - `brief=<URL>`: 依頼書（Artifact）。無ければ依頼を待つ（下の 1）。
-- `jira=<課題>`: Jira の課題（あれば）。
+- `jira=<課題>`: Jira の課題（あれば）。触るときは `${CLAUDE_SKILL_DIR}/../_shared/jira.md` を読み、従う。
 
 ## 0. 決まりを読む（最初に必ず）
 
