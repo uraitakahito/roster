@@ -19,7 +19,12 @@ disable-model-invocation: true
    cmux set-status model "<自分の model> · ${CLAUDE_EFFORT}" --icon sparkle --priority 90
    cmux set-status wait "作業中: 起動" --icon hourglass --priority 80
    ```
-2. 起こされた folder（`${CLAUDE_PROJECT_DIR}`）の設定を見る:
+2. 起こされた folder（`${CLAUDE_PROJECT_DIR}`）の設定を見る。確かめには下のとおり `test -f` を使う（`ls` は無いファイルで exit 1 になり、無くてよいファイルでも Error と出る）:
+   ```sh
+   d="${CLAUDE_PROJECT_DIR}/.claude"
+   test -f "$d/dependabot/config.json" && echo "$d/dependabot/config.json がある → /dependabot-triage を呼ぶ" || echo "$d/dependabot/config.json が無い → /dependabot-triage は飛ばす"
+   test -f "$d/roles/config.json" && echo "$d/roles/config.json がある → 起こす役の model などはこれに従う" || echo "$d/roles/config.json が無い → 起こす役は既定（下の表）のまま"
+   ```
    - `${CLAUDE_PROJECT_DIR}/.claude/dependabot/config.json` があれば `/dependabot-triage` を呼ぶ。無ければ「この folder には Dependabot の設定が無いので、/dependabot-triage は飛ばした」と 1 行書いて先へ進む（止まらない）。
    - `${CLAUDE_PROJECT_DIR}/.claude/roles/config.json` があれば読む（下の「起こす役の既定」）。無ければ既定のまま。
 3. `wait` を `回答待ち(PM): 指示` にして、Product Manager の指示を待つ。
