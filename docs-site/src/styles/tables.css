@@ -1,6 +1,14 @@
-/* 表のセルの中の code（skill の名前と引数・path・設定の欄の名前）を折り返さない。
-   Starlight の表は既定で `display: block; overflow: auto` なので、
-   収まらないときは表そのものが横に scroll する。 */
+/* 表のセルの中の code（skill の名前と引数・path・設定の欄の名前）は、code の中では折り返さず、
+   code と code の間で折り返す。
+   - nowrap だけだと、`a`・`b` の並びが Chrome では切れない塊になり、その列の最小の幅が広がる。
+     日本語の列は 1 字ごとに切れるので、表は足りない幅を日本語の列から削り、行がとても高くなる。
+   - inline-block にすると、折り返しの上で code は 1 つの字のように扱われ、前後で切れる。
+   長い code（skill の名前と引数など）は、原稿で空白ごとに別の code に分ける。
+   1 つの code のままだと、その長さがそのまま列の最小の幅になる。
+   margin-block: Starlight は code に -0.125rem を付けている。inline-block ではこれが効き、
+   折り返した code の背景が上下でくっつくので 0 に戻す。 */
 .sl-markdown-content table code {
+  display: inline-block;
   white-space: nowrap;
+  margin-block: 0;
 }
