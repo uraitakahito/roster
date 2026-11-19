@@ -2,6 +2,15 @@
 
 Claude Code の skill を、使う project の外に置く repo。使う側のセッションは `--add-dir` でこの repo を足して読む。旗を付けたセッションにだけ skill が出るので、ほかの作業のセッションには出ない。
 
+skill は束（pack）に分けてあり、`--add-dir` で足した束の skill だけが出る。
+
+| 束 | folder | skill |
+|---|---|---|
+| core | `core/.claude/skills/` | `/tpm`・`/software-engineer`・`/devops-engineer`・`_shared/protocol.md` |
+| dependabot | `dependabot/.claude/skills/` | `/dependabot-triage`・`/sustaining-engineer`・`_shared/release-age.mjs` |
+
+core はいつも足す。ほかの束は、起こす folder の `.claude/roles/config.json` の `packs` に書いたときだけ足す（下の「使う側の設定」）。束は兄弟の folder に置く（入れ子にすると、外側の束を足したセッションが内側の束の folder を触ったときに、内側の skill まで見つかりうるため）。
+
 ## skillで呼び出される担当者
 
 | 担当 | 人間かAIか |
@@ -16,30 +25,36 @@ Claude Code の skill を、使う project の外に置く repo。使う側の�
 
 | skill | 呼ぶ人 | すること |
 |---|---|---|
-| `/tpm` | TPM 役（`bin/tpm` が起こす） | Product Manager を助け、課題ごとに Software Engineer 役・DevOps Engineer 役を起こす。起きたとき、Dependabot の設定があれば `/dependabot-triage` を呼ぶ |
+| `/tpm` | TPM 役（`bin/tpm` が起こす） | Product Manager を助け、課題ごとに Software Engineer 役・DevOps Engineer 役を起こす。起きたとき、Dependabot の束を足していて設定もあれば `/dependabot-triage` を呼ぶ |
 | `/software-engineer tpm=<surface> brief=<URL> [jira=<課題>]` | Software Engineer 役（TPM 役が起こす） | 課題 1 つを受け持つ。依頼書（Artifact）を読み、調査・提案・計画・実装・テストを worktree で進め、成果を Artifact と PR で出す |
 | `/devops-engineer tpm=<surface> [brief=<URL>] [jira=<課題>]` | DevOps Engineer 役（TPM 役が起こす） | Apple Container と Windmill のビルド・デプロイ・環境の整備。並べて動いている物に響く操作の前は TPM 役に相談する |
 | `/dependabot-triage` | Technical Program Manager 役（TPM 役） | Dependabot の PR を集め、依存の版の公開から 72 時間を判定し、対象の PR ごとに Sustaining Engineer 役を起こす。merge と workspace を閉じるのも TPM 役。`一覧だけ` で表だけ |
 | `/sustaining-engineer <repo>#<PR> tpm=<workspace>` | Sustaining Engineer 役（TPM 役が起こす） | PR 1 本を受け持つ。72 時間の確かめ・直し・CI を緑に・TPM 役に merge を頼む |
 
-役のあいだの決まり（知らせの送り方と頭・サイドバーの `model` と `wait`・Product Manager への確かめ方・文書の食い違い・共有の環境・終わり方）は `.claude/skills/_shared/protocol.md` の 1 か所に書き、どの役もそれを読む。TPM 役が書く依頼書には、その課題だけのことを書く（ひな形は `.claude/skills/tpm/brief-template.md`）。
+役のあいだの決まり（知らせの送り方と頭・サイドバーの `model` と `wait`・Product Manager への確かめ方・文書の食い違い・共有の環境・終わり方）は `core/.claude/skills/_shared/protocol.md` の 1 か所に書き、どの役もそれを読む。TPM 役が書く依頼書には、その課題だけのことを書く（ひな形は `core/.claude/skills/tpm/brief-template.md`）。
 
-判定の道具は `.claude/skills/_shared/release-age.mjs`（`node release-age.mjs <owner>/<repo> <PR> [--hours <時間>] [--now <ISO 時刻>]`）。版は PR の差分（pnpm-lock・package-lock・yarn.lock・workflow の `uses:`）から読み、依存の依存も数える。終了コードは 0 対象・10 まだ・20 判定できない・1 道具の誤り。
+判定の道具は `dependabot/.claude/skills/_shared/release-age.mjs`（`node release-age.mjs <owner>/<repo> <PR> [--hours <時間>] [--now <ISO 時刻>]`）。版は PR の差分（pnpm-lock・package-lock・yarn.lock・workflow の `uses:`）から読み、依存の依存も数える。終了コードは 0 対象・10 まだ・20 判定できない・1 道具の誤り。
 
 ## 使う側の設定
 
 ### `.claude/roles/config.json`（任意）
 
-TPM 役を起こした folder に置くと、TPM 役が起こす役の既定を替えられる。無ければ `/tpm` の表の既定（Software Engineer 役は Opus 5.5・medium、DevOps Engineer 役は Opus 5.5・low、どちらも `bypassPermissions`）。
+TPM 役を起こした folder に置くと、足す束と、TPM 役が起こす役の既定を替えられる。
+
+| 欄 | 中身 | 無いとき |
+|---|---|---|
+| `packs` | core のほかに足す束の名前の配列（`bin/tpm` が読む） | core だけ |
+| `software-engineer`・`devops-engineer` | 起こす役の `model`・`effort`・`permissionMode`（`/tpm` が読む） | `/tpm` の表の既定（Software Engineer 役は Opus 5.5・medium、DevOps Engineer 役は Opus 5.5・low、どちらも `bypassPermissions`） |
 
 ```json
-{ "software-engineer": { "model": "claude-opus-5-5", "effort": "high", "permissionMode": "bypassPermissions" },
+{ "packs": ["dependabot"],
+  "software-engineer": { "model": "claude-opus-5-5", "effort": "high", "permissionMode": "bypassPermissions" },
   "devops-engineer": { "model": "claude-opus-5-5", "effort": "low", "permissionMode": "bypassPermissions" } }
 ```
 
 ### Dependabot の設定
 
-Dependabot の skill を使う project に次の 2 つを置く。無いと `/dependabot-triage` と `/sustaining-engineer` は止まる（`/tpm` は飛ばして先へ進む）。
+Dependabot の skill を使う project では、`.claude/roles/config.json` の `packs` に `"dependabot"` を書き、次の 2 つを置く。束を書かなければ、2 つを置いても `/tpm` は `/dependabot-triage` を呼ばない（読み込まれない）。束を書いても 2 つが無いと `/dependabot-triage` と `/sustaining-engineer` は止まる（`/tpm` は飛ばして先へ進む）。
 
 #### `.claude/dependabot/config.json`
 
@@ -71,11 +86,20 @@ tpm              # 今いる folder で TPM 役を起こす
 tpm <folder>     # その folder で起こす
 ```
 
-`bin/tpm` は自分の場所からこの repo を求め、`claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --add-dir <この repo の folder> -- /tpm` を起こした folder で実行する（`tpm --print` で命令だけを出す）。**最初の入力は `--` の後に置く**（`--add-dir` は後ろの語もまとめて folder として読むため）。起こした folder に `.claude/dependabot/config.json` があれば、`/tpm` が起きたときに `/dependabot-triage` を呼ぶ。
+`bin/tpm` は自分の場所からこの repo を求め、起こした folder の `.claude/roles/config.json` の `packs` を読んで、次を起こした folder で実行する（`tpm --print` で命令だけを出す）。
 
-ほかの役を起こす 1 行は、`/tpm`（Software Engineer・DevOps Engineer 役）と `/dependabot-triage`（Sustaining Engineer 役）が自分の場所（`${CLAUDE_SKILL_DIR}/../../..`）から組むので、人は打たない。起こした後、サイドバーに `wait=作業中: …` が出たか（`cmux sidebar-state --workspace <workspace>`）で、skill が読まれたことを確かめる。題は起こすときに `--name` で付けるので、見分けに使えない。
+```sh
+# packs が無い（既定）
+claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --add-dir <repo>/core -- /tpm
+# "packs": ["dependabot"]
+claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --add-dir <repo>/core <repo>/dependabot -- "/tpm packs=dependabot"
+```
 
-動いているセッションに途中から足すときは `/add-dir <この repo の folder>`。信頼していない folder だとダイアログが出るので、↓ と Enter で「Yes, add it」を選ぶ。
+**最初の入力は `--` の後に置く**（`--add-dir` は後ろの語もまとめて folder として読むため）。`/tpm` は `packs=` に `dependabot` があり、起こした folder に `.claude/dependabot/config.json` があるときだけ `/dependabot-triage` を呼ぶ。`packs` が読めない・無い束を書いた、のときは起こさずに止まる。
+
+ほかの役を起こす 1 行は、`/tpm`（Software Engineer・DevOps Engineer 役）と `/dependabot-triage`（Sustaining Engineer 役）が自分の場所（`${CLAUDE_SKILL_DIR}/../../../..`）から組む（Software Engineer・DevOps Engineer 役は `--add-dir <repo>/core`、Sustaining Engineer 役は `--add-dir <repo>/core <repo>/dependabot`）ので、人は打たない。起こした後、サイドバーに `wait=作業中: …` が出たか（`cmux sidebar-state --workspace <workspace>`）で、skill が読まれたことを確かめる。題は起こすときに `--name` で付けるので、見分けに使えない。
+
+動いているセッションに途中から足すときは `/add-dir <この repo の folder>/core`（Dependabot の束も要るなら `<この repo の folder>/dependabot` も）。信頼していない folder だとダイアログが出るので、↓ と Enter で「Yes, add it」を選ぶ。
 
 ## 信頼のダイアログ
 
@@ -92,12 +116,12 @@ tpm <folder>     # その folder で起こす
 2. `mv <今の folder> <新しい folder>`（git の履歴ごと移る）。
 3. 新しい folder で 1 度 Claude Code を対話で起こして信頼する（上の「信頼のダイアログ」。信頼は path に付くので、移すたびに要る）。
 4. `~/.local/bin/tpm` の symlink を張り直す（`ln -sf <新しい folder>/bin/tpm ~/.local/bin/tpm`）。
-5. 動いている TPM 役は、起こし直すか `/add-dir <新しい folder>` を打つ。ほかの役を起こす旗は `/tpm` と `/dependabot-triage` が自分の場所から求めるので直さない。
+5. 動いている TPM 役は、起こし直すか `/add-dir <新しい folder>/core`（束を足していれば、その束の folder も）を打つ。ほかの役を起こす旗は `/tpm` と `/dependabot-triage` が自分の場所から求めるので直さない。
 
 ## 試験
 
 ```sh
-node --test .claude/skills/_shared/ bin/
+node --test dependabot/.claude/skills/_shared/ bin/
 ```
 
 GitHub Actions でも同じ試験を流す（`.github/workflows/test.yml`）。

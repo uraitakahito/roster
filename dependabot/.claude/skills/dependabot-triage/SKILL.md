@@ -13,7 +13,7 @@ description: TPM 役が Dependabot の PR を集め、依存の版の公開か�
 
 ## 0. 設定を読む（最初に必ず）
 
-- `${CLAUDE_SKILL_DIR}/../_shared/protocol.md`（役のあいだの決まり。知らせの送り方・頭・サイドバー）
+- `${CLAUDE_SKILL_DIR}/../../../../core/.claude/skills/_shared/protocol.md`（役のあいだの決まり。知らせの送り方・頭・サイドバー）
 - `${CLAUDE_PROJECT_DIR}/.claude/dependabot/config.json`（欄は repo の README の表。以下 `config.<欄>` と書く）
 - `${CLAUDE_PROJECT_DIR}/.claude/dependabot/rules.md`（この project の決まり。**この skill の手順より先に従う**）
 
@@ -72,17 +72,17 @@ node "${CLAUDE_SKILL_DIR}/../_shared/release-age.mjs" <config.owner>/<repo> <PR>
 **この skills の repo の root** を先に求める（Sustaining Engineer 役にも同じ skill を読ませるため）:
 
 ```sh
-realpath "${CLAUDE_SKILL_DIR}/../../.."
+realpath "${CLAUDE_SKILL_DIR}/../../../.."
 ```
 
 起こす 1 行（`<root>` は上の出力・`<cwd>` は `config.cwd`、無ければ `${CLAUDE_PROJECT_DIR}`）:
 
 ```sh
 cmux workspace create --name "Sustaining Engineer <repo>#<PR>" --cwd <cwd> \
-  --command 'claude --model <config.model> --effort <config.effort> --permission-mode <config.permissionMode> --add-dir <root> -- "/sustaining-engineer <repo>#<PR> tpm=<自分の workspace>"'
+  --command 'claude --model <config.model> --effort <config.effort> --permission-mode <config.permissionMode> --add-dir <root>/core <root>/dependabot -- "/sustaining-engineer <repo>#<PR> tpm=<自分の workspace>"'
 ```
 
-- **`--add-dir <root>` の後の `--` を落とさない。** `--add-dir` は後ろの語もまとめて folder として読むので、`--` が無いと `/sustaining-engineer …` が依頼として渡らない。
+- **`--add-dir <root>/core <root>/dependabot` の後の `--` を落とさない。** 2 つの束を両方足す（protocol.md は core の束、`/sustaining-engineer` は dependabot の束にある）。 `--add-dir` は後ろの語もまとめて folder として読むので、`--` が無いと `/sustaining-engineer …` が依頼として渡らない。
 - 自分の workspace は `cmux identify` の caller の `workspace_ref`。
 - 起動の命令は 1,024 バイトを超えると黙って実行されない。上の形を延ばさない。
 - **起こした後 90 秒の間に、`cmux sidebar-state --workspace <新しい workspace>` に `wait=作業中: …` の行が出たかを見る**（`/sustaining-engineer` の最初の手が `wait` を出す。題は起こすときに `--name` で付けてあるので、題では見分けられない）。出なければ `cmux read-screen --workspace <新しい workspace>` で画面を読む:

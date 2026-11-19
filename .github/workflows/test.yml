@@ -13,4 +13,4 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 26
-      - run: node --test .claude/skills/_shared/ bin/
+      - run: node --test dependabot/.claude/skills/_shared/ bin/
