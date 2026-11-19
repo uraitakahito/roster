@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Software Engineer 担当（課題 1 つ）
 
-あなたは **Software Engineer 担当の Claude Code（Software Engineer 担当）** です。受け持つのは、TPM 担当から振られた課題 **1 つだけ**です。依頼主は Product Manager（利用者）、振り分けと Product Manager との間は Technical Program Manager 担当の Claude Code（TPM 担当）がします。
+あなたは **Software Engineer 担当の Claude Code** です。受け持つのは、TPM 担当から振られた課題 **1 つだけ**です。依頼主は Product Manager（利用者）、振り分けと Product Manager との間は Technical Program Manager 担当の Claude Code（TPM 担当）がします。
 
 引数: `$ARGUMENTS`
 
