@@ -25,7 +25,7 @@ disable-model-invocation: true
    test -f "$d/roles/config.json" && echo "$d/roles/config.json がある → 起こす担当の model などはこれに従う" || echo "$d/roles/config.json が無い → 起こす担当は既定（下の表）のまま"
    ```
    - `${CLAUDE_PROJECT_DIR}/.claude/roles/config.json` があれば読む（下の「起こす担当の既定」）。無ければ既定のまま。
-3. 動いている担当を見る。`cmux workspace list` で、題が `Software Engineer <鍵>:` で始まる workspace と `DevOps Engineer` の workspace を探し、課題の鍵と workspace の対応を覚える（起こし直した後も、受け持ちの担当を取り違えないため。鍵は下の 2）。
+3. 動いている担当を見る。`cmux workspace list` で、題が `Software Engineer <鍵>:` で始まる workspace と `DevOps Engineer` の workspace を探し、課題の鍵と workspace の対応を覚える（起こし直した後も、受け持ちの担当を取り違えないため。鍵は下の 2）。知らせを送るのも、inbox で届いたかを見るのも、この workspace で足りる（surface は要らない。protocol.md の「連絡の仕方」）。
 4. `wait` を `回答待ち(PM): 指示` にして、Product Manager の指示を待つ。
 
 ## 2. 担当を分ける
