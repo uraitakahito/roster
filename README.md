@@ -29,10 +29,10 @@ cd </your/workspace> # あなたが作業する場所
 # skill-sets が無い（既定）
 cd <folder> && claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --add-dir <repo>/core -- /tpm
 # "skill-sets": ["dependabot"]
-cd <folder> && claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --add-dir <repo>/core <repo>/dependabot -- '/tpm skill-sets=dependabot'
+cd <folder> && claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --add-dir <repo>/core <repo>/dependabot -- /tpm
 ```
 
-**最初の入力は `--` の後に置く**（`--add-dir` は後ろの語もまとめて folder として読むため）。
+**最初の入力は `--` の後に置く**（`--add-dir` は後ろの語もまとめて folder として読むため）。最初の入力はいつも `/tpm`。`skill-sets` で変わるのは `--add-dir` だけ。
 
 ### `--add-dir` の先の skill セット
 
@@ -52,7 +52,7 @@ core はいつも足す。追加の skill セットは、起こす folder の `.
 | `/tpm` | Product Manager | TPM | Product Manager を助け、課題ごとに担当者を割り当てる |
 | `/software-engineer tpm=<surface> brief=<URL> [jira=<課題>]` | TPM | Software Engineer | 課題 1 つを受け持つ。依頼書（Artifact）を読み、調査・提案・計画・実装・テストを worktree で進め、成果を Artifact と PR で出す |
 | `/devops-engineer tpm=<surface> [brief=<URL>] [jira=<課題>]` | TPM | DevOps Engineer | Apple Container と Windmill のビルド・デプロイ・環境の整備。課題間のconflict等は TPM 担当に相談する |
-| `/dependabot-triage` | TPM | TPM | Dependabot の PR を集め、依存の version の公開から 72 時間を判定し、対象の PR ごとに Sustaining Engineer 担当を起こす。merge と workspace を閉じるのも TPM 担当。`dry-run` で表だけ |
+| `/dependabot-triage` | Product Manager が言ったとき、TPM | TPM | Dependabot の PR を集め、依存の version の公開から 72 時間を判定し、対象の PR ごとに Sustaining Engineer 担当を起こす。merge と workspace を閉じるのも TPM 担当。`dry-run` で表だけ |
 | `/sustaining-engineer <repo>#<PR> tpm=<workspace>` | TPM | Sustaining Engineer | PR 1 本を受け持つ。72 時間の確かめ・直し・CI を緑に・TPM 担当に merge を頼む |
 
 ## 担当のあいだの決まり
@@ -80,7 +80,7 @@ TPM 担当を起こした folder に置くと、追加の skill セットと、T
 
 ### Dependabot の設定
 
-Dependabot の skill を使う project では、`.claude/roles/config.json` の `skill-sets` に `"dependabot"` を書き、次の 2 つを置く。skill セットを書かなければ、2 つを置いても `/tpm` は `/dependabot-triage` を呼ばない（読み込まれない）。skill セットを書いても 2 つが無いと `/dependabot-triage` と `/sustaining-engineer` は止まる（`/tpm` は飛ばして先へ進む）。
+Dependabot の skill を使う project では、`.claude/roles/config.json` の `skill-sets` に `"dependabot"` を書き、次の 2 つを置く。`/tpm` の起動では Dependabot の PR を見ない。Product Manager が言ったときに TPM 担当が `/dependabot-triage` を呼ぶ。skill セットを書かなければ `/dependabot-triage` は使えない。skill セットを書いても 2 つが無いと `/dependabot-triage` と `/sustaining-engineer` は止まる。
 
 #### `.claude/dependabot/config.json`
 

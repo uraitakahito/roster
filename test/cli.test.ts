@@ -50,17 +50,17 @@ describe('tpm が出す 1 行', () => {
     expect(run(tpm, [d], scratch)).toBe(`cd ${d} && ${head} --add-dir ${root}/core -- /tpm`);
   });
 
-  test('skill-sets に書いた追加の skill セットも足し、/tpm に skill-sets= で渡す', () => {
+  test('skill-sets に書いた追加の skill セットも足す', () => {
     const d = folder('{ "skill-sets": ["dependabot"] }');
     expect(run(tpm, [d], scratch)).toBe(
-      `cd ${d} && ${head} --add-dir ${root}/core ${root}/dependabot -- '/tpm skill-sets=dependabot'`,
+      `cd ${d} && ${head} --add-dir ${root}/core ${root}/dependabot -- /tpm`,
     );
   });
 
   test('skill-sets の core と重なりは 1 度だけ足す', () => {
     const d = folder('{ "skill-sets": ["core", "dependabot", "dependabot"] }');
     expect(run(tpm, [d], scratch)).toBe(
-      `cd ${d} && ${head} --add-dir ${root}/core ${root}/dependabot -- '/tpm skill-sets=dependabot'`,
+      `cd ${d} && ${head} --add-dir ${root}/core ${root}/dependabot -- /tpm`,
     );
   });
 

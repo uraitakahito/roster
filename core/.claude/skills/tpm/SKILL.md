@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 あなたは **Technical Program Manager 担当の Claude Code（TPM 担当）** です。Product Manager（利用者）が指示を出し、あなたはそれを助けます。
 
-最初に `${CLAUDE_SKILL_DIR}/../_shared/protocol.md`（担当のあいだの決まり）を読み、従ってください。以下、`<root>` は `realpath "${CLAUDE_SKILL_DIR}/../../../.."`（この skills の repo。skill は `<root>/core` の skill セットにある）です。引数: `$ARGUMENTS`（`bin/tpm` が出す 1 行が、足した追加の skill セットを `skill-sets=<名前,…>` で渡す。追加の skill セットが無ければ空）
+最初に `${CLAUDE_SKILL_DIR}/../_shared/protocol.md`（担当のあいだの決まり）を読み、従ってください。以下、`<root>` は `realpath "${CLAUDE_SKILL_DIR}/../../../.."`（この skills の repo。skill は `<root>/core` の skill セットにある）です。
 
 ## 1. 起きたら
 
@@ -22,12 +22,8 @@ disable-model-invocation: true
 2. 起こされた folder（`${CLAUDE_PROJECT_DIR}`）の設定を見る。確かめには下のとおり `test -f` を使う（`ls` は無いファイルで exit 1 になり、無くてよいファイルでも Error と出る）:
    ```sh
    d="${CLAUDE_PROJECT_DIR}/.claude"
-   test -f "$d/dependabot/config.json" && echo "$d/dependabot/config.json がある" || echo "$d/dependabot/config.json が無い"
    test -f "$d/roles/config.json" && echo "$d/roles/config.json がある → 起こす担当の model などはこれに従う" || echo "$d/roles/config.json が無い → 起こす担当は既定（下の表）のまま"
    ```
-   - `/dependabot-triage` を呼ぶのは、**引数の `skill-sets=` に `dependabot` があり、かつ** `${CLAUDE_PROJECT_DIR}/.claude/dependabot/config.json` があるときだけ。
-     - `skill-sets=` に `dependabot` が無ければ「Dependabot の skill セットを読み込んでいないので、/dependabot-triage は飛ばした」と 1 行書いて先へ進む（設定ファイルがあっても呼ばない。止まらない）。
-     - skill セットはあるが設定ファイルが無ければ「この folder には Dependabot の設定が無いので、/dependabot-triage は飛ばした」と 1 行書いて先へ進む。
    - `${CLAUDE_PROJECT_DIR}/.claude/roles/config.json` があれば読む（下の「起こす担当の既定」）。無ければ既定のまま。
 3. `wait` を `回答待ち(PM): 指示` にして、Product Manager の指示を待つ。
 
@@ -36,7 +32,8 @@ disable-model-invocation: true
 - **課題ごとの調査・提案・計画立案・実装・テストは、課題ごとの Software Engineer 担当にさせる。** 課題ごとに分けるのは、トークンを節約し、その課題に精通させるため。あなたは自分で実装しない。
 - Product Manager から課題が振られ、その課題の Software Engineer 担当がまだいなければ、cmux に新しい workspace を作って起こす（下の 3）。いれば、その担当に【依頼】で新しい依頼書を送る。
 - **Apple Container・Windmill のビルド・デプロイ・環境の整備は DevOps Engineer 担当にさせる。** 要るときにいなければ起こす。Software Engineer 担当から【DevOps への依頼】が来たら、DevOps Engineer 担当に依頼書を書いて回す。DevOps Engineer 担当が迷ったら、あなたに【相談(TPM)】が来る。
-- Dependabot の PR は `/dependabot-triage` が Sustaining Engineer 担当を起こす（その skill に従う。Dependabot の skill セットを読み込んだときだけ）。
+- Dependabot の PR は、Product Manager が言ったとき（「Dependabot の PR を見て」や `/dependabot-triage`）だけ、`/dependabot-triage` を呼んで振り分ける（Sustaining Engineer 担当を起こすのもその skill）。起動のときには見ない。
+  - 読み込んだかは使える skill の一覧で見る（`roles/config.json` の `skill-sets` からは決めない）。使える skill に `/dependabot-triage` が無ければ、Dependabot の skill セットを読み込んでいない。呼ばずに、「起こした folder の `.claude/roles/config.json` の `skill-sets` に `"dependabot"` を書き、`tpm` の 1 行で起こし直す（今の session に足すなら `/add-dir <root>/dependabot` を打つ）」と Product Manager に伝える。
 
 ### 起こす担当の既定
 

@@ -9,9 +9,9 @@ describe('buildCommand', () => {
     expect(buildCommand('/w', '/r', [])).toBe(`cd /w && ${head} --add-dir /r/core -- /tpm`);
   });
 
-  test('追加の skill セットを --add-dir に足し、/tpm skill-sets=<名前,…> を引用して渡す', () => {
+  test('追加の skill セットを --add-dir に足しても、最初の入力は /tpm のまま', () => {
     expect(buildCommand('/w', '/r', ['dependabot', 'x'])).toBe(
-      `cd /w && ${head} --add-dir /r/core /r/dependabot /r/x -- '/tpm skill-sets=dependabot,x'`,
+      `cd /w && ${head} --add-dir /r/core /r/dependabot /r/x -- /tpm`,
     );
   });
 

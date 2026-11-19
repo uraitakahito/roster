@@ -1,11 +1,11 @@
 ---
 name: dependabot-triage
-description: TPM 担当が Dependabot の PR を集め、依存の version の公開から 72 時間を判定し、対象の PR ごとに Sustaining Engineer 担当（/sustaining-engineer）を起こす。merge と workspace を閉じるのも TPM 担当。引数 `dry-run` なら判定の表を出すだけで誰も起こさない。設定は使う側の .claude/dependabot/ から読む。
+description: Product Manager が言ったときに TPM 担当が Dependabot の PR を集め、依存の version の公開から 72 時間を判定し、対象の PR ごとに Sustaining Engineer 担当（/sustaining-engineer）を起こす。merge と workspace を閉じるのも TPM 担当。引数 `dry-run` なら判定の表を出すだけで誰も起こさない。設定は使う側の .claude/dependabot/ から読む。
 ---
 
 # Dependabot の PR の振り分け（TPM 担当が呼ぶ）
 
-呼ぶのは **Technical Program Manager 担当の Claude Code（TPM 担当）** です。引数: `$ARGUMENTS`
+呼ぶのは **Technical Program Manager 担当の Claude Code（TPM 担当）** で、Product Manager が言ったときです（`/tpm` の起動では呼ばない）。引数: `$ARGUMENTS`
 
 - `dry-run`: 1・2 だけをして表を出し、誰も起こさない。
 - `max=<n>`: 同時に動かす Sustaining Engineer 担当の数（既定は `config.maxConcurrent`）。
