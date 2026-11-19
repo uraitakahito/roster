@@ -28,7 +28,7 @@ cmux --json agent inbox --surface <相手の workspace か surface> --limit 3   
 | 【ドキュメント修正】 | 文書やコメントの食い違いを直した PR を merge した | PR の URL と一言 |
 | 【merge 済み】 | 自分の PR を 1 本 merge した | PR の URL と一言 |
 | 【完成】 | 依頼書の成果（提案・計画などの Artifact）を publish した。依頼書が【計画完成】など別の名を決めていればそれを使う | URL・要点・「残り」（依頼の外で直すとよい物・やらなかった物・merge していない PR。無ければ「なし」）・「決めてほしいこと」（【PM への依頼】で送った項目の題。無ければ「なし」）。TPM 担当はこの 2 つで【片付け】を送るかを決める |
-| 【終わり】 | 【片付け】を受けて片付けた（Sustaining Engineer 担当は PR を merge した後。`/sustaining-engineer`） | 成果の Artifact の URL・merge した PR・登録した課題・消した worktree・残っている物 |
+| 【終わり】 | 【片付け】を受けて片付けた（Sustaining Engineer 担当は PR を merge した後。`/sustaining-engineer`） | 成果の Artifact の URL・merge した PR・消した worktree・残っている物 |
 
 Dependabot の PR だけで使う見出し（【merge の依頼】【まだ】【作り直し】）は `/sustaining-engineer` と `/dependabot-triage` に書いてある。
 
@@ -40,7 +40,7 @@ Dependabot の PR だけで使う見出し（【merge の依頼】【まだ】�
 | 【PM の回答】 | Product Manager の答え。待ちの表示を作業中に戻して続ける |
 | 【連絡】 | 知っておくこと（Jira の番号など）。返事は要らない |
 | 【TPM の宛先】 | 起こし直した TPM 担当の workspace。これからの知らせは、起こされたときの `tpm=` ではなくここへ送る。返事は要らない |
-| 【片付け】 | この課題に続きは無い（Product Manager が決めたか、TPM 担当が聞かなくてよいと決めた）。worktree・課題の登録・Jira（課題を `完了` に）を済ませて【終わり】を返す。担当の交代のためなら、そう書いてある（課題は続くので、登録と `完了` はしない） |
+| 【片付け】 | この課題に続きは無い（Product Manager が決めたか、TPM 担当が聞かなくてよいと決めた）。worktree・Jira（課題を `完了` に）を済ませて【終わり】を返す。担当の交代のためなら、そう書いてある（課題は続くので、`完了` にはしない） |
 
 ## サイドバー
 
@@ -55,7 +55,7 @@ Dependabot の PR だけで使う見出し（【merge の依頼】【まだ】�
 
 ## Jira
 
-Jira の課題にコメントを書く・読む・Product Manager に確かめる・状態を進める・課題を登録するときは、同じ folder の `jira.md` を読み、従う。
+Jira の課題にコメントを書く・読む・Product Manager に確かめる・状態を進めるときは、同じ folder の `jira.md` を読み、従う。
 
 ## 文書の食い違い
 

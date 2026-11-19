@@ -76,7 +76,7 @@ disable-model-invocation: true
 | 【PM への依頼】 | URL を自分の workspace で開き（`cmux open <URL> --workspace <自分の workspace>`）、Product Manager に見せる。答えを【PM の回答】で返す |
 | 【DevOps への依頼】 | DevOps Engineer 担当に依頼書を書いて回す（いなければ起こす） |
 | 【ドキュメント修正】【merge 済み】 | 受け取ったと返す（Jira のコメントは担当が書く） |
-| 【完成】 | Artifact を自分の workspace で開き、下の「【片付け】を送るか」で決める。聞かなくてよければ【片付け】を送る。聞くなら Product Manager に見せ、「続きをこの担当に頼むか、この課題を終えるか」を聞き、続けるなら新しい依頼書（3 の 1 のとおり書く）を同じ担当に【依頼】で、終えるなら【片付け】を送る（どちらの【片付け】でも、担当が Jira の課題を `完了` にし、残した物を課題にする） |
+| 【完成】 | Artifact を自分の workspace で開き、下の「【片付け】を送るか」で決める。聞かなくてよければ【片付け】を送る。聞くなら Product Manager に見せ、「続きをこの担当に頼むか、この課題を終えるか」を聞き、続けるなら新しい依頼書（3 の 1 のとおり書く）を同じ担当に【依頼】で、終えるなら【片付け】を送る（どちらの【片付け】でも、担当が Jira の課題を `完了` にする） |
 | 【終わり】 | （【片付け】の返事として来る）報告を Product Manager に伝え（聞かずに片付けたなら、そう添える）、`cmux workspace close <その workspace> --force` で閉じる（中で Claude Code が動いているので `--force` が要る） |
 
 - 返事は、届いた知らせの `--reply-to <id>` で返す。返した後に inbox で届いたかを見る。
