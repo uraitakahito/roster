@@ -5,13 +5,13 @@ import { buildCommand, shellQuote } from '../src/command.js';
 const head = 'claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions';
 
 describe('buildCommand', () => {
-  test('束が core だけなら /tpm', () => {
+  test('追加の skill セットが無ければ /tpm', () => {
     expect(buildCommand('/w', '/r', [])).toBe(`cd /w && ${head} --add-dir /r/core -- /tpm`);
   });
 
-  test('束を --add-dir に足し、/tpm packs=<束,…> を引用して渡す', () => {
+  test('追加の skill セットを --add-dir に足し、/tpm skill-sets=<名前,…> を引用して渡す', () => {
     expect(buildCommand('/w', '/r', ['dependabot', 'x'])).toBe(
-      `cd /w && ${head} --add-dir /r/core /r/dependabot /r/x -- '/tpm packs=dependabot,x'`,
+      `cd /w && ${head} --add-dir /r/core /r/dependabot /r/x -- '/tpm skill-sets=dependabot,x'`,
     );
   });
 
