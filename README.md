@@ -52,7 +52,7 @@ core はいつも足す。追加の skill セットは、起こす folder の `.
 | `/tpm` | Product Manager | TPM | Product Manager を助け、課題ごとに担当者を割り当てる |
 | `/software-engineer tpm=<surface> brief=<URL> [jira=<課題>]` | TPM | Software Engineer | 課題 1 つを受け持つ。依頼書（Artifact）を読み、調査・提案・計画・実装・テストを worktree で進め、成果を Artifact と PR で出す |
 | `/devops-engineer tpm=<surface> [brief=<URL>] [jira=<課題>]` | TPM | DevOps Engineer | Apple Container と Windmill のビルド・デプロイ・環境の整備。課題間のconflict等は TPM 担当に相談する |
-| `/dependabot-triage` | TPM | TPM | Dependabot の PR を集め、依存のversionの公開から 72 時間を判定し、対象の PR ごとに Sustaining Engineer 担当を起こす。merge と workspace を閉じるのも TPM 担当。`一覧だけ` で表だけ |
+| `/dependabot-triage` | TPM | TPM | Dependabot の PR を集め、依存のversionの公開から 72 時間を判定し、対象の PR ごとに Sustaining Engineer 担当を起こす。merge と workspace を閉じるのも TPM 担当。`dry-run` で表だけ |
 | `/sustaining-engineer <repo>#<PR> tpm=<workspace>` | TPM | Sustaining Engineer | PR 1 本を受け持つ。72 時間の確かめ・直し・CI を緑に・TPM 担当に merge を頼む |
 
 ## 担当のあいだの決まり
