@@ -1,5 +1,5 @@
 // 利用者が写して打つ 1 行（cd と claude の命令）を組む。
-import { join } from 'node:path';
+import { skillSetDir } from './skill-sets.js';
 
 const CLAUDE_OPTIONS = ['--model', 'claude-opus-5-5', '--effort', 'medium', '--permission-mode', 'bypassPermissions'];
 
@@ -15,7 +15,7 @@ export function shellQuote(word: string): string {
  * --add-dir は後ろの語もまとめて folder として読むので、最初の入力の前に -- を置く。
  */
 export function buildCommand(dir: string, root: string, skillSets: string[]): string {
-  const addDirs = ['core', ...skillSets].map(s => join(root, s));
+  const addDirs = ['core', ...skillSets].map(s => skillSetDir(root, s));
   const claude = ['claude', ...CLAUDE_OPTIONS, '--add-dir', ...addDirs, '--', '/tpm'];
   return `cd ${shellQuote(dir)} && ${claude.map(shellQuote).join(' ')}`;
 }

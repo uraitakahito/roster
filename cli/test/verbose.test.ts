@@ -7,7 +7,7 @@ import { explain, listSkills } from '../src/verbose.js';
 // skill セット core（skill 2 つと _shared）と empty（skill なし）を持つ偽の repo を作る。
 let root: string;
 const skill = (skillSet: string, name: string, withSkillMd = true): void => {
-  const d = join(root, skillSet, '.claude', 'skills', name);
+  const d = join(root, 'skill-sets', skillSet, '.claude', 'skills', name);
   mkdirSync(d, { recursive: true });
   if (withSkillMd) writeFileSync(join(d, 'SKILL.md'), '');
 };
@@ -17,17 +17,17 @@ beforeAll(() => {
   skill('core', 'tpm');
   skill('core', 'devops-engineer');
   skill('core', '_shared', false);
-  writeFileSync(join(root, 'core', '.claude', 'skills', 'note.md'), '');
-  mkdirSync(join(root, 'empty', '.claude', 'skills'), { recursive: true });
+  writeFileSync(join(root, 'skill-sets', 'core', '.claude', 'skills', 'note.md'), '');
+  mkdirSync(join(root, 'skill-sets', 'empty', '.claude', 'skills'), { recursive: true });
 });
 
 describe('listSkills', () => {
   test('SKILL.md を持つ folder だけを名前順に返す', () => {
-    expect(listSkills(join(root, 'core'))).toEqual(['devops-engineer', 'tpm']);
+    expect(listSkills(join(root, 'skill-sets', 'core'))).toEqual(['devops-engineer', 'tpm']);
   });
 
   test('skill が無ければ空', () => {
-    expect(listSkills(join(root, 'empty'))).toEqual([]);
+    expect(listSkills(join(root, 'skill-sets', 'empty'))).toEqual([]);
   });
 });
 
@@ -38,7 +38,7 @@ describe('explain', () => {
       `repo        ${root}`,
       'config      /w/nope.json（なし）',
       'skill-sets  なし（core だけ）',
-      `core        ${root}/core → /devops-engineer /tpm`,
+      `core        ${root}/skill-sets/core → /devops-engineer /tpm`,
     ]);
   });
 
@@ -50,8 +50,8 @@ describe('explain', () => {
       `repo        ${root}`,
       `config      ${configFile}（あり）`,
       'skill-sets  empty（config の skill-sets から。core と重なりは除いた）',
-      `core        ${root}/core → /devops-engineer /tpm`,
-      `empty       ${root}/empty → （skill なし）`,
+      `core        ${root}/skill-sets/core → /devops-engineer /tpm`,
+      `empty       ${root}/skill-sets/empty → （skill なし）`,
     ]);
   });
 });

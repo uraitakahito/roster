@@ -21,10 +21,10 @@ description: Sustaining Engineer 担当として、Dependabot の PR 1 本を受
 
 使う側の project の設定を読む。無ければ「この project には `.claude/dependabot/` の設定が無い」と画面に書いて止まる。
 
-- `${CLAUDE_PROJECT_DIR}/.claude/dependabot/config.json`（欄は `${CLAUDE_SKILL_DIR}/../../../../docs-site/src/content/docs/configuration.md` の「`.claude/dependabot/config.json`」の表。以下 `config.<欄>` と書く）
+- `${CLAUDE_PROJECT_DIR}/.claude/dependabot/config.json`（欄は `${CLAUDE_SKILL_DIR}/../../../../../docs-site/src/content/docs/configuration.md` の「`.claude/dependabot/config.json`」の表。以下 `config.<欄>` と書く）
 - `${CLAUDE_PROJECT_DIR}/.claude/dependabot/rules.md`（この project の決まり。**この skill の手順より先に従う**）
 
-この skill の folder（`${CLAUDE_SKILL_DIR}` の 4 つ上の repo）は**直さない**（protocol.md の「文書の食い違い」の例外）。直したい所を見つけたら TPM 担当に【相談(TPM)】で知らせる。
+この skill の folder（`${CLAUDE_SKILL_DIR}` の 5 つ上の repo）は**直さない**（protocol.md の「文書の食い違い」の例外）。直したい所を見つけたら TPM 担当に【相談(TPM)】で知らせる。
 
 ## 1. 名乗る
 
@@ -47,7 +47,7 @@ cmux set-status wait "作業中: 読む" --icon hourglass --priority 80
 ## 3. 72 時間を確かめる
 
 ```sh
-node "${CLAUDE_SKILL_DIR}/../../../../src/release-age.ts" <config.owner>/<repo> <PR> --hours <config.hours>
+node "${CLAUDE_SKILL_DIR}/../../../../../cli/src/release-age.ts" <config.owner>/<repo> <PR> --hours <config.hours>
 ```
 
 | 終了コード | 意味 | すること |

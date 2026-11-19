@@ -33,8 +33,10 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
-      # root の package.json の packageManager を読む
+      # pnpm の版は docs-site/package.json の packageManager を読む（root に package.json は無い）
       - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: docs-site/package.json
       - uses: actions/setup-node@v7
         with:
           node-version: 26

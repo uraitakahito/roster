@@ -9,10 +9,10 @@ skill は skill セットに分けてあり、`--add-dir` で足した skill セ
 
 | skill セット | folder | skill |
 |---|---|---|
-| core | `core/.claude/skills/` | `/tpm`・`/software-engineer`・`/devops-engineer`・`_shared/protocol.md` |
-| dependabot | `dependabot/.claude/skills/` | `/dependabot-triage`・`/sustaining-engineer` |
+| core | `skill-sets/core/.claude/skills/` | `/tpm`・`/software-engineer`・`/devops-engineer`・`_shared/protocol.md` |
+| dependabot | `skill-sets/dependabot/.claude/skills/` | `/dependabot-triage`・`/sustaining-engineer` |
 
-core はいつも足す。追加の skill セットは、起こす folder の `.claude/roles/config.json` の `skill-sets` に書いたときだけ足す（[設定](/configuration/)）。skill セットは兄弟の folder に置く（入れ子にすると、外側の skill セットを足したセッションが内側の skill セットの folder を触ったときに、内側の skill まで見つかりうるため）。
+core はいつも足す。追加の skill セットは、起こす folder の `.claude/roles/config.json` の `skill-sets` に書いたときだけ足す（[設定](/configuration/)）。skill セットは `skill-sets/` の下に兄弟の folder で置く（入れ子にすると、外側の skill セットを足したセッションが内側の skill セットの folder を触ったときに、内側の skill まで見つかりうるため）。
 
 ## skill
 

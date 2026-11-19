@@ -5,7 +5,7 @@ name: site
 # astro build だけでは守りにならない —— .md のページは中で何が落ちても exit 0 になる。
 # だから build と一緒に docs-site/scripts/check-refs.mjs を必ず通す（pnpm run check）。
 #
-# **paths で絞らない。** 検査は docs の外（README・core/・dependabot/ など）も読むので、
+# **paths で絞らない。** 検査は docs の外（README・skill-sets/・cli/ など）も読むので、
 # 絞ると、そちらだけを変えた PR で検査が走らない。
 #
 # main への push では走らせない。main の検査は、公開の docs.yml の中で同じ check を 1 回だけ流す。
@@ -29,8 +29,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      # root の package.json の packageManager を読む
+      # pnpm の版は docs-site/package.json の packageManager を読む（root に package.json は無い）
       - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: docs-site/package.json
       - uses: actions/setup-node@v7
         with:
           node-version: 26

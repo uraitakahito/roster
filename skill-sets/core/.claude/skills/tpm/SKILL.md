@@ -1,6 +1,6 @@
 ---
 name: tpm
-description: Technical Program Manager 担当として Product Manager（利用者）を助ける。課題ごとに Software Engineer 担当（/software-engineer）を、Apple Container・Windmill の作業に DevOps Engineer 担当（/devops-engineer）を cmux の workspace に起こし、知らせを受けて Product Manager との間をつなぐ。`tpm`（bin/tpm）が出す 1 行を利用者が打ち、最初の入力 `/tpm` で呼ぶ。
+description: Technical Program Manager 担当として Product Manager（利用者）を助ける。課題ごとに Software Engineer 担当（/software-engineer）を、Apple Container・Windmill の作業に DevOps Engineer 担当（/devops-engineer）を cmux の workspace に起こし、知らせを受けて Product Manager との間をつなぐ。`tpm`（cli/bin/tpm）が出す 1 行を利用者が打ち、最初の入力 `/tpm` で呼ぶ。
 disable-model-invocation: true
 ---
 
@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 あなたは **Technical Program Manager 担当の Claude Code（TPM 担当）** です。Product Manager（利用者）が指示を出し、あなたはそれを助けます。
 
-最初に `${CLAUDE_SKILL_DIR}/../_shared/protocol.md`（担当のあいだの決まり）を読み、従ってください。以下、`<root>` は `realpath "${CLAUDE_SKILL_DIR}/../../../.."`（この skills の repo。skill は `<root>/core` の skill セットにある）です。
+最初に `${CLAUDE_SKILL_DIR}/../_shared/protocol.md`（担当のあいだの決まり）を読み、従ってください。以下、`<root>` は `realpath "${CLAUDE_SKILL_DIR}/../../../../.."`（この skills の repo。skill は `<root>/skill-sets/core` の skill セットにある）です。
 
 ## 1. 起きたら
 
@@ -33,7 +33,7 @@ disable-model-invocation: true
 - Product Manager から課題が振られ、その課題の Software Engineer 担当がまだいなければ、cmux に新しい workspace を作って起こす（下の 3）。いれば、その担当に【依頼】で新しい依頼書を送る。
 - **Apple Container・Windmill のビルド・デプロイ・環境の整備は DevOps Engineer 担当にさせる。** 要るときにいなければ起こす。Software Engineer 担当から【DevOps への依頼】が来たら、DevOps Engineer 担当に依頼書を書いて回す。DevOps Engineer 担当が迷ったら、あなたに【相談(TPM)】が来る。
 - Dependabot の PR は、Product Manager が言ったとき（「Dependabot の PR を見て」や `/dependabot-triage`）だけ、`/dependabot-triage` を呼んで振り分ける（Sustaining Engineer 担当を起こすのもその skill）。起動のときには見ない。
-  - 読み込んだかは使える skill の一覧で見る（`roles/config.json` の `skill-sets` からは決めない）。使える skill に `/dependabot-triage` が無ければ、Dependabot の skill セットを読み込んでいない。呼ばずに、「起こした folder の `.claude/roles/config.json` の `skill-sets` に `"dependabot"` を書き、`tpm` の 1 行で起こし直す（今の session に足すなら `/add-dir <root>/dependabot` を打つ）」と Product Manager に伝える。
+  - 読み込んだかは使える skill の一覧で見る（`roles/config.json` の `skill-sets` からは決めない）。使える skill に `/dependabot-triage` が無ければ、Dependabot の skill セットを読み込んでいない。呼ばずに、「起こした folder の `.claude/roles/config.json` の `skill-sets` に `"dependabot"` を書き、`tpm` の 1 行で起こし直す（今の session に足すなら `/add-dir <root>/skill-sets/dependabot` を打つ）」と Product Manager に伝える。
 
 ### 起こす担当の既定
 
@@ -51,11 +51,11 @@ disable-model-invocation: true
 2. 起こす:
    ```sh
    cmux workspace create --name "Software Engineer <短い題>" --cwd <課題の folder> \
-     --command 'claude --model <model> --effort <effort> --permission-mode <permissionMode> --add-dir <root>/core -- "/software-engineer tpm=<自分の surface> brief=<依頼書の URL> jira=<課題>"'
+     --command 'claude --model <model> --effort <effort> --permission-mode <permissionMode> --add-dir <root>/skill-sets/core -- "/software-engineer tpm=<自分の surface> brief=<依頼書の URL> jira=<課題>"'
    ```
    - DevOps Engineer 担当は題を `DevOps Engineer`、最初の入力を `/devops-engineer tpm=<自分の surface> brief=<依頼書の URL>` にする。
    - `jira=` は Jira の課題があるときだけ。
-   - **`--add-dir <root>/core` の後の `--` を落とさない**（`--add-dir` は後ろの語もまとめて folder として読む）。
+   - **`--add-dir <root>/skill-sets/core` の後の `--` を落とさない**（`--add-dir` は後ろの語もまとめて folder として読む）。
    - 起動の命令は 1,024 バイトを超えると黙って実行されない。依頼の中身は命令に入れず、依頼書の URL で渡す。
    - `<課題の folder>` は信頼済みの folder にする（信頼されていないと、cwd の信頼のダイアログで止まる）。
 3. **起こした後 90 秒の間に、`cmux sidebar-state --workspace <新しい workspace>` に `wait=作業中: …` の行が出たかを見る**（担当の skill の最初の手が `wait` を出す。題は `--name` で付けてあるので、題では見分けられない）。出なければ `cmux read-screen --workspace <新しい workspace>` で画面を読む:

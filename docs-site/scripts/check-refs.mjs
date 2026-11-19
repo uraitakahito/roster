@@ -6,7 +6,7 @@
 // 1. 本文の [x](/page/) の先のページが在る
 // 2. 本文が code で名指した repo の path（repo の一番上の folder で始まる物）が在る
 // 3. README のドキュメントの URL が、astro.config.ts の site ＋ base と同じ
-// 4. skill（core/・dependabot/ の *.md）が名指す原稿が在り、「」で名指した見出しがその原稿に在る
+// 4. skill（skill-sets/ の *.md）が名指す原稿が在り、「」で名指した見出しがその原稿に在る
 // 5. configuration.md の「`.claude/dependabot/config.json`」の表の欄と、skill が使う config.<欄> が両方向で揃う
 // 6. 画面の絵（src/assets/screens/）と本文の参照が両方向で揃う
 // 7. skill（SKILL.md）の本文の ${CLAUDE_SKILL_DIR}/… の先が在り、realpath "${CLAUDE_SKILL_DIR}/…" が repo の一番上を指す
@@ -63,7 +63,7 @@ for (const p of all) {
 // 2. repo の path の名指し。一番上の folder（隠しも含む）で始まる code だけを見る。
 //    <…>・*・空白・$ を含む物は形の説明なので見ない。末尾の :<行> は落とす
 //    一番上の folder は git が追跡する物から求める（手元だけの dist/・node_modules/ などを数えない）
-//    symlink はその物を見る（bin/tpm は build 前は在らない dist/cli.js を指す）
+//    symlink はその物を見る（cli/bin/tpm は build 前は在らない cli/dist/cli.js を指す）
 const inRepo = (path) => {
   try {
     lstatSync(join(REPO, path));
@@ -98,7 +98,7 @@ for (const u of urls) {
 
 // 4. skill が名指す原稿と見出し
 const DOCS_IN_REPO = "docs-site/src/content/docs/";
-const skillFiles = tracked.filter((f) => /^(core|dependabot)\/.*\.md$/.test(f));
+const skillFiles = tracked.filter((f) => /^skill-sets\/.*\.md$/.test(f));
 const headings = (text) =>
   new Set([...prose(text).matchAll(/^#{2,6}\s+(.+?)\s*$/gm)].map((m) => m[1].replace(/（[^）]*）$/, "")));
 const configFields = new Set();

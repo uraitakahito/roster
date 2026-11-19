@@ -5,24 +5,24 @@ description: install・build と、TPM 担当を起こす 1 行の出し方。�
 
 ## 起動のしかた
 
-`bin/tpm` が出す 1 行を写して打つ。
+`cli/bin/tpm` が出す 1 行を写して打つ。
 
 ```sh
 cd </foo/bar/skills> # skillsの置き場所
-pnpm install --frozen-lockfile
-pnpm run build
+pnpm --dir cli install --frozen-lockfile
+pnpm --dir cli run build
 cd </your/workspace> # あなたが作業する場所
-/foo/bar/skills/bin/tpm --verbose             # 今いる folder で TPM 担当を起こす 1 行を出す
-/foo/bar/skills/bin/tpm --verbose <folder>    # その folder で起こす 1 行を出す
+/foo/bar/skills/cli/bin/tpm --verbose             # 今いる folder で TPM 担当を起こす 1 行を出す
+/foo/bar/skills/cli/bin/tpm --verbose <folder>    # その folder で起こす 1 行を出す
 ```
 
 `tpm` は claude を起こさない。folder の `.claude/roles/config.json` の `skill-sets` を確かめて、次の 1 行を出すだけ。それをそのまま打てばClaude Codeが適切に起動する。
 
 ```sh
 # skill-sets が無い（既定）
-cd <folder> && claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --add-dir <repo>/core -- /tpm
+cd <folder> && claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --add-dir <repo>/skill-sets/core -- /tpm
 # "skill-sets": ["dependabot"]
-cd <folder> && claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --add-dir <repo>/core <repo>/dependabot -- /tpm
+cd <folder> && claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --add-dir <repo>/skill-sets/core <repo>/skill-sets/dependabot -- /tpm
 ```
 
 **最初の入力は `--` の後に置く**（`--add-dir` は後ろの語もまとめて folder として読むため）。

@@ -14,7 +14,7 @@ description: Product Manager が言ったときに TPM 担当が Dependabot の 
 ## 0. 設定を読む（最初に必ず）
 
 - `${CLAUDE_SKILL_DIR}/../../../../core/.claude/skills/_shared/protocol.md`（担当のあいだの決まり。連絡の仕方・見出し・サイドバー）
-- `${CLAUDE_PROJECT_DIR}/.claude/dependabot/config.json`（欄は `${CLAUDE_SKILL_DIR}/../../../../docs-site/src/content/docs/configuration.md` の「`.claude/dependabot/config.json`」の表。以下 `config.<欄>` と書く）
+- `${CLAUDE_PROJECT_DIR}/.claude/dependabot/config.json`（欄は `${CLAUDE_SKILL_DIR}/../../../../../docs-site/src/content/docs/configuration.md` の「`.claude/dependabot/config.json`」の表。以下 `config.<欄>` と書く）
 - `${CLAUDE_PROJECT_DIR}/.claude/dependabot/rules.md`（この project の決まり。**この skill の手順より先に従う**）
 
 無ければ「この project には `.claude/dependabot/` の設定が無い」と言って止まる。
@@ -43,7 +43,7 @@ gh search prs --author app/dependabot --state open "${args[@]}" --limit 100 \
 PR ごとに:
 
 ```sh
-node "${CLAUDE_SKILL_DIR}/../../../../src/release-age.ts" <config.owner>/<repo> <PR> --hours <config.hours>
+node "${CLAUDE_SKILL_DIR}/../../../../../cli/src/release-age.ts" <config.owner>/<repo> <PR> --hours <config.hours>
 ```
 
 終了コード 0 = 対象・10 = まだ・20 = 判定できない・1 = 道具の誤り。CI は `gh pr checks <PR> --repo <config.owner>/<repo> --json name,bucket` で見て、`bucket` が `fail` の check の **名前** も拾う。
@@ -75,21 +75,21 @@ node "${CLAUDE_SKILL_DIR}/../../../../src/release-age.ts" <config.owner>/<repo> 
 **この skills の repo の root** を先に求める（Sustaining Engineer 担当にも同じ skill を読ませるため）:
 
 ```sh
-realpath "${CLAUDE_SKILL_DIR}/../../../.."
+realpath "${CLAUDE_SKILL_DIR}/../../../../.."
 ```
 
 起こす 1 行（`<root>` は上の出力・`<cwd>` は `config.cwd`、無ければ `${CLAUDE_PROJECT_DIR}`）:
 
 ```sh
 cmux workspace create --name "Sustaining Engineer <repo>#<PR>" --cwd <cwd> \
-  --command 'claude --model <config.model> --effort <config.effort> --permission-mode <config.permissionMode> --add-dir <root>/core <root>/dependabot -- "/sustaining-engineer <repo>#<PR> tpm=<自分の workspace>"'
+  --command 'claude --model <config.model> --effort <config.effort> --permission-mode <config.permissionMode> --add-dir <root>/skill-sets/core <root>/skill-sets/dependabot -- "/sustaining-engineer <repo>#<PR> tpm=<自分の workspace>"'
 ```
 
-- **`--add-dir <root>/core <root>/dependabot` の後の `--` を落とさない。** 2 つの skill セットを両方足す（protocol.md は core の skill セット、`/sustaining-engineer` は dependabot の skill セットにある）。 `--add-dir` は後ろの語もまとめて folder として読むので、`--` が無いと `/sustaining-engineer …` が依頼として渡らない。
+- **`--add-dir <root>/skill-sets/core <root>/skill-sets/dependabot` の後の `--` を落とさない。** 2 つの skill セットを両方足す（protocol.md は core の skill セット、`/sustaining-engineer` は dependabot の skill セットにある）。 `--add-dir` は後ろの語もまとめて folder として読むので、`--` が無いと `/sustaining-engineer …` が依頼として渡らない。
 - 自分の workspace は `cmux identify` の caller の `workspace_ref`。
 - 起動の命令は 1,024 バイトを超えると黙って実行されない。上の形を延ばさない。
 - **起こした後 90 秒の間に、`cmux sidebar-state --workspace <新しい workspace>` に `wait=作業中: …` の行が出たかを見る**（`/sustaining-engineer` の最初の手が `wait` を出す。題は起こすときに `--name` で付けてあるので、題では見分けられない）。出なければ `cmux read-screen --workspace <新しい workspace>` で画面を読む:
-  - `Adding a new directory` や `trust` のダイアログ: `<root>` が信頼されていない（この repo は別の git の repo なので、信頼済みの folder の下に置いても信頼は及ばない）。**Yes は押さずに**その workspace を `close --force` し、`<root>` で 1 度 Claude Code を対話で起こして信頼するよう Product Manager に頼む（`${CLAUDE_SKILL_DIR}/../../../../docs-site/src/content/docs/getting-started.md` の「信頼のダイアログ」）。
+  - `Adding a new directory` や `trust` のダイアログ: `<root>` が信頼されていない（この repo は別の git の repo なので、信頼済みの folder の下に置いても信頼は及ばない）。**Yes は押さずに**その workspace を `close --force` し、`<root>` で 1 度 Claude Code を対話で起こして信頼するよう Product Manager に頼む（`${CLAUDE_SKILL_DIR}/../../../../../docs-site/src/content/docs/getting-started.md` の「信頼のダイアログ」）。
   - `Unknown command: /sustaining-engineer`: 旗か `<root>` の誤り。`close --force` して、命令を直して 1 度だけ起こし直す。2 回目も `wait` が出なければ Product Manager に知らせる。
 - ほかの作業と順番がぶつかるとき（`rules.md` に書いてある物）は、起こすのを遅らせてよい。
 
