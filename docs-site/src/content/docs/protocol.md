@@ -35,11 +35,15 @@ sequenceDiagram
   loop 依頼書ごと（提案 → 計画 → 実装）
     SE->>TPM: 【merge 済み】（PR ごと）
     SE->>TPM: 【完成】（成果の Artifact）
-    TPM->>PM: 見せる。続けるか、終えるか
-    TPM->>SE: 続けるなら【依頼】（同じ担当に）
+    alt 残り・決めてほしいことがある、または次の段がある
+      TPM->>PM: 見せる。続けるか、終えるか
+      TPM->>SE: 続けるなら【依頼】（同じ担当に）
+    else どれも無い
+      TPM->>TPM: 聞かずに片付けると決める
+    end
   end
   TPM->>SE: 【片付け】
   SE->>TPM: 【終わり】
-  TPM->>PM: 報告する
+  TPM->>PM: 報告する（聞かずに片付けたなら、そう添える）
   TPM->>TPM: 担当の workspace を閉じる
 ```

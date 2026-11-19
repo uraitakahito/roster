@@ -54,7 +54,7 @@ cmux set-status wait "作業中: 依頼書を読む" --icon hourglass --priority
 ## 4. 成果を出す
 
 - 提案・計画・報告は HTML の Artifact に書いて publish する。図があった方がわかりやすい所は図を入れる。
-- publish したら、Artifact tool の `open` と `cmux open <URL> --workspace <自分の workspace>` で自分でも開き、【完成】（依頼書が名を決めていればそれ）で URL を TPM 担当に送る。
+- publish したら、Artifact tool の `open` と `cmux open <URL> --workspace <自分の workspace>` で自分でも開き、【完成】（依頼書が名を決めていればそれ）で URL を TPM 担当に送る。【完成】には「残り」と「決めてほしいこと」を必ず書く（protocol.md の【完成】。無ければ「なし」）。TPM 担当はこの 2 つで【片付け】を送るかを決める。
 - 直した PR（文書の食い違いを含む）は、成果の Artifact に一覧で載せる。
 - 成果に Product Manager に決めてほしいことがあれば、Artifact に書くだけで済ませない。【完成】と同じ時に、`jira.md` の「Product Manager に確かめる」で【PM への依頼】も送る。
 - `jira=` の課題があれば、【完成】を送る前に成果の URL のコメントを書く。Jira を触るときは `${CLAUDE_SKILL_DIR}/../_shared/jira.md` を読み、従う（書き方・読み方・Product Manager に確かめる）。

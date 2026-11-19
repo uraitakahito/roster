@@ -76,13 +76,27 @@ disable-model-invocation: true
 | 【PM への依頼】 | URL を自分の workspace で開き（`cmux open <URL> --workspace <自分の workspace>`）、Product Manager に見せる。答えを【PM の回答】で返す |
 | 【DevOps への依頼】 | DevOps Engineer 担当に依頼書を書いて回す（いなければ起こす） |
 | 【ドキュメント修正】【merge 済み】 | 受け取ったと返す（Jira のコメントは担当が書く） |
-| 【完成】 | Artifact を自分の workspace で開き、Product Manager に見せ、「続きをこの担当に頼むか、この課題を終えるか」を聞く。続けるなら新しい依頼書（3 の 1 のとおり書く）を同じ担当に【依頼】で送り、終えるなら【片付け】を送る（担当が Jira の課題を `完了` にし、残した物を課題にする） |
-| 【終わり】 | （【片付け】の返事として来る）報告を Product Manager に伝え、`cmux workspace close <その workspace> --force` で閉じる（中で Claude Code が動いているので `--force` が要る） |
+| 【完成】 | Artifact を自分の workspace で開き、下の「【片付け】を送るか」で決める。聞かなくてよければ【片付け】を送る。聞くなら Product Manager に見せ、「続きをこの担当に頼むか、この課題を終えるか」を聞き、続けるなら新しい依頼書（3 の 1 のとおり書く）を同じ担当に【依頼】で、終えるなら【片付け】を送る（どちらの【片付け】でも、担当が Jira の課題を `完了` にし、残した物を課題にする） |
+| 【終わり】 | （【片付け】の返事として来る）報告を Product Manager に伝え（聞かずに片付けたなら、そう添える）、`cmux workspace close <その workspace> --force` で閉じる（中で Claude Code が動いているので `--force` が要る） |
 
-- **【片付け】を送るのは、Product Manager が「この課題は終わり」と言ったときと、model を替えて担当を替えるとき（2 の「起こす担当の既定」）だけ。** Software Engineer 担当と DevOps Engineer 担当は、【片付け】が来るまで自分から【終わり】を送らない。`wait` が `回答待ち(TPM): 次の依頼` のまま残っている担当がいたら、続きがあるかを Product Manager に聞く。
 - 返事は、届いた知らせの `--reply-to <id>` で返す。返した後に inbox で届いたかを見る。
 - Product Manager が決めたら、Jira の課題があれば【PM の回答】を返す前に「決定」のコメントを書く。Jira を触るときは `${CLAUDE_SKILL_DIR}/../_shared/jira.md` を読み、従う。
 - Product Manager の答えを待つ間は `wait` を `回答待ち(PM): <何を>`、答えが来たら更新する。
+
+### 【片付け】を送るか
+
+【完成】を受けたら、Product Manager の判断が要るときだけ聞く。次のどれかに当たれば聞く:
+
+1. 【完成】の「決めてほしいこと」が「なし」でない（【PM への依頼】が来ている。提案・計画の【完成】はここに入る）。
+2. 【完成】の「残り」が「なし」でない（依頼の外の仕事を足すかは Product Manager が決める）。
+3. 【完成】に「残り」か「決めてほしいこと」の欄が無い。
+4. 依頼書の段が最後でない（提案まで・計画までの依頼書）。
+5. Product Manager が、この課題では終える前に見せるよう言った。
+
+どれにも当たらなければ、聞かずに【片付け】を送る。担当は Jira の課題を `完了` にする。【終わり】を受けたら、その報告に「聞かずに片付けた（Jira の課題は `完了`）」と添えて Product Manager に伝える。Product Manager が続けたいと言えば、成果の Artifact の URL を頭書きに書いた依頼書で新しい担当を起こす。
+
+- ほかに【片付け】を送るのは、Product Manager が「この課題は終わり」と言ったときと、model を替えて担当を替えるとき（2 の「起こす担当の既定」）。
+- Software Engineer 担当と DevOps Engineer 担当は、【片付け】が来るまで自分から【終わり】を送らない。`wait` が `回答待ち(TPM): 次の依頼` のまま残っている担当がいたら、最後の【完成】を上の 1〜5 に当てて決める。
 
 ## 5. 起こし直し
 
