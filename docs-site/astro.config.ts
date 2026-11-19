@@ -33,6 +33,12 @@ export default defineConfig({
       ],
       sidebar: [
         { label: "概要", slug: "index" },
+        { label: "はじめる", slug: "getting-started" },
+        { label: "skill", slug: "skill" },
+        { label: "担当のあいだの決まり", slug: "protocol" },
+        { label: "設定", slug: "configuration" },
+        { label: "運用", slug: "operations" },
+        { label: "開発", slug: "development" },
       ],
     }),
   ],

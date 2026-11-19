@@ -6,7 +6,13 @@
 // 1. 本文の [x](/page/) の先のページが在る
 // 2. 本文が code で名指した repo の path（repo の一番上の folder で始まる物）が在る
 // 3. README のドキュメントの URL が、astro.config.ts の site ＋ base と同じ
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+// 4. skill（core/・dependabot/ の *.md）が名指す原稿が在り、「」で名指した見出しがその原稿に在る
+// 5. configuration.md の「`.claude/dependabot/config.json`」の表の欄と、skill が使う config.<欄> が両方向で揃う
+//
+// 4 と 5 が要るのは、skill が Pages ではなく原稿の Markdown を読むため。原稿の見出しや表を
+// 直したときに、skill の読む先が無くなるのを止める。
+import { execFileSync } from "node:child_process";
+import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -51,17 +57,24 @@ for (const p of all) {
 
 // 2. repo の path の名指し。一番上の folder（隠しも含む）で始まる code だけを見る。
 //    <…>・*・空白・$ を含む物は形の説明なので見ない。末尾の :<行> は落とす
-const topDirs = new Set(
-  readdirSync(REPO, { withFileTypes: true })
-    .filter((e) => e.isDirectory() && !["node_modules", "dist", ".git"].includes(e.name))
-    .map((e) => e.name),
-);
+//    一番上の folder は git が追跡する物から求める（手元だけの dist/・node_modules/ などを数えない）
+//    symlink はその物を見る（bin/tpm は build 前は在らない dist/cli.js を指す）
+const inRepo = (path) => {
+  try {
+    lstatSync(join(REPO, path));
+    return true;
+  } catch {
+    return false;
+  }
+};
+const tracked = execFileSync("git", ["ls-files"], { cwd: REPO, encoding: "utf8" }).split("\n").filter(Boolean);
+const topDirs = new Set(tracked.filter((f) => f.includes("/")).map((f) => f.split("/")[0]));
 for (const p of all) {
   for (const m of prose(p.text).matchAll(/`([^`\n]+)`/g)) {
     const code = m[1].replace(/:\d+(-\d+)?$/, "");
     if (/[<>*\s$]/.test(code) || !code.includes("/")) continue;
     if (!topDirs.has(code.split("/")[0])) continue;
-    if (!existsSync(join(REPO, code))) errors.push(`${relative(REPO, p.file)}: 名指した path が無い: ${code}`);
+    if (!inRepo(code)) errors.push(`${relative(REPO, p.file)}: 名指した path が無い: ${code}`);
   }
 }
 
@@ -76,6 +89,40 @@ if (!site || !base) errors.push("astro.config.ts: site か base が読めない"
 else if (urls.length === 0) errors.push(`README.md: ドキュメントの URL（${url}）が無い`);
 for (const u of urls) {
   if (!u.startsWith(url)) errors.push(`README.md: URL が astro.config.ts の site ＋ base（${url}）と違う: ${u}`);
+}
+
+// 4. skill が名指す原稿と見出し
+const DOCS_IN_REPO = "docs-site/src/content/docs/";
+const skillFiles = tracked.filter((f) => /^(core|dependabot)\/.*\.md$/.test(f));
+const headings = (text) =>
+  new Set([...prose(text).matchAll(/^#{2,6}\s+(.+?)\s*$/gm)].map((m) => m[1].replace(/（[^）]*）$/, "")));
+const configFields = new Set();
+for (const f of skillFiles) {
+  const text = readFileSync(join(REPO, f), "utf8");
+  for (const m of text.matchAll(new RegExp(`${DOCS_IN_REPO.replaceAll("/", "\\/")}([\\w-]+\\.md)\`?(?:\\s*の「(.+?)」)?`, "g"))) {
+    const page = join(DOCS, m[1]);
+    if (!existsSync(page)) {
+      errors.push(`${f}: 名指した原稿が無い: ${DOCS_IN_REPO}${m[1]}`);
+      continue;
+    }
+    if (m[2] && !headings(readFileSync(page, "utf8")).has(m[2])) {
+      errors.push(`${f}: ${DOCS_IN_REPO}${m[1]} に見出し「${m[2]}」が無い`);
+    }
+  }
+  for (const m of text.matchAll(/config\.([a-zA-Z]+)/g)) if (m[1] !== "json") configFields.add(m[1]);
+}
+
+// 5. config.json の欄。見出しの下の最初の表の 1 列目を読む
+const CONFIG_HEADING = "`.claude/dependabot/config.json`";
+const configuration = readFileSync(join(DOCS, "configuration.md"), "utf8");
+const section = configuration.split(/^#{2,6}\s+/m).find((s) => s.startsWith(`${CONFIG_HEADING}\n`));
+if (!section) {
+  errors.push(`configuration.md: 見出し「${CONFIG_HEADING}」が無い`);
+} else {
+  const rows = section.split("\n").filter((l) => l.startsWith("|")).slice(2);
+  const documented = new Set(rows.map((l) => l.split("|")[1].trim().replace(/^`|`$/g, "")));
+  for (const k of configFields) if (!documented.has(k)) errors.push(`configuration.md: skill が使う config.${k} が表に無い`);
+  for (const k of documented) if (!configFields.has(k)) errors.push(`configuration.md: 表の欄 ${k} を使う skill が無い`);
 }
 
 if (errors.length > 0) {
