@@ -40,4 +40,4 @@ cmux set-status wait "作業中: 依頼書を読む" --icon hourglass --priority
 
 ## 3. 終わり
 
-依頼 1 つが済んだら、`jira=` の課題があれば「結果」のコメントを書き（`jira.md` の「誰が・いつ書くか」）、【完成】（依頼書が名を決めていればそれ）で、したこと・確かめた結果・残っている物を TPM 担当に送り（Product Manager に決めてほしいことがあれば、同じ時に `jira.md` の「Product Manager に確かめる」で【PM への依頼】も）、`wait` を `回答待ち(TPM): 次の依頼` にする。TPM 担当から【片付け】が来たら【終わり】を送り、`wait` を `回答待ち(TPM): workspace を閉じる` にする。**workspace は自分で閉じない。**
+依頼 1 つが済んだら、`jira=` の課題があれば「結果」のコメントを書き（`jira.md` の「誰が・いつ書くか」）、【完成】（依頼書が名を決めていればそれ）で、したこと・確かめた結果・「残り」・「決めてほしいこと」（protocol.md の【完成】。無ければ「なし」）を TPM 担当に送り（Product Manager に決めてほしいことがあれば、同じ時に `jira.md` の「Product Manager に確かめる」で【PM への依頼】も）、`wait` を `回答待ち(TPM): 次の依頼` にする。TPM 担当から【片付け】が来たら【終わり】を送り、`wait` を `回答待ち(TPM): workspace を閉じる` にする。**workspace は自分で閉じない。**

@@ -82,7 +82,7 @@ acli jira workitem view <課題> --fields comment --json                        
 
 ## 状態を進める
 
-Software Engineer 担当が【片付け】を受けたら、課題を `完了` にする。TPM 担当は、Product Manager がこの課題を終えると決めてから【片付け】を送る。担当の交代のための【片付け】では進めない。ほかの時にも進めない。
+Software Engineer 担当が【片付け】を受けたら、課題を `完了` にする。【片付け】を送るかは TPM 担当が決める（tpm/SKILL.md の「【片付け】を送るか」）。担当の交代のための【片付け】では進めない。ほかの時にも進めない。
 
 ```sh
 acli jira workitem transition --key <課題> --status "完了" --yes
