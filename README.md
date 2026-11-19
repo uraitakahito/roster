@@ -57,7 +57,7 @@ core はいつも足す。ほかの束は、起こす folder の `.claude/roles/
 
 ## 担当のあいだの決まり
 
-「知らせの送り方と見出し・サイドバーの `model` と `wait`・Product Manager への確かめ方・文書の食い違い・共有の環境・終わり方」は `core/.claude/skills/_shared/protocol.md` の 1 か所に書き、どの担当もそれを読む。TPM 担当が書く依頼書には、その課題だけのことを書く（ひな形は `core/.claude/skills/tpm/brief-template.md`）。
+「連絡の仕方と見出し・サイドバーの `model` と `wait`・Product Manager への確かめ方・文書の食い違い・共有の環境・終わり方」は `core/.claude/skills/_shared/protocol.md` の 1 か所に書き、どの担当もそれを読む。TPM 担当が書く依頼書には、その課題だけのことを書く（ひな形は `core/.claude/skills/tpm/brief-template.md`）。
 
 判定の道具は `dependabot/.claude/skills/_shared/release-age.mjs`（`node release-age.mjs <owner>/<repo> <PR> [--hours <時間>] [--now <ISO 時刻>]`）。版は PR の差分（pnpm-lock・package-lock・yarn.lock・workflow の `uses:`）から読み、依存の依存も数える。終了コードは 0 対象・10 まだ・20 判定できない・1 道具の誤り。
 

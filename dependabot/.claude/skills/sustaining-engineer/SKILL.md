@@ -17,7 +17,7 @@ description: Sustaining Engineer 役として、Dependabot の PR 1 本を受け
 
 ## 0. 設定を読む（最初に必ず）
 
-`${CLAUDE_SKILL_DIR}/../../../../core/.claude/skills/_shared/protocol.md`（役のあいだの決まり）を読み、従う。知らせの送り方・見出し・サイドバー・Product Manager への確かめ方はそこにある。
+`${CLAUDE_SKILL_DIR}/../../../../core/.claude/skills/_shared/protocol.md`（役のあいだの決まり）を読み、従う。連絡の仕方・見出し・サイドバー・Product Manager への確かめ方はそこにある。
 
 使う側の project の設定を読む。無ければ「この project には `.claude/dependabot/` の設定が無い」と画面に書いて止まる。
 
@@ -91,7 +91,7 @@ cmux agent message <tpm> --from "Sustaining Engineer <repo>#<PR>" -- "【merge �
 cmux set-status wait "回答待ち(TPM): merge" --icon hourglass --priority 80
 ```
 
-送った後に届いたかを見る（protocol.md の「知らせの送り方」）。
+送った後に届いたかを見る（protocol.md の「連絡の仕方」）。
 
 ## 6. 困ったら
 

@@ -50,7 +50,7 @@ disable-model-invocation: true
 
 ## 3. 起こす
 
-1. 依頼書を HTML の Artifact に書いて publish する。ひな形は `${CLAUDE_SKILL_DIR}/brief-template.md`。決まり文句（連絡のしかた・サイドバー・終わり方）は書かない（役の skill と protocol.md にある）。
+1. 依頼書を HTML の Artifact に書いて publish する。ひな形は `${CLAUDE_SKILL_DIR}/brief-template.md`。決まり文句（連絡の仕方・サイドバー・終わり方）は書かない（役の skill と protocol.md にある）。
 2. 起こす:
    ```sh
    cmux workspace create --name "Software Engineer <短い題>" --cwd <課題の folder> \

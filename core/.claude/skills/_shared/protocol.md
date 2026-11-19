@@ -2,7 +2,7 @@
 
 TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・DevOps Engineer 担当（`/devops-engineer`）・Sustaining Engineer 担当（`/sustaining-engineer`）が共通に従う決まり。依頼主は Product Manager（利用者）。返答と報告は日本語で書く。
 
-## 知らせの送り方
+## 連絡の仕方
 
 ```sh
 cmux agent message <相手の surface か workspace> --from "<自分の workspace の題>" -- "【見出し】本文"
