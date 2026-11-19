@@ -34,6 +34,19 @@ cd <folder> && claude --model claude-opus-5-5 --effort medium --permission-mode 
 
 **最初の入力は `--` の後に置く**（`--add-dir` は後ろの語もまとめて folder として読むため）。
 
+`-v`・`--verbose` を付けると、読んだ config と足す束、束ごとの skill を stderr に出す。stdout は上の 1 行のまま。
+
+```sh
+$ /foo/bar/skills/bin/tpm -v
+tpm: folder  /your/workspace（今いる folder）
+tpm: repo    /foo/bar/skills
+tpm: config  /your/workspace/.claude/roles/config.json（あり）
+tpm: packs   dependabot（config の packs から。core と重なりは除いた）
+tpm: core        /foo/bar/skills/core → /devops-engineer /software-engineer /tpm
+tpm: dependabot  /foo/bar/skills/dependabot → /dependabot-triage /sustaining-engineer
+cd /your/workspace && claude ...
+```
+
 ### `--add-dir` の先の束
 
 skill は束（pack）に分けてあり、`--add-dir` で足した束の skill だけが出る。
