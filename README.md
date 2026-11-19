@@ -44,7 +44,7 @@ claude --model claude-opus-5-5 --effort <段> --permission-mode bypassPermission
   --add-dir <この repo の folder> -- "<依頼>"
 ```
 
-Sustaining Engineer 役を起こす 1 行は、`/dependabot-triage` が自分の場所（`${CLAUDE_SKILL_DIR}/../../..`）から組むので、人は打たない。起こした後、題が `Sustaining <repo>#<PR>` に替わったかで、skill が読まれたことを確かめる。
+Sustaining Engineer 役を起こす 1 行は、`/dependabot-triage` が自分の場所（`${CLAUDE_SKILL_DIR}/../../..`）から組むので、人は打たない。起こした後、サイドバーに `wait=作業中: …` が出たか（`cmux sidebar-state --workspace <workspace>`）で、skill が読まれたことを確かめる。題は起こすときに `--name` で付けるので、見分けに使えない。
 
 動いているセッションに途中から足すときは `/add-dir <この repo の folder>`。信頼していない folder だとダイアログが出るので、↓ と Enter で「Yes, add it」を選ぶ。
 
@@ -54,7 +54,7 @@ Sustaining Engineer 役を起こす 1 行は、`/dependabot-triage` が自分の
 
 - 信頼は、信頼した folder が git の repo ならその repo 全体に、そうでなければその下の全部に効く。**この repo は別の git の repo なので、信頼済みの folder の下に置いても信頼は及ばない**（信頼済みの folder の下の、git の repo でない folder では出なかった）。
 - 置いた場所ごとに、**この repo の folder で 1 度 Claude Code を対話で起こし**、「Yes, I trust this folder」を選んでおく。信頼は残る。
-- 起こした Sustaining Engineer 役がこのダイアログで止まると、題が替わらない。`/dependabot-triage` は Yes を押さずに閉じ、人に信頼を頼む。
+- 起こした Sustaining Engineer 役がこのダイアログで止まると、サイドバーに `wait` が出ない。`/dependabot-triage` は Yes を押さずに閉じ、人に信頼を頼む。
 
 ## 移す手順
 
