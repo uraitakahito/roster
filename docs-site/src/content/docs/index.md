@@ -7,15 +7,7 @@ skills は、Product Manager（人）を、Claude Code の各担当が cmux の�
 
 ## skill で呼び出される担当者
 
-| 担当 | 人間か AI か |
-|---|---|
-| `Product Manager` | 人間 |
-| `Technical Program Manager` | AI |
-| `Software Engineer` | AI |
-| `DevOps Engineer` | AI |
-| `Sustaining Engineer` | AI |
-
-担当はこう起こし合います。Product Manager が TPM 担当を起こし、TPM 担当が課題ごとにほかの担当を起こします。
+Product Manager が TPM 担当を起こし、TPM 担当が課題ごとにほかの担当を起こします。
 
 ```mermaid
 flowchart LR
