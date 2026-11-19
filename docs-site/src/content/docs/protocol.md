@@ -29,8 +29,13 @@ sequenceDiagram
     TPM->>PM: 確かめる
     TPM->>SE: 【PM の回答】
   end
-  SE->>TPM: 【merge 済み】（PR ごと）
-  SE->>TPM: 【完成】（成果の Artifact）
+  loop 依頼書ごと（提案 → 計画 → 実装）
+    SE->>TPM: 【merge 済み】（PR ごと）
+    SE->>TPM: 【完成】（成果の Artifact）
+    TPM->>PM: 見せる。続けるか、終えるか
+    TPM->>SE: 続けるなら【依頼】（同じ担当に）
+  end
+  TPM->>SE: 【片付け】
   SE->>TPM: 【終わり】
   TPM->>PM: 報告する
   TPM->>TPM: 担当の workspace を閉じる
