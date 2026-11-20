@@ -106,8 +106,8 @@ describe('hook の入力と settings', () => {
     expect(hookCommand(guardSettings('/my repo/cli/bin/tpm'))).toBe('\'/my repo/cli/bin/tpm\' guard');
   });
 
-  // Claude Code は hook の命令を shell で動かす。空白・引用符・$ を含む folder に置いた tpm でも、門として動くこと。
-  test('空白・引用符・$ を含む path の tpm でも、hook の命令が門として動く', () => {
+  // Claude Code は hook の命令を shell で動かす。空白・引用符・$ を含む folder に置いた tpm でも、guard として動くこと。
+  test('空白・引用符・$ を含む path の tpm でも、hook の命令が guard として動く', () => {
     const dir = join(mkdtempSync(join(tmpdir(), 'tpm-guard-')), 'my repo', 'it\'s $HOME');
     mkdirSync(dir, { recursive: true });
     const tpmBin = join(dir, 'tpm');
@@ -126,7 +126,7 @@ describe('tpm infra と tpm guard', () => {
   const hook = (command: string): string => JSON.stringify({ tool_name: 'Bash', tool_input: { command } });
   const devops = (w: ReturnType<typeof world>) => ({ ...w.role('devops', 'file:1'), env: { TPM_KEY: 'devops', TPM_ROLE: 'devops-engineer' } });
 
-  test('承認を書くと門が開き、消すと閉じる', () => {
+  test('承認を書くと通り、消すと止まる', () => {
     const w = world({ infra });
     expect(guard(devops(w), hook('aws s3 ls')).allow).toBe(false);
     expect(infraApprove(w.tpm, 'aws-staging', { minutes: 30, note: 'deploy' })).toEqual(['承認を書いた: aws-staging（2026-11-20T12:30:00.000Z まで）']);

@@ -1,4 +1,4 @@
-// 門: 担当が打つ shell の命令を、実行の前に見て、通すか止めるかを決める（Claude Code の PreToolUse hook から呼ばれる）。
+// guard: 担当が打つ shell の命令を、実行の前に見て、通すか止めるかを決める（Claude Code の PreToolUse hook から呼ばれる）。
 // 止めるのは 2 つ。(1) project の設定（infra）に書いた環境に触る命令で、級の条件を満たさない物。
 // (2) 連携と課題管理の道具の直打ち（tpm を通さないと、記録と状態が抜ける）。
 // 字の一致で見るので、防げるのは「うっかり」まで。script に包んだ命令などはすり抜ける。確実な守りは、担当に渡す権限の方で行う。
@@ -16,7 +16,7 @@ export interface Approval {
   note?: string
 }
 
-/** 門の答え。止めるときは、代わりにどうするかを reason に書く。 */
+/** guard の答え。止めるときは、代わりにどうするかを reason に書く。 */
 export type Verdict = { allow: true } | { allow: false, reason: string };
 
 /** 直に打たせない道具の命令と、代わりに使う tpm の命令。 */
@@ -32,7 +32,7 @@ const DIRECT: [pattern: RegExp, instead: string][] = [
 /** 命令の頭にこれを書くと、道具の直打ちを通す（tpm 自身の開発と試しのため。環境の級には効かない）。 */
 export const RAW = 'TPM_RAW=1';
 
-/** 門に聞く 1 件。打った命令と、決めるのに要る設定・承認・時刻。 */
+/** guard に聞く 1 件。打った命令と、決めるのに要る設定・承認・時刻。 */
 export interface Asked {
   command: string
   /** 打った担当。TPM 担当と、tpm が起こしていない session は undefined。 */
@@ -59,7 +59,7 @@ export function judgeEnv(name: string, env: InfraEnv, role: RoleName | undefined
   const expired = approval === undefined ? '' : `（承認は ${approval.until} で切れた）`;
   return {
     allow: false,
-    reason: `環境 ${name} は、ほかの人と共有です。変えるには Product Manager の承認が要ります${expired}。何を・なぜ・何が止まるかを確認の Artifact に書き、tpm ask pm で送ってください。承認されたら TPM 担当が tpm infra approve ${name} で門を開けます。`,
+    reason: `環境 ${name} は、ほかの人と共有です。変えるには Product Manager の承認が要ります${expired}。何を・なぜ・何が止まるかを確認の Artifact に書き、tpm ask pm で送ってください。承認されたら TPM 担当が tpm infra approve ${name} で承認を書きます。`,
   };
 }
 

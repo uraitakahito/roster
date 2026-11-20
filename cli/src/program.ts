@@ -93,13 +93,13 @@ export function buildProgram(): Command {
 
   program.command('guard').description('（hook が呼ぶ）標準入力の命令を通すか止めるかを決める')
     .action(() => {
-      // 設定を読めないときも止める（門を素通りさせない）。
+      // 設定を読めないときも止める（guard を素通りさせない）。
       let verdict: Verdict;
       try {
         verdict = guard(createContext(), readFileSync(0, 'utf8'));
       }
       catch (e) {
-        verdict = { allow: false, reason: `門が命令を見られません: ${(e as Error).message}` };
+        verdict = { allow: false, reason: `guard が命令を見られません: ${(e as Error).message}` };
       }
       if (verdict.allow) return;
       process.stderr.write(`tpm guard: ${verdict.reason}\n`);

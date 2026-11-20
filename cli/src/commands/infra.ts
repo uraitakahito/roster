@@ -1,4 +1,4 @@
-// tpm infra …: インフラの環境の宣言と承認を見る・書く。tpm guard: hook から呼ばれる門。
+// tpm infra …: インフラの環境の宣言と承認を見る・書く。tpm guard: hook から呼ばれる guard。
 import type { Context } from '../context.ts';
 import { commandOf, judge, judgeEnv, readApprovals, removeApproval, writeApproval, type Verdict } from '../guard.ts';
 import { ROLE_NAMES, type RoleName } from '../protocol.ts';

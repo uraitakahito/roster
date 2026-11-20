@@ -1,6 +1,6 @@
 ---
 title: 担当のあいだの決まり
-description: 決まりは protocol.md の文と tpm の CLI に分けてある。層の分け方・見出しの流れ・状態・門
+description: 決まりは protocol.md の文と tpm の CLI に分けてある。層の分け方・見出しの流れ・状態・guard
 ---
 
 担当どうしのやりとりは、文とコードに分けてある。
@@ -20,14 +20,14 @@ TPM 担当が書く依頼書には、その課題だけのことを書く（ひ�
 | 決まり | 見出し・順番・記録・名簿 | `protocol.md` の文と、`cli/src/protocol.ts`・`cli/src/roster.ts`・`cli/src/commands/` |
 | 連携の道具 | 知らせを送る・担当を起こす・状態を出す | `cli/src/transport/`（`cmux`・試験用の `file`） |
 | 課題管理の道具 | 課題に記録を書く・読む・課題を閉じる | `cli/src/tracker/`（`jira`・`github`・`none`） |
-| 門 | 共有の環境と、道具の直打ちを止める | `cli/src/guard.ts`（Claude Code の hook から呼ばれる） |
+| guard | 共有の環境と、道具の直打ちを止める | `cli/src/guard.ts`（Claude Code の hook から呼ばれる） |
 
 ```mermaid
 flowchart TB
   R["役割（SKILL.md）"] -->|"tpm report done …"| P["決まり（tpm の命令）"]
   P --> T["連携の道具<br/>cmux"]
   P --> K["課題管理の道具<br/>Jira・GitHub の Issue・なし"]
-  R -.->|"shell の命令"| G["門（tpm guard）"]
+  R -.->|"shell の命令"| G["guard（tpm guard）"]
   G -.->|"通す／止める"| E["環境（container・サーバー）"]
 ```
 
@@ -83,7 +83,7 @@ sequenceDiagram
   TPM->>TPM: tpm close（担当の居場所を閉じる）
 ```
 
-## 門
+## guard
 
 `tpm start` の 1 行と `tpm assign` は、起こす claude に `--settings` で hook を付ける。担当が shell の命令を打つと、実行の前に `tpm guard` が見て、通すか止めるかを決める（hook の拒否は `bypassPermissions` でも効く）。
 
@@ -92,4 +92,4 @@ sequenceDiagram
 - **共有の環境に触る命令**: 設定の `infra` の `match` に当たる命令を、環境の級で見る（[設定](/configuration/)）。「TPM に相談」と「PM の承認」は DevOps Engineer 担当だけが通り、「PM の承認」は `tpm infra approve` で書いた承認の期限の中だけ通る。
 - **道具の直打ち**: `cmux agent message`・`cmux set-status`・`cmux workspace create`・`cmux workspace close`、`acli` の記録と状態、（課題管理が GitHub の Issue の project では）`gh issue comment`・`gh issue close`。`tpm` を通さないと記録と状態が抜けるため。
 
-門は字の一致で見るので、防げるのは「うっかり」まで。script に包んだ命令や別名はすり抜ける。ほかの人と共有の環境を確実に守るには、担当に渡す権限を読むだけにする。
+guard は字の一致で見るので、防げるのは「うっかり」まで。script に包んだ命令や別名はすり抜ける。ほかの人と共有の環境を確実に守るには、担当に渡す権限を読むだけにする。

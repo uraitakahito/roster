@@ -37,14 +37,14 @@ build は無い。`cli/bin/tpm` は `cli/src/cli.ts` を node で直に動かす
 | `cli/src/roster.ts`・`cli/src/state.ts` | 名簿と、状態の folder |
 | `cli/src/transport/` | 連携の口（`types.ts`）と adapter（`cmux.ts`・`file.ts`） |
 | `cli/src/tracker/` | 課題管理の口（`types.ts`）と adapter（`jira.ts`・`github.ts`・`none.ts`） |
-| `cli/src/guard.ts` | 門 |
+| `cli/src/guard.ts` | guard |
 | `cli/src/run-role.ts` | 連携の道具が担当の居場所で動かす `tpm run-role`（名簿を読んで claude を起こす） |
 
 - **見出しを足す・変える**: `cli/src/protocol.ts` の `HEADINGS` と、`skill-sets/core/.claude/skills/_shared/protocol.md` の表を合わせる（`check` が揃いを見る）。
 - **命令を足す**: `cli/src/program.ts`（か `cli/src/commands/register.ts`）に足し、`cli/src/protocol.ts` の `COMMANDS` にも書く（試験が命令の木との揃いを、`check` が skill と docs の `tpm <命令>` が在るかを見る）。
 - **道具を足す**: `transport/` か `tracker/` に口を満たす adapter を書き、`cli/src/config.ts` の選択肢と `cli/src/context.ts` に足す。上の層は変えない。
 - **試し方**: 決まりの命令は、連携を `file`（知らせ・居場所・状態をファイルに書くだけ）にした project で cmux 無しに試せる（`cli/test/helpers.ts`）。実機で担当を起こして試すときは、`TPM_STATE` を一時の folder に向けて本物の名簿を汚さない。
-- **道具を直に打つ**: `tpm` が起こした session では、門が `cmux` や `acli` の直打ちを止める。adapter の開発で直に打つときは、命令の頭に `TPM_RAW=1` を付ける。
+- **道具を直に打つ**: `tpm` が起こした session では、guard が `cmux` や `acli` の直打ちを止める。adapter の開発で直に打つときは、命令の頭に `TPM_RAW=1` を付ける。
 
 ## 判定の道具
 
