@@ -1,8 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { describe, expect, test } from 'vitest';
-import { buildCommand, shellQuote } from '../src/command.ts';
+import { buildCommand } from '../src/command.ts';
+import { shellQuote } from '../src/shell.ts';
 
-const head = (root: string): string => `PATH=${root.includes(' ') ? `'${root}/cli/bin'` : `${root}/cli/bin`}:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"${root}/cli/bin/tpm guard"}]}]}}'`;
+const head = (root: string): string => `PATH=${root.includes(' ') ? `'${root}/cli/bin'` : `${root}/cli/bin`}:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"${root.includes(' ') ? `'\\''${root}/cli/bin/tpm'\\''` : `${root}/cli/bin/tpm`} guard"}]}]}}'`;
 
 describe('buildCommand', () => {
   test('追加の skill セットが無ければ /tpm', () => {

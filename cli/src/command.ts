@@ -2,15 +2,10 @@
 import { join } from 'node:path';
 import { guardSettings } from './guard.ts';
 import { TPM_SETTINGS } from './protocol.ts';
+import { shellQuote } from './shell.ts';
 import { skillSetDir } from './skill-sets.ts';
 
 const CLAUDE_OPTIONS = ['--model', TPM_SETTINGS.model, '--effort', TPM_SETTINGS.effort, '--permission-mode', TPM_SETTINGS.permissionMode];
-
-/** shell の 1 語として打てるように引用する。安全な字だけならそのまま、ほかは '…' で包む。 */
-export function shellQuote(word: string): string {
-  if (/^[A-Za-z0-9_./:=,+@%-]+$/.test(word)) return word;
-  return `'${word.replaceAll('\'', '\'\\\'\'')}'`;
-}
 
 /**
  * dir に移って TPM 担当の claude を起こす 1 行を返す。

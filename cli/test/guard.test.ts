@@ -1,3 +1,7 @@
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, realpathSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { guard, infraApprove, infraList, infraRevoke, infraRun } from '../src/commands/infra.ts';
 import type { InfraEnv } from '../src/config.ts';
@@ -84,6 +88,10 @@ describe('道具の直打ち', () => {
   });
 });
 
+/** settings の hook の命令。 */
+const hookCommand = (settings: string): string =>
+  (JSON.parse(settings) as { hooks: { PreToolUse: { hooks: { command: string }[] }[] } }).hooks.PreToolUse[0]!.hooks[0]!.command;
+
 describe('hook の入力と settings', () => {
   test('Bash の命令だけを取り出す', () => {
     expect(commandOf(JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'ls' }, cwd: '/w' }))).toBe('ls');
@@ -92,6 +100,25 @@ describe('hook の入力と settings', () => {
 
   test('settings は Bash の前に tpm guard を呼ぶ hook', () => {
     expect(JSON.parse(guardSettings('/r/cli/bin/tpm'))).toEqual({ hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: '/r/cli/bin/tpm guard' }] }] } });
+  });
+
+  test('path に空白などがあれば、hook の命令の中で引用する', () => {
+    expect(hookCommand(guardSettings('/my repo/cli/bin/tpm'))).toBe('\'/my repo/cli/bin/tpm\' guard');
+  });
+
+  // Claude Code は hook の命令を shell で動かす。空白・引用符・$ を含む folder に置いた tpm でも、門として動くこと。
+  test('空白・引用符・$ を含む path の tpm でも、hook の命令が門として動く', () => {
+    const dir = join(mkdtempSync(join(tmpdir(), 'tpm-guard-')), 'my repo', 'it\'s $HOME');
+    mkdirSync(dir, { recursive: true });
+    const tpmBin = join(dir, 'tpm');
+    symlinkSync(realpathSync(join(import.meta.dirname, '..', 'bin', 'tpm')), tpmBin);
+    const command = hookCommand(guardSettings(tpmBin));
+    const env = { ...process.env, TPM_PROJECT: undefined, TPM_STATE: undefined, TPM_KEY: undefined, TPM_ROLE: undefined };
+    const run = (cmd: string) => spawnSync('/bin/sh', ['-c', command], { cwd: dir, env, encoding: 'utf8', input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: cmd } }) });
+    const denied = run(['cmux', 'set-status', 'x'].join(' '));
+    expect(denied.stderr).toContain('tpm wait');
+    expect(denied.status).toBe(2);
+    expect(run('ls').status).toBe(0);
   });
 });
 

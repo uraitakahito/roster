@@ -1,6 +1,6 @@
 // TPM 担当が打つ命令: 名乗る（init）・名簿を見る（roles）・課題を担当に振る（assign）・閉じる（close）。
 import { join } from 'node:path';
-import { shellQuote } from '../command.ts';
+import { shellQuote } from '../shell.ts';
 import type { Context } from '../context.ts';
 import { modelStatus, ROLES, TPM_SETTINGS, TPM_TITLE, WAIT, type RoleName, type RoleSettings } from '../protocol.ts';
 import { allRoles, assertKey, readRole, removeRole, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
