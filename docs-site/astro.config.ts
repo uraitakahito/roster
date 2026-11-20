@@ -3,6 +3,7 @@ import starlight from "@astrojs/starlight";
 import mermaid from "astro-mermaid";
 import { satteri } from "@astrojs/markdown-satteri";
 import hastRebaseLinks from "./src/plugins/hast-rebase-links";
+import hastSplitTableCode from "./src/plugins/hast-split-table-code";
 
 export default defineConfig({
   // user page の origin ＋ repo 名の base。README のドキュメントの URL はこの 2 つから組んだもの
@@ -43,7 +44,8 @@ export default defineConfig({
     }),
   ],
   markdown: {
-    // 本文の [x](/page/) に base を付ける。Starlight が書き換えるのはナビだけ
-    processor: satteri({ hastPlugins: [hastRebaseLinks] }),
+    // 本文の [x](/page/) に base を付ける。Starlight が書き換えるのはナビだけ。
+    // 表の中の code を空白ごとに分ける（src/styles/tables.css と組で、表を本文の幅に収める）
+    processor: satteri({ hastPlugins: [hastRebaseLinks, hastSplitTableCode] }),
   },
 });
