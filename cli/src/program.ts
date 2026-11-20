@@ -6,7 +6,7 @@ import { buildCommand } from './command.ts';
 import { guard, infraApprove, infraList, infraRevoke, infraRun } from './commands/infra.ts';
 import { registerMessages } from './commands/register.ts';
 import { hello, inbox } from './commands/role-side.ts';
-import { assign, close, init, roles, type AssignOptions } from './commands/tpm-side.ts';
+import { assign, close, roles, type AssignOptions } from './commands/tpm-side.ts';
 import { rolesConfigFile } from './config.ts';
 import { createContext } from './context.ts';
 import type { Verdict } from './guard.ts';
@@ -55,10 +55,6 @@ export function buildProgram(): Command {
       console.log(buildCommand(dir, root, skillSets, resolveSettings('tpm', { env: process.env })));
     });
 
-  program.command('init').description('TPM 担当が名乗る（宛先を状態に書き、名簿を出す）')
-    .option('--model <model>', '自分の model（既定は tpm start が起こす model。$TPM_MODEL があればそれ）')
-    .option('--effort <effort>', '自分の effort（既定は $CLAUDE_EFFORT、無ければ tpm start が起こす effort）')
-    .action((options: { model?: string, effort?: string }) => print(init(createContext(), options)));
   program.command('roles').description('名簿を、動いている居場所と突き合わせて出す').action(() => print(roles(createContext())));
   program.command('assign <key>').description('課題を担当に振る（動いていれば【依頼】を送る。いなければ起こし、名乗るまで待つ）')
     .requiredOption('--role <role>', ROLE_NAMES.join('・'))
@@ -76,7 +72,10 @@ export function buildProgram(): Command {
       print(assign(createContext(), key, { ...options, role: options.role as RoleName, wait: Number(options.wait) }));
     });
   program.command('close <key>').description('担当の居場所を閉じ、名簿から消す').action((key: string) => print(close(createContext(), key)));
-  program.command('hello').description('担当が名乗る（受け持ちを返す）').action(() => print(hello(createContext())));
+  program.command('hello').description('名乗る（TPM 担当は宛先を状態に書いて名簿を出す。担当は受け持ちを返す）')
+    .option('--model <model>', 'TPM 担当の model（既定は tpm start が起こす model。$TPM_MODEL があればそれ）')
+    .option('--effort <effort>', 'TPM 担当の effort（既定は $CLAUDE_EFFORT、無ければ tpm start が起こす effort）')
+    .action((options: { model?: string, effort?: string }) => print(hello(createContext(), options)));
   program.command('inbox').description('自分宛てで、まだ届いていない知らせを出す（段の区切りに見る）').action(() => print(inbox(createContext())));
   registerMessages(program, print);
 

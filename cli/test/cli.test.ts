@@ -166,8 +166,14 @@ describe('命令の一覧', () => {
   });
 
   test('決まりの誤りは tpm: で始まる 1 行を出して exit 1', () => {
-    const r = spawnSync(tpm, ['hello'], { cwd: scratch, encoding: 'utf8', env: { ...process.env, TPM_KEY: '', TPM_STATE: join(scratch, 'state') } });
+    const r = spawnSync(tpm, ['ask', 'tpm', 'x', '--waiting-for', 'y'], { cwd: scratch, encoding: 'utf8', env: { ...process.env, TPM_KEY: '', TPM_STATE: join(scratch, 'state') } });
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(/^tpm: \$TPM_KEY がありません/);
+  });
+
+  test('tpm init は無い（TPM 担当も tpm hello で名乗る）', () => {
+    const r = spawnSync(tpm, ['init'], { cwd: scratch, encoding: 'utf8' });
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain('unknown command \'init\'');
   });
 });

@@ -1,4 +1,4 @@
-// TPM 担当が打つ命令: 名乗る（init）・名簿を見る（roles）・課題を担当に振る（assign）・閉じる（close）。
+// TPM 担当が打つ命令: 名乗る（tpmHello。tpm hello から呼ばれる）・名簿を見る（roles）・課題を担当に振る（assign）・閉じる（close）。
 import { join } from 'node:path';
 import { shellQuote } from '../shell.ts';
 import type { Context } from '../context.ts';
@@ -12,10 +12,10 @@ import { brief } from './messages.ts';
 const HELLO_INTERVAL_MS = 2000;
 
 /**
- * 名乗る: 居場所の題と状態を出し、自分の宛先を状態に書く。続けて名簿を出す。
+ * TPM 担当が名乗る（$TPM_KEY の無い tpm hello）: 居場所の題と状態を出し、自分の宛先を状態に書く。続けて名簿を出す。
  * 状態の model は、旗が無ければ起こす 1 行と同じ決め方（resolveSettings）。effort は、旗が無ければ Claude Code が入れる $CLAUDE_EFFORT（実際の effort）を旗と同じに扱う。
  */
-export function init(ctx: Context, options: { model?: string, effort?: string } = {}): string[] {
+export function tpmHello(ctx: Context, options: { model?: string, effort?: string } = {}): string[] {
   const address = ctx.transport.whoami();
   ctx.transport.setTitle(TPM_TITLE);
   const settings = resolveSettings('tpm', { flags: { model: options.model, effort: options.effort ?? ctx.env.CLAUDE_EFFORT }, env: ctx.env });

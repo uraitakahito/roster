@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { answer, askDevops, askPm, askTpm, dismiss, notify, reportDependabot, reportDocFix, reportDone, reportEnd, reportMerged, show, wait } from '../src/commands/messages.ts';
 import { hello } from '../src/commands/role-side.ts';
-import { assign, close, init, roles } from '../src/commands/tpm-side.ts';
+import { assign, close, roles } from '../src/commands/tpm-side.ts';
 import { requireRole } from '../src/roster.ts';
 import { world, type World } from './helpers.ts';
 
@@ -13,7 +13,7 @@ const TPM = { model: 'claude-opus-5-5', effort: 'medium' };
 /** TPM 担当が名乗り、t-x の Software Engineer 担当を起こして名乗らせた世界。 */
 function started(config: Record<string, unknown> = {}, issue?: string): World & { se: ReturnType<World['role']> } {
   const w = world(config);
-  init(w.tpm, TPM);
+  hello(w.tpm, TPM);
   assign(w.tpm, 't-x', { role: 'software-engineer', title: '計画と実装', brief: BRIEF, wait: 0, ...(issue === undefined ? {} : { issue }) });
   const se = w.role('t-x', 'file:1');
   hello(se);
@@ -164,7 +164,7 @@ describe('ほかの知らせ', () => {
 
   test('Dependabot の見出し。PR 1 本の担当は【片付け】を待たずに終われる', () => {
     const w = world({ 'skill-sets': ['dependabot'] });
-    init(w.tpm, TPM);
+    hello(w.tpm, TPM);
     assign(w.tpm, 'app#12', { role: 'sustaining-engineer', wait: 0 });
     const su = w.role('app#12', 'file:1');
     hello(su);

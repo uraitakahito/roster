@@ -1,10 +1,19 @@
-// 担当（TPM 担当に起こされた Claude Code）が打つ命令。inbox は TPM 担当も打つ。
+// 担当（TPM 担当に起こされた Claude Code）が打つ命令。hello と inbox は TPM 担当も打つ。
 import type { Context } from '../context.ts';
 import { modelStatus, ROLES, WAIT } from '../protocol.ts';
 import { requireSelf, requireTpm, writeRole } from '../roster.ts';
+import { TpmError } from '../skill-sets.ts';
+import { tpmHello } from './tpm-side.ts';
 
-/** 名乗る: 状態を出し、名簿に自分の宛先と時刻を書く。受け持ちを返す。 */
-export function hello(ctx: Context): string[] {
+/**
+ * 名乗る。$TPM_KEY が無ければ TPM 担当の名乗り（tpmHello）。
+ * 担当なら、状態を出し、名簿に自分の宛先と時刻を書き、受け持ちを返す。担当の model と effort は tpm assign が決めたので、旗は受けない。
+ */
+export function hello(ctx: Context, options: { model?: string, effort?: string } = {}): string[] {
+  if (!ctx.env.TPM_KEY) return tpmHello(ctx, options);
+  if (options.model !== undefined || options.effort !== undefined) {
+    throw new TpmError('--model・--effort は TPM 担当が名乗るときだけ使う（担当の model と effort は tpm assign が決める）');
+  }
   const record = requireSelf(ctx);
   const tpm = requireTpm(ctx);
   record.address = ctx.transport.whoami();

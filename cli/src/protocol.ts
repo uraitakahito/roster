@@ -11,7 +11,6 @@ export const TPM_TITLE = 'Technical Program Manager';
  */
 export const COMMANDS = [
   'start',
-  'init',
   'roles',
   'assign',
   'close',
