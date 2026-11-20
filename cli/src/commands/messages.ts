@@ -108,11 +108,24 @@ export function reportDocFix(ctx: Context, options: { pr: string, note: string }
   return [...recorded, toTpm(ctx, self, 'doc-fix', `${options.pr}（merge 済み）${options.note}`)];
 }
 
+/** `tpm report done --kind` の値（`tpm page put --kind` と同じ語）と、課題に書く記録の種類。 */
+export const DONE_KINDS = { proposal: '提案', plan: '計画', result: '結果' } as const satisfies Record<string, NoteKind>;
+/** `tpm report done --kind` に書ける値。 */
+export type DoneKind = keyof typeof DONE_KINDS;
+
+/** `--kind` の値を読む。前の値（提案・計画・結果）は誤りにし、替わりの値を案内する。 */
+export function doneKind(value: string): DoneKind {
+  if (Object.hasOwn(DONE_KINDS, value)) return value as DoneKind;
+  const renamed = Object.entries(DONE_KINDS).find(([, note]) => note === value)?.[0];
+  if (renamed !== undefined) throw new TpmError(`--kind ${value} は ${renamed} に替わりました（--kind ${renamed}）`);
+  throw new TpmError(`--kind は ${Object.keys(DONE_KINDS).join('・')} のどれかにしてください`);
+}
+
 /** `tpm report done` の旗。 */
 export interface DoneOptions {
   url?: string
-  /** 課題に書く記録の種類（提案・計画・結果）。 */
-  kind: NoteKind
+  /** 成果の種類。課題の記録は DONE_KINDS の日本語の種類で書く。 */
+  kind: DoneKind
   summary: string
   /** 依頼の外で直すとよい物・やらなかった物・merge していない PR。無ければ「なし」。 */
   remaining?: string
@@ -126,11 +139,12 @@ export function reportDone(ctx: Context, options: DoneOptions): string[] {
   const self = requireSelf(ctx);
   const remaining = required(options.remaining, '--remaining（残り）');
   const decisions = required(options.decisions, '--decisions（決めてほしいこと）');
+  const kind = DONE_KINDS[options.kind];
   const recorded = record(ctx, self, {
-    kind: options.kind,
+    kind,
     role: ROLES[self.role].label,
     summary: oneLine(options.summary),
-    links: options.url === undefined ? [] : [{ label: options.kind, url: options.url }],
+    links: options.url === undefined ? [] : [{ label: kind, url: options.url }],
     points: options.points,
   });
   if (options.url !== undefined) ctx.transport.show(options.url);
