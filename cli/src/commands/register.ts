@@ -1,4 +1,4 @@
-// 知らせの命令を commander に載せる。
+// やりとりの命令を commander に載せる。
 import type { Command } from 'commander';
 import { createContext } from '../context.ts';
 import { WAIT, type WaitKind } from '../protocol.ts';
@@ -9,7 +9,7 @@ import { answer, askDevops, askPm, askTpm, dismiss, notify, reportDependabot, re
 const collect = (value: string, all: string[]): string[] => [...all, value];
 const DONE_KINDS: NoteKind[] = ['提案', '計画', '結果'];
 
-/** 知らせの命令（`wait`・`show`・`ask`・`report`・TPM 担当の `answer` など）を命令の木に足す。print は命令の出す行を書き出す。 */
+/** やりとりの命令（状態を替える `wait`・人に見せる `show`・知らせを送る `ask`・`report`・TPM 担当の `answer`・`notify`・`dismiss`）を命令の木に足す。print は命令の出す行を書き出す。 */
 export function registerMessages(program: Command, print: (lines: string[]) => void): void {
   program.command('wait <kind> <what>').description(`状態 wait を替える（kind は ${Object.keys(WAIT).join('・')}）`)
     .action((kind: string, what: string) => {

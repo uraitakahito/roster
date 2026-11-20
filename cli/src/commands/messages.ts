@@ -1,5 +1,5 @@
 // 見出しの付いた知らせを送る命令。送る・届いたかを見る・課題に記録を書く・状態を替える、を 1 度にする。
-// 担当が打つ物（ask・report・wait）と、TPM 担当が打つ物（brief・answer・notify・dismiss・show）。
+// 担当が打つ物（ask・report・wait）と、TPM 担当が打つ物（answer・notify・dismiss・show）。brief は命令でなく、assign の中で使う。
 import type { Context } from '../context.ts';
 import { HEADINGS, message, ROLES, TPM_TITLE, WAIT, WAIT_CLOSE, WAIT_NEXT_BRIEF, type HeadingId, type WaitKind } from '../protocol.ts';
 import { requireRole, requireSelf, requireTpm, writeRole, type RoleRecord } from '../roster.ts';
