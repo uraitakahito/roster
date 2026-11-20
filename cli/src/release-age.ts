@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // Dependabot の PR 1 本について、上げる依存の version が公開から決めた時間（既定 72 時間・`--hours` で替える）を過ぎたかを判定する。
 //
 //   node release-age.ts <owner>/<repo> <PR 番号> [--hours <時間>] [--now <ISO 時刻>]
