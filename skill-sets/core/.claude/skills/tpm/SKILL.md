@@ -75,7 +75,7 @@ disable-model-invocation: true
 
 - 送った命令が「まだ届いていない」と返したら、相手が手を動かしている。空いたら届くので、送り直さない。
 - Product Manager の答えを待つ間は `tpm wait pm "<何を>"`、答えが来たら `tpm wait work "<段>"` などに更新する。
-- Product Manager が共有の環境を変えることを承認したら、`tpm infra approve <環境> --minutes <分> --note "<何の承認か>"` で門を開けてから【PM の回答】を返す。済んだら `tpm infra revoke <環境>` で閉じる。
+- Product Manager が共有の環境を変えることを承認したら、`tpm infra approve <環境> --minutes <分> --note "<何の承認か>"` で承認を書いてから【PM の回答】を返す。済んだら `tpm infra revoke <環境>` で承認を消す。
 
 ### 【片付け】を送るか
 

@@ -13,7 +13,7 @@ TPM 担当を起こした folder（project）に置くと、道具の選び方�
 |---|---|---|
 | `tracker` | 課題管理の道具。`jira`（acli）・`github`（その folder の repo の Issue。gh）・`none` | `none`（課題に記録を書かない） |
 | `transport` | 担当どうしの連携の道具。`cmux`（`file` は試験用） | `cmux` |
-| `infra` | インフラの環境の宣言。環境の名前（英小文字・数字・`-`）ごとに `guard`（級）と `match`（その環境に触る命令が含む字の配列） | 宣言なし（門は環境を見ない） |
+| `infra` | インフラの環境の宣言。環境の名前（英小文字・数字・`-`）ごとに `guard`（級）と `match`（その環境に触る命令が含む字の配列） | 宣言なし（guard は環境を見ない） |
 | `skill-sets` | core のほかに加える、追加の skill セットの名前の配列 | core だけ |
 | `software-engineer`・`devops-engineer` | 起こす担当の `model`・`effort`・`permissionMode` | 既定（Software Engineer 担当は Opus 5.5・medium、DevOps Engineer 担当は Opus 5.5・low、どちらも `bypassPermissions`） |
 
@@ -60,13 +60,13 @@ TPM 担当を起こした folder（project）に置くと、道具の選び方�
 
 ### 環境の級
 
-`guard` には、その環境を変えると誰に響くかを書く。条件を満たさない命令は、門が実行の前に止める（[担当のあいだの決まり](/protocol/#門)）。
+`guard` には級（その環境を変えると誰に響くか）を書く。級の条件を満たさない命令は、guard（`tpm guard`）が実行の前に止める（[担当のあいだの決まり](/protocol/#guard)）。
 
 | `guard` | 響く先 | 変えてよい担当 | 先に要ること |
 |---|---|---|---|
 | `free` | 自分だけ | どの担当も | 無し |
 | `tpm` | 並べて動いているほかの担当 | DevOps Engineer 担当だけ | TPM 担当に相談 |
-| `pm` | ほかの人・ほかのチーム | DevOps Engineer 担当だけ | Product Manager の承認（TPM 担当が `tpm infra approve <環境> --minutes <分>` で門を開ける） |
+| `pm` | ほかの人・ほかのチーム | DevOps Engineer 担当だけ | Product Manager の承認（TPM 担当が `tpm infra approve <環境> --minutes <分>` で承認を書く） |
 
 `match` は命令の字との一致で見る。広すぎると読むだけの命令も止まり、狭すぎるとすり抜けるので、その環境を変える命令の頭（`aws `・`ssh staging` など）を書く。
 
