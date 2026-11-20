@@ -38,6 +38,7 @@ export class State {
     renameSync(tmp, file);
   }
 
+  /** ファイルを消す。無くても誤りにしない。 */
   remove(name: string): void {
     rmSync(join(this.dir, name), { force: true });
   }

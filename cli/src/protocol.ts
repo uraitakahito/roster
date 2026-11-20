@@ -40,12 +40,14 @@ export const COMMANDS = [
   'run-role',
 ] as const;
 
+/** 担当を起こすときの claude の旗（--model・--effort・--permission-mode）。 */
 export interface RoleSettings {
   model: string
   effort: string
   permissionMode: string
 }
 
+/** 担当の種類 1 つの決まり。 */
 export interface RoleDef {
   /** 題と記録に書く名前。 */
   label: string
@@ -61,11 +63,13 @@ export interface RoleDef {
 /** tpm start が起こす TPM 担当の model など。 */
 export const TPM_SETTINGS: RoleSettings = { model: 'claude-opus-5-5', effort: 'medium', permissionMode: 'bypassPermissions' };
 
+/** 担当の種類（TPM 担当は別。TPM_TITLE・TPM_SETTINGS）。 */
 export const ROLES = {
   'software-engineer': {
     label: 'Software Engineer',
     prompt: '/software-engineer',
     defaults: { model: 'claude-opus-5-5', effort: 'medium', permissionMode: 'bypassPermissions' },
+    /** 居場所の題（`Software Engineer <鍵>: <短い題>`）。 */
     title: (key, short) => `Software Engineer ${key}: ${short}`,
     endsWithoutDismiss: false,
   },
@@ -73,6 +77,7 @@ export const ROLES = {
     label: 'DevOps Engineer',
     prompt: '/devops-engineer',
     defaults: { model: 'claude-opus-5-5', effort: 'low', permissionMode: 'bypassPermissions' },
+    /** 居場所の題。DevOps Engineer 担当は 1 人だけなので、鍵を付けない。 */
     title: () => 'DevOps Engineer',
     endsWithoutDismiss: false,
   },
@@ -80,12 +85,15 @@ export const ROLES = {
     label: 'Sustaining Engineer',
     prompt: '/sustaining-engineer',
     defaults: { model: 'claude-opus-5-5', effort: 'medium', permissionMode: 'bypassPermissions' },
+    /** 居場所の題（`Sustaining Engineer <鍵>`）。 */
     title: key => `Sustaining Engineer ${key}`,
     endsWithoutDismiss: true,
   },
 } as const satisfies Record<string, RoleDef>;
 
+/** 担当の種類の名前（`--role` に書く字）。 */
 export type RoleName = keyof typeof ROLES;
+/** 担当の種類の名前の一覧。 */
 export const ROLE_NAMES = Object.keys(ROLES) as RoleName[];
 
 /** 見出し 1 つ。from は送る側、record は課題に書く記録の種類（書かなければ無し）。 */
@@ -113,6 +121,7 @@ export const HEADINGS = {
   'dismiss': { name: '片付け', from: 'tpm' },
 } as const satisfies Record<string, Heading>;
 
+/** 見出しの名前（`ask-tpm` など）。 */
 export type HeadingId = keyof typeof HEADINGS;
 
 /** 知らせの字。 */
@@ -120,14 +129,19 @@ export const message = (id: HeadingId, body: string): string => `【${HEADINGS[i
 
 /** 状態 wait の字。「今、誰が何を待っているか」を 1 つだけ出す。 */
 export const WAIT = {
+  /** 自分が動いている。 */
   work: (what: string) => `作業中: ${what}`,
+  /** Product Manager の答えを待つ。 */
   pm: (what: string) => `回答待ち(PM): ${what}`,
+  /** TPM 担当の答えを待つ。 */
   tpm: (what: string) => `回答待ち(TPM): ${what}`,
 } as const;
+/** 待ちの種類（`tpm wait` の kind）。 */
 export type WaitKind = keyof typeof WAIT;
 
-/** 【完成】の後と【終わり】の後の待ち。 */
+/** 【完成】の後の待ち。 */
 export const WAIT_NEXT_BRIEF = WAIT.tpm('次の依頼');
+/** 【終わり】の後の待ち。 */
 export const WAIT_CLOSE = WAIT.tpm('workspace を閉じる');
 
 /** model の id を状態の字にする（claude-opus-5-5 → Opus 5.5）。形が違えばそのまま。 */

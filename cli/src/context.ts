@@ -13,6 +13,7 @@ import { CmuxTransport } from './transport/cmux.ts';
 import { FileTransport } from './transport/file.ts';
 import type { Transport } from './transport/types.ts';
 
+/** 命令が動くときの周り。命令はみなこれを受け取り、試験では偽物の道具を入れて組む。 */
 export interface Context {
   /** TPM 担当を起こした folder。設定（.claude/roles/config.jsonc）と状態はここで決まる。 */
   project: string

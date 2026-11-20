@@ -32,6 +32,7 @@ function resolveFolder(folder: string): string {
   throw new TpmError(`folder がありません: ${folder}`);
 }
 
+/** `tpm` の命令の木を組む。 */
 export function buildProgram(): Command {
   const print = (lines: string[]): void => console.log(lines.join('\n'));
   const program = new Command()
