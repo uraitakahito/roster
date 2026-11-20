@@ -65,19 +65,19 @@ sequenceDiagram
   opt 迷ったとき・決めてほしいとき
     SE->>TPM: 【相談(TPM)】【PM への依頼】
     TPM->>PM: 確かめる
-    TPM->>SE: 【PM の回答】
+    TPM->>SE: 【answer】
   end
   loop 依頼書ごと（提案 → 計画 → 実装）
     SE->>TPM: 【merge 済み】（PR ごと）
     SE->>TPM: 【完成】（成果の Artifact）
     alt 残り・決めてほしいことがある、または次の段がある
       TPM->>PM: 見せる。続けるか、終えるか
-      TPM->>SE: 続けるなら【依頼】（tpm assign を同じ鍵に）
+      TPM->>SE: 続けるなら【brief】（tpm assign を同じ鍵に）
     else どれも無い
       TPM->>TPM: 聞かずに片付けると決める
     end
   end
-  TPM->>SE: 【片付け】（tpm dismiss）
+  TPM->>SE: 【dismiss】（tpm dismiss）
   SE->>TPM: 【終わり】（課題を閉じる）
   TPM->>PM: 報告する（聞かずに片付けたなら、そう添える）
   TPM->>TPM: tpm close（担当の居場所を閉じる）

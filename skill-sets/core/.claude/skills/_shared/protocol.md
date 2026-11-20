@@ -25,9 +25,9 @@ TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・De
 | 【ドキュメント修正】 | 文書やコメントの食い違いを直した PR を merge した | `tpm report doc-fix --pr <URL> --note "<一言>"` |
 | 【merge 済み】 | 自分の PR を 1 本 merge した | `tpm report merged --pr <URL> --note "<一言>"` |
 | 【完成】 | 依頼書の成果（提案・計画などの Artifact）を publish した | `tpm report done --url <URL> --kind <提案\|計画\|結果> --summary "<要点>" --remaining "<残り>" --decisions "<決めてほしいこと>"` |
-| 【終わり】 | 【片付け】を受けて片付けた（Sustaining Engineer 担当は PR を merge した後） | `tpm report end --url <URL> --pr <URL> … --removed <worktree> … --left "<残っている物>"` |
+| 【終わり】 | 【dismiss】を受けて片付けた（Sustaining Engineer 担当は PR を merge した後） | `tpm report end --url <URL> --pr <URL> … --removed <worktree> … --left "<残っている物>"` |
 
-- 【完成】の「残り」は、依頼の外で直すとよい物・やらなかった物・merge していない PR。「決めてほしいこと」は、【PM への依頼】で送った項目の題。どちらも無ければ「なし」と書く（書かないと送れない）。TPM 担当はこの 2 つで【片付け】を送るかを決める。
+- 【完成】の「残り」は、依頼の外で直すとよい物・やらなかった物・merge していない PR。「決めてほしいこと」は、【PM への依頼】で送った項目の題。どちらも無ければ「なし」と書く（書かないと送れない）。TPM 担当はこの 2 つで【dismiss】を送るかを決める。
 - 【終わり】の「残っている物」は、計画から外れた物・残した物で直した方がよい物。無ければ「なし」。
 
 Dependabot の PR だけで使う見出し（【merge の依頼】【まだ】【作り直し】）は `/sustaining-engineer` と `/dependabot-triage` に書いてある。
@@ -36,10 +36,10 @@ Dependabot の PR だけで使う見出し（【merge の依頼】【まだ】�
 
 | 見出し | 中身 | 命令（TPM 担当が打つ） |
 |---|---|---|
-| 【依頼】 | 新しい依頼書の URL。Artifact tool の `read` で読み、それに従う | `tpm assign <鍵> --role <役割> --brief <URL>` |
-| 【PM の回答】 | Product Manager の答え。待ちの表示を作業中に戻して続ける | `tpm answer <鍵> "<答え>"` |
-| 【連絡】 | 知っておくこと・受け取ったという返事。返事は要らない | `tpm notify <鍵> "<本文>"` |
-| 【片付け】 | この課題に続きは無い（Product Manager が決めたか、TPM 担当が聞かなくてよいと決めた）。worktree を片付けて【終わり】を返す。担当の交代のためなら、そう書いてある | `tpm dismiss <鍵> [--handover]` |
+| 【brief】 | 新しい依頼書の URL。Artifact tool の `read` で読み、それに従う | `tpm assign <鍵> --role <役割> --brief <URL>` |
+| 【answer】 | Product Manager の答え。待ちの表示を作業中に戻して続ける | `tpm answer <鍵> "<答え>"` |
+| 【notify】 | 知っておくこと・受け取ったという返事。返事は要らない | `tpm notify <鍵> "<本文>"` |
+| 【dismiss】 | この課題に続きは無い（Product Manager が決めたか、TPM 担当が聞かなくてよいと決めた）。worktree を片付けて【終わり】を返す。担当の交代のためなら、そう書いてある | `tpm dismiss <鍵> [--handover]` |
 
 ## 状態
 
@@ -61,11 +61,11 @@ Dependabot の PR だけで使う見出し（【merge の依頼】【まだ】�
 | `tpm report done --kind <種類>` | `提案`・`計画`・`結果`。成果の URL と、`--point` の要点（3 つまで） |
 | `tpm report doc-fix` | `文書の修正`。PR の URL |
 | `tpm ask pm` | `確認`。確認の Artifact の URL と、項目の題 |
-| `tpm answer`（TPM 担当） | `決定`。【PM の回答】を返す前に書かれる |
-| `tpm report end` | `結果`。続けて課題を済みにする（担当の交代の【片付け】のときは済みにしない） |
+| `tpm answer`（TPM 担当） | `決定`。【answer】を返す前に書かれる |
+| `tpm report end` | `結果`。続けて課題を済みにする（担当の交代の【dismiss】のときは済みにしない） |
 
 - 中身は Artifact に書き、記録には写さない。
-- GitHub の Issue を使う project では、PR の題か本文に課題の鍵を書くとき `Refs #12` と書く。`Closes #12` と書くと merge で勝手に閉じ、【片付け】で閉じる決まりとずれる。
+- GitHub の Issue を使う project では、PR の題か本文に課題の鍵を書くとき `Refs #12` と書く。`Closes #12` と書くと merge で勝手に閉じ、【dismiss】で閉じる決まりとずれる。
 
 ## Product Manager に確かめる
 
@@ -74,7 +74,7 @@ Dependabot の PR だけで使う見出し（【merge の依頼】【まだ】�
 1. 確認の Artifact を作る。項目ごとに、背景・選択肢・お勧めとその訳を書き、比べる物は表か図にする。
 2. publish する。
 3. `tpm ask pm --url <URL> --item "<項目の題>" … --waiting-for "<何を>"` を打つ。確認の Artifact が自分の所で開き、TPM 担当に【PM への依頼】が行き、状態が `回答待ち(PM): <何を>` になる。
-4. 答えは【PM の回答】で来る。
+4. 答えは【answer】で来る。
 
 ## 文書の食い違い
 
@@ -96,6 +96,6 @@ TPM 担当は自分で直さず、課題として Software Engineer 担当に回
 
 ## 終わり方
 
-- Software Engineer 担当と DevOps Engineer 担当は、依頼書 1 つが済むごとに【完成】を送り、次の【依頼】を待つ。同じ課題の続きは同じ担当が受ける。【片付け】が来るまで自分から終えない（`tpm report end` は【片付け】の前には送れない）。
+- Software Engineer 担当と DevOps Engineer 担当は、依頼書 1 つが済むごとに【完成】を送り、次の【brief】を待つ。同じ課題の続きは同じ担当が受ける。【dismiss】が来るまで自分から終えない（`tpm report end` は【dismiss】の前には送れない）。
 - 自分の居場所（workspace）は自分で閉じない。【終わり】を送った後、TPM 担当が報告を受けてから閉じる。
 - 自分で作った worktree と branch は、merge の後に消す（`git worktree list` に本体だけが残ること）。

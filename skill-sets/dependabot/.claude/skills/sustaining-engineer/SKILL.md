@@ -88,8 +88,8 @@ TPM 担当に【merge の依頼】が行き、状態が `回答待ち(TPM): merg
 
 ## 6. 終わり
 
-TPM 担当から merge 済みの知らせ（【連絡】）を受けたら:
+TPM 担当から merge 済みの知らせ（【notify】）を受けたら:
 
 1. 3 で作った worktree があれば消す。
-2. `tpm report end --pr <PR の URL> --removed <消した worktree> … --left "<merge の commit／残した物>"` を打つ（PR 1 本の担当は、【片付け】を待たずに【終わり】を送ってよい）。
+2. `tpm report end --pr <PR の URL> --removed <消した worktree> … --left "<merge の commit／残した物>"` を打つ（PR 1 本の担当は、【dismiss】を待たずに【終わり】を送ってよい）。
 3. **居場所は自分で閉じない。** TPM 担当が報告を受け取った後に閉じる。

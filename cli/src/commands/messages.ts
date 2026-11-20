@@ -121,7 +121,7 @@ export interface DoneOptions {
   points: string[]
 }
 
-/** 依頼書 1 つの成果を出した。TPM 担当は「残り」と「決めてほしいこと」で【片付け】を送るかを決めるので、どちらも必ず書く。 */
+/** 依頼書 1 つの成果を出した。TPM 担当は「残り」と「決めてほしいこと」で【dismiss】を送るかを決めるので、どちらも必ず書く。 */
 export function reportDone(ctx: Context, options: DoneOptions): string[] {
   const self = requireSelf(ctx);
   const remaining = required(options.remaining, '--remaining（残り）');
@@ -137,7 +137,7 @@ export function reportDone(ctx: Context, options: DoneOptions): string[] {
   const body = `${options.url === undefined ? '' : `${options.url} `}要点: ${options.summary}／残り: ${remaining}／決めてほしいこと: ${decisions}`;
   const sent = toTpm(ctx, self, 'done', body);
   ctx.transport.setStatus('wait', WAIT_NEXT_BRIEF);
-  return [...recorded, sent, `状態: ${WAIT_NEXT_BRIEF}（次の【依頼】か【片付け】を待つ。自分から【終わり】を送らない）`];
+  return [...recorded, sent, `状態: ${WAIT_NEXT_BRIEF}（次の【brief】か【dismiss】を待つ。自分から【終わり】を送らない）`];
 }
 
 /** `tpm report end` の旗。 */
@@ -149,11 +149,11 @@ export interface EndOptions {
   left?: string
 }
 
-/** 【片付け】を受けて片付けた。課題に結果を書き、課題を閉じる（担当の交代なら閉じない）。 */
+/** 【dismiss】を受けて片付けた。課題に結果を書き、課題を閉じる（担当の交代なら閉じない）。 */
 export function reportEnd(ctx: Context, options: EndOptions): string[] {
   const self = requireSelf(ctx);
   if (self.dismissed === undefined && !ROLES[self.role].endsWithoutDismiss) {
-    throw new TpmError('【片付け】がまだ来ていません。【完成】の後は次の【依頼】か【片付け】を待ち、自分から【終わり】を送らない');
+    throw new TpmError('【dismiss】がまだ来ていません。【完成】の後は次の【brief】か【dismiss】を待ち、自分から【終わり】を送らない');
   }
   const left = required(options.left, '--left（残っている物）');
   const links: NoteLink[] = [
@@ -210,7 +210,7 @@ export function answer(ctx: Context, key: string, options: { text: string, reply
   return [...recorded, toRole(ctx, role, 'answer', options.text, options.replyTo)];
 }
 
-/** 担当に、返事の要らない知らせを送る（【連絡】）。 */
+/** 担当に、返事の要らない知らせを送る（【notify】）。 */
 export function notify(ctx: Context, key: string, options: { text: string, replyTo?: string }): string[] {
   return [toRole(ctx, requireRole(ctx, key), 'notify', options.text, options.replyTo)];
 }

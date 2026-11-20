@@ -34,7 +34,7 @@ export function roles(ctx: Context): string[] {
     const alive = r.address !== undefined && seats.some(s => s.address === r.address);
     const wait = alive && r.address !== undefined ? ctx.transport.status(r.address)?.wait : undefined;
     const where = alive ? `${r.address}（${wait ?? '状態なし'}）` : '消えた（居場所が無い。tpm assign で起こし直すか、tpm close で名簿から消す）';
-    return `- ${r.key}  ${ROLES[r.role].label}  ${where}${r.dismissed ? `  片付け済み（${r.dismissed === 'handover' ? '交代' : '終わり'}）` : ''}${r.brief ? `  依頼書: ${r.brief}` : ''}`;
+    return `- ${r.key}  ${ROLES[r.role].label}  ${where}${r.dismissed ? `  dismiss 済み（${r.dismissed === 'handover' ? '交代' : '終わり'}）` : ''}${r.brief ? `  依頼書: ${r.brief}` : ''}`;
   })];
 }
 
@@ -49,14 +49,14 @@ export interface AssignOptions {
   model?: string
   effort?: string
   permissionMode?: string
-  /** 【依頼】に添える一言。 */
+  /** 【brief】に添える一言。 */
   note?: string
   /** 起こした担当の tpm hello を待つ秒。0 なら待たない。 */
   wait: number
 }
 
 /**
- * 課題を担当に振る。同じ鍵の担当が動いていれば、その担当に【依頼】で新しい依頼書を送る（背景を知っているため）。
+ * 課題を担当に振る。同じ鍵の担当が動いていれば、その担当に【brief】で新しい依頼書を送る（背景を知っているため）。
  * いなければ（居場所が消えていても）起こし、名乗るまで待つ。
  */
 export function assign(ctx: Context, key: string, options: AssignOptions): string[] {

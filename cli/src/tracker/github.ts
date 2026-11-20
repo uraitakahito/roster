@@ -36,7 +36,7 @@ export class GithubTracker implements Tracker {
   }
 
   close(key: string): void {
-    // PR の本文に Closes #12 と書くと merge で勝手に閉じる。閉じるのは【片付け】の後のここだけにする。
+    // PR の本文に Closes #12 と書くと merge で勝手に閉じる。閉じるのは【dismiss】の後のここだけにする。
     this.run(['close', this.number(key), '--reason', 'completed']);
   }
 

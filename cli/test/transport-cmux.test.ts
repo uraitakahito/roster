@@ -62,9 +62,9 @@ describe('CmuxTransport', () => {
   test('pending は自分宛ての queued の知らせを、既読にせずに読む', () => {
     const { transport, calls } = fake([
       ['--json identify', json({ caller: { workspace_ref: 'workspace:7' } })],
-      ['--json agent inbox', json({ messages: [{ id: ID, sender_name: 'Technical Program Manager', body: '【依頼】u', state: 'queued' }] })],
+      ['--json agent inbox', json({ messages: [{ id: ID, sender_name: 'Technical Program Manager', body: '【brief】u', state: 'queued' }] })],
     ]);
-    expect(transport.pending()).toEqual([{ id: ID, from: 'Technical Program Manager', text: '【依頼】u' }]);
+    expect(transport.pending()).toEqual([{ id: ID, from: 'Technical Program Manager', text: '【brief】u' }]);
     expect(calls[1]?.args).toEqual(['--json', 'agent', 'inbox', '--surface', 'workspace:7', '--state', 'queued']);
   });
 

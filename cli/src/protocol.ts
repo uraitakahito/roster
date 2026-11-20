@@ -55,7 +55,7 @@ export interface RoleDef {
   defaults: RoleSettings
   /** 居場所の題。TPM 担当は同じ鍵の担当をこの題でも見分けられる。 */
   title: (key: string, short: string) => string
-  /** 【片付け】を待たずに【終わり】を送ってよいか（PR 1 本を受け持つ担当は、merge の知らせで終える）。 */
+  /** 【dismiss】を待たずに【終わり】を送ってよいか（PR 1 本を受け持つ担当は、merge の知らせで終える）。 */
   endsWithoutDismiss: boolean
 }
 
@@ -114,10 +114,10 @@ export const HEADINGS = {
   'merge-request': { name: 'merge の依頼', from: 'role' },
   'not-yet': { name: 'まだ', from: 'role' },
   'recreated': { name: '作り直し', from: 'role' },
-  'brief': { name: '依頼', from: 'tpm' },
-  'answer': { name: 'PM の回答', from: 'tpm', record: '決定' },
-  'notify': { name: '連絡', from: 'tpm' },
-  'dismiss': { name: '片付け', from: 'tpm' },
+  'brief': { name: 'brief', from: 'tpm' },
+  'answer': { name: 'answer', from: 'tpm', record: '決定' },
+  'notify': { name: 'notify', from: 'tpm' },
+  'dismiss': { name: 'dismiss', from: 'tpm' },
 } as const satisfies Record<string, Heading>;
 
 /** 見出しの名前（`ask-tpm` など）。 */

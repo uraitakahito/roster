@@ -55,7 +55,7 @@ export function buildProgram(): Command {
     });
 
   program.command('roles').description('名簿を、動いている居場所と突き合わせて出す').action(() => print(roles(createContext())));
-  program.command('assign <key>').description('課題を担当に振る（動いていれば【依頼】を送る。いなければ起こし、名乗るまで待つ）')
+  program.command('assign <key>').description('課題を担当に振る（動いていれば【brief】を送る。いなければ起こし、名乗るまで待つ）')
     .requiredOption('--role <role>', ROLE_NAMES.join('・'))
     .option('--title <短い題>', '居場所の題に付ける短い題')
     .option('--brief <URL>', '依頼書の URL')
@@ -64,7 +64,7 @@ export function buildProgram(): Command {
     .option('--model <model>', '担当の model（既定は config.jsonc の担当の欄・$TPM_MODEL・担当の既定の順）')
     .option('--effort <effort>', '担当の effort（既定は config.jsonc の担当の欄・$TPM_EFFORT・担当の既定の順）')
     .option('--permission-mode <mode>', '担当の permission mode（既定は config.jsonc の担当の欄・$TPM_PERMISSION_MODE・担当の既定の順）')
-    .option('--note <一言>', '【依頼】に添える一言（担当が動いているとき）')
+    .option('--note <一言>', '【brief】に添える一言（担当が動いているとき）')
     .option('--wait <秒>', '起こした担当の tpm hello を待つ秒（0 なら待たない）', '90')
     .action((key: string, options: Omit<AssignOptions, 'wait' | 'role'> & { wait: string, role: string }) => {
       if (!(ROLE_NAMES as string[]).includes(options.role)) throw new TpmError(`--role は ${ROLE_NAMES.join('・')} のどれかにしてください`);
