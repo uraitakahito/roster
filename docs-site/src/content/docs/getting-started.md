@@ -46,13 +46,18 @@ cd <folder> && PATH=<repo>/cli/bin:"$PATH" claude --model claude-opus-5-5 --effo
 ```sh
 # いつも替える: shell の profile（~/.zshrc など）で export する。TPM 担当にも、TPM 担当が起こす担当にも効く
 export TPM_MODEL=claude-fable-5-2
-export TPM_EFFORT=high
+export TPM_EFFORT=medium
 
-# 1 回だけ替える: tpm start の前に付ける。出る 1 行（TPM 担当）にだけ効き、TPM 担当が起こす担当には効かない
+# 1 回だけ替える: tpm start の前に付ける。出る 1 行を打った TPM 担当と、その TPM 担当が起こす担当に効く
 TPM_EFFORT=high /foo/bar/skills/cli/bin/tpm start
 ```
 
-1 回だけ替えたときは、TPM 担当の状態の `model` が既定のままに見える（TPM 担当の Claude Code に `TPM_MODEL` が渡らないため）。いつも使う値は profile に書く。
+`tpm start` は、書いてある `TPM_MODEL`・`TPM_EFFORT`・`TPM_PERMISSION_MODE` を 1 行の頭（`PATH=…` の隣）にも写す。1 回だけ付けた値も TPM 担当の Claude Code の環境に入るので、TPM 担当の状態の `model` と、`tpm assign` で起こす担当に、profile に書いたときと同じに効く。
+
+```sh
+# TPM_EFFORT=high tpm start が出す 1 行（skill-sets が無いとき）
+cd <folder> && PATH=<repo>/cli/bin:"$PATH" TPM_EFFORT=high claude --model claude-opus-5-5 --effort high --permission-mode bypassPermissions --settings '…' --add-dir <repo>/skill-sets/core -- /tpm
+```
 
 欄ごとに、命令の旗（`tpm assign --model` など）> `.claude/roles/config.jsonc` の担当の欄 > 環境変数 > コードの既定 の順で、先に値がある物が使われる。project の config に `"devops-engineer": { "effort": "low" }` と書いてあれば、`TPM_EFFORT=high` でもその project の DevOps Engineer 担当は low のまま。表は[設定](/configuration/#model-などの既定の環境変数任意)。
 

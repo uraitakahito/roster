@@ -1,29 +1,34 @@
 import { execFileSync } from 'node:child_process';
 import { describe, expect, test } from 'vitest';
 import { buildCommand } from '../src/command.ts';
-import { TPM_SETTINGS } from '../src/protocol.ts';
 import { shellQuote } from '../src/shell.ts';
 
 const head = (root: string): string => `PATH=${root.includes(' ') ? `'${root}/cli/bin'` : `${root}/cli/bin`}:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"${root.includes(' ') ? `'\\''${root}/cli/bin/tpm'\\''` : `${root}/cli/bin/tpm`} guard"}]}]}}'`;
 
 describe('buildCommand', () => {
   test('追加の skill セットが無ければ /tpm', () => {
-    expect(buildCommand('/w', '/r', [], TPM_SETTINGS)).toBe(`cd /w && ${head('/r')} --add-dir /r/skill-sets/core -- /tpm`);
+    expect(buildCommand('/w', '/r', [], {})).toBe(`cd /w && ${head('/r')} --add-dir /r/skill-sets/core -- /tpm`);
   });
 
   test('追加の skill セットを --add-dir に足しても、最初の入力は /tpm のまま', () => {
-    expect(buildCommand('/w', '/r', ['dependabot', 'x'], TPM_SETTINGS)).toBe(
+    expect(buildCommand('/w', '/r', ['dependabot', 'x'], {})).toBe(
       `cd /w && ${head('/r')} --add-dir /r/skill-sets/core /r/skill-sets/dependabot /r/skill-sets/x -- /tpm`,
     );
   });
 
-  test('model・effort・permissionMode は渡した settings の値', () => {
-    expect(buildCommand('/w', '/r', [], { model: 'claude-fable-5-2', effort: 'high', permissionMode: 'acceptEdits' }))
-      .toMatch(/ claude --model claude-fable-5-2 --effort high --permission-mode acceptEdits --settings /);
+  test('TPM_MODEL などがあれば、旗にし、1 行の頭（PATH の隣）にも引用して写す', () => {
+    const env = { TPM_MODEL: 'claude-fable-5-2', TPM_EFFORT: 'high', TPM_PERMISSION_MODE: 'accept edits' };
+    expect(buildCommand('/w', '/r', [], env)).toMatch(
+      /^cd \/w && PATH=\/r\/cli\/bin:"\$PATH" TPM_MODEL=claude-fable-5-2 TPM_EFFORT=high TPM_PERMISSION_MODE='accept edits' claude --model claude-fable-5-2 --effort high --permission-mode 'accept edits' --settings /,
+    );
+  });
+
+  test('無い物・空の物は写さない', () => {
+    expect(buildCommand('/w', '/r', [], { TPM_MODEL: '', TPM_EFFORT: 'high' })).toMatch(/^cd \/w && PATH=\/r\/cli\/bin:"\$PATH" TPM_EFFORT=high claude --model claude-opus-5-5 --effort high /);
   });
 
   test('空白を含む道も引用する', () => {
-    expect(buildCommand('/my work', '/my repo', [], TPM_SETTINGS)).toBe(
+    expect(buildCommand('/my work', '/my repo', [], {})).toBe(
       `cd '/my work' && ${head('/my repo')} --add-dir '/my repo/skill-sets/core' -- /tpm`,
     );
   });

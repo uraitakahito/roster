@@ -17,7 +17,7 @@ disable-model-invocation: true
    tpm hello
    ```
    - **これが最初の手。** 居場所の題と状態（`model`・`wait`）を出し、自分の宛先を覚えさせ、project の道具（課題管理・連携）と名簿を返す。担当は知らせを送るたびにこの宛先を読むので、起こし直しても担当に知らせ直さなくてよい。
-   - `tpm start` の 1 行と違う model で起こされていたら（Product Manager が 1 行を書き替えた・`TPM_MODEL=… tpm start` と 1 回だけ付けた、など）、`tpm hello --model <model の id>` で打ち直す。
+   - `tpm start` の 1 行と違う model で起こされていたら（Product Manager が 1 行の `--model` を書き替えた、など）、`tpm hello --model <model の id>` で打ち直す。
 2. 名簿を読む。動いている担当がいれば、課題の鍵と担当の対応を覚える（鍵は下の 2）。「消えた」と出た担当は、居場所がもう無い。Product Manager に伝え、続けるなら `tpm assign` で起こし直し、終えるなら `tpm close <鍵>` で名簿から消す。
 3. `tpm wait pm 指示` を打ち、Product Manager の指示を待つ。
 

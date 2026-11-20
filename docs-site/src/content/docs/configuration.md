@@ -92,11 +92,11 @@ shell の profile などで書くと、すべての project・すべての担当
 ```sh
 # ~/.zshrc など
 export TPM_MODEL=claude-fable-5-2
-export TPM_EFFORT=high
+export TPM_EFFORT=medium
 ```
 
 - `tpm start` は環境変数を読んで 1 行の `--model`・`--effort`・`--permission-mode` に入れる。TPM 担当が名乗る `tpm hello` も同じ値を状態の `model` に出す（effort は、Claude Code が入れる `$CLAUDE_EFFORT` があればそれ）。
-- `tpm assign` は TPM 担当の居場所で動くので、TPM 担当の Claude Code が受け継いだ環境変数を読む。profile に書いて export すれば、TPM 担当にも担当にも効く。`TPM_MODEL=… tpm start` のように 1 行を出すときだけ書いた値は、その 1 行（TPM 担当）にしか効かない。
+- `tpm start` は、書いてある環境変数を 1 行の頭（`PATH=…` の隣）にも写す。`tpm assign` は TPM 担当の居場所で動き、TPM 担当の Claude Code の環境変数を読むので、profile で export した値も、`TPM_MODEL=… tpm start` のように 1 行を出すときだけ付けた値も、TPM 担当と担当の両方に効く。
 
 ## Dependabot の設定
 
