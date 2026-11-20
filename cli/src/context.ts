@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { readRolesConfig, rolesConfigFile, type RolesConfig } from './config.ts';
 import { exec as realExec, type Exec } from './exec.ts';
 import { readSkillSets } from './skill-sets.ts';
-import { State, stateDir } from './state.ts';
+import { migrateLegacyJson, State, stateDir } from './state.ts';
 import { GithubTracker } from './tracker/github.ts';
 import { JiraTracker } from './tracker/jira.ts';
 import { NoneTracker } from './tracker/none.ts';
@@ -47,6 +47,7 @@ export function createContext(env: NodeJS.ProcessEnv = process.env, cwd: string 
   const configFile = rolesConfigFile(project);
   const config = readRolesConfig(configFile);
   const state = new State(stateDir(project, env));
+  migrateLegacyJson(state.dir);
   const transport = config.transport === 'file' ? new FileTransport(state, env.TPM_ADDRESS || 'file:tpm') : new CmuxTransport(exec);
   const tracker = config.tracker === 'jira' ? new JiraTracker(exec) : config.tracker === 'github' ? new GithubTracker(exec, project) : new NoneTracker();
   return { project, config, state, transport, tracker, env, exec, root, skillSets: readSkillSets(configFile, root), sleep: sleepSync, now: () => new Date() };

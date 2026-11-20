@@ -21,7 +21,7 @@ export function tpmHello(ctx: Context, options: { model?: string, effort?: strin
   const settings = resolveSettings('tpm', { flags: { model: options.model, effort: options.effort ?? ctx.env.CLAUDE_EFFORT }, env: ctx.env });
   ctx.transport.setStatus('model', modelStatus(settings.model, settings.effort));
   ctx.transport.setStatus('wait', WAIT.work('起動'));
-  ctx.state.write('tpm.json', { address } satisfies TpmRecord);
+  ctx.state.write('tpm.jsonc', { address } satisfies TpmRecord);
   return [`TPM 担当の宛先: ${address}`, `課題管理: ${ctx.config.tracker}・連携: ${ctx.config.transport}`, ...roles(ctx)];
 }
 

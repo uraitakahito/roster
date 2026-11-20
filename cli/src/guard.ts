@@ -10,7 +10,7 @@ import type { State } from './state.ts';
 /** 環境を変えてよい担当。 */
 const INFRA_ROLE: RoleName = 'devops-engineer';
 
-/** 承認 1 件（`approvals/<環境>.json`）。until を過ぎたら効かない。 */
+/** 承認 1 件（`approvals/<環境>.jsonc`）。until を過ぎたら効かない。 */
 export interface Approval {
   until: string
   note?: string
@@ -83,7 +83,7 @@ export function judge(asked: Asked): Verdict {
   return { allow: true };
 }
 
-const approvalFile = (name: string): string => `approvals/${name}.json`;
+const approvalFile = (name: string): string => `approvals/${name}.jsonc`;
 
 /** 設定にある環境ごとの承認を読む。承認が無い環境は undefined。 */
 export function readApprovals(state: State, infra: Record<string, InfraEnv>): Record<string, Approval | undefined> {
