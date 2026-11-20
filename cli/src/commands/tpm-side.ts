@@ -1,10 +1,11 @@
-// TPM 担当が打つ命令: 名乗る（init）・名簿を見る（roles）・担当を起こす（assign）・閉じる（close）。
+// TPM 担当が打つ命令: 名乗る（init）・名簿を見る（roles）・課題を担当に振る（assign）・閉じる（close）。
 import { join } from 'node:path';
 import { shellQuote } from '../command.ts';
 import type { Context } from '../context.ts';
 import { modelStatus, ROLES, TPM_TITLE, WAIT, type RoleName, type RoleSettings } from '../protocol.ts';
 import { allRoles, assertKey, readRole, removeRole, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
 import { skillSetDir, TpmError } from '../skill-sets.ts';
+import { brief } from './messages.ts';
 
 /** 起きたかを見る間（ミリ秒）。 */
 const HELLO_INTERVAL_MS = 2000;
@@ -42,18 +43,22 @@ export interface AssignOptions {
   model?: string
   effort?: string
   permissionMode?: string
+  /** 【依頼】に添える一言。 */
+  note?: string
   /** 起きた合図を待つ秒。0 なら待たない。 */
   wait: number
 }
 
 /**
- * 課題を担当に振る。名簿に担当がいなければ（居場所が消えていても）起こし、名乗るまで待つ。
+ * 課題を担当に振る。同じ鍵の担当が動いていれば、その担当に【依頼】で新しい依頼書を送る（背景を知っているため）。
+ * いなければ（居場所が消えていても）起こし、名乗るまで待つ。
  */
 export function assign(ctx: Context, key: string, options: AssignOptions): string[] {
   assertKey(key);
   const existing = readRole(ctx, key);
   if (existing?.address !== undefined && ctx.transport.seats().some(s => s.address === existing.address)) {
-    throw new TpmError(`${key} の担当はもう動いています（${existing.address}）`);
+    if (options.brief === undefined) throw new TpmError(`${key} の担当はもう動いています（${existing.address}）。新しい依頼書を --brief で渡してください`);
+    return brief(ctx, existing, options.brief, options.note);
   }
   if (options.issue !== undefined && !ctx.tracker.owns(options.issue)) {
     throw new TpmError(`${options.issue} は、この project の課題管理（${ctx.config.tracker}）の鍵ではありません`);
