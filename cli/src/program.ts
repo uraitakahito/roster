@@ -67,13 +67,13 @@ export function buildProgram(): Command {
     .option('--cwd <folder>', '担当を起こす folder（既定は project）')
     .option('--model <model>').option('--effort <effort>').option('--permission-mode <mode>')
     .option('--note <一言>', '【依頼】に添える一言（担当が動いているとき）')
-    .option('--wait <秒>', '起きた合図を待つ秒（0 なら待たない）', '90')
+    .option('--wait <秒>', '名乗りを待つ秒（0 なら待たない）', '90')
     .action((key: string, options: Omit<AssignOptions, 'wait' | 'role'> & { wait: string, role: string }) => {
       if (!(ROLE_NAMES as string[]).includes(options.role)) throw new TpmError(`--role は ${ROLE_NAMES.join('・')} のどれかにしてください`);
       print(assign(createContext(), key, { ...options, role: options.role as RoleName, wait: Number(options.wait) }));
     });
   program.command('close <key>').description('担当の居場所を閉じ、名簿から消す').action((key: string) => print(close(createContext(), key)));
-  program.command('hello').description('担当が名乗る（起きた合図。受け持ちを返す）').action(() => print(hello(createContext())));
+  program.command('hello').description('担当が名乗る（受け持ちを返す）').action(() => print(hello(createContext())));
   program.command('inbox').description('自分宛てで、まだ届いていない知らせを出す（段の区切りに見る）').action(() => print(inbox(createContext())));
   registerMessages(program, print);
 

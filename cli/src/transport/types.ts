@@ -49,7 +49,7 @@ export interface Transport {
   setTitle(title: string): void
   /** 自分の状態を出す。 */
   setStatus(key: StatusKey, text: string): void
-  /** 居場所の画面の字（起きない訳を読む）。 */
+  /** 居場所の画面の字（名乗らない訳を読む）。 */
   screen(address: string): string
   /** URL を自分の居場所で開いて人に見せる。 */
   show(url: string): void

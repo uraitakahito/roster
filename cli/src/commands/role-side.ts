@@ -3,7 +3,7 @@ import type { Context } from '../context.ts';
 import { modelStatus, ROLES, WAIT } from '../protocol.ts';
 import { requireSelf, requireTpm, writeRole } from '../roster.ts';
 
-/** 名乗る: 状態を出し、名簿に自分の宛先と時刻を書く（起きた合図）。受け持ちを返す。 */
+/** 名乗る: 状態を出し、名簿に自分の宛先と時刻を書く。受け持ちを返す。 */
 export function hello(ctx: Context): string[] {
   const record = requireSelf(ctx);
   const tpm = requireTpm(ctx);

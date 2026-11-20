@@ -13,7 +13,7 @@ description: Sustaining Engineer 担当として、Dependabot の PR 1 本を受
 tpm hello
 ```
 
-- **これが最初の手。** 状態を出し、TPM 担当に起きたことを知らせ、受け持ちを返す。「課題の鍵」が受け持つ PR（`<repo>#<PR 番号>`）。誤りで止まったら（`tpm assign` で起こされていない）、何もせずにそのことを画面に書いて止まる。
+- **これが最初の手。** 状態を出し、TPM 担当に名乗りを届け、受け持ちを返す。「課題の鍵」が受け持つ PR（`<repo>#<PR 番号>`）。誤りで止まったら（`tpm assign` で起こされていない）、何もせずにそのことを画面に書いて止まる。
 - 居場所の題は TPM 担当が `Sustaining Engineer <repo>#<PR>` の形で付けてある。
 
 以下、`<repo>#<PR>` を「この PR」と書きます。

@@ -37,7 +37,7 @@ describe('assign', () => {
     });
     expect(w.wire.command('file:1')).toBe(`${w.tpm.root}/cli/bin/tpm run-role t-x --project ${w.project} --state ${w.tpm.state.dir}`);
     expect(w.wire.seats()).toEqual([{ address: 'file:1', title: 'Software Engineer t-x: 計画と実装' }]);
-    expect(out).toEqual(['起こした: Software Engineer t-x: 計画と実装（file:1・Opus 5.5 · medium）', '起きた合図（tpm hello）は待っていない']);
+    expect(out).toEqual(['起こした: Software Engineer t-x: 計画と実装（file:1・Opus 5.5 · medium）', '名乗り（tpm hello）は待っていない']);
   });
 
   test('model などは 旗 > config.jsonc > 役割の既定 の順で決まる', () => {
@@ -63,7 +63,7 @@ describe('assign', () => {
         if (n === 2) hello(w.role('t-x', 'file:1'));
       },
     };
-    expect(assign(tpm, 't-x', { ...SE, wait: 90 })[1]).toBe('起きた（担当が名乗った）');
+    expect(assign(tpm, 't-x', { ...SE, wait: 90 })[1]).toBe('名乗った（tpm hello が来た）');
     expect(n).toBe(2);
   });
 
