@@ -110,6 +110,12 @@ describe('CmuxTransport', () => {
     ]);
   });
 
+  test('setTitle は自分の workspace の題を替える', () => {
+    const { transport, calls } = fake([['--json identify', json({ caller: { workspace_ref: 'workspace:7' } })]]);
+    transport.setTitle('Technical Program Manager');
+    expect(calls[1]?.args).toEqual(['workspace', 'rename', 'workspace:7', '--title', 'Technical Program Manager']);
+  });
+
   test('show は自分の居場所で開き、close は --force を付ける', () => {
     const { transport, calls } = fake([['--json identify', json({ caller: { workspace_ref: 'workspace:7' } })]]);
     transport.show('https://example.com/a');

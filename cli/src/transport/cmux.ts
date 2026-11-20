@@ -84,6 +84,10 @@ export class CmuxTransport implements Transport {
     return status;
   }
 
+  setTitle(title: string): void {
+    this.run(['workspace', 'rename', this.whoami(), '--title', title]);
+  }
+
   setStatus(key: StatusKey, text: string): void {
     this.run(['set-status', key, text, ...STATUS_STYLE[key]]);
   }

@@ -34,6 +34,8 @@ export interface Transport {
   seats(): Seat[]
   /** 居場所が出している状態（鍵 → 字）。居場所が無ければ undefined。 */
   status(address: string): Record<string, string> | undefined
+  /** 自分の居場所の題を替える。 */
+  setTitle(title: string): void
   /** 自分の状態を出す。 */
   setStatus(key: StatusKey, text: string): void
   /** 居場所の画面の字（起きない訳を読む）。 */

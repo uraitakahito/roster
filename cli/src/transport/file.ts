@@ -69,6 +69,13 @@ export class FileTransport implements Transport {
     return this.state.read<Record<string, string>>(`${DIR}/status/${fileName(address)}.json`);
   }
 
+  setTitle(title: string): void {
+    const file = `${DIR}/seats/${fileName(this.self)}.json`;
+    const seat = this.state.read<FileSeat>(file);
+    // 起こされていない居場所（TPM 担当）は一覧に載らないので、題を覚える先が無い。
+    if (seat !== undefined) this.state.write(file, { ...seat, title });
+  }
+
   setStatus(key: StatusKey, text: string): void {
     this.state.write(`${DIR}/status/${fileName(this.self)}.json`, { ...this.status(this.self), [key]: text });
   }

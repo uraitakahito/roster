@@ -1,5 +1,6 @@
 // 起こす folder の .claude/roles/config.json から、層 1 の道具の選び方（課題管理・連携・インフラ）を読む。
 // skill-sets の欄は skill-sets.ts、担当ごとの model などは担当を起こす所が読む。
+import type { RoleName, RoleSettings } from './protocol.ts';
 import { readConfig, TpmError } from './skill-sets.ts';
 
 /** 課題管理の道具。none は「記録を書かない」。 */
@@ -28,7 +29,13 @@ export interface RolesConfig {
   tracker: Tracker
   transport: Transport
   infra: Record<string, InfraEnv>
+  /** 起こす担当ごとの model・effort・permissionMode（書いた欄だけ。無い欄は既定）。 */
+  roles: Partial<Record<RoleName, Partial<RoleSettings>>>
 }
+
+/** config.json で既定を替えられる担当。 */
+const CONFIGURABLE_ROLES = ['software-engineer', 'devops-engineer'] as const;
+const ROLE_FIELDS = ['model', 'effort', 'permissionMode'] as const;
 
 const ENV_NAME = /^[a-z0-9-]+$/;
 
@@ -40,7 +47,26 @@ export function readRolesConfig(configFile: string): RolesConfig {
     tracker: oneOf(config.tracker, TRACKERS, 'none', 'tracker', configFile),
     transport: oneOf(config.transport, TRANSPORTS, 'cmux', 'transport', configFile),
     infra: infraField(config.infra, configFile),
+    roles: rolesField(config, configFile),
   };
+}
+
+function rolesField(config: Record<string, unknown>, configFile: string): RolesConfig['roles'] {
+  const roles: RolesConfig['roles'] = {};
+  for (const role of CONFIGURABLE_ROLES) {
+    const value = config[role];
+    if (value === undefined) continue;
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new TpmError(`${configFile} の ${role} は { "model": …, "effort": …, "permissionMode": … } の形にしてください`);
+    const settings: Partial<RoleSettings> = {};
+    for (const field of ROLE_FIELDS) {
+      const v = (value as Record<string, unknown>)[field];
+      if (v === undefined) continue;
+      if (typeof v !== 'string' || v === '') throw new TpmError(`${configFile} の ${role}.${field} は空でない文字列にしてください`);
+      settings[field] = v;
+    }
+    roles[role] = settings;
+  }
+  return roles;
 }
 
 function oneOf<T extends string>(value: unknown, choices: readonly T[], fallback: T, field: string, configFile: string): T {
