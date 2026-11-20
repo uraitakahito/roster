@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // tpm <命令> …
 //
 // 担当（Claude Code）のあいだの決まりを受け持つ命令。命令の一覧は program.ts（tpm --help）。
