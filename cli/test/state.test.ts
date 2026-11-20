@@ -15,6 +15,10 @@ describe('stateDir', () => {
     expect(stateDir('/Users/me/my work/app', { XDG_STATE_HOME: '/s' })).toBe('/s/tpm/-Users-me-my-work-app');
   });
 
+  test('TPM_STATE があればそれを使う', () => {
+    expect(stateDir('/w', { TPM_STATE: '/given', XDG_STATE_HOME: '/s' })).toBe('/given');
+  });
+
   test('XDG_STATE_HOME が無ければ ~/.local/state', () => {
     expect(stateDir('/w', {})).toMatch(/\/\.local\/state\/tpm\/-w$/);
   });

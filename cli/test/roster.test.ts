@@ -1,0 +1,198 @@
+import { describe, expect, test } from 'vitest';
+import { hello } from '../src/commands/role-side.ts';
+import { assign, close, init, roles } from '../src/commands/tpm-side.ts';
+import { modelLabel } from '../src/protocol.ts';
+import { readRole, requireRole } from '../src/roster.ts';
+import { claudeArgs, roleEnv } from '../src/run-role.ts';
+import { TpmError } from '../src/skill-sets.ts';
+import { world } from './helpers.ts';
+
+const SE = { role: 'software-engineer', title: '計画と実装', brief: 'https://claude.ai/artifact/b1', wait: 0 } as const;
+
+describe('init', () => {
+  test('宛先を状態に書き、状態を出し、名簿を出す', () => {
+    const w = world();
+    expect(init(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' })).toEqual(['TPM 担当の宛先: file:tpm', '課題管理: none・連携: file', '名簿: 担当はいない']);
+    expect(w.tpm.state.read('tpm.json')).toEqual({ address: 'file:tpm' });
+    expect(w.wire.status('file:tpm')).toEqual({ model: 'Opus 5.5 · medium', wait: '作業中: 起動' });
+  });
+});
+
+describe('assign', () => {
+  test('名簿に書き、短い命令で居場所を作る', () => {
+    const w = world();
+    const out = assign(w.tpm, 't-x', SE);
+    const record = requireRole(w.tpm, 't-x');
+    expect(record).toEqual({
+      key: 't-x',
+      role: 'software-engineer',
+      title: 'Software Engineer t-x: 計画と実装',
+      cwd: w.project,
+      addDirs: [`${w.tpm.root}/skill-sets/core`],
+      model: 'claude-opus-5-5',
+      effort: 'medium',
+      permissionMode: 'bypassPermissions',
+      brief: 'https://claude.ai/artifact/b1',
+      address: 'file:1',
+    });
+    expect(w.wire.command('file:1')).toBe(`${w.tpm.root}/cli/bin/tpm run-role t-x --project ${w.project} --state ${w.tpm.state.dir}`);
+    expect(w.wire.seats()).toEqual([{ address: 'file:1', title: 'Software Engineer t-x: 計画と実装' }]);
+    expect(out).toEqual(['起こした: Software Engineer t-x: 計画と実装（file:1・Opus 5.5 · medium）', '起きた合図（tpm hello）は待っていない']);
+  });
+
+  test('model などは 旗 > config.json > 役割の既定 の順で決まる', () => {
+    const w = world({ 'skill-sets': ['dependabot'], 'devops-engineer': { model: 'claude-fable-5-2' } });
+    assign(w.tpm, 'devops', { role: 'devops-engineer', wait: 0, effort: 'high' });
+    expect(requireRole(w.tpm, 'devops')).toMatchObject({
+      title: 'DevOps Engineer',
+      model: 'claude-fable-5-2',
+      effort: 'high',
+      permissionMode: 'bypassPermissions',
+      addDirs: [`${w.tpm.root}/skill-sets/core`, `${w.tpm.root}/skill-sets/dependabot`],
+    });
+  });
+
+  test('担当が名乗るまで待つ', () => {
+    const w = world();
+    init(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
+    let n = 0;
+    const tpm = {
+      ...w.tpm,
+      sleep: () => {
+        n += 1;
+        if (n === 2) hello(w.role('t-x', 'file:1'));
+      },
+    };
+    expect(assign(tpm, 't-x', { ...SE, wait: 90 })[1]).toBe('起きた（担当が名乗った）');
+    expect(n).toBe(2);
+  });
+
+  test('名乗らなければ、画面の終わりを添えて止まり、居場所は残す', () => {
+    const w = world();
+    const tpm = { ...w.tpm, transport: Object.assign(w.wire, { screen: () => 'line 1\nError: something\n' }) };
+    expect(() => assign(tpm, 't-x', { ...SE, wait: 4 })).toThrow(/4 秒たっても名乗りません。居場所は残してあります。画面の終わり:\nline 1\nError: something/);
+    expect(w.slept()).toBe(2);
+    expect(w.wire.seats()).toHaveLength(1);
+  });
+
+  test.each([
+    ['信頼のダイアログ', 'Adding a new directory: /x\nIs this a directory you created or one you trust?', /信頼のダイアログで止まっていたので、Yes は押さずに閉じました/],
+    ['命令の誤り', 'Unknown command: /software-engineer', /Unknown command でした/],
+  ])('%sなら居場所を閉じてから止まる', (_, screen, message) => {
+    const w = world();
+    const tpm = { ...w.tpm, transport: Object.assign(w.wire, { screen: () => screen }) };
+    expect(() => assign(tpm, 't-x', { ...SE, wait: 2 })).toThrow(message);
+    expect(w.wire.seats()).toEqual([]);
+    expect(readRole(w.tpm, 't-x')?.address).toBeUndefined();
+  });
+
+  test('動いている担当の鍵では起こさない。居場所が消えていれば起こし直す', () => {
+    const w = world();
+    assign(w.tpm, 't-x', SE);
+    expect(() => assign(w.tpm, 't-x', SE)).toThrow(/t-x の担当はもう動いています（file:1）/);
+    w.wire.close('file:1');
+    expect(assign(w.tpm, 't-x', SE)[0]).toMatch(/^起こし直した: .*file:2/);
+  });
+
+  test('この project の課題管理の鍵でない課題は断る', () => {
+    expect(() => assign(world().tpm, 't-x', { ...SE, issue: 'SKILLS-12' })).toThrow(/課題管理（none）の鍵ではありません/);
+    const w = world({ tracker: 'github' });
+    assign(w.tpm, 'gh-12', { ...SE, issue: 'gh-12' });
+    expect(requireRole(w.tpm, 'gh-12').issue).toBe('gh-12');
+  });
+
+  test('鍵に空白などは使えない', () => {
+    expect(() => assign(world().tpm, 't x', SE)).toThrow(TpmError);
+  });
+});
+
+describe('hello', () => {
+  test('状態を出し、名簿に宛先と時刻を書き、受け持ちを返す', () => {
+    const w = world();
+    init(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
+    assign(w.tpm, 't-x', { ...SE, model: 'claude-fable-5-2' });
+    expect(hello(w.role('t-x', 'file:1'))).toEqual([
+      '役割: Software Engineer',
+      '課題の鍵: t-x',
+      '依頼書: https://claude.ai/artifact/b1',
+      '課題管理の課題: 無し（道具: none）',
+      'TPM 担当の宛先: file:tpm',
+      '自分の宛先: file:1',
+    ]);
+    expect(requireRole(w.tpm, 't-x').helloAt).toBe('2026-11-20T12:00:00.000Z');
+    expect(w.wire.status('file:1')).toEqual({ model: 'Fable 5.2 · medium', wait: '作業中: 依頼書を読む' });
+  });
+
+  test('起こされた担当でなければ止まる', () => {
+    const w = world();
+    expect(() => hello(w.tpm)).toThrow(/\$TPM_KEY がありません/);
+    expect(() => hello(w.role('t-nope', 'file:9'))).toThrow(/名簿に担当がいません: t-nope/);
+  });
+});
+
+describe('roles と close', () => {
+  test('動いている担当は状態を、消えた担当は消えたと出す', () => {
+    const w = world();
+    init(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
+    assign(w.tpm, 't-a', SE);
+    assign(w.tpm, 'app#12', { role: 'sustaining-engineer', wait: 0 });
+    hello(w.role('t-a', 'file:1'));
+    w.wire.close('file:2');
+    expect(roles(w.tpm)).toEqual([
+      '名簿:',
+      '- app#12  Sustaining Engineer  消えた（居場所が無い。tpm assign で起こし直すか、tpm close で名簿から消す）',
+      '- t-a  Software Engineer  file:1（作業中: 依頼書を読む）  依頼書: https://claude.ai/artifact/b1',
+    ]);
+  });
+
+  test('close は居場所を閉じて名簿から消す。居場所が無くても名簿からは消す', () => {
+    const w = world();
+    assign(w.tpm, 't-a', SE);
+    assign(w.tpm, 't-b', SE);
+    w.wire.close('file:2');
+    expect(close(w.tpm, 't-a')).toEqual(['閉じた: Software Engineer t-a: 計画と実装（file:1）']);
+    expect(close(w.tpm, 't-b')).toEqual(['閉じた: Software Engineer t-b: 計画と実装（居場所はもう無かった）']);
+    expect(w.wire.seats()).toEqual([]);
+    expect(roles(w.tpm)).toEqual(['名簿: 担当はいない']);
+    expect(() => close(w.tpm, 't-a')).toThrow(/名簿に担当がいません/);
+  });
+});
+
+describe('run-role', () => {
+  test('claude の引数は、最初の入力の前に -- を置く', () => {
+    const w = world({ 'skill-sets': ['dependabot'] });
+    assign(w.tpm, 'app#12', { role: 'sustaining-engineer', wait: 0 });
+    expect(claudeArgs(requireRole(w.tpm, 'app#12'))).toEqual([
+      '--model',
+      'claude-opus-5-5',
+      '--effort',
+      'medium',
+      '--permission-mode',
+      'bypassPermissions',
+      '--add-dir',
+      `${w.tpm.root}/skill-sets/core`,
+      `${w.tpm.root}/skill-sets/dependabot`,
+      '--',
+      '/sustaining-engineer',
+    ]);
+  });
+
+  test('担当に project・状態の folder・鍵・役割と、tpm の在り処を渡す', () => {
+    const w = world();
+    assign(w.tpm, 't-x', SE);
+    expect(roleEnv(requireRole(w.tpm, 't-x'), '/p', '/s', '/r', { PATH: '/usr/bin', HOME: '/h' })).toEqual({
+      HOME: '/h',
+      TPM_PROJECT: '/p',
+      TPM_STATE: '/s',
+      TPM_KEY: 't-x',
+      TPM_ROLE: 'software-engineer',
+      PATH: '/r/cli/bin:/usr/bin',
+    });
+  });
+});
+
+describe('modelLabel', () => {
+  test.each([['claude-opus-5-5', 'Opus 5.5'], ['claude-fable-5-2', 'Fable 5.2'], ['claude-haiku-5-5-20261001', 'Haiku 5.5'], ['my-model', 'my-model']])('%s → %s', (model, label) => {
+    expect(modelLabel(model)).toBe(label);
+  });
+});

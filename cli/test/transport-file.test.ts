@@ -43,6 +43,14 @@ describe('FileTransport', () => {
     expect(tpm.status(a)).toEqual({ model: 'Opus 5.5 · medium', wait: '回答待ち(TPM): 次の依頼' });
   });
 
+  test('setTitle は自分の居場所の題を替える', () => {
+    const tpm = at('file:tpm');
+    const a = tpm.spawn({ title: 'Sustaining Engineer app#12', cwd: '/w', command: 'c' });
+    at(a).setTitle('Sustaining Engineer app#15');
+    tpm.setTitle('Technical Program Manager');
+    expect(tpm.seats()).toEqual([{ address: a, title: 'Sustaining Engineer app#15' }]);
+  });
+
   test('close した居場所は一覧と状態から消える', () => {
     const tpm = at('file:tpm');
     const a = tpm.spawn({ title: 't', cwd: '/w', command: 'c' });

@@ -19,11 +19,11 @@ beforeAll(() => {
 
 describe('readRolesConfig', () => {
   test('ファイルが無ければ既定（課題管理なし・cmux・環境の宣言なし）', () => {
-    expect(readRolesConfig(join(dir, 'nope.json'))).toEqual({ tracker: 'none', transport: 'cmux', infra: {} });
+    expect(readRolesConfig(join(dir, 'nope.json'))).toEqual({ tracker: 'none', transport: 'cmux', infra: {}, roles: {} });
   });
 
   test('欄が無ければ既定', () => {
-    expect(readRolesConfig(config('{ "skill-sets": ["dependabot"] }'))).toEqual({ tracker: 'none', transport: 'cmux', infra: {} });
+    expect(readRolesConfig(config('{ "skill-sets": ["dependabot"] }'))).toEqual({ tracker: 'none', transport: 'cmux', infra: {}, roles: {} });
   });
 
   test('書いた道具と環境を返す', () => {
@@ -36,7 +36,13 @@ describe('readRolesConfig', () => {
       tracker: 'github',
       transport: 'file',
       infra: { 'apple-container': { guard: 'free', match: ['container '] }, 'aws-staging': { guard: 'pm', match: ['aws ', 'ssh staging'] } },
+      roles: {},
     });
+  });
+
+  test('担当ごとの model などは、書いた欄だけを返す', () => {
+    const file = config('{ "software-engineer": { "model": "claude-fable-5-2", "effort": "high" }, "devops-engineer": {} }');
+    expect(readRolesConfig(file).roles).toEqual({ 'software-engineer': { model: 'claude-fable-5-2', effort: 'high' }, 'devops-engineer': {} });
   });
 
   test.each([
@@ -48,6 +54,8 @@ describe('readRolesConfig', () => {
     ['級が無い', '{ "infra": { "x": { "match": ["x "] } } }', /infra\.x\.guard がありません/],
     ['match が無い', '{ "infra": { "x": { "guard": "pm" } } }', /infra\.x\.match は/],
     ['空の match', '{ "infra": { "x": { "guard": "pm", "match": [] } } }', /infra\.x\.match は/],
+    ['object でない担当の欄', '{ "software-engineer": "opus" }', /software-engineer は/],
+    ['文字列でない model', '{ "devops-engineer": { "model": 5 } }', /devops-engineer\.model は/],
     ['空白だけの match', '{ "infra": { "x": { "guard": "pm", "match": [" "] } } }', /infra\.x\.match は/],
   ])('%sなら TpmError', (_, text, message) => {
     const file = config(text);
