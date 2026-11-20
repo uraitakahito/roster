@@ -13,7 +13,7 @@ beforeEach(() => {
 });
 
 describe('FileTransport', () => {
-  test('送った知らせは、相手の inbox に届いた順に並ぶ', () => {
+  test('送ったメッセージは、相手の inbox に届いた順に並ぶ', () => {
     const first = at('file:1').send('file:tpm', 'SE t-x', '【完成】a');
     at('file:1').send('file:tpm', 'SE t-x', '【終わり】b', first.id);
     expect(first.delivered).toBe(true);

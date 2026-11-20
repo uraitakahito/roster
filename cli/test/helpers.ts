@@ -20,7 +20,7 @@ export interface World {
   tpm: Context
   /** 鍵 key の担当の周り（address は居場所の宛先）。 */
   role: (key: string, address: string) => Context
-  /** file の連携（届いた知らせ・起こす命令を読む）。 */
+  /** file の連携（届いたメッセージ・起こす命令を読む）。 */
   wire: FileTransport
   /** sleep で待った回数。 */
   slept: () => number

@@ -1,4 +1,4 @@
-// 見出しの付いた知らせを送る命令。送る・届いたかを見る・課題に記録を書く・状態を替える、を 1 度にする。
+// 見出しの付いたメッセージを送る命令。送る・届いたかを見る・課題に記録を書く・状態を替える、を 1 度にする。
 // 担当が打つ物（ask・report・wait）と、TPM 担当が打つ物（answer・notify・dismiss・show）。brief は命令でなく、assign の中で使う。
 import type { Context } from '../context.ts';
 import { HEADINGS, message, ROLES, TPM_TITLE, WAIT, WAIT_CLOSE, WAIT_NEXT_BRIEF, type HeadingId, type WaitKind } from '../protocol.ts';
@@ -6,7 +6,7 @@ import { requireRole, requireSelf, requireTpm, writeRole, type RoleRecord } from
 import { TpmError } from '../skill-sets.ts';
 import { MAX_POINTS, type Note, type NoteKind, type NoteLink } from '../tracker/types.ts';
 
-/** 記録の 1 行目の一言に使う長さの上限（知らせの本文から作るとき）。 */
+/** 記録の 1 行目の一言に使う長さの上限（メッセージの本文から作るとき）。 */
 const SUMMARY_LIMIT = 80;
 
 interface Sent {
@@ -20,7 +20,7 @@ interface Sent {
   delivered: boolean
 }
 
-/** 知らせを送り、送った記録を log.jsonl に足す。 */
+/** メッセージを送り、送った記録を log.jsonl に足す。 */
 function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: string, body: string, replyTo?: string): string {
   const text = message(id, body);
   const d = ctx.transport.send(to, from, text, replyTo);
@@ -210,7 +210,7 @@ export function answer(ctx: Context, key: string, options: { text: string, reply
   return [...recorded, toRole(ctx, role, 'answer', options.text, options.replyTo)];
 }
 
-/** 担当に、返事の要らない知らせを送る（【notify】）。 */
+/** 担当に、返事の要らないメッセージを送る（【notify】）。 */
 export function notify(ctx: Context, key: string, options: { text: string, replyTo?: string }): string[] {
   return [toRole(ctx, requireRole(ctx, key), 'notify', options.text, options.replyTo)];
 }

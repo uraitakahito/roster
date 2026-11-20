@@ -1,19 +1,19 @@
-// 連携の口。担当どうしが知らせを送り、担当を起こし、状態を見せるための道具（cmux など）を、この形で包む。
+// 連携の口。担当どうしがメッセージを送り、担当を起こし、状態を見せるための道具（cmux など）を、この形で包む。
 // 決まり（見出し・順番・名簿）はこの上の層が持ち、ここは道具の言葉を知らない。
 
-/** 動いている担当の居場所。address は知らせの宛先で、道具ごとの形の字（cmux なら workspace:12）。 */
+/** 動いている担当の居場所。address はメッセージの宛先で、道具ごとの形の字（cmux なら workspace:12）。 */
 export interface Seat {
   address: string
   title: string
 }
 
-/** 送った知らせ。delivered は、相手に届いたところまで見られたか。 */
+/** 送ったメッセージ。delivered は、相手に届いたところまで見られたか。 */
 export interface Delivery {
   id: string
   delivered: boolean
 }
 
-/** 自分宛ての知らせ。 */
+/** 自分宛てのメッセージ。 */
 export interface Incoming {
   id: string
   from: string
@@ -35,9 +35,9 @@ export type StatusKey = 'model' | 'wait';
 export interface Transport {
   /** 自分の宛先。 */
   whoami(): string
-  /** 知らせを送り、届いたかまで見る。replyTo は、返事の先の知らせの id。 */
+  /** メッセージを送り、届いたかまで見る。replyTo は、返事の先のメッセージの id。 */
   send(to: string, from: string, text: string, replyTo?: string): Delivery
-  /** 自分宛てで、まだ届いていない知らせ（手を動かしている間は届かない道具がある）。 */
+  /** 自分宛てで、まだ届いていないメッセージ（手を動かしている間は届かない道具がある）。 */
   pending(): Incoming[]
   /** 担当の居場所を作って命令を動かし、宛先を返す。 */
   spawn(options: SpawnOptions): string

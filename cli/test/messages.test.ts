@@ -70,7 +70,7 @@ describe('1 つの課題の 1 周（課題管理なし）', () => {
     ]);
     expect(roles(w.tpm)).toEqual(['名簿: 担当はいない']);
     expect(w.calls).toEqual([]);
-    // 送った知らせは log.jsonl に残る
+    // 送ったメッセージは log.jsonl に残る
     expect(w.tpm.state.lines<{ heading: string }>('log.jsonl').map(l => l.heading)).toEqual(['相談(TPM)', 'notify', 'merge 済み', '完成', 'brief', '完成', 'dismiss', '終わり']);
   });
 });
@@ -155,7 +155,7 @@ describe('【完成】と【終わり】に要る欄', () => {
   });
 });
 
-describe('ほかの知らせ', () => {
+describe('ほかのメッセージ', () => {
   test('【DevOps への依頼】は何を・なぜ・急ぎかを並べる', () => {
     const w = started();
     askDevops(w.se, { what: 'windmill の worker を作り直す', why: '設定を変えた', urgent: false });

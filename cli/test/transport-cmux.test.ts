@@ -59,7 +59,7 @@ describe('CmuxTransport', () => {
     expect(calls.filter(c => c.args.includes('inbox'))).toHaveLength(4);
   });
 
-  test('pending は自分宛ての queued の知らせを、既読にせずに読む', () => {
+  test('pending は自分宛ての queued のメッセージを、既読にせずに読む', () => {
     const { transport, calls } = fake([
       ['--json identify', json({ caller: { workspace_ref: 'workspace:7' } })],
       ['--json agent inbox', json({ messages: [{ id: ID, sender_name: 'Technical Program Manager', body: '【brief】u', state: 'queued' }] })],

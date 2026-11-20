@@ -37,7 +37,7 @@ export function buildProgram(): Command {
   const print = (lines: string[]): void => console.log(lines.join('\n'));
   const program = new Command()
     .name('tpm')
-    .description('担当（Claude Code）のあいだの決まりを受け持つ: 担当を起こす・知らせを送る・課題に記録する・共有の環境を守る')
+    .description('担当（Claude Code）のあいだの決まりを受け持つ: 担当を起こす・メッセージを送る・課題に記録する・共有の環境を守る')
     .exitOverride((err: CommanderError) => {
       process.exit(err.exitCode === 0 ? 0 : EXIT_USAGE);
     });
@@ -75,7 +75,7 @@ export function buildProgram(): Command {
     .option('--model <model>', 'TPM 担当の model（既定は tpm start が起こす model。$TPM_MODEL があればそれ）')
     .option('--effort <effort>', 'TPM 担当の effort（既定は $CLAUDE_EFFORT、無ければ tpm start が起こす effort）')
     .action((options: { model?: string, effort?: string }) => print(hello(createContext(), options)));
-  program.command('inbox').description('自分宛てで、まだ届いていない知らせを出す（段の区切りに見る）').action(() => print(inbox(createContext())));
+  program.command('inbox').description('自分宛てで、まだ届いていないメッセージを出す（段の区切りに見る）').action(() => print(inbox(createContext())));
   registerMessages(program, print);
 
   const infra = program.command('infra').description('インフラの環境の宣言と承認');

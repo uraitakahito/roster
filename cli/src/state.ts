@@ -1,4 +1,4 @@
-// tpm が持つ状態（TPM 担当の宛先・担当の名簿・承認・送った知らせ）の置き場。
+// tpm が持つ状態（TPM 担当の宛先・担当の名簿・承認・送ったメッセージ）の置き場。
 // project（TPM 担当を起こした folder）ごとに folder を分け、1 件 1 ファイルで書く（担当が同時に書いてもぶつからない）。
 // 1 件 1 ファイルは .jsonc（config.jsonc と同じ parseJsonc で読む）、足していく記録は 1 行 1 件の .jsonl。
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';

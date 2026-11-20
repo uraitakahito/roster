@@ -9,7 +9,7 @@ import { answer, askDevops, askPm, askTpm, dismiss, notify, reportDependabot, re
 const collect = (value: string, all: string[]): string[] => [...all, value];
 const DONE_KINDS: NoteKind[] = ['提案', '計画', '結果'];
 
-/** やりとりの命令（状態を替える `wait`・人に見せる `show`・知らせを送る `ask`・`report`・TPM 担当の `answer`・`notify`・`dismiss`）を命令の木に足す。print は命令の出す行を書き出す。 */
+/** やりとりの命令（状態を替える `wait`・人に見せる `show`・メッセージを送る `ask`・`report`・TPM 担当の `answer`・`notify`・`dismiss`）を命令の木に足す。print は命令の出す行を書き出す。 */
 export function registerMessages(program: Command, print: (lines: string[]) => void): void {
   program.command('wait <kind> <what>').description(`状態 wait を替える（kind は ${Object.keys(WAIT).join('・')}）`)
     .action((kind: string, what: string) => {
@@ -21,7 +21,7 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
   const ask = program.command('ask').description('担当が TPM 担当に頼む');
   ask.command('tpm <text>').description('【相談(TPM)】困っていること・試したこと・案とお勧め')
     .requiredOption('--waiting-for <何を>', '状態に出す、待っている物')
-    .option('--reply-to <id>', '返事の先の知らせの id')
+    .option('--reply-to <id>', '返事の先のメッセージの id')
     .action((text: string, options: { waitingFor: string, replyTo?: string }) => print(askTpm(createContext(), { text, ...options })));
   ask.command('pm').description('【PM への依頼】確認の Artifact を送る（課題に「確認」の記録も書く）')
     .requiredOption('--url <URL>', '確認の Artifact')
@@ -67,10 +67,10 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
   }
 
   program.command('answer <key> <text>').description('TPM 担当が【answer】を返す（課題に「決定」の記録も書く）')
-    .option('--reply-to <id>', '返事の先の知らせの id')
+    .option('--reply-to <id>', '返事の先のメッセージの id')
     .action((key: string, text: string, options: { replyTo?: string }) => print(answer(createContext(), key, { text, ...options })));
   program.command('notify <key> <text>').description('TPM 担当が【notify】を送る（返事は要らない）')
-    .option('--reply-to <id>', '返事の先の知らせの id')
+    .option('--reply-to <id>', '返事の先のメッセージの id')
     .action((key: string, text: string, options: { replyTo?: string }) => print(notify(createContext(), key, { text, ...options })));
   program.command('dismiss <key>').description('TPM 担当が【dismiss】を送る')
     .option('--handover', '担当の交代のため（担当は課題を閉じない）', false)

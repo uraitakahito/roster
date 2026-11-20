@@ -23,7 +23,7 @@ const sleepSync: Sleep = (ms) => {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 };
 
-/** cmux で知らせを送り、居場所（workspace）を作り、状態をサイドバーに出す adapter。 */
+/** cmux でメッセージを送り、居場所（workspace）を作り、状態をサイドバーに出す adapter。 */
 export class CmuxTransport implements Transport {
   private readonly exec: Exec;
   private readonly sleep: Sleep;
@@ -44,7 +44,7 @@ export class CmuxTransport implements Transport {
     const target = replyTo === undefined ? [to] : ['--reply-to', replyTo];
     const out = this.run(['agent', 'message', ...target, '--from', from, '-'], text).stdout;
     const id = /message ([0-9a-f-]{36})/i.exec(out)?.[1];
-    if (id === undefined) throw new TpmError(`cmux agent message の出力から知らせの id を読めません: ${out.trim()}`);
+    if (id === undefined) throw new TpmError(`cmux agent message の出力からメッセージの id を読めません: ${out.trim()}`);
     for (let i = 0; i < DELIVERY_TRIES; i++) {
       if (this.delivered(to, id)) return { id, delivered: true };
       this.sleep(DELIVERY_INTERVAL_MS);

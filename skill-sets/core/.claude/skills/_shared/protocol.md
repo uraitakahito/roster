@@ -2,14 +2,14 @@
 
 TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・DevOps Engineer 担当（`/devops-engineer`）・Sustaining Engineer 担当（`/sustaining-engineer`）が共通に従う決まり。依頼主は Product Manager（利用者）。返答と報告は日本語で書く。
 
-担当どうしのやりとりは、すべて `tpm` の命令でする。`tpm` が、知らせを送る・届いたかを見る・課題に記録を書く・状態を出す、を 1 度にする。連携の道具（cmux など）と課題管理の道具（Jira・GitHub の Issue）の命令は直に打たない（直に打つと記録と状態が抜けるので、guard が止める）。どの道具を使うかは、TPM 担当を起こした folder の `.claude/roles/config.jsonc` で決まる。
+担当どうしのやりとりは、すべて `tpm` の命令でする。`tpm` が、メッセージを送る・届いたかを見る・課題に記録を書く・状態を出す、を 1 度にする。連携の道具（cmux など）と課題管理の道具（Jira・GitHub の Issue）の命令は直に打たない（直に打つと記録と状態が抜けるので、guard が止める）。どの道具を使うかは、TPM 担当を起こした folder の `.claude/roles/config.jsonc` で決まる。
 
 ## 連絡の仕方
 
-- 知らせは、下の「見出し」の表の命令で送る。命令は「届いた」か「まだ届いていない」を返す。相手が手を動かしている間は届かず、空いたら届くので、送り直さない。
-- 知らせは、手が空いた時に画面に届く。段の区切り（PR を出す前・merge を頼む前）には `tpm inbox` で、まだ届いていない自分宛ての知らせを見る。
-- 届いた知らせには id が付いている。その知らせへの返事は `--reply-to <id>` を付けて送る。
-- 宛先は書かない。担当の知らせは TPM 担当へ行き、TPM 担当は課題の鍵で担当を名指す。
+- メッセージは、下の「見出し」の表の命令で送る。命令は「届いた」か「まだ届いていない」を返す。相手が手を動かしている間は届かず、空いたら届くので、送り直さない。
+- メッセージは、手が空いた時に画面に届く。段の区切り（PR を出す前・merge を頼む前）には `tpm inbox` で、まだ届いていない自分宛てのメッセージを見る。
+- 届いたメッセージには id が付いている。そのメッセージへの返事は `--reply-to <id>` を付けて送る。
+- 宛先は書かない。担当のメッセージは TPM 担当へ行き、TPM 担当は課題の鍵で担当を名指す。
 - **Product Manager に直接聞かない。** Product Manager とのやりとりは、すべて TPM 担当を通す。
 - 命令の使い方は `tpm <命令> --help`。命令が誤りで止まったら、出た文に従って直す（道具の命令に替えて先へ進まない）。
 
@@ -49,7 +49,7 @@ Dependabot の PR だけで使う見出し（【merge の依頼】【まだ】�
   - Product Manager の答えを待つ: `tpm wait pm "<何を>"`（`回答待ち(PM): <何を>`）
   - TPM 担当の答えを待つ: `tpm wait tpm "<何を>"`（`回答待ち(TPM): <何を>`）
   - 待つ時間に限りがあれば添える: `tpm wait tpm "merge（14:30 まで）"`
-- やりとりの命令は、知らせを送った後の待ちも出す（`tpm ask …` は回答待ち、`tpm report done` は `回答待ち(TPM): 次の依頼`、`tpm report end` は `回答待ち(TPM): workspace を閉じる`）。答えが来たら `tpm wait work "<段>"` に戻す。
+- やりとりの命令は、メッセージを送った後の待ちも出す（`tpm ask …` は回答待ち、`tpm report done` は `回答待ち(TPM): 次の依頼`、`tpm report end` は `回答待ち(TPM): workspace を閉じる`）。答えが来たら `tpm wait work "<段>"` に戻す。
 - **`/model`・`/effort` は打たない**（新しい session の既定まで書き換わる）。model と effort は起動の旗で決まる。
 
 ## 記録

@@ -18,7 +18,7 @@ tpm hello
 - `tpm hello` が誤りで止まったら（`tpm assign` で起こされていない）、何もせずにそのことを画面に書いて止まる。
 - 居場所の題は TPM 担当が `Software Engineer <課題の鍵>: <短い題>` の形で付けてある。替えない。
 
-続けて `${CLAUDE_SKILL_DIR}/../_shared/protocol.md` を読み、従う。知らせの見出しと命令・状態・記録・文書の食い違い・共有の環境・終わり方はそこにある。
+続けて `${CLAUDE_SKILL_DIR}/../_shared/protocol.md` を読み、従う。メッセージの見出しと命令・状態・記録・文書の食い違い・共有の環境・終わり方はそこにある。
 
 ## 1. 読む
 

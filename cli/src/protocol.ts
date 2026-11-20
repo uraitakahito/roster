@@ -2,7 +2,7 @@
 // 「いつ・なぜ送るか」は skill の文（_shared/protocol.md）に書く。ここを変えたら、その表も合わせる。
 import type { NoteKind } from './tracker/types.ts';
 
-/** TPM 担当の居場所の題（知らせの差出人にも使う）。 */
+/** TPM 担当の居場所の題（メッセージの差出人にも使う）。 */
 export const TPM_TITLE = 'Technical Program Manager';
 
 /**
@@ -55,7 +55,7 @@ export interface RoleDef {
   defaults: RoleSettings
   /** 居場所の題。TPM 担当は同じ鍵の担当をこの題でも見分けられる。 */
   title: (key: string, short: string) => string
-  /** 【dismiss】を待たずに【終わり】を送ってよいか（PR 1 本を受け持つ担当は、merge の知らせで終える）。 */
+  /** 【dismiss】を待たずに【終わり】を送ってよいか（PR 1 本を受け持つ担当は、merge のメッセージで終える）。 */
   endsWithoutDismiss: boolean
 }
 
@@ -123,7 +123,7 @@ export const HEADINGS = {
 /** 見出しの名前（`ask-tpm` など）。 */
 export type HeadingId = keyof typeof HEADINGS;
 
-/** 知らせの字。 */
+/** メッセージの書式。 */
 export const message = (id: HeadingId, body: string): string => `【${HEADINGS[id].name}】${body}`;
 
 /** 状態 wait の字。「今、誰が何を待っているか」を 1 つだけ出す。 */

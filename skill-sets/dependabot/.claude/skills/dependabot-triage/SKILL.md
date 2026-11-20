@@ -89,7 +89,7 @@ tpm assign "<repo>#<PR>" --role sustaining-engineer --cwd <cwd> \
 
 ## 4. 受ける
 
-Sustaining Engineer 担当から届く知らせ:
+Sustaining Engineer 担当から届くメッセージ:
 
 | 見出し | すること |
 |---|---|

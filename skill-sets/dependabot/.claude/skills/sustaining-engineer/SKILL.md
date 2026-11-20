@@ -84,11 +84,11 @@ TPM 担当に【merge の依頼】が行き、状態が `回答待ち(TPM): merg
 
 - 迷ったら `tpm ask tpm "<何に困っているか・試したこと・案と推し>" --waiting-for "<何を>"`。
 - Product Manager の判断が要るときは、protocol.md の「Product Manager に確かめる」で `tpm ask pm` を送る。
-- 段の区切り（PR を出す前・merge を頼む前）に `tpm inbox` で、まだ届いていない知らせを見る。
+- 段の区切り（PR を出す前・merge を頼む前）に `tpm inbox` で、まだ届いていないメッセージを見る。
 
 ## 6. 終わり
 
-TPM 担当から merge 済みの知らせ（【notify】）を受けたら:
+TPM 担当から merge 済みのメッセージ（【notify】）を受けたら:
 
 1. 3 で作った worktree があれば消す。
 2. `tpm report end --pr <PR の URL> --removed <消した worktree> … --left "<merge の commit／残した物>"` を打つ（PR 1 本の担当は、【dismiss】を待たずに【終わり】を送ってよい）。
