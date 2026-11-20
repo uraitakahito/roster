@@ -18,12 +18,12 @@ const run = (bin: string, args: string[], cwd: string): string =>
   execFileSync(bin, args, { cwd, encoding: 'utf8' }).trimEnd();
 const runFailing = (args: string[]) => spawnSync(tpm, ['start', ...args], { cwd: scratch, encoding: 'utf8' });
 
-// .claude/roles/config.json に text を書いた folder を作る（text が null なら config.json を置かない）
+// .claude/roles/config.jsonc に text を書いた folder を作る（text が null なら config.jsonc を置かない）
 let n = 0;
 const folder = (text: string | null): string => {
   const d = join(scratch, `f${n++}`);
   mkdirSync(join(d, '.claude', 'roles'), { recursive: true });
-  if (text !== null) writeFileSync(join(d, '.claude', 'roles', 'config.json'), text);
+  if (text !== null) writeFileSync(join(d, '.claude', 'roles', 'config.jsonc'), text);
   return d;
 };
 
@@ -41,7 +41,7 @@ describe('tpm start が出す 1 行', () => {
     expect(run(tpm, ['start', d], root)).toMatch(new RegExp(`^cd ${d} && `));
   });
 
-  test('config.json が無ければ core だけを --add-dir で足し、/tpm の前に -- を置く', () => {
+  test('config.jsonc が無ければ core だけを --add-dir で足し、/tpm の前に -- を置く', () => {
     const d = folder(null);
     expect(run(tpm, ['start', d], scratch)).toBe(`cd ${d} && ${head} --add-dir ${root}/skill-sets/core -- /tpm`);
   });
@@ -53,6 +53,13 @@ describe('tpm start が出す 1 行', () => {
 
   test('skill-sets に書いた追加の skill セットも足す', () => {
     const d = folder('{ "skill-sets": ["dependabot"] }');
+    expect(run(tpm, ['start', d], scratch)).toBe(
+      `cd ${d} && ${head} --add-dir ${root}/skill-sets/core ${root}/skill-sets/dependabot -- /tpm`,
+    );
+  });
+
+  test('コメントと末尾のカンマを書いた config.jsonc も読む', () => {
+    const d = folder('{\n  // Dependabot の skill も使う\n  "skill-sets": ["dependabot",],\n}\n');
     expect(run(tpm, ['start', d], scratch)).toBe(
       `cd ${d} && ${head} --add-dir ${root}/skill-sets/core ${root}/skill-sets/dependabot -- /tpm`,
     );
@@ -78,7 +85,7 @@ describe('--verbose', () => {
     const r = spawnSync(tpm, ['start', flag, d], { cwd: scratch, encoding: 'utf8' });
     expect(r.status).toBe(0);
     expect(r.stdout.trimEnd()).toBe(run(tpm, ['start', d], scratch));
-    expect(r.stderr).toContain(`tpm: config      ${d}/.claude/roles/config.json（あり）\n`);
+    expect(r.stderr).toContain(`tpm: config      ${d}/.claude/roles/config.jsonc（あり）\n`);
     expect(r.stderr).toContain('tpm: skill-sets  dependabot（');
     expect(r.stderr).toMatch(/^tpm: core +\S+\/skill-sets\/core → .*\/tpm/m);
     expect(r.stderr).toMatch(/^tpm: dependabot +\S+\/skill-sets\/dependabot → .*\/dependabot-triage/m);
@@ -93,13 +100,22 @@ describe('--verbose', () => {
 describe('誤りなら 1 行を出さずに止まる', () => {
   test.each([
     ['無い skill セット', '{ "skill-sets": ["nope"] }', /skill セットがありません: nope/],
-    ['壊れた JSON', '{ skill-sets: ', /JSON として読めません/],
+    ['壊れた JSON', '{ skill-sets: ', /JSONC として読めません/],
     ['配列でない skill-sets', '{ "skill-sets": "dependabot" }', /skill-sets は skill セットの名前/],
     ['道を含む skill セットの名前', '{ "skill-sets": ["../x"] }', /skill-sets は skill セットの名前/],
   ])('%s', (_, text, message) => {
     const r = runFailing([folder(text)]);
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(message);
+    expect(r.stdout).toBe('');
+  });
+
+  test('古い config.json があれば、名前を替えるよう言って止まる', () => {
+    const d = folder(null);
+    writeFileSync(join(d, '.claude', 'roles', 'config.json'), '{ "skill-sets": ["dependabot"] }');
+    const r = runFailing([d]);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain(`${d}/.claude/roles/config.json は読みません。config.jsonc に名前を替えてください`);
     expect(r.stdout).toBe('');
   });
 

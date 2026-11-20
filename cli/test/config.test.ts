@@ -1,14 +1,14 @@
-import { mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { readRolesConfig } from '../src/config.ts';
+import { readRolesConfig, rolesConfigFile } from '../src/config.ts';
 import { TpmError } from '../src/skill-sets.ts';
 
 let dir: string;
 let n = 0;
 const config = (text: string): string => {
-  const file = join(dir, `config-${n++}.json`);
+  const file = join(dir, `config-${n++}.jsonc`);
   writeFileSync(file, text);
   return file;
 };
@@ -19,7 +19,12 @@ beforeAll(() => {
 
 describe('readRolesConfig', () => {
   test('ファイルが無ければ既定（課題管理なし・cmux・環境の宣言なし）', () => {
-    expect(readRolesConfig(join(dir, 'nope.json'))).toEqual({ tracker: 'none', transport: 'cmux', infra: {}, roles: {} });
+    expect(readRolesConfig(join(dir, 'nope.jsonc'))).toEqual({ tracker: 'none', transport: 'cmux', infra: {}, roles: {} });
+  });
+
+  test('コメントと末尾のカンマを書いても読む', () => {
+    const file = config('{\n  // 課題は GitHub の Issue に書く\n  "tracker": "github",\n  /* 連携 */ "transport": "file",\n}\n');
+    expect(readRolesConfig(file)).toEqual({ tracker: 'github', transport: 'file', infra: {}, roles: {} });
   });
 
   test('欄が無ければ既定', () => {
@@ -61,5 +66,33 @@ describe('readRolesConfig', () => {
     const file = config(text);
     expect(() => readRolesConfig(file)).toThrow(TpmError);
     expect(() => readRolesConfig(file)).toThrow(message);
+  });
+});
+
+describe('rolesConfigFile', () => {
+  const project = (files: string[]): string => {
+    const d = join(dir, `p${n++}`);
+    mkdirSync(join(d, '.claude', 'roles'), { recursive: true });
+    for (const f of files) writeFileSync(join(d, '.claude', 'roles', f), '{}');
+    return d;
+  };
+
+  test.each([[[]], [['config.jsonc']]])('config.json が無ければ .claude/roles/config.jsonc（置いた物: %j）', (files) => {
+    const d = project(files);
+    expect(rolesConfigFile(d)).toBe(join(d, '.claude', 'roles', 'config.jsonc'));
+  });
+
+  test.each([[['config.json']], [['config.json', 'config.jsonc']]])('config.json があれば、名前を替える mv を言って止める（置いた物: %j）', (files) => {
+    const d = project(files);
+    const dir = join(d, '.claude', 'roles');
+    expect(() => rolesConfigFile(d)).toThrow(TpmError);
+    expect(() => rolesConfigFile(d)).toThrow(`mv ${dir}/config.json ${dir}/config.jsonc`);
+  });
+
+  test('mv の path は shell の引用符で囲む（空白のある folder）', () => {
+    const d = join(dir, `with space ${n++}`);
+    mkdirSync(join(d, '.claude', 'roles'), { recursive: true });
+    writeFileSync(join(d, '.claude', 'roles', 'config.json'), '{}');
+    expect(() => rolesConfigFile(d)).toThrow(`mv '${d}/.claude/roles/config.json' '${d}/.claude/roles/config.jsonc'`);
   });
 });

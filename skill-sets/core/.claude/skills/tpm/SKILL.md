@@ -30,7 +30,7 @@ disable-model-invocation: true
 - 課題を振るときは、いつも `tpm assign <鍵> …` を打つ（下の 3）。**同じ鍵の担当が動いていれば、その担当に【依頼】で新しい依頼書が行く**（提案の後の計画、計画の後の実装、Product Manager が選んだ案の実装も同じ。提案した担当がその背景を知っているため）。いなければ、新しい担当が起きる。
 - **共有の環境のビルド・デプロイ・整備は DevOps Engineer 担当にさせる**（どの環境が共有かは `tpm infra list`。protocol.md の「共有の環境」）。要るときにいなければ起こす。Software Engineer 担当から【DevOps への依頼】が来たら、DevOps Engineer 担当に依頼書を書いて回す。DevOps Engineer 担当が迷ったら、あなたに【相談(TPM)】が来る。
 - Dependabot の PR は、Product Manager が言ったとき（「Dependabot の PR を見て」や `/dependabot-triage`）だけ、`/dependabot-triage` を呼んで振り分ける（Sustaining Engineer 担当を起こすのもその skill）。起動のときには見ない。
-  - 使える skill に `/dependabot-triage` が無ければ、Dependabot の skill セットを読み込んでいない。呼ばずに、「起こした folder の `.claude/roles/config.json` の `skill-sets` に `"dependabot"` を書き、`tpm start` の 1 行で起こし直す」と Product Manager に伝える。
+  - 使える skill に `/dependabot-triage` が無ければ、Dependabot の skill セットを読み込んでいない。呼ばずに、「起こした folder の `.claude/roles/config.jsonc` の `skill-sets` に `"dependabot"` を書き、`tpm start` の 1 行で起こし直す」と Product Manager に伝える。
 
 ### 起こす担当の既定
 
@@ -39,7 +39,7 @@ disable-model-invocation: true
 | Software Engineer | `software-engineer` | `claude-opus-5-5` | `medium` | `bypassPermissions` |
 | DevOps Engineer | `devops-engineer` | `claude-opus-5-5` | `low` | `bypassPermissions` |
 
-- 起こした folder の `.claude/roles/config.json` に `software-engineer`・`devops-engineer`（欄は `model`・`effort`・`permissionMode`）があれば、`tpm assign` はそちらを使う。
+- 起こした folder の `.claude/roles/config.jsonc` に `software-engineer`・`devops-engineer`（欄は `model`・`effort`・`permissionMode`）があれば、`tpm assign` はそちらを使う。
 - **Product Manager が課題ごとに別の model や effort を指示したら、それに従う**（`tpm assign` に `--model`・`--effort` を付ける）。その課題の担当が既にいれば、替えると背景を知らない新しい担当になることを Product Manager に伝え、それでも替えるかを確かめる。替えるなら、前の担当に `tpm dismiss <鍵> --handover`（担当の交代の【片付け】。担当は課題を閉じない）を送り、【終わり】（成果の URL が載る）を受けて `tpm close <鍵>` で閉じてから、その URL を頭書きに書いた依頼書で新しい担当を起こす。
 
 ## 3. 起こす

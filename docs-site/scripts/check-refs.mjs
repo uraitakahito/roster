@@ -157,7 +157,7 @@ for (const f of skillFiles) {
     }
   }
   for (const m of text.matchAll(/config\.([a-zA-Z]+)/g))
-    if (m[1] !== "json") configFields.add(m[1]);
+    if (m[1] !== "json" && m[1] !== "jsonc") configFields.add(m[1]);
 }
 
 // 5. config.json の欄。見出しの下の最初の表の 1 列目を読む

@@ -26,12 +26,12 @@ export interface World {
   slept: () => number
 }
 
-/** config は .claude/roles/config.json に書く中身（transport は file に固定する）。 */
+/** config は .claude/roles/config.jsonc に書く中身（transport は file に固定する）。 */
 export function world(config: Record<string, unknown> = {}): World {
   const base = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-world-')));
   const project = join(base, 'project');
   mkdirSync(join(project, '.claude', 'roles'), { recursive: true });
-  writeFileSync(join(project, '.claude', 'roles', 'config.json'), JSON.stringify({ ...config, transport: 'file' }));
+  writeFileSync(join(project, '.claude', 'roles', 'config.jsonc'), JSON.stringify({ ...config, transport: 'file' }));
   const calls: Call[] = [];
   const exec: Exec = (cmd, args, options) => {
     calls.push({ cmd, args, ...(options === undefined ? {} : { options }) });

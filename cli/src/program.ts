@@ -7,6 +7,7 @@ import { guard, infraApprove, infraList, infraRevoke, infraRun } from './command
 import { registerMessages } from './commands/register.ts';
 import { hello, inbox } from './commands/role-side.ts';
 import { assign, close, init, roles, type AssignOptions } from './commands/tpm-side.ts';
+import { rolesConfigFile } from './config.ts';
 import { createContext } from './context.ts';
 import type { Verdict } from './guard.ts';
 import { ROLE_NAMES, type RoleName } from './protocol.ts';
@@ -44,7 +45,7 @@ export function buildProgram(): Command {
     .option('-v, --verbose', '読んだ config・追加の skill セット・skill セットごとの skill を stderr に出す')
     .action((folder: string | undefined, options: { verbose?: boolean }) => {
       const dir = resolveFolder(folder ?? process.cwd());
-      const configFile = join(dir, '.claude', 'roles', 'config.json');
+      const configFile = rolesConfigFile(dir);
       const skillSets = readSkillSets(configFile, root);
       if (options.verbose) {
         for (const line of explain({ given: folder, dir, root, configFile, skillSets })) process.stderr.write(`tpm: ${line}\n`);
