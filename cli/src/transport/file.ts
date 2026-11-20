@@ -8,6 +8,7 @@ interface FileSeat extends Seat {
   command: string
 }
 
+/** ファイルに書いた知らせ 1 件。 */
 export interface FileMessage {
   id: string
   from: string
@@ -19,6 +20,7 @@ const DIR = 'file-transport';
 /** 宛先（file:3 など）をファイルの名に使える字にする。 */
 const fileName = (address: string): string => address.replaceAll(/[^A-Za-z0-9._-]/g, '-');
 
+/** 知らせ・居場所・状態を、状態の folder の下のファイルに書く adapter（試験用）。 */
 export class FileTransport implements Transport {
   private readonly state: State;
   private readonly self: string;

@@ -22,6 +22,7 @@
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
+/** 上げる依存 1 つ。version は新しく入る version。source は差分のどこから取ったか（commit の本文から取ったときは無い）。 */
 export interface Dependency {
   name: string
   version?: string
@@ -29,13 +30,16 @@ export interface Dependency {
   source?: 'lockfile' | 'workflow'
 }
 
+/** PR の commit 1 つ（書いた人と本文）。 */
 export interface Commit {
   author: string
   message: string
 }
 
+/** 依存の version の公開の時刻（ISO の字）を返す。読めなければ null。 */
 export type Lookup = (ecosystem: string, name: string, version: string) => Promise<string | null> | string | null;
 
+/** 判定の表の 1 行。依存 1 つの公開の時刻と、そこから今までの時間。 */
 export interface JudgeRow {
   name: string
   version: string | null
@@ -43,6 +47,7 @@ export interface JudgeRow {
   hours: number | null
 }
 
+/** 判定の結果。eligible は対象か（読めない version があれば 'undetermined'）、eligibleAt は対象になる（なった）時刻で、判定できなければ null。 */
 export interface JudgeResult {
   eligible: boolean | 'undetermined'
   eligibleAt: string | null
@@ -50,7 +55,9 @@ export interface JudgeResult {
   deps: JudgeRow[]
 }
 
+/** 既定の待つ時間（時間）。`--hours` で替える。 */
 export const HOURS = 72;
+/** 判定ごとの終了コード。 */
 export const EXIT = { eligible: 0, notYet: 10, undetermined: 20, error: 1 } as const;
 
 /** commit の本文から `updated-dependencies:` の塊を読む。無ければ空の配列。 */
@@ -186,6 +193,7 @@ export async function judge({ deps, ecosystem, now, lookup, hours = HOURS }: { d
   return { eligible: now >= eligibleAtMs, eligibleAt: new Date(eligibleAtMs).toISOString(), ecosystem, deps: rows };
 }
 
+/** 判定の結果を終了コードにする。 */
 export function exitCodeOf(result: JudgeResult): number {
   if (result.eligible === 'undetermined') return EXIT.undetermined;
   return result.eligible ? EXIT.eligible : EXIT.notYet;
@@ -199,6 +207,7 @@ function run(cmd: string, args: string[]): string {
 
 const npmTimes = new Map<string, Record<string, string>>(); // 同じ名前の version が lockfile に何度も出るので、名前ごとに 1 回だけ引く
 
+/** 本物の Lookup。npm は `npm view`、GitHub Actions は Release か tag の commit の日付を読む。ほかの種類は null。 */
 export function realLookup(ecosystem: string, name: string, version: string): string | null {
   if (ecosystem === 'npm') {
     let times = npmTimes.get(name);

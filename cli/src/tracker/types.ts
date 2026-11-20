@@ -3,8 +3,10 @@
 
 /** 記録の種類（1 行目の【】の中）。 */
 export const NOTE_KINDS = ['提案', '計画', '結果', '文書の修正', '確認', '決定'] as const;
+/** 記録の種類の 1 つ。 */
 export type NoteKind = typeof NOTE_KINDS[number];
 
+/** 記録に載せるリンク 1 つ（`label: URL` の 1 段落になる）。 */
 export interface NoteLink {
   label: string
   url: string
@@ -23,16 +25,20 @@ export interface Note {
   points: string[]
 }
 
+/** 課題から読み返したコメント 1 件。 */
 export interface TrackerComment {
   id: string
   /** 段落を改行でつないだ字。 */
   text: string
 }
 
+/** 課題管理の口。道具ごとの adapter（`jira.ts`・`github.ts`・`none.ts`）がこの形を持つ。 */
 export interface Tracker {
   /** この道具の課題の鍵か。 */
   owns(key: string): boolean
+  /** 課題に記録を 1 件書く。 */
   comment(key: string, note: Note): void
+  /** 課題のコメントを読む。 */
   comments(key: string): TrackerComment[]
   /** 課題を済みにする。 */
   close(key: string): void

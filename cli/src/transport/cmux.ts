@@ -16,12 +16,14 @@ const DELIVERY_INTERVAL_MS = 500;
 /** 起動の命令の上限（バイト）。超えると cmux は黙って実行しない。 */
 const COMMAND_LIMIT = 1024;
 
+/** ms ミリ秒だけ止まる。試験では待たない物に替える。 */
 export type Sleep = (ms: number) => void;
 
 const sleepSync: Sleep = (ms) => {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 };
 
+/** cmux で知らせを送り、居場所（workspace）を作り、状態をサイドバーに出す adapter。 */
 export class CmuxTransport implements Transport {
   private readonly exec: Exec;
   private readonly sleep: Sleep;
