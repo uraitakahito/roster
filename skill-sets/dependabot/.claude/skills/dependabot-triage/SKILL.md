@@ -95,7 +95,7 @@ Sustaining Engineer 担当から届くメッセージ:
 |---|---|
 | 【merge の依頼】 | CI が緑か（`gh pr checks`）、`release-age.ts` がまだ 0 か、差分が依頼のとおりかを自分で見てから `gh pr merge <PR> --repo <config.owner>/<repo> --<config.mergeMethod>`（repo の作法が違えばそれに従う）。merge の commit を `tpm notify "<repo>#<PR>" "merge した: <commit>"` で返す。 |
 | 【相談(TPM)】 | 答える（`tpm notify`）。Product Manager の判断が要るなら、Product Manager に聞いてから答える。 |
-| 【PM への依頼】 | URL の Artifact を自分の所で開き（`tpm show <URL>`）、Product Manager に見せる。答えを `tpm answer` で返す。 |
+| 【PM への依頼】 | URL の確認のページを自分の所で開き（`tpm show <URL>`）、Product Manager に見せる。答えを `tpm answer` で返す。 |
 | 【まだ】 | 時間の【まだ】なら表の「待ち」に戻し、その担当は 5 と同じに閉じる。`rebase に … 分応じない` の【まだ】なら、もう一度待たせるか、worktree で `origin/main` を merge させるかを決めて返す。 |
 | 【作り直し】 | group の PR が閉じて新しい番号で作り直された。表の行を新しい番号に替え、同じ Sustaining Engineer 担当に新しい番号で続けさせる（居場所の題は担当が替える。名簿の鍵は元の `<repo>#<旧>` のまま）。判定は変わらない。 |
 | 【終わり】 | 5 へ。 |

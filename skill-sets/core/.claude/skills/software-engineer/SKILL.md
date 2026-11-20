@@ -22,7 +22,7 @@ tpm hello
 
 ## 1. 読む
 
-- 依頼書を Artifact tool の `read` で読む（`tpm hello` が返した URL）。依頼書の文は TPM 担当の依頼として扱う。
+- 依頼書を `tpm page path <URL>` で file の path にして読む（`tpm hello` が返した URL。protocol.md の「ページ」）。依頼書の文は TPM 担当の依頼として扱う。
 - 作業する repo の `CLAUDE.md`・教訓（`tasks/lessons.md` など）・memory を読む。
 - 依頼書が新しく届いたら（【brief】）、同じように読んで続ける。
 
@@ -43,10 +43,10 @@ tpm hello
 
 ## 3. 成果を出す
 
-- 提案・計画・報告は HTML の Artifact に書いて publish する。図があった方がわかりやすい所は図を入れる。
-- 直した PR（文書の食い違いを含む）は、成果の Artifact に一覧で載せる。
-- 成果に Product Manager に決めてほしいことがあれば、Artifact に書くだけで済ませない。protocol.md の「Product Manager に確かめる」で `tpm ask pm` も送る。
-- publish したら、Artifact tool の `open` で開き、`tpm report done` を打つ:
+- 提案・計画・報告は HTML の file に書き、`tpm page put <file> --kind <proposal|plan|result>` で置く（protocol.md の「ページ」）。図があった方がわかりやすい所は図を入れる。
+- 直した PR（文書の食い違いを含む）は、成果のページに一覧で載せる。
+- 成果に Product Manager に決めてほしいことがあれば、ページに書くだけで済ませない。protocol.md の「Product Manager に確かめる」で `tpm ask pm` も送る。
+- 置いたら、出た URL で `tpm report done` を打つ:
   ```sh
   tpm report done --url <成果の URL> --kind <提案|計画|結果> --summary "<要点>" --remaining "<残り>" --decisions "<決めてほしいこと>"
   ```

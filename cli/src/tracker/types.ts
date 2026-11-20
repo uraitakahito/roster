@@ -14,7 +14,7 @@ export interface NoteLink {
 
 /**
  * 記録 1 件。1 行目は`【<種類>】<担当>: <一言>`。続けてリンク（label: URL）、要点（1 点 1 段落・3 つまで）。
- * 中身は Artifact に書き、記録には写さない。
+ * 中身はページに書き、記録には写さない。
  */
 export interface Note {
   kind: NoteKind

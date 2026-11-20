@@ -23,8 +23,8 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
     .requiredOption('--waiting-for <何を>', '状態に出す、待っている物')
     .option('--reply-to <id>', '返事の先のメッセージの id')
     .action((text: string, options: { waitingFor: string, replyTo?: string }) => print(askTpm(createContext(), { text, ...options })));
-  ask.command('pm').description('【PM への依頼】確認の Artifact を送る（課題に「確認」の記録も書く）')
-    .requiredOption('--url <URL>', '確認の Artifact')
+  ask.command('pm').description('【PM への依頼】確認のページを送る（課題に「確認」の記録も書く）')
+    .requiredOption('--url <URL>', '確認のページ（tpm page put で置いた URL）')
     .requiredOption('--item <題>', '決めてほしい項目の題（繰り返せる）', collect, [] as string[])
     .requiredOption('--waiting-for <何を>', '状態に出す、待っている物')
     .action((options: { url: string, item: string[], waitingFor: string }) => print(askPm(createContext(), { url: options.url, items: options.item, waitingFor: options.waitingFor })));
@@ -40,7 +40,7 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
     .requiredOption('--pr <URL>').requiredOption('--note <一言>')
     .action((options: { pr: string, note: string }) => print(reportDocFix(createContext(), options)));
   report.command('done').description('【完成】依頼書 1 つの成果を出した')
-    .option('--url <URL>', '成果の Artifact')
+    .option('--url <URL>', '成果のページ（tpm page put で置いた URL）')
     .option('--kind <種類>', `課題に書く記録の種類（${DONE_KINDS.join('・')}）`, '結果')
     .requiredOption('--summary <要点>')
     .option('--remaining <残り>', '依頼の外で直すとよい物・やらなかった物・merge していない PR（無ければ「なし」）')
@@ -51,7 +51,7 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
       print(reportDone(createContext(), { ...options, kind: options.kind as NoteKind, points: options.point }));
     });
   report.command('end').description('【終わり】【dismiss】を受けて片付けた（課題を閉じる）')
-    .option('--url <URL>', '成果の Artifact')
+    .option('--url <URL>', '成果のページ（tpm page put で置いた URL）')
     .option('--pr <URL>', 'merge した PR（繰り返せる）', collect, [] as string[])
     .option('--removed <worktree>', '消した worktree（繰り返せる）', collect, [] as string[])
     .option('--left <残っている物>', '残っている物（無ければ「なし」）')

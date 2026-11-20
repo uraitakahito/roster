@@ -81,7 +81,7 @@ sequenceDiagram
   end
   loop 依頼書ごと（提案 → 計画 → 実装）
     SE->>TPM: 【merge 済み】（PR ごと）
-    SE->>TPM: 【完成】（成果の Artifact）
+    SE->>TPM: 【完成】（成果のページ）
     alt 残り・決めてほしいことがある、または次の段がある
       TPM->>PM: 見せる。続けるか、終えるか
       TPM->>SE: 続けるなら【brief】（tpm assign を同じ鍵に）
