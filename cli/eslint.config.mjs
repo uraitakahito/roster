@@ -4,6 +4,7 @@ import { defineConfig } from 'eslint/config';
 import tseslint from 'typescript-eslint';
 import stylistic from '@stylistic/eslint-plugin';
 import globals from 'globals';
+import tsdoc from 'eslint-plugin-tsdoc';
 
 export default defineConfig(
   {
@@ -29,6 +30,15 @@ export default defineConfig(
   {
     rules: {
       '@stylistic/semi': ['error', 'always'],
+    },
+  },
+
+  // /** */ のコメントが TSDoc の形かを見る。字の中の <…> や @ は HTML や TSDoc の tag と読まれるので、`…` で囲む。
+  {
+    files: ['src/**/*.ts'],
+    plugins: { tsdoc },
+    rules: {
+      'tsdoc/syntax': 'error',
     },
   },
 );

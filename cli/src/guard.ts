@@ -10,7 +10,7 @@ import type { State } from './state.ts';
 /** 環境を変えてよい担当。 */
 const INFRA_ROLE: RoleName = 'devops-engineer';
 
-/** 承認 1 件（approvals/<環境>.json）。until を過ぎたら効かない。 */
+/** 承認 1 件（`approvals/<環境>.json`）。until を過ぎたら効かない。 */
 export interface Approval {
   until: string
   note?: string

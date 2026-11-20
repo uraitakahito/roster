@@ -92,7 +92,7 @@ export function ecosystemFromBranch(ref: string): string {
 /**
  * PR の差分（`gh pr diff` の字）から、この PR で新しく入る version を読む。
  * commit の本文の `updated-dependencies` は、group の PR が作り直されると古いまま残る
- * （実例: 本文は @astrojs/starlight 0.42.11、差分は 0.43.1）。version は差分から取る。
+ * （実例: 本文は `@astrojs/starlight` 0.42.11、差分は 0.43.1）。version は差分から取る。
  *
  * 読む物（足された行 `+` だけ）:
  *   - pnpm-lock.yaml: 2 字下げの `'name@version':`・`name@version:`（packages と snapshots の鍵）
