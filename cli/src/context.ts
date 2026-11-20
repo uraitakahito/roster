@@ -4,6 +4,10 @@ import { join } from 'node:path';
 import { readRolesConfig, type RolesConfig } from './config.ts';
 import { exec as realExec, type Exec } from './exec.ts';
 import { State, stateDir } from './state.ts';
+import { GithubTracker } from './tracker/github.ts';
+import { JiraTracker } from './tracker/jira.ts';
+import { NoneTracker } from './tracker/none.ts';
+import type { Tracker } from './tracker/types.ts';
 import { CmuxTransport } from './transport/cmux.ts';
 import { FileTransport } from './transport/file.ts';
 import type { Transport } from './transport/types.ts';
@@ -14,6 +18,7 @@ export interface Context {
   config: RolesConfig
   state: State
   transport: Transport
+  tracker: Tracker
   env: NodeJS.ProcessEnv
   exec: Exec
 }
@@ -27,5 +32,6 @@ export function createContext(env: NodeJS.ProcessEnv = process.env, cwd: string 
   const config = readRolesConfig(join(project, '.claude', 'roles', 'config.json'));
   const state = new State(stateDir(project, env));
   const transport = config.transport === 'file' ? new FileTransport(state, env.TPM_ADDRESS || 'file:tpm') : new CmuxTransport(exec);
-  return { project, config, state, transport, env, exec };
+  const tracker = config.tracker === 'jira' ? new JiraTracker(exec) : config.tracker === 'github' ? new GithubTracker(exec, project) : new NoneTracker();
+  return { project, config, state, transport, tracker, env, exec };
 }
