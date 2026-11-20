@@ -20,9 +20,9 @@ tpm hello
 
 `${CLAUDE_SKILL_DIR}/../../../../core/.claude/skills/_shared/protocol.md`（担当のあいだの決まり）を読み、従う。連絡の仕方・見出し・状態はそこにある。
 
-使う側の project の設定を読む。無ければ「この project には `.claude/dependabot/` の設定が無い」と画面に書いて止まる。
+使う側の project の設定を読む。無ければ「この project には `.claude/dependabot/` の設定が無い」と画面に書いて止まる。古い名前の `.claude/dependabot/config.json` があれば、読まずに止まる。`config.jsonc` が無ければ「`config.jsonc` に名前を替えてください（中身はそのままで読めます）。project の folder で `mv .claude/dependabot/config.json .claude/dependabot/config.jsonc`」、両方あれば「`config.json` を消してください（要る中身は先に `config.jsonc` へ移す）」と言う。
 
-- `${CLAUDE_PROJECT_DIR}/.claude/dependabot/config.json`（欄は `${CLAUDE_SKILL_DIR}/../../../../../docs-site/src/content/docs/configuration.md` の「`.claude/dependabot/config.json`」の表。以下 `config.<欄>` と書く）
+- `${CLAUDE_PROJECT_DIR}/.claude/dependabot/config.jsonc`（欄は `${CLAUDE_SKILL_DIR}/../../../../../docs-site/src/content/docs/configuration.md` の「`.claude/dependabot/config.jsonc`」の表。以下 `config.<欄>` と書く）
 - `${CLAUDE_PROJECT_DIR}/.claude/dependabot/rules.md`（この project の決まり。**この skill の手順より先に従う**）
 
 この skill の folder（`${CLAUDE_SKILL_DIR}` の 5 つ上の repo）は**直さない**（protocol.md の「文書の食い違い」の例外）。直したい所を見つけたら TPM 担当に【相談(TPM)】で知らせる。

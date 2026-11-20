@@ -7,7 +7,7 @@
 // 2. 本文が code で名指した repo の path（repo の一番上の folder で始まる物）が在る
 // 3. README のドキュメントの URL が、astro.config.ts の site ＋ base と同じ
 // 4. skill（skill-sets/ の *.md）が名指す原稿が在り、「」で名指した見出しがその原稿に在る
-// 5. configuration.md の「`.claude/dependabot/config.json`」の表の欄と、skill が使う config.<欄> が両方向で揃う
+// 5. configuration.md の「`.claude/dependabot/config.jsonc`」の表の欄と、skill が使う config.<欄> が両方向で揃う
 // 6. 画面の絵（src/assets/screens/）と本文の参照が両方向で揃う
 // 7. skill（SKILL.md）の本文の ${CLAUDE_SKILL_DIR}/… の先が在り、realpath "${CLAUDE_SKILL_DIR}/…" が repo の一番上を指す
 // 8. skill（skill-sets/ の *.md）が「protocol.md の「見出し」」の形で _shared/ の決まりの見出しを名指したら、その見出しが在る
@@ -160,8 +160,8 @@ for (const f of skillFiles) {
     if (m[1] !== "json" && m[1] !== "jsonc") configFields.add(m[1]);
 }
 
-// 5. config.json の欄。見出しの下の最初の表の 1 列目を読む
-const CONFIG_HEADING = "`.claude/dependabot/config.json`";
+// 5. config.jsonc の欄。見出しの下の最初の表の 1 列目を読む
+const CONFIG_HEADING = "`.claude/dependabot/config.jsonc`";
 const configuration = readFileSync(join(DOCS, "configuration.md"), "utf8");
 const section = configuration
   .split(/^#{2,6}\s+/m)

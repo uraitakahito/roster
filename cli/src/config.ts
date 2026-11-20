@@ -48,15 +48,18 @@ const ENV_NAME = /^[a-z0-9-]+$/;
 
 /**
  * project の設定のファイル（<project>/.claude/roles/config.jsonc）。在るかは見ない。
- * 古い名前の config.json があれば、読まずに名前を替えるよう言って止める（両方は読まない）。
+ * 古い名前の config.json があれば、読まずに止める（両方は読まない）。config.jsonc が無ければ名前を替える mv を、両方あれば config.json を消すよう言う。
  */
 export function rolesConfigFile(project: string): string {
   const dir = join(project, '.claude', 'roles');
   const legacy = join(dir, 'config.json');
+  const file = join(dir, 'config.jsonc');
   if (existsSync(legacy)) {
-    throw new TpmError(`${legacy} は読みません。config.jsonc に名前を替えてください（中身はそのままで読めます）: mv ${shellQuote(legacy)} ${shellQuote(join(dir, 'config.jsonc'))}`);
+    // 両方あるときに mv を出すと、写して打った人の config.jsonc を上書きしてしまう。
+    if (existsSync(file)) throw new TpmError(`${legacy} と config.jsonc が両方あります。config.json を消してください（要る中身は先に config.jsonc へ移す）`);
+    throw new TpmError(`${legacy} は読みません。config.jsonc に名前を替えてください（中身はそのままで読めます）: mv ${shellQuote(legacy)} ${shellQuote(file)}`);
   }
-  return join(dir, 'config.jsonc');
+  return file;
 }
 
 /** config.jsonc を読む。ファイルや欄が無ければ既定（課題管理なし・cmux・環境の宣言なし）。誤りなら TpmError。 */

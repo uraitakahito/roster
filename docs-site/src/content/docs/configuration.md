@@ -7,7 +7,7 @@ description: 使う側の project に置く .claude/roles/config.jsonc（課題�
 
 TPM 担当を起こした folder（project）に置くと、道具の選び方・追加の skill セット・起こす担当の既定を替えられる。`tpm` の命令が読む。JSONC（`//`・`/* */` のコメントと、`}`・`]` の前の末尾のカンマを許す JSON）で書く。
 
-古い名前の `.claude/roles/config.json` があると、`tpm` の命令はそれを読まずに止まり、名前を替える `mv` を出す。中身はそのまま JSONC として読めるので、名前を替えるだけで移せる。
+古い名前の `.claude/roles/config.json` があると、`tpm` の命令はそれを読まずに止まる。`config.jsonc` が無ければ名前を替える `mv` を出す（中身はそのまま JSONC として読めるので、名前を替えるだけで移せる）。両方あれば、`config.json` を消すよう言う（要る中身は先に `config.jsonc` へ移す）。
 
 | 欄 | 中身 | 無いとき |
 |---|---|---|
@@ -74,9 +74,9 @@ TPM 担当を起こした folder（project）に置くと、道具の選び方�
 
 Dependabot の skill を使う project では、`.claude/roles/config.jsonc` の `skill-sets` に `"dependabot"` を書き、次の 2 つを置く。`/tpm` の起動では Dependabot の PR を見ない。Product Manager が言ったときに TPM 担当が `/dependabot-triage` を呼ぶ。skill セットを書かなければ `/dependabot-triage` は使えない。skill セットを書いても 2 つが無いと `/dependabot-triage` と `/sustaining-engineer` は止まる。
 
-### `.claude/dependabot/config.json`
+### `.claude/dependabot/config.jsonc`
 
-`/dependabot-triage` と `/sustaining-engineer` はこの表を読み、欄を `config.<欄>` と書く（表と skill の欄の揃いは `docs-site/scripts/check-refs.mjs` が見る）。
+`/dependabot-triage` と `/sustaining-engineer` はこの表を読み、欄を `config.<欄>` と書く（表と skill の欄の揃いは `docs-site/scripts/check-refs.mjs` が見る）。`.claude/roles/config.jsonc` と同じく JSONC で書く。古い名前の `config.json` があれば、skill は読まずに止まる（扱いは `.claude/roles/config.json` と同じ）。
 
 | 欄 | 中身 | 例 |
 |---|---|---|
