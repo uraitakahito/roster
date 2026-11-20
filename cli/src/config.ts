@@ -5,10 +5,12 @@ import { readConfig, TpmError } from './skill-sets.ts';
 
 /** 課題管理の道具。none は「記録を書かない」。 */
 export const TRACKERS = ['jira', 'github', 'none'] as const;
+/** 課題管理の道具の名前。 */
 export type Tracker = typeof TRACKERS[number];
 
 /** 担当どうしの連携の道具。file は試験用（ファイルに知らせを書くだけ）。 */
 export const TRANSPORTS = ['cmux', 'file'] as const;
+/** 連携の道具の名前。 */
 export type Transport = typeof TRANSPORTS[number];
 
 /**
@@ -17,6 +19,7 @@ export type Transport = typeof TRANSPORTS[number];
  * pm: ほかの人（DevOps Engineer 担当だけ・Product Manager の承認が要る）。
  */
 export const GUARDS = ['free', 'tpm', 'pm'] as const;
+/** 環境の級の名前。 */
 export type Guard = typeof GUARDS[number];
 
 /** インフラの環境 1 つ。match のどれかを含む命令が、この環境に触る命令。 */
@@ -25,6 +28,7 @@ export interface InfraEnv {
   match: string[]
 }
 
+/** project の設定（`.claude/roles/` の config）を読んだ物。書かない欄は既定で埋める。 */
 export interface RolesConfig {
   tracker: Tracker
   transport: Transport
