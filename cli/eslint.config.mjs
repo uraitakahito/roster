@@ -7,7 +7,7 @@ import globals from 'globals';
 
 export default defineConfig(
   {
-    ignores: ['dist/**', 'node_modules/**', 'eslint.config.mjs'],
+    ignores: ['node_modules/**', 'eslint.config.mjs'],
   },
 
   eslint.configs.recommended,

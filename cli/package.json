@@ -13,13 +13,11 @@
     "node": ">=26"
   },
   "//scripts": {
-    "build": "src/ を dist/ に書き出す（src/release-age.ts は除く。設定は tsconfig.build.json）。bin/tpm（sh）が dist/cli.js を node で動かすので、実行権は要らない。ほかの script は build を呼ばないので、clone・pull・src/ を変えた後に人が打つ。",
-    "test": "Vitest を監視せずに 1 回だけ実行する（設定は vitest.config.ts）。test/cli.test.ts は build 済みの dist/ を動かすので、先に `pnpm run build` が要る。",
+    "test": "Vitest を監視せずに 1 回だけ実行する（設定は vitest.config.ts）。build は無い（bin/tpm が src/cli.ts を node で直に動かす）。",
     "lint": "ESLint で cli/ を検査する（設定は eslint.config.mjs）。",
     "typecheck": "tsc で src・test・設定の型だけを検査し、何も書き出さない（設定は tsconfig.json）。Vitest は型を検査しないので、型の誤りはこれで見つける。"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"

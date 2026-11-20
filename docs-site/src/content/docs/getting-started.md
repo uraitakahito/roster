@@ -1,6 +1,6 @@
 ---
 title: はじめる
-description: Node と pnpm の入れ方・install・build と、TPM 担当を起こす 1 行の出し方。信頼のダイアログ
+description: Node と pnpm の入れ方・install と、TPM 担当を起こす 1 行の出し方。信頼のダイアログ
 ---
 
 ## Node と pnpm を入れる
@@ -22,8 +22,7 @@ pnpm は Node の version ごとに入る。`.node-version` を上げたら、�
 
 ```sh
 cd </foo/bar/skills> # skillsの置き場所
-pnpm --dir cli install --frozen-lockfile
-pnpm --dir cli run build
+pnpm --dir cli install --frozen-lockfile   # build は無い（tpm は src/ を node で直に動かす）
 cd </your/workspace> # あなたが作業する場所
 /foo/bar/skills/cli/bin/tpm --verbose             # 今いる folder で TPM 担当を起こす 1 行を出す
 /foo/bar/skills/cli/bin/tpm --verbose <folder>    # その folder で起こす 1 行を出す

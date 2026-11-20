@@ -1,6 +1,7 @@
 // 型の検査（pnpm run typecheck）と ESLint の型つき規則が使う。src・test・設定をまとめて見て、何も書き出さない。
-// erasableSyntaxOnly: src/release-age.ts は skill が node で直に動かす（Node は消せる型しか扱えない）ので、enum など消せない書き方を止める。
-// 書き出しは tsconfig.build.json（pnpm run build）。
+// build は無い。src/ は bin/tpm と skill が node で直に動かす（Node が型を消して動かす）。
+// erasableSyntaxOnly: Node は消せる型しか扱えないので、enum など消せない書き方を止める。
+// allowImportingTsExtensions: node が直に読めるように、import の先を .ts と書く。
 {
   "compilerOptions": {
     "target": "es2024",
@@ -13,6 +14,7 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "erasableSyntaxOnly": true,
+    "allowImportingTsExtensions": true,
     "noEmit": true
   },
   "include": ["src", "test", "*.config.ts"]

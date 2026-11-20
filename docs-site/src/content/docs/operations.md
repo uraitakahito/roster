@@ -8,7 +8,7 @@ description: この repo を別の folder へ移す手順と、Node の version 
 1. TPM 担当のほかに動いている担当（Software Engineer・DevOps Engineer・Sustaining Engineer）が 0 のときに行う。
 2. `mv <今の folder> <新しい folder>`（git の履歴ごと移る）。
 3. 新しい folder で 1 度 Claude Code を対話で起こして信頼する（[信頼のダイアログ](/getting-started/#信頼のダイアログ)。信頼は path に付くので、移すたびに要る）。
-4. 新しい folder で `pnpm --dir cli install --frozen-lockfile` と `pnpm --dir cli run build` を打つ。`~/.local/bin/tpm` の symlink を張っていれば張り直す（`ln -sf <新しい folder>/cli/bin/tpm ~/.local/bin/tpm`）。
+4. 新しい folder で `pnpm --dir cli install --frozen-lockfile` を打つ。`~/.local/bin/tpm` の symlink を張っていれば張り直す（`ln -sf <新しい folder>/cli/bin/tpm ~/.local/bin/tpm`）。
 5. 動いている TPM 担当は、起こし直すか `/add-dir <新しい folder>/skill-sets/core`（追加の skill セットを足していれば、その skill セットの folder も）を打つ。ほかの担当を起こす旗は `/tpm` と `/dependabot-triage` が自分の場所から求めるので直さない。
 
 ## Node の version を上げる

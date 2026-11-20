@@ -17,9 +17,8 @@
 //
 // 出力は標準出力に JSON 1 つ。終了コード: 0 対象 / 10 まだ / 20 判定できない / 1 道具の誤り。
 //
-// skill は pnpm install も build もせずに `node release-age.ts` で直に動かす（Node が型を消して動かす）。
+// skill は pnpm install もせずに `node release-age.ts` で直に動かす（Node が型を消して動かす）。
 // そのため Node の組み込みだけを import し、消せる型だけを書く（tsconfig.json の erasableSyntaxOnly）。
-// build（dist/）には入れない（tsconfig.build.json の exclude）。
 
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';

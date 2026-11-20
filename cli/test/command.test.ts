@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { describe, expect, test } from 'vitest';
-import { buildCommand, shellQuote } from '../src/command.js';
+import { buildCommand, shellQuote } from '../src/command.ts';
 
 const head = 'claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions';
 

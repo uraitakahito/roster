@@ -4,15 +4,15 @@
 // TPM 担当の Claude Code を起こす 1 行を出す（起こすのは、それを写して打つ利用者）。
 // folder を渡さなければ今いる folder。追加の skill セットは folder の .claude/roles/config.json の skill-sets で選ぶ。
 // --verbose なら、読んだ config・追加の skill セット・skill セットごとの skill を stderr に出す（stdout は 1 行のまま）。
-// cli/bin/tpm（sh）が本当の在り処の path でこれを node で動かす（nodenv が repo の .node-version を読むため）。repo は自分の在り処（import.meta.dirname）から求める。
+// cli/bin/tpm（sh）が本当の在り処の path でこれを node で直に動かす（build は無い。nodenv が repo の .node-version を読むため）。repo は自分の在り処（import.meta.dirname）から求める。
 import { realpathSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { Command, CommanderError } from 'commander';
-import { buildCommand } from './command.js';
-import { readSkillSets, TpmError } from './skill-sets.js';
-import { explain } from './verbose.js';
+import { buildCommand } from './command.ts';
+import { readSkillSets, TpmError } from './skill-sets.ts';
+import { explain } from './verbose.ts';
 
-/** この file は <repo>/cli/dist/cli.js にある。 */
+/** この file は <repo>/cli/src/cli.ts にある。 */
 const root = join(import.meta.dirname, '..', '..');
 
 /** 使い方の誤りの終了コード（sh の慣わし）。 */

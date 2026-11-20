@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { parseUpdatedDependencies, ecosystemFromBranch, depsFromCommits, versionsFromDiff, judge, exitCodeOf, EXIT } from '../src/release-age.js';
+import { parseUpdatedDependencies, ecosystemFromBranch, depsFromCommits, versionsFromDiff, judge, exitCodeOf, EXIT } from '../src/release-age.ts';
 
 // group の PR が作り直された実例の差分の抜き書き。commit の本文は starlight 0.42.11 だが、差分は 0.43.1。
 const pnpmDiff = `diff --git a/docs-site/package.json b/docs-site/package.json
