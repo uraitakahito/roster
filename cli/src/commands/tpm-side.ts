@@ -51,7 +51,7 @@ export interface AssignOptions {
   permissionMode?: string
   /** 【依頼】に添える一言。 */
   note?: string
-  /** 名乗りを待つ秒。0 なら待たない。 */
+  /** 起こした担当の tpm hello を待つ秒。0 なら待たない。 */
   wait: number
 }
 
@@ -61,6 +61,7 @@ export interface AssignOptions {
  */
 export function assign(ctx: Context, key: string, options: AssignOptions): string[] {
   assertKey(key);
+  if (!Number.isFinite(options.wait) || options.wait < 0) throw new TpmError('--wait は 0 以上の数にしてください（0 なら待たない）');
   const existing = readRole(ctx, key);
   if (existing?.address !== undefined && ctx.transport.seats().some(s => s.address === existing.address)) {
     if (options.brief === undefined) throw new TpmError(`${key} の担当はもう動いています（${existing.address}）。新しい依頼書を --brief で渡してください`);
@@ -86,7 +87,7 @@ export function assign(ctx: Context, key: string, options: AssignOptions): strin
   record.address = ctx.transport.spawn({ title: record.title, cwd: record.cwd, command });
   writeRole(ctx, record);
   const head = `${existing ? '起こし直した' : '起こした'}: ${record.title}（${record.address}・${modelStatus(record.model, record.effort)}）`;
-  if (options.wait <= 0) return [head, '名乗り（tpm hello）は待っていない'];
+  if (options.wait === 0) return [head, '名乗り（tpm hello）は待っていない'];
   for (let waited = 0; waited < options.wait * 1000; waited += HELLO_INTERVAL_MS) {
     if (readRole(ctx, key)?.helloAt !== undefined) return [head, '名乗った（tpm hello が来た）'];
     ctx.sleep(HELLO_INTERVAL_MS);
