@@ -8,3 +8,7 @@ minimumReleaseAge: 2880
 # 外す条件: mermaid が、katex を 0.18.2 以上で要求する版を出したとき。
 overrides:
   mermaid>katex: ^0.18.2
+
+# package.json の engines.node（>=26）に合わない Node では install を止める。
+# version は repo の一番上の .node-version で決める（nodenv が読む）。
+engineStrict: true

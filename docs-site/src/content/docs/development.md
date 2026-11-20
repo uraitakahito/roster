@@ -5,7 +5,7 @@ description: 試験の流し方・Dependabot の判定の道具・この docs �
 
 ## 試験
 
-TypeScript の道具（`tpm` と判定の道具）は `cli/` の pnpm の project にある。試験は `cli/` で打つ。
+TypeScript の道具（`tpm` と判定の道具）は `cli/` の pnpm の project にある。試験は `cli/` で打つ。Node と pnpm は [はじめる](/getting-started/#node-と-pnpm-を入れる) のとおりに入れる（version は `.node-version`）。
 
 ```sh
 cd cli
