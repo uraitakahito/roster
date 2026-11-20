@@ -11,11 +11,19 @@ TypeScript の道具（`tpm` と判定の道具）は `cli/` の pnpm の projec
 cd cli
 pnpm install --frozen-lockfile
 pnpm run typecheck   # 型の検査（tsc）
-pnpm run lint        # ESLint
+pnpm run lint        # ESLint（TSDoc の書き方も見る）
+pnpm run doccheck    # コメントの抜け（TypeDoc。ページは作らない）
 pnpm test            # Vitest
 ```
 
 build は無い。`cli/bin/tpm` は `cli/src/cli.ts` を node で直に動かす（Node が型を消して動かす）ので、main を pull すれば次から新しいコードで動く。そのため `cli/src/` には消せる型だけを書き、import の先は `.ts` と書く（`cli/tsconfig.json` の `erasableSyntaxOnly`・`allowImportingTsExtensions`）。GitHub Actions でも上と同じ順に流す（`.github/workflows/test.yml`）。
+
+`cli/src/` のコメントの決まり:
+
+- export した関数・型・class・定数と method には、`/** */` で一言を書く（何か・何を返すか）。`pnpm run doccheck` が抜けを止める（設定は `cli/typedoc.json`）。interface の欄には、名前で分からない物にだけ書く。
+- `@param`・`@returns` は書かない。引数は、要る時だけ文の中で名前を出して書く。
+- `/** */` の中の `<…>` と `@` は `` `…` `` で囲む（TSDoc が HTML や tag と読む。`pnpm run lint` の `tsdoc/syntax` が止める）。
+- file の頭の説明は `//` で書く。
 
 ## tpm のコード
 
