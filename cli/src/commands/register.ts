@@ -9,6 +9,7 @@ import { answer, askDevops, askPm, askTpm, dismiss, notify, reportDependabot, re
 const collect = (value: string, all: string[]): string[] => [...all, value];
 const DONE_KINDS: NoteKind[] = ['提案', '計画', '結果'];
 
+/** 知らせの命令（`wait`・`show`・`ask`・`report`・TPM 担当の `answer` など）を命令の木に足す。print は命令の出す行を書き出す。 */
 export function registerMessages(program: Command, print: (lines: string[]) => void): void {
   program.command('wait <kind> <what>').description(`状態 wait を替える（kind は ${Object.keys(WAIT).join('・')}）`)
     .action((kind: string, what: string) => {

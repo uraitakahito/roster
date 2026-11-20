@@ -4,6 +4,7 @@ import type { Context } from './context.ts';
 import type { RoleName, RoleSettings } from './protocol.ts';
 import { TpmError } from './skill-sets.ts';
 
+/** 名簿の 1 行（`roles/` の 1 ファイル）。担当 1 人の役割・居場所・受けている依頼書。 */
 export interface RoleRecord extends RoleSettings {
   key: string
   role: RoleName
@@ -33,25 +34,32 @@ const KEY = /^[A-Za-z0-9][A-Za-z0-9#._/-]*$/;
 /** 鍵をファイルの名にする（<repo>#<PR> の # と / を替える）。 */
 const fileOf = (key: string): string => `roles/${key.replaceAll(/[^A-Za-z0-9._-]/g, '_')}.json`;
 
+/** 課題の鍵が、使ってよい字（英数字と # . _ / -）だけかを見る。違えば止める。 */
 export function assertKey(key: string): void {
   if (!KEY.test(key)) throw new TpmError(`課題の鍵は英数字と # . _ / - だけにしてください: ${key}`);
 }
 
+/** 鍵の担当を名簿から読む。いなければ undefined。 */
 export const readRole = (ctx: Context, key: string): RoleRecord | undefined => ctx.state.read<RoleRecord>(fileOf(key));
 
+/** 鍵の担当を名簿から読む。いなければ止める。 */
 export function requireRole(ctx: Context, key: string): RoleRecord {
   const record = readRole(ctx, key);
   if (record === undefined) throw new TpmError(`名簿に担当がいません: ${key}（tpm roles で名簿を見る）`);
   return record;
 }
 
+/** 名簿の行を書く（あれば上書き）。 */
 export const writeRole = (ctx: Context, record: RoleRecord): void => ctx.state.write(fileOf(record.key), record);
+/** 名簿の行を消す。 */
 export const removeRole = (ctx: Context, key: string): void => ctx.state.remove(fileOf(key));
 
+/** 名簿の全員。 */
 export function allRoles(ctx: Context): RoleRecord[] {
   return ctx.state.list('roles').map(name => ctx.state.read<RoleRecord>(`roles/${name}.json`)).filter(r => r !== undefined);
 }
 
+/** TPM 担当の宛先を読む。`tpm init` の前なら止める。 */
 export function requireTpm(ctx: Context): TpmRecord {
   const tpm = ctx.state.read<TpmRecord>('tpm.json');
   if (tpm === undefined) throw new TpmError('TPM 担当の宛先がありません（TPM 担当が tpm init を打つ）');

@@ -33,6 +33,7 @@ export function roles(ctx: Context): string[] {
   })];
 }
 
+/** `tpm assign` の旗。 */
 export interface AssignOptions {
   role: RoleName
   /** 居場所の題に付ける短い題（Software Engineer 担当だけが使う）。 */

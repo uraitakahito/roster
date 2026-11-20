@@ -16,6 +16,7 @@ export interface Approval {
   note?: string
 }
 
+/** 門の答え。止めるときは、代わりにどうするかを reason に書く。 */
 export type Verdict = { allow: true } | { allow: false, reason: string };
 
 /** 直に打たせない道具の命令と、代わりに使う tpm の命令。 */
@@ -31,6 +32,7 @@ const DIRECT: [pattern: RegExp, instead: string][] = [
 /** 命令の頭にこれを書くと、道具の直打ちを通す（tpm 自身の開発と試しのため。環境の級には効かない）。 */
 export const RAW = 'TPM_RAW=1';
 
+/** 門に聞く 1 件。打った命令と、決めるのに要る設定・承認・時刻。 */
 export interface Asked {
   command: string
   /** 打った担当。TPM 担当と、tpm が起こしていない session は undefined。 */
@@ -61,6 +63,7 @@ export function judgeEnv(name: string, env: InfraEnv, role: RoleName | undefined
   };
 }
 
+/** 命令を通すか。環境の級を先に見て、次に道具の直打ちを見る。 */
 export function judge(asked: Asked): Verdict {
   for (const name of touched(asked.command, asked.config.infra)) {
     const env = asked.config.infra[name];
@@ -82,14 +85,17 @@ export function judge(asked: Asked): Verdict {
 
 const approvalFile = (name: string): string => `approvals/${name}.json`;
 
+/** 設定にある環境ごとの承認を読む。承認が無い環境は undefined。 */
 export function readApprovals(state: State, infra: Record<string, InfraEnv>): Record<string, Approval | undefined> {
   return Object.fromEntries(Object.keys(infra).map(name => [name, state.read<Approval>(approvalFile(name))]));
 }
 
+/** 環境の承認を書く（`tpm infra approve`）。 */
 export function writeApproval(state: State, name: string, approval: Approval): void {
   state.write(approvalFile(name), approval);
 }
 
+/** 環境の承認を消す（`tpm infra revoke`）。 */
 export function removeApproval(state: State, name: string): void {
   state.remove(approvalFile(name));
 }
