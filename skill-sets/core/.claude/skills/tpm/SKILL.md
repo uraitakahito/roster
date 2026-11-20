@@ -34,12 +34,14 @@ disable-model-invocation: true
 
 ### 起こす担当の既定
 
+コードの既定:
+
 | 担当 | `--role` | model | effort | permissionMode |
 |---|---|---|---|---|
 | Software Engineer | `software-engineer` | `claude-opus-5-5` | `medium` | `bypassPermissions` |
 | DevOps Engineer | `devops-engineer` | `claude-opus-5-5` | `low` | `bypassPermissions` |
 
-- 起こした folder の `.claude/roles/config.jsonc` に `software-engineer`・`devops-engineer`（欄は `model`・`effort`・`permissionMode`）があれば、`tpm assign` はそちらを使う。
+- 欄ごとに、旗 > 起こした folder の `.claude/roles/config.jsonc` の `software-engineer`・`devops-engineer`（欄は `model`・`effort`・`permissionMode`）> 環境変数 `TPM_MODEL`・`TPM_EFFORT`・`TPM_PERMISSION_MODE` > コードの既定 の順に、`tpm assign` が決める。環境変数は `tpm start` の 1 行（あなた）にも効く。
 - **Product Manager が課題ごとに別の model や effort を指示したら、それに従う**（`tpm assign` に `--model`・`--effort` を付ける）。その課題の担当が既にいれば、替えると背景を知らない新しい担当になることを Product Manager に伝え、それでも替えるかを確かめる。替えるなら、前の担当に `tpm dismiss <鍵> --handover`（担当の交代の【片付け】。担当は課題を閉じない）を送り、【終わり】（成果の URL が載る）を受けて `tpm close <鍵>` で閉じてから、その URL を頭書きに書いた依頼書で新しい担当を起こす。
 
 ## 3. 起こす

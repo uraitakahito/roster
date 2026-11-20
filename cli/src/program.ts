@@ -12,6 +12,7 @@ import { createContext } from './context.ts';
 import type { Verdict } from './guard.ts';
 import { ROLE_NAMES, type RoleName } from './protocol.ts';
 import { requireRole } from './roster.ts';
+import { resolveSettings } from './settings.ts';
 import { runRole } from './run-role.ts';
 import { readSkillSets, TpmError } from './skill-sets.ts';
 import { explain } from './verbose.ts';
@@ -51,11 +52,11 @@ export function buildProgram(): Command {
       if (options.verbose) {
         for (const line of explain({ given: folder, dir, root, configFile, skillSets })) process.stderr.write(`tpm: ${line}\n`);
       }
-      console.log(buildCommand(dir, root, skillSets));
+      console.log(buildCommand(dir, root, skillSets, resolveSettings('tpm', { env: process.env })));
     });
 
   program.command('init').description('TPM 担当が名乗る（宛先を状態に書き、名簿を出す）')
-    .option('--model <model>', '自分の model（既定は tpm start が起こす model）')
+    .option('--model <model>', '自分の model（既定は tpm start が起こす model。$TPM_MODEL があればそれ）')
     .option('--effort <effort>', '自分の effort（既定は $CLAUDE_EFFORT、無ければ tpm start が起こす effort）')
     .action((options: { model?: string, effort?: string }) => print(init(createContext(), options)));
   program.command('roles').description('名簿を、動いている居場所と突き合わせて出す').action(() => print(roles(createContext())));
@@ -65,7 +66,9 @@ export function buildProgram(): Command {
     .option('--brief <URL>', '依頼書の URL')
     .option('--issue <課題>', '課題管理の課題の鍵')
     .option('--cwd <folder>', '担当を起こす folder（既定は project）')
-    .option('--model <model>').option('--effort <effort>').option('--permission-mode <mode>')
+    .option('--model <model>', '担当の model（既定は config.jsonc の担当の欄・$TPM_MODEL・担当の既定の順）')
+    .option('--effort <effort>', '担当の effort（既定は config.jsonc の担当の欄・$TPM_EFFORT・担当の既定の順）')
+    .option('--permission-mode <mode>', '担当の permission mode（既定は config.jsonc の担当の欄・$TPM_PERMISSION_MODE・担当の既定の順）')
     .option('--note <一言>', '【依頼】に添える一言（担当が動いているとき）')
     .option('--wait <秒>', '名乗りを待つ秒（0 なら待たない）', '90')
     .action((key: string, options: Omit<AssignOptions, 'wait' | 'role'> & { wait: string, role: string }) => {

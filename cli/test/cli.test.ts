@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { buildProgram, commandPaths } from '../src/program.ts';
 import { COMMANDS } from '../src/protocol.ts';
+import { SETTINGS_ENV } from '../src/settings.ts';
 
 /** cli/ の folder（bin/tpm と src/ がある）と、その 1 つ上の repo。 */
 const cli = realpathSync(join(import.meta.dirname, '..'));
@@ -14,9 +15,15 @@ const tpm = join(cli, 'bin', 'tpm');
 const head = `PATH=${root}/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"${root}/cli/bin/tpm guard"}]}]}}'`;
 let scratch: string;
 
-const run = (bin: string, args: string[], cwd: string): string =>
-  execFileSync(bin, args, { cwd, encoding: 'utf8' }).trimEnd();
-const runFailing = (args: string[]) => spawnSync(tpm, ['start', ...args], { cwd: scratch, encoding: 'utf8' });
+/** 試験を流す人の profile の TPM_MODEL などを抜いた環境変数に、extra を足す。 */
+const env = (extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv => {
+  const e = { ...process.env, ...extra };
+  for (const name of Object.values(SETTINGS_ENV)) if (!(name in extra)) delete e[name];
+  return e;
+};
+const run = (bin: string, args: string[], cwd: string, extra: NodeJS.ProcessEnv = {}): string =>
+  execFileSync(bin, args, { cwd, encoding: 'utf8', env: env(extra) }).trimEnd();
+const runFailing = (args: string[]) => spawnSync(tpm, ['start', ...args], { cwd: scratch, encoding: 'utf8', env: env() });
 
 // .claude/roles/config.jsonc に text を書いた folder を作る（text が null なら config.jsonc を置かない）
 let n = 0;
@@ -43,6 +50,17 @@ describe('tpm start が出す 1 行', () => {
 
   test('config.jsonc が無ければ core だけを --add-dir で足し、/tpm の前に -- を置く', () => {
     const d = folder(null);
+    expect(run(tpm, ['start', d], scratch)).toBe(`cd ${d} && ${head} --add-dir ${root}/skill-sets/core -- /tpm`);
+  });
+
+  test('$TPM_MODEL・$TPM_EFFORT・$TPM_PERMISSION_MODE があれば、その値で起こす', () => {
+    const d = folder(null);
+    expect(run(tpm, ['start', d], scratch, { TPM_MODEL: 'claude-fable-5-2', TPM_EFFORT: 'high', TPM_PERMISSION_MODE: 'acceptEdits' }))
+      .toMatch(/ claude --model claude-fable-5-2 --effort high --permission-mode acceptEdits --settings /);
+  });
+
+  test('config.jsonc の担当の欄は TPM 担当の 1 行に効かない', () => {
+    const d = folder('{ "software-engineer": { "model": "claude-fable-5-2" } }');
     expect(run(tpm, ['start', d], scratch)).toBe(`cd ${d} && ${head} --add-dir ${root}/skill-sets/core -- /tpm`);
   });
 
@@ -82,7 +100,7 @@ describe('tpm start が出す 1 行', () => {
 describe('--verbose', () => {
   test.each([['--verbose'], ['-v']])('%s なら stderr に説明を出し、stdout は 1 行のまま', (flag) => {
     const d = folder('{ "skill-sets": ["dependabot"] }');
-    const r = spawnSync(tpm, ['start', flag, d], { cwd: scratch, encoding: 'utf8' });
+    const r = spawnSync(tpm, ['start', flag, d], { cwd: scratch, encoding: 'utf8', env: env() });
     expect(r.status).toBe(0);
     expect(r.stdout.trimEnd()).toBe(run(tpm, ['start', d], scratch));
     expect(r.stderr).toContain(`tpm: config      ${d}/.claude/roles/config.jsonc（あり）\n`);
