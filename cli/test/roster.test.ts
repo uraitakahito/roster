@@ -114,6 +114,13 @@ describe('assign', () => {
     expect(readRole(w.tpm, 't-x')?.address).toBeUndefined();
   });
 
+  test.each([Number.NaN, -1, Number.POSITIVE_INFINITY])('--wait が %s なら、起こす前に止まる', (wait) => {
+    const w = world();
+    expect(() => assign(w.tpm, 't-x', { ...SE, wait })).toThrow(/--wait は 0 以上の数にしてください/);
+    expect(w.wire.seats()).toEqual([]);
+    expect(readRole(w.tpm, 't-x')).toBeUndefined();
+  });
+
   test('動いている担当の鍵では起こさない。居場所が消えていれば起こし直す', () => {
     const w = world();
     assign(w.tpm, 't-x', SE);

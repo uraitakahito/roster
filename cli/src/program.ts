@@ -70,7 +70,7 @@ export function buildProgram(): Command {
     .option('--effort <effort>', '担当の effort（既定は config.jsonc の担当の欄・$TPM_EFFORT・担当の既定の順）')
     .option('--permission-mode <mode>', '担当の permission mode（既定は config.jsonc の担当の欄・$TPM_PERMISSION_MODE・担当の既定の順）')
     .option('--note <一言>', '【依頼】に添える一言（担当が動いているとき）')
-    .option('--wait <秒>', '名乗りを待つ秒（0 なら待たない）', '90')
+    .option('--wait <秒>', '起こした担当の tpm hello を待つ秒（0 なら待たない）', '90')
     .action((key: string, options: Omit<AssignOptions, 'wait' | 'role'> & { wait: string, role: string }) => {
       if (!(ROLE_NAMES as string[]).includes(options.role)) throw new TpmError(`--role は ${ROLE_NAMES.join('・')} のどれかにしてください`);
       print(assign(createContext(), key, { ...options, role: options.role as RoleName, wait: Number(options.wait) }));
