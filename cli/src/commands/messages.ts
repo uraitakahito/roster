@@ -68,6 +68,7 @@ export function wait(ctx: Context, kind: WaitKind, what: string): string[] {
   return [`状態: ${text}`];
 }
 
+/** TPM 担当に決めてほしいことを送り（【相談(TPM)】）、状態を回答待ちにする。 */
 export function askTpm(ctx: Context, options: { text: string, waitingFor: string, replyTo?: string }): string[] {
   const self = requireSelf(ctx);
   return [toTpm(ctx, self, 'ask-tpm', options.text, options.replyTo), ...wait(ctx, 'tpm', options.waitingFor)];
@@ -89,21 +90,25 @@ export function askPm(ctx: Context, options: { url: string, items: string[], wai
   return [...recorded, toTpm(ctx, self, 'ask-pm', body), ...wait(ctx, 'pm', options.waitingFor)];
 }
 
+/** 共有の環境で DevOps Engineer 担当の手が要ることを、TPM 担当に送る（【DevOps への依頼】）。 */
 export function askDevops(ctx: Context, options: { what: string, why: string, urgent: boolean }): string[] {
   const self = requireSelf(ctx);
   return [toTpm(ctx, self, 'ask-devops', `何を: ${options.what}／なぜ: ${options.why}／急ぎ: ${options.urgent ? 'はい' : 'いいえ'}`)];
 }
 
+/** 自分の PR を 1 本 merge したと知らせる（【merge 済み】）。 */
 export function reportMerged(ctx: Context, options: { pr: string, note: string }): string[] {
   return [toTpm(ctx, requireSelf(ctx), 'merged', `${options.pr} ${options.note}`)];
 }
 
+/** 文書やコメントの食い違いを直した PR を merge したと知らせ、課題があれば記録を書く（【ドキュメント修正】）。 */
 export function reportDocFix(ctx: Context, options: { pr: string, note: string }): string[] {
   const self = requireSelf(ctx);
   const recorded = record(ctx, self, { kind: '文書の修正', role: ROLES[self.role].label, summary: options.note, links: [{ label: 'PR（merge 済み）', url: options.pr }], points: [] });
   return [...recorded, toTpm(ctx, self, 'doc-fix', `${options.pr}（merge 済み）${options.note}`)];
 }
 
+/** `tpm report done` の旗。 */
 export interface DoneOptions {
   url?: string
   /** 課題に書く記録の種類（提案・計画・結果）。 */
@@ -135,6 +140,7 @@ export function reportDone(ctx: Context, options: DoneOptions): string[] {
   return [...recorded, sent, `状態: ${WAIT_NEXT_BRIEF}（次の【依頼】か【片付け】を待つ。自分から【終わり】を送らない）`];
 }
 
+/** `tpm report end` の旗。 */
 export interface EndOptions {
   url?: string
   prs: string[]
@@ -204,6 +210,7 @@ export function answer(ctx: Context, key: string, options: { text: string, reply
   return [...recorded, toRole(ctx, role, 'answer', options.text, options.replyTo)];
 }
 
+/** 担当に、返事の要らない知らせを送る（【連絡】）。 */
 export function notify(ctx: Context, key: string, options: { text: string, replyTo?: string }): string[] {
   return [toRole(ctx, requireRole(ctx, key), 'notify', options.text, options.replyTo)];
 }

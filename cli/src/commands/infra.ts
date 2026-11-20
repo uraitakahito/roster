@@ -22,6 +22,7 @@ function requireTpmSide(ctx: Context): void {
   if (ctx.env.TPM_KEY) throw new TpmError('承認を書くのは TPM 担当です（Product Manager が決めた後）。担当は tpm ask pm で頼んでください');
 }
 
+/** 設定にある環境と級、「PM の承認」の環境なら今の承認を並べる（`tpm infra list`）。 */
 export function infraList(ctx: Context): string[] {
   const names = Object.keys(ctx.config.infra);
   if (names.length === 0) return ['環境の宣言は無い（設定の infra に書く）'];
@@ -35,6 +36,7 @@ export function infraList(ctx: Context): string[] {
   });
 }
 
+/** 「PM の承認」の環境に、minutes 分だけ効く承認を書く（`tpm infra approve`）。TPM 担当だけが打てる。 */
 export function infraApprove(ctx: Context, name: string, options: { minutes: number, note?: string }): string[] {
   requireTpmSide(ctx);
   if (requireEnv(ctx, name).guard !== 'pm') throw new TpmError(`環境 ${name} の級は「PM の承認」ではないので、承認は要りません`);
@@ -44,6 +46,7 @@ export function infraApprove(ctx: Context, name: string, options: { minutes: num
   return [`承認を書いた: ${name}（${until} まで）`];
 }
 
+/** 環境の承認を、切れる前に消す（`tpm infra revoke`）。TPM 担当だけが打てる。 */
 export function infraRevoke(ctx: Context, name: string): string[] {
   requireTpmSide(ctx);
   requireEnv(ctx, name);
