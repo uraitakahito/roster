@@ -13,6 +13,13 @@ export interface Delivery {
   delivered: boolean
 }
 
+/** 自分宛ての知らせ。 */
+export interface Incoming {
+  id: string
+  from: string
+  text: string
+}
+
 export interface SpawnOptions {
   title: string
   cwd: string
@@ -28,6 +35,8 @@ export interface Transport {
   whoami(): string
   /** 知らせを送り、届いたかまで見る。replyTo は、返事の先の知らせの id。 */
   send(to: string, from: string, text: string, replyTo?: string): Delivery
+  /** 自分宛てで、まだ届いていない知らせ（手を動かしている間は届かない道具がある）。 */
+  pending(): Incoming[]
   /** 担当の居場所を作って命令を動かし、宛先を返す。 */
   spawn(options: SpawnOptions): string
   /** 今ある居場所の一覧。 */

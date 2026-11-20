@@ -2,7 +2,7 @@
 import { join } from 'node:path';
 import { shellQuote } from '../command.ts';
 import type { Context } from '../context.ts';
-import { modelStatus, ROLES, TPM_TITLE, WAIT, type RoleName, type RoleSettings } from '../protocol.ts';
+import { modelStatus, ROLES, TPM_SETTINGS, TPM_TITLE, WAIT, type RoleName, type RoleSettings } from '../protocol.ts';
 import { allRoles, assertKey, readRole, removeRole, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
 import { skillSetDir, TpmError } from '../skill-sets.ts';
 import { brief } from './messages.ts';
@@ -11,10 +11,10 @@ import { brief } from './messages.ts';
 const HELLO_INTERVAL_MS = 2000;
 
 /** 名乗る: 居場所の題と状態を出し、自分の宛先を状態に書く。続けて名簿を出す。 */
-export function init(ctx: Context, options: { model: string, effort: string }): string[] {
+export function init(ctx: Context, options: { model?: string, effort?: string } = {}): string[] {
   const address = ctx.transport.whoami();
   ctx.transport.setTitle(TPM_TITLE);
-  ctx.transport.setStatus('model', modelStatus(options.model, options.effort));
+  ctx.transport.setStatus('model', modelStatus(options.model ?? TPM_SETTINGS.model, options.effort ?? ctx.env.CLAUDE_EFFORT ?? TPM_SETTINGS.effort));
   ctx.transport.setStatus('wait', WAIT.work('起動'));
   ctx.state.write('tpm.json', { address } satisfies TpmRecord);
   return [`TPM 担当の宛先: ${address}`, `課題管理: ${ctx.config.tracker}・連携: ${ctx.config.transport}`, ...roles(ctx)];

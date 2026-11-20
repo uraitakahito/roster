@@ -4,17 +4,19 @@ import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, test } from 'vitest';
+import { buildProgram, commandPaths } from '../src/program.ts';
+import { COMMANDS } from '../src/protocol.ts';
 
 /** cli/ の folder（bin/tpm と src/ がある）と、その 1 つ上の repo。 */
 const cli = realpathSync(join(import.meta.dirname, '..'));
 const root = join(cli, '..');
 const tpm = join(cli, 'bin', 'tpm');
-const head = 'claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions';
+const head = `PATH=${root}/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"${root}/cli/bin/tpm guard"}]}]}}'`;
 let scratch: string;
 
 const run = (bin: string, args: string[], cwd: string): string =>
   execFileSync(bin, args, { cwd, encoding: 'utf8' }).trimEnd();
-const runFailing = (args: string[]) => spawnSync(tpm, args, { cwd: scratch, encoding: 'utf8' });
+const runFailing = (args: string[]) => spawnSync(tpm, ['start', ...args], { cwd: scratch, encoding: 'utf8' });
 
 // .claude/roles/config.json に text を書いた folder を作る（text が null なら config.json を置かない）
 let n = 0;
@@ -29,36 +31,36 @@ beforeAll(() => {
   scratch = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-test-')));
 });
 
-describe('tpm が出す 1 行', () => {
+describe('tpm start が出す 1 行', () => {
   test('folder を渡さなければ今いる folder に cd する', () => {
-    expect(run(tpm, [], scratch)).toMatch(new RegExp(`^cd ${scratch} && `));
+    expect(run(tpm, ['start'], scratch)).toMatch(new RegExp(`^cd ${scratch} && `));
   });
 
   test('渡した folder に cd する', () => {
     const d = folder(null);
-    expect(run(tpm, [d], root)).toMatch(new RegExp(`^cd ${d} && `));
+    expect(run(tpm, ['start', d], root)).toMatch(new RegExp(`^cd ${d} && `));
   });
 
   test('config.json が無ければ core だけを --add-dir で足し、/tpm の前に -- を置く', () => {
     const d = folder(null);
-    expect(run(tpm, [d], scratch)).toBe(`cd ${d} && ${head} --add-dir ${root}/skill-sets/core -- /tpm`);
+    expect(run(tpm, ['start', d], scratch)).toBe(`cd ${d} && ${head} --add-dir ${root}/skill-sets/core -- /tpm`);
   });
 
   test('skill-sets の欄が無ければ core だけ', () => {
     const d = folder('{ "software-engineer": { "effort": "high" } }');
-    expect(run(tpm, [d], scratch)).toBe(`cd ${d} && ${head} --add-dir ${root}/skill-sets/core -- /tpm`);
+    expect(run(tpm, ['start', d], scratch)).toBe(`cd ${d} && ${head} --add-dir ${root}/skill-sets/core -- /tpm`);
   });
 
   test('skill-sets に書いた追加の skill セットも足す', () => {
     const d = folder('{ "skill-sets": ["dependabot"] }');
-    expect(run(tpm, [d], scratch)).toBe(
+    expect(run(tpm, ['start', d], scratch)).toBe(
       `cd ${d} && ${head} --add-dir ${root}/skill-sets/core ${root}/skill-sets/dependabot -- /tpm`,
     );
   });
 
   test('skill-sets の core と重なりは 1 度だけ足す', () => {
     const d = folder('{ "skill-sets": ["core", "dependabot", "dependabot"] }');
-    expect(run(tpm, [d], scratch)).toBe(
+    expect(run(tpm, ['start', d], scratch)).toBe(
       `cd ${d} && ${head} --add-dir ${root}/skill-sets/core ${root}/skill-sets/dependabot -- /tpm`,
     );
   });
@@ -66,16 +68,16 @@ describe('tpm が出す 1 行', () => {
   test('symlink から呼んでも repo を正しく求める', () => {
     const link = join(scratch, 'tpm-link');
     symlinkSync(tpm, link);
-    expect(run(link, [], scratch)).toMatch(new RegExp(`--add-dir ${root}/skill-sets/core -- /tpm$`));
+    expect(run(link, ['start'], scratch)).toMatch(new RegExp(`--add-dir ${root}/skill-sets/core -- /tpm$`));
   });
 });
 
 describe('--verbose', () => {
   test.each([['--verbose'], ['-v']])('%s なら stderr に説明を出し、stdout は 1 行のまま', (flag) => {
     const d = folder('{ "skill-sets": ["dependabot"] }');
-    const r = spawnSync(tpm, [flag, d], { cwd: scratch, encoding: 'utf8' });
+    const r = spawnSync(tpm, ['start', flag, d], { cwd: scratch, encoding: 'utf8' });
     expect(r.status).toBe(0);
-    expect(r.stdout.trimEnd()).toBe(run(tpm, [d], scratch));
+    expect(r.stdout.trimEnd()).toBe(run(tpm, ['start', d], scratch));
     expect(r.stderr).toContain(`tpm: config      ${d}/.claude/roles/config.json（あり）\n`);
     expect(r.stderr).toContain('tpm: skill-sets  dependabot（');
     expect(r.stderr).toMatch(/^tpm: core +\S+\/skill-sets\/core → .*\/tpm/m);
@@ -83,7 +85,7 @@ describe('--verbose', () => {
   });
 
   test('旗が無ければ stderr に何も出さない', () => {
-    const r = spawnSync(tpm, [folder(null)], { cwd: scratch, encoding: 'utf8' });
+    const r = spawnSync(tpm, ['start', folder(null)], { cwd: scratch, encoding: 'utf8' });
     expect(r.stderr).toBe('');
   });
 });
@@ -115,5 +117,23 @@ describe('誤りなら 1 行を出さずに止まる', () => {
     const r = runFailing(args);
     expect(r.status).toBe(2);
     expect(r.stdout).toBe('');
+  });
+});
+
+describe('命令の一覧', () => {
+  test('命令を渡さなければ、使い方を出して exit 2', () => {
+    const r = spawnSync(tpm, [], { cwd: scratch, encoding: 'utf8' });
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain('Usage: tpm');
+  });
+
+  test('命令の木は protocol.ts の COMMANDS と揃っている', () => {
+    expect(commandPaths(buildProgram()).sort()).toEqual([...COMMANDS].sort());
+  });
+
+  test('決まりの誤りは tpm: で始まる 1 行を出して exit 1', () => {
+    const r = spawnSync(tpm, ['hello'], { cwd: scratch, encoding: 'utf8', env: { ...process.env, TPM_KEY: '', TPM_STATE: join(scratch, 'state') } });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/^tpm: \$TPM_KEY がありません/);
   });
 });

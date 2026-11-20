@@ -2,22 +2,22 @@ import { execFileSync } from 'node:child_process';
 import { describe, expect, test } from 'vitest';
 import { buildCommand, shellQuote } from '../src/command.ts';
 
-const head = 'claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions';
+const head = (root: string): string => `PATH=${root.includes(' ') ? `'${root}/cli/bin'` : `${root}/cli/bin`}:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"${root}/cli/bin/tpm guard"}]}]}}'`;
 
 describe('buildCommand', () => {
   test('追加の skill セットが無ければ /tpm', () => {
-    expect(buildCommand('/w', '/r', [])).toBe(`cd /w && ${head} --add-dir /r/skill-sets/core -- /tpm`);
+    expect(buildCommand('/w', '/r', [])).toBe(`cd /w && ${head('/r')} --add-dir /r/skill-sets/core -- /tpm`);
   });
 
   test('追加の skill セットを --add-dir に足しても、最初の入力は /tpm のまま', () => {
     expect(buildCommand('/w', '/r', ['dependabot', 'x'])).toBe(
-      `cd /w && ${head} --add-dir /r/skill-sets/core /r/skill-sets/dependabot /r/skill-sets/x -- /tpm`,
+      `cd /w && ${head('/r')} --add-dir /r/skill-sets/core /r/skill-sets/dependabot /r/skill-sets/x -- /tpm`,
     );
   });
 
   test('空白を含む道も引用する', () => {
     expect(buildCommand('/my work', '/my repo', [])).toBe(
-      `cd '/my work' && ${head} --add-dir '/my repo/skill-sets/core' -- /tpm`,
+      `cd '/my work' && ${head('/my repo')} --add-dir '/my repo/skill-sets/core' -- /tpm`,
     );
   });
 });

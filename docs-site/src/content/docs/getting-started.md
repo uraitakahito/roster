@@ -18,23 +18,23 @@ pnpm は Node の version ごとに入る。`.node-version` を上げたら、�
 
 ## 起動のしかた
 
-`cli/bin/tpm` が出す 1 行を写して打つ。
+`cli/bin/tpm start` が出す 1 行を写して打つ。
 
 ```sh
 cd </foo/bar/skills> # skillsの置き場所
 pnpm --dir cli install --frozen-lockfile   # build は無い（tpm は src/ を node で直に動かす）
 cd </your/workspace> # あなたが作業する場所
-/foo/bar/skills/cli/bin/tpm --verbose             # 今いる folder で TPM 担当を起こす 1 行を出す
-/foo/bar/skills/cli/bin/tpm --verbose <folder>    # その folder で起こす 1 行を出す
+/foo/bar/skills/cli/bin/tpm start --verbose             # 今いる folder で TPM 担当を起こす 1 行を出す
+/foo/bar/skills/cli/bin/tpm start --verbose <folder>    # その folder で起こす 1 行を出す
 ```
 
-`tpm` は claude を起こさない。folder の `.claude/roles/config.json` の `skill-sets` を確かめて、次の 1 行を出すだけ。それをそのまま打てばClaude Codeが適切に起動する。
+`tpm start` は claude を起こさない。folder の `.claude/roles/config.json` の `skill-sets` を確かめて、次の 1 行を出すだけ。それをそのまま打てばClaude Codeが適切に起動する。`PATH=…` は、TPM 担当が `tpm` を名前だけで打てるようにする。`--settings` は、shell の命令を実行の前に `tpm guard` に見せる hook（[担当のあいだの決まり](/protocol/#門)）。下では `<門の hook>` と略す。
 
 ```sh
 # skill-sets が無い（既定）
-cd <folder> && claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --add-dir <repo>/skill-sets/core -- /tpm
+cd <folder> && PATH=<repo>/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '<門の hook>' --add-dir <repo>/skill-sets/core -- /tpm
 # "skill-sets": ["dependabot"]
-cd <folder> && claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --add-dir <repo>/skill-sets/core <repo>/skill-sets/dependabot -- /tpm
+cd <folder> && PATH=<repo>/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '<門の hook>' --add-dir <repo>/skill-sets/core <repo>/skill-sets/dependabot -- /tpm
 ```
 
 **最初の入力は `--` の後に置く**（`--add-dir` は後ろの語もまとめて folder として読むため）。
@@ -49,4 +49,4 @@ cd <folder> && claude --model claude-opus-5-5 --effort medium --permission-mode 
 
 - 信頼は、信頼した folder が git の repo ならその repo 全体に、そうでなければその下の全部に効く。**この repo は別の git の repo なので、信頼済みの folder の下に置いても信頼は及ばない**（信頼済みの folder の下の、git の repo でない folder では出なかった）。
 - 置いた場所ごとに、**この repo の folder で 1 度 Claude Code を対話で起こし**、「Yes, I trust this folder」を選んでおく。信頼は残る。
-- 起こした担当がこのダイアログで止まると、サイドバーに `wait` が出ない。`/tpm` と `/dependabot-triage` は Yes を押さずに閉じ、人に信頼を頼む。
+- 起こした担当がこのダイアログで止まると、担当が名乗らない。`tpm assign` は 90 秒待っても名乗らなければ画面を読み、このダイアログなら Yes を押さずに閉じて、人に信頼を頼むよう返す。

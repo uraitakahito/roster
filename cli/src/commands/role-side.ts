@@ -1,4 +1,4 @@
-// 担当（TPM 担当に起こされた Claude Code）が打つ命令。
+// 担当（TPM 担当に起こされた Claude Code）が打つ命令。inbox は TPM 担当も打つ。
 import type { Context } from '../context.ts';
 import { modelStatus, ROLES, WAIT } from '../protocol.ts';
 import { requireSelf, requireTpm, writeRole } from '../roster.ts';
@@ -20,4 +20,11 @@ export function hello(ctx: Context): string[] {
     `TPM 担当の宛先: ${tpm.address}`,
     `自分の宛先: ${record.address}`,
   ];
+}
+
+/** 自分宛てで、まだ届いていない知らせを出す。届くのは手が空いた時なので、段の区切り（PR を出す前・merge を頼む前）に見る。 */
+export function inbox(ctx: Context): string[] {
+  const pending = ctx.transport.pending();
+  if (pending.length === 0) return ['まだ届いていない知らせは無い'];
+  return pending.flatMap(m => [`--- ${m.from}（id ${m.id}）`, m.text]);
 }

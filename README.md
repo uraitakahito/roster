@@ -1,7 +1,8 @@
 # skills
 
 Product Manager（人）を、TPM・Software Engineer・DevOps Engineer・Sustaining Engineer の
-各担当（Claude Code）が cmux の上で助けるための skill の一式。
+各担当（Claude Code）が助けるための skill の一式と、担当のあいだの決まりを受け持つ `tpm` の CLI。
+課題管理（Jira・GitHub の Issue）と担当どうしの連携（cmux）は、project ごとに設定で選ぶ。
 
 ## ドキュメント
 
@@ -13,5 +14,5 @@ Node は `.node-version` の version を nodenv で入れ、pnpm は corepack �
 
 ```sh
 cd <skills の置き場所> && pnpm --dir cli install --frozen-lockfile
-<skills の置き場所>/cli/bin/tpm <作業する folder>   # 出た 1 行を写して打つ
+<skills の置き場所>/cli/bin/tpm start <作業する folder>   # 出た 1 行を写して打つ
 ```

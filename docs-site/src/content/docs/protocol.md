@@ -1,21 +1,58 @@
 ---
 title: 担当のあいだの決まり
-description: 担当どうしの連絡の決まりは protocol.md の 1 か所にある。依頼書のひな形の場所と、見出しの流れ
+description: 決まりは protocol.md の文と tpm の CLI に分けてある。層の分け方・見出しの流れ・状態・門
 ---
 
-「連絡の仕方と見出し・サイドバーの `model` と `wait`・文書の食い違い・共有の環境・終わり方」は `skill-sets/core/.claude/skills/_shared/protocol.md` の 1 か所に書き、どの担当もそれを読む。Jira の課題へのコメントの書き方と読み方・Product Manager への確かめ方・状態の進め方は `skill-sets/core/.claude/skills/_shared/jira.md` に書き、Jira を触る担当がその場面で読む。決まりの本文は、このページには写さない（skill が読む原本は `protocol.md`）。
+担当どうしのやりとりは、文とコードに分けてある。
+
+- **文**（`skill-sets/core/.claude/skills/_shared/protocol.md`）: いつ・なぜ知らせるか、どの命令を打つか。どの担当もこれを読む。決まりの本文は、このページには写さない（skill が読む原本は `protocol.md`）。
+- **コード**（`cli/src/`）: 見出しの表・知らせの文の形・課題への記録・状態の字・名簿。担当は `tpm` の命令を打ち、命令が道具（cmux・acli・gh）を動かす。
 
 TPM 担当が書く依頼書には、その課題だけのことを書く（ひな形は `skill-sets/core/.claude/skills/tpm/brief-template.md`）。
 
-## サイドバー
+## 層
 
-各担当は、cmux のサイドバーの自分の workspace に `model` と `wait` の 2 つだけを出す。`wait` は「今、誰が何を待っているか」を 1 つだけ出し、状況が変わるたびに上書きする（字の形は `protocol.md` の「サイドバー」）。
+上の層は下の層の道具を知らない。道具は使う側の project の設定で選ぶ（[設定](/configuration/)）。
+
+| 層 | 中身 | 置き場所 |
+|---|---|---|
+| 役割 | 誰が何を受け持つか | `skill-sets/` の `SKILL.md` |
+| 決まり | 見出し・順番・記録・名簿 | `protocol.md` の文と、`cli/src/protocol.ts`・`cli/src/roster.ts`・`cli/src/commands/` |
+| 連携の道具 | 知らせを送る・担当を起こす・状態を出す | `cli/src/transport/`（`cmux`・試験用の `file`） |
+| 課題管理の道具 | 課題に記録を書く・読む・課題を閉じる | `cli/src/tracker/`（`jira`・`github`・`none`） |
+| 門 | 共有の環境と、道具の直打ちを止める | `cli/src/guard.ts`（Claude Code の hook から呼ばれる） |
+
+```mermaid
+flowchart TB
+  R["役割（SKILL.md）"] -->|"tpm report done …"| P["決まり（tpm の命令）"]
+  P --> T["連携の道具<br/>cmux"]
+  P --> K["課題管理の道具<br/>Jira・GitHub の Issue・なし"]
+  R -.->|"shell の命令"| G["門（tpm guard）"]
+  G -.->|"通す／止める"| E["環境（container・サーバー）"]
+```
+
+## 名簿と状態の置き場
+
+`tpm` は、TPM 担当を起こした folder（project）ごとに状態を持つ。置き場所は `~/.local/state/tpm/<project の path から作った名>/`（`$XDG_STATE_HOME` があればその下）。
+
+| ファイル | 中身 |
+|---|---|
+| `tpm.json` | TPM 担当の宛先。担当は知らせを送るたびに読むので、TPM 担当を起こし直しても担当に知らせ直さなくてよい |
+| `roles/<鍵>.json` | 名簿。課題の鍵 → 役割・居場所の宛先・依頼書・課題管理の課題 |
+| `approvals/<環境>.json` | Product Manager の承認と期限 |
+| `log.jsonl`・`infra.jsonl` | 送った知らせと、`tpm infra run` で打った命令の記録 |
+
+名簿は「鍵 → 宛先」を覚えるだけで、動いているかは毎回、連携の道具に聞く。`tpm roles` は、名簿にあって居場所が無い担当を「消えた」と出す。
+
+## 状態
+
+各担当は、連携の道具の表示（cmux ならサイドバー）に `model` と `wait` の 2 つだけを出す。`wait` は「今、誰が何を待っているか」を 1 つだけ出し、状況が変わるたびに上書きする（`tpm wait` と、知らせの命令が出す。字の形は `protocol.md` の「状態」）。
 
 ![cmux のサイドバー。workspace の題の下に、model（Opus 5.5 · medium）と wait（回答待ち(TPM): merge（14:30 まで））が並ぶ](../../assets/screens/sidebar.webp)
 
 ## 見出しの流れ
 
-担当どうしは、`cmux agent message` で見出しの付いた知らせを送り合う。Software Engineer 担当の 1 つの課題では、おおよそ次の順に流れる（見出しの一覧と中身は `protocol.md`）。
+担当どうしは、`tpm` の命令で見出しの付いた知らせを送り合う。Software Engineer 担当の 1 つの課題では、おおよそ次の順に流れる（見出しと命令の一覧は `protocol.md`）。
 
 ```mermaid
 sequenceDiagram
@@ -23,10 +60,8 @@ sequenceDiagram
   participant TPM as TPM 担当
   participant SE as Software Engineer 担当
   PM->>TPM: 課題を頼む
-  TPM->>SE: /software-engineer（依頼書の URL）
-  opt TPM 担当を起こし直したとき
-    TPM->>SE: 【TPM の宛先】（新しい workspace）
-  end
+  TPM->>SE: tpm assign（起こす）
+  SE->>TPM: tpm hello（名乗る）
   opt 迷ったとき・決めてほしいとき
     SE->>TPM: 【相談(TPM)】【PM への依頼】
     TPM->>PM: 確かめる
@@ -37,13 +72,24 @@ sequenceDiagram
     SE->>TPM: 【完成】（成果の Artifact）
     alt 残り・決めてほしいことがある、または次の段がある
       TPM->>PM: 見せる。続けるか、終えるか
-      TPM->>SE: 続けるなら【依頼】（同じ担当に）
+      TPM->>SE: 続けるなら【依頼】（tpm assign を同じ鍵に）
     else どれも無い
       TPM->>TPM: 聞かずに片付けると決める
     end
   end
-  TPM->>SE: 【片付け】
-  SE->>TPM: 【終わり】
+  TPM->>SE: 【片付け】（tpm dismiss）
+  SE->>TPM: 【終わり】（課題を閉じる）
   TPM->>PM: 報告する（聞かずに片付けたなら、そう添える）
-  TPM->>TPM: 担当の workspace を閉じる
+  TPM->>TPM: tpm close（担当の居場所を閉じる）
 ```
+
+## 門
+
+`tpm start` の 1 行と `tpm assign` は、起こす claude に `--settings` で hook を付ける。担当が shell の命令を打つと、実行の前に `tpm guard` が見て、通すか止めるかを決める（hook の拒否は `bypassPermissions` でも効く）。
+
+止めるのは 2 つ。
+
+- **共有の環境に触る命令**: 設定の `infra` の `match` に当たる命令を、環境の級で見る（[設定](/configuration/)）。「TPM に相談」と「PM の承認」は DevOps Engineer 担当だけが通り、「PM の承認」は `tpm infra approve` で書いた承認の期限の中だけ通る。
+- **道具の直打ち**: `cmux agent message`・`cmux set-status`・`cmux workspace create`・`cmux workspace close`、`acli` の記録と状態、（課題管理が GitHub の Issue の project では）`gh issue comment`・`gh issue close`。`tpm` を通さないと記録と状態が抜けるため。
+
+門は字の一致で見るので、防げるのは「うっかり」まで。script に包んだ命令や別名はすり抜ける。ほかの人と共有の環境を確実に守るには、担当に渡す権限を読むだけにする。
