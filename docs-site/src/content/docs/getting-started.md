@@ -28,13 +28,13 @@ cd </your/workspace> # あなたが作業する場所
 /foo/bar/skills/cli/bin/tpm start --verbose <folder>    # その folder で起こす 1 行を出す
 ```
 
-`tpm start` は claude を起こさない。folder の `.claude/roles/config.json` の `skill-sets` を確かめて、次の 1 行を出すだけ。それをそのまま打てばClaude Codeが適切に起動する。`PATH=…` は、TPM 担当が `tpm` を名前だけで打てるようにする。`--settings` は、shell の命令を実行の前に `tpm guard` に見せる hook（[担当のあいだの決まり](/protocol/#門)）。下では `<門の hook>` と略す。
+`tpm start` は claude を起こさない。folder の `.claude/roles/config.json` の `skill-sets` を確かめて、次の 1 行を出すだけ。それをそのまま打てばClaude Codeが適切に起動する。`PATH=…` は、TPM 担当が `tpm` を名前だけで打てるようにする。`--settings` は、shell の命令を実行の前に `tpm guard` に見せる hook（[担当のあいだの決まり](/protocol/#門)）。`<repo>` は skills を置いた場所（上の例なら `/foo/bar/skills`）に替わる。違う場所に置いたときも、`<repo>` のところだけが変わる。
 
 ```sh
 # skill-sets が無い（既定）
-cd <folder> && PATH=<repo>/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '<門の hook>' --add-dir <repo>/skill-sets/core -- /tpm
+cd <folder> && PATH=<repo>/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"<repo>/cli/bin/tpm guard"}]}]}}' --add-dir <repo>/skill-sets/core -- /tpm
 # "skill-sets": ["dependabot"]
-cd <folder> && PATH=<repo>/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '<門の hook>' --add-dir <repo>/skill-sets/core <repo>/skill-sets/dependabot -- /tpm
+cd <folder> && PATH=<repo>/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"<repo>/cli/bin/tpm guard"}]}]}}' --add-dir <repo>/skill-sets/core <repo>/skill-sets/dependabot -- /tpm
 ```
 
 **最初の入力は `--` の後に置く**（`--add-dir` は後ろの語もまとめて folder として読むため）。
