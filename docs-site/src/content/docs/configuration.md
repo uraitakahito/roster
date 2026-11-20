@@ -1,6 +1,6 @@
 ---
 title: 設定
-description: 使う側の project に置く .claude/roles/config.jsonc（課題管理・連携・インフラの環境・担当の既定）、model などの既定を人ごとに決める環境変数、Dependabot の skill の設定
+description: 使う側の project に置く .claude/roles/config.jsonc（課題管理・連携・インフラの環境・担当の既定）、model などの既定を人ごとに決める環境変数、ページの置き場の環境変数、Dependabot の skill の設定
 ---
 
 ## `.claude/roles/config.jsonc`（任意）
@@ -97,6 +97,15 @@ export TPM_EFFORT=medium
 
 - `tpm start` は環境変数を読んで 1 行の `--model`・`--effort`・`--permission-mode` に入れる。TPM 担当が名乗る `tpm hello` も同じ値を状態の `model` に出す（effort は、Claude Code が入れる `$CLAUDE_EFFORT` があればそれ）。
 - `tpm start` は、書いてある環境変数を 1 行の頭（`PATH=…` の隣）にも写す。`tpm assign` は TPM 担当の居場所で動き、TPM 担当の Claude Code の環境変数を読むので、profile で export した値も、`TPM_MODEL=… tpm start` のように 1 行を出すときだけ付けた値も、TPM 担当と担当の両方に効く。
+
+## ページの置き場の環境変数（任意）
+
+`tpm page put`・`tpm page path` が使う、代わりの置き場（[担当のあいだの決まり](/protocol/#ページの置き場)）の folder と URL。置き場は Mac に 1 つで、project をまたいで同じなので、`.claude/roles/config.jsonc` には書かない。替えるのは、置き場の container の mount や port を替えたときだけ。
+
+| 環境変数 | 決める物 | 無いとき |
+|---|---|---|
+| `TPM_PAGES_DIR` | 置き場の folder（container に mount する folder と同じにする） | `$XDG_DATA_HOME/tpm/pages`（`$XDG_DATA_HOME` も無ければ `~/.local/share/tpm/pages`） |
+| `TPM_PAGES_URL` | 置き場の URL（container の port の publish と同じにする） | `http://127.0.0.1:8800` |
 
 ## Dependabot の設定
 
