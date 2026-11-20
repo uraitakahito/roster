@@ -1,5 +1,5 @@
 // 利用者が写して打つ 1 行（cd と claude の命令）を組む。
-import { skillSetDir } from './skill-sets.js';
+import { skillSetDir } from './skill-sets.ts';
 
 const CLAUDE_OPTIONS = ['--model', 'claude-opus-5-5', '--effort', 'medium', '--permission-mode', 'bypassPermissions'];
 

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { explain, listSkills } from '../src/verbose.js';
+import { explain, listSkills } from '../src/verbose.ts';
 
 // skill セット core（skill 2 つと _shared）と empty（skill なし）を持つ偽の repo を作る。
 let root: string;

@@ -1,11 +1,11 @@
-// build 済みの cli/dist/cli.js を cli/bin/tpm（sh）経由で動かす。先に pnpm run build が要る。
+// cli/src/cli.ts を cli/bin/tpm（sh）経由で動かす。
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, test } from 'vitest';
 
-/** cli/ の folder（bin/tpm と dist/ がある）と、その 1 つ上の repo。 */
+/** cli/ の folder（bin/tpm と src/ がある）と、その 1 つ上の repo。 */
 const cli = realpathSync(join(import.meta.dirname, '..'));
 const root = join(cli, '..');
 const tpm = join(cli, 'bin', 'tpm');
@@ -26,9 +26,6 @@ const folder = (text: string | null): string => {
 };
 
 beforeAll(() => {
-  if (!existsSync(join(cli, 'dist', 'cli.js'))) {
-    throw new Error('dist/cli.js がありません。先に pnpm run build を打ってください');
-  }
   scratch = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-test-')));
 });
 

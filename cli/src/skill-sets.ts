@@ -22,7 +22,7 @@ export function readSkillSets(configFile: string, root: string): string[] {
 }
 
 /** config.json を JSON として読む。ファイルが無ければ undefined。 */
-function readConfig(configFile: string): unknown {
+export function readConfig(configFile: string): unknown {
   if (!existsSync(configFile)) return undefined;
   try {
     return JSON.parse(readFileSync(configFile, 'utf8'));

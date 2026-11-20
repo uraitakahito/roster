@@ -1,7 +1,7 @@
 // --verbose で stderr に出す説明。tpm が何をどこから読み、どの skill セットの skill を足すかを並べる。
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { skillSetDir } from './skill-sets.js';
+import { skillSetDir } from './skill-sets.ts';
 
 /** 説明に使う、tpm が求めた値。 */
 export interface Resolved {

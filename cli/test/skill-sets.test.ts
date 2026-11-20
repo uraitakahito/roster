@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { readSkillSets, TpmError } from '../src/skill-sets.js';
+import { readSkillSets, TpmError } from '../src/skill-sets.ts';
 
 // skill セット core・dependabot・a-1 を持つ偽の repo と、config.json を置く folder を作る。
 let root: string;

@@ -70,7 +70,7 @@ for (const p of all) {
 // 2. repo の path の名指し。一番上の folder（隠しも含む）で始まる code だけを見る。
 //    <…>・*・空白・$ を含む物は形の説明なので見ない。末尾の :<行> は落とす
 //    在るかは手元の folder でなく git から求める。追跡する物と、まだ add していない新しい物（.gitignore の外）だけを
-//    数え、手元だけの cli/dist/・node_modules/ などは数えない（数えると手元では通り、CI で落ちる）
+//    数え、手元だけの node_modules/ などは数えない（数えると手元では通り、CI で落ちる）
 const tracked = execFileSync("git", ["ls-files"], {
   cwd: REPO,
   encoding: "utf8",
