@@ -1,5 +1,5 @@
 // guard: 担当が打つ shell の命令を、実行の前に見て、通すか止めるかを決める（Claude Code の PreToolUse hook から呼ばれる）。
-// 止めるのは 2 つ。(1) project の設定（infra）に書いた環境に触る命令で、級の条件を満たさない物。
+// 止めるのは 2 つ。(1) project の設定（infra）に書いた環境に触る命令で、手続きを踏んでいない物。
 // (2) 連携と課題管理の道具の直打ち（tpm を通さないと、記録と状態が抜ける）。
 // 字の一致で見るので、防げるのは「うっかり」まで。script に包んだ命令などはすり抜ける。確実な守りは、担当に渡す権限の方で行う。
 import type { InfraEnv, RolesConfig } from './config.ts';
@@ -29,7 +29,7 @@ const DIRECT: [pattern: RegExp, instead: string][] = [
   [/\bgh\s+issue\s+(comment|close)\b/, 'tpm report …・tpm ask pm・tpm answer（記録は命令が書く）'],
 ];
 
-/** 命令の頭にこれを書くと、道具の直打ちを通す（tpm 自身の開発と試しのため。環境の級には効かない）。 */
+/** 命令の頭にこれを書くと、道具の直打ちを通す（tpm 自身の開発と試しのため。環境の手続きには効かない）。 */
 export const RAW = 'TPM_RAW=1';
 
 /** guard に聞く 1 件。打った命令と、決めるのに要る設定・承認・時刻。 */
@@ -63,7 +63,7 @@ export function judgeEnv(name: string, env: InfraEnv, role: RoleName | undefined
   };
 }
 
-/** 命令を通すか。環境の級を先に見て、次に道具の直打ちを見る。 */
+/** 命令を通すか。環境の手続きを先に見て、次に道具の直打ちを見る。 */
 export function judge(asked: Asked): Verdict {
   for (const name of touched(asked.command, asked.config.infra)) {
     const env = asked.config.infra[name];

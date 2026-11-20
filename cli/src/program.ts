@@ -79,7 +79,7 @@ export function buildProgram(): Command {
   registerMessages(program, print);
 
   const infra = program.command('infra').description('インフラの環境の宣言と承認');
-  infra.command('list').description('環境・級・承認を出す').action(() => print(infraList(createContext())));
+  infra.command('list').description('環境・手続き・承認を出す').action(() => print(infraList(createContext())));
   infra.command('approve <env>').description('TPM 担当が、Product Manager の承認を時間付きで書く')
     .requiredOption('--minutes <分>', '承認が効く分')
     .option('--note <一言>', '何の承認か')

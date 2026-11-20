@@ -17,12 +17,12 @@ export const TRANSPORTS = ['cmux', 'file'] as const;
 export type Transport = typeof TRANSPORTS[number];
 
 /**
- * 環境の級。触ると誰に響くかで決める。
+ * 環境の手続き（変える前に要ること）。触ると誰に響くかで決める。
  * free: 自分だけ（どの担当も断りなく）／tpm: 並べて動く担当（DevOps Engineer 担当だけ・TPM に相談）／
  * pm: ほかの人（DevOps Engineer 担当だけ・Product Manager の承認が要る）。
  */
 export const GUARDS = ['free', 'tpm', 'pm'] as const;
-/** 環境の級の名前。 */
+/** 環境の手続きの名前。 */
 export type Guard = typeof GUARDS[number];
 
 /** インフラの環境 1 つ。match のどれかを含む命令が、この環境に触る命令。 */
