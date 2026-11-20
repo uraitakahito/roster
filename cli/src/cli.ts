@@ -4,7 +4,7 @@
 // TPM 担当の Claude Code を起こす 1 行を出す（起こすのは、それを写して打つ利用者）。
 // folder を渡さなければ今いる folder。追加の skill セットは folder の .claude/roles/config.json の skill-sets で選ぶ。
 // --verbose なら、読んだ config・追加の skill セット・skill セットごとの skill を stderr に出す（stdout は 1 行のまま）。
-// cli/bin/tpm は cli/dist/cli.js への symlink。Node は main を realpath で解くので、symlink から呼んでも repo は正しく求まる。
+// cli/bin/tpm（sh）が本当の在り処の path でこれを node で動かす（nodenv が repo の .node-version を読むため）。repo は自分の在り処（import.meta.dirname）から求める。
 import { realpathSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { Command, CommanderError } from 'commander';

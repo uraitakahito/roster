@@ -1,4 +1,4 @@
-// pnpm run build が使う。src/ だけを dist/ に書き出す（bin/tpm は dist/cli.js への symlink）。
+// pnpm run build が使う。src/ だけを dist/ に書き出す（bin/tpm は dist/cli.js を node で動かす sh）。
 // src/release-age.ts は skill が node で直に動かすので書き出さない。
 {
   "extends": "./tsconfig.json",
