@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { answer, askDevops, askPm, askTpm, dismiss, notify, reportDependabot, reportDocFix, reportDone, reportEnd, reportMerged, show, wait } from '../src/commands/messages.ts';
+import { answer, askDevops, askPm, askTpm, dismiss, doneKind, notify, reportDependabot, reportDocFix, reportDone, reportEnd, reportMerged, show, wait } from '../src/commands/messages.ts';
 import { hello } from '../src/commands/role-side.ts';
 import { assign, close, roles } from '../src/commands/tpm-side.ts';
 import { requireRole } from '../src/roster.ts';
@@ -35,7 +35,7 @@ describe('1 つの課題の 1 周（課題管理なし）', () => {
 
     expect(wait(w.se, 'work', '実装')).toEqual(['状態: 作業中: 実装']);
     reportMerged(w.se, { pr: PR, note: '段 1 を入れた' });
-    expect(reportDone(w.se, { url: OUT, kind: '計画', summary: 'PR 2 本の計画', remaining: 'なし', decisions: 'なし', points: [] })).toEqual([
+    expect(reportDone(w.se, { url: OUT, kind: 'plan', summary: 'PR 2 本の計画', remaining: 'なし', decisions: 'なし', points: [] })).toEqual([
       '送った: 【done】→ file:tpm（届いた）',
       '状態: 回答待ち(TPM): 次の依頼（次の【brief】か【dismiss】を待つ。自分から【end】を送らない）',
     ]);
@@ -45,7 +45,7 @@ describe('1 つの課題の 1 周（課題管理なし）', () => {
     expect(assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: 'https://claude.ai/artifact/b2', note: '計画の実装', wait: 0 })).toEqual(['送った: 【brief】→ file:1（届いた）']);
     expect(requireRole(w.tpm, 't-x7k2').brief).toBe('https://claude.ai/artifact/b2');
     expect(w.wire.seats()).toHaveLength(1);
-    reportDone(w.se, { url: OUT, kind: '結果', summary: '実装した', remaining: 'なし', decisions: 'なし', points: [] });
+    reportDone(w.se, { url: OUT, kind: 'result', summary: '実装した', remaining: 'なし', decisions: 'なし', points: [] });
 
     expect(() => reportEnd(w.se, { prs: [PR], removed: [], left: 'なし' })).toThrow(/【dismiss】がまだ来ていません/);
     dismiss(w.tpm, 't-x7k2', { handover: false });
@@ -78,12 +78,18 @@ describe('1 つの課題の 1 周（課題管理なし）', () => {
 describe('課題への記録（GitHub の Issue）', () => {
   const bodies = (w: World): string[] => w.calls.filter(c => c.args[1] === 'comment').map(c => c.options?.input ?? '');
 
+  test('--kind plan でも、記録は日本語の種類（【計画】）で書く', () => {
+    const w = started({ tracker: 'github' }, 'gh-12');
+    reportDone(w.se, { url: OUT, kind: 'plan', summary: 'PR 2 本の計画', remaining: 'なし', decisions: 'なし', points: [] });
+    expect(bodies(w)).toEqual([`【計画】Software Engineer: PR 2 本の計画\n\n計画: ${OUT}`]);
+  });
+
   test('決まりの時に 1 件ずつ書き、【end】で課題を閉じる', () => {
     const w = started({ tracker: 'github' }, 'gh-12');
     askPm(w.se, { url: 'https://claude.ai/artifact/c1', items: ['案の選択', '切り替えの単位'], waitingFor: '案と単位' });
     answer(w.tpm, 't-x7k2', { text: '(1) 案 A (2) project ごと\n細かい事は依頼書に' });
     reportDocFix(w.se, { pr: PR, note: 'ひな形の surface を workspace に直した' });
-    reportDone(w.se, { url: OUT, kind: '提案', summary: '3 案を比べた', remaining: 'なし', decisions: '案の選択', points: ['お勧めは案 A'] });
+    reportDone(w.se, { url: OUT, kind: 'proposal', summary: '3 案を比べた', remaining: 'なし', decisions: '案の選択', points: ['お勧めは案 A'] });
     dismiss(w.tpm, 't-x7k2', { handover: false });
     const out = reportEnd(w.se, { url: OUT, prs: [PR], removed: [], left: 'なし' });
 
@@ -125,6 +131,22 @@ describe('課題への記録（GitHub の Issue）', () => {
   });
 });
 
+describe('tpm report done --kind', () => {
+  test('page put と同じ語（proposal・plan・result）を受ける', () => {
+    expect(['proposal', 'plan', 'result'].map(doneKind)).toEqual(['proposal', 'plan', 'result']);
+  });
+
+  test('前の値（提案・計画・結果）は誤りにして、替わりの値を案内する', () => {
+    expect(() => doneKind('提案')).toThrow('--kind 提案 は proposal に替わりました（--kind proposal）');
+    expect(() => doneKind('計画')).toThrow('--kind 計画 は plan に替わりました（--kind plan）');
+    expect(() => doneKind('結果')).toThrow('--kind 結果 は result に替わりました（--kind result）');
+  });
+
+  test('ほかの値は誤りにする', () => {
+    for (const value of ['brief', 'confirm', '確認', 'toString', '']) expect(() => doneKind(value)).toThrow('--kind は proposal・plan・result のどれかにしてください');
+  });
+});
+
 describe('【done】と【end】に要る欄', () => {
   test.each([
     ['残り', { decisions: 'なし' }, /--remaining（残り） を書いてください/],
@@ -132,19 +154,19 @@ describe('【done】と【end】に要る欄', () => {
     ['空白だけの残り', { remaining: ' ', decisions: 'なし' }, /--remaining/],
   ])('%sが無ければ送らない', (_, fields, message) => {
     const w = started();
-    expect(() => reportDone(w.se, { kind: '結果', summary: 's', points: [], ...fields })).toThrow(message);
+    expect(() => reportDone(w.se, { kind: 'result', summary: 's', points: [], ...fields })).toThrow(message);
     expect(texts(w, 'file:tpm')).toEqual([]);
   });
 
   test('成果の URL が無い【done】（DevOps Engineer 担当）は、要点から書く', () => {
     const w = started();
-    reportDone(w.se, { kind: '結果', summary: 'container を作り直した', remaining: 'なし', decisions: 'なし', points: [] });
+    reportDone(w.se, { kind: 'result', summary: 'container を作り直した', remaining: 'なし', decisions: 'なし', points: [] });
     expect(texts(w, 'file:tpm')).toEqual(['【done】要点: container を作り直した／残り: なし／決めてほしいこと: なし']);
   });
 
   test('記録の要点は 3 つまで', () => {
     const w = started({ tracker: 'github' }, 'gh-12');
-    expect(() => reportDone(w.se, { kind: '結果', summary: 's', remaining: 'なし', decisions: 'なし', points: ['1', '2', '3', '4'] })).toThrow(/3 つまで/);
+    expect(() => reportDone(w.se, { kind: 'result', summary: 's', remaining: 'なし', decisions: 'なし', points: ['1', '2', '3', '4'] })).toThrow(/3 つまで/);
     expect(texts(w, 'file:tpm')).toEqual([]);
   });
 

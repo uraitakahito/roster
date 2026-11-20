@@ -24,7 +24,7 @@ TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・De
 | 【ask-devops】 | 共有の環境で DevOps Engineer 担当の手が要る（下の「共有の環境」） | `tpm ask devops --what "<何を>" --why "<なぜ>" [--urgent]` |
 | 【doc-fix】 | 文書やコメントの食い違いを直した PR を merge した | `tpm report doc-fix --pr <URL> --note "<一言>"` |
 | 【merged】 | 自分の PR を 1 本 merge した | `tpm report merged --pr <URL> --note "<一言>"` |
-| 【done】 | 依頼書の成果（提案・計画・結果のページ）を置いた | `tpm report done --url <URL> --kind <提案\|計画\|結果> --summary "<要点>" --remaining "<残り>" --decisions "<決めてほしいこと>"` |
+| 【done】 | 依頼書の成果（提案・計画・結果のページ）を置いた | `tpm report done --url <URL> --kind <proposal\|plan\|result> --summary "<要点>" --remaining "<残り>" --decisions "<決めてほしいこと>"` |
 | 【end】 | 【dismiss】を受けて片付けた（Sustaining Engineer 担当は PR を merge した後） | `tpm report end --url <URL> --pr <URL> … --removed <worktree> … --left "<残っている物>"` |
 
 - 【done】の「残り」は、依頼の外で直すとよい物・やらなかった物・merge していない PR。「決めてほしいこと」は、【ask-pm】で送った項目の題。どちらも無ければ「なし」と書く（書かないと送れない）。TPM 担当はこの 2 つで【dismiss】を送るかを決める。
@@ -58,7 +58,7 @@ Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【
 
 | 命令 | 書く記録（1 行目は `【<種類>】<担当>: <一言>`） |
 |---|---|
-| `tpm report done --kind <種類>` | `提案`・`計画`・`結果`。成果の URL と、`--point` の要点（3 つまで） |
+| `tpm report done --kind <種類>` | `提案`・`計画`・`結果`（`--kind` の `proposal`・`plan`・`result`）。成果の URL と、`--point` の要点（3 つまで） |
 | `tpm report doc-fix` | `文書の修正`。PR の URL |
 | `tpm ask pm` | `確認`。確認のページの URL と、項目の題 |
 | `tpm answer`（TPM 担当） | `決定`。【answer】を返す前に書かれる |

@@ -46,7 +46,7 @@ tpm infra list
 依頼 1 つが済んだら、`tpm report done` で、したこと・確かめた結果・「残り」・「決めてほしいこと」（無ければ「なし」）を送る（Product Manager に決めてほしいことがあれば、protocol.md の「Product Manager に確かめる」で `tpm ask pm` も）。成果のページが無ければ `--url` は付けない:
 
 ```sh
-tpm report done --kind 結果 --summary "<したこと・確かめた結果>" --remaining "<残り>" --decisions "<決めてほしいこと>"
+tpm report done --kind result --summary "<したこと・確かめた結果>" --remaining "<残り>" --decisions "<決めてほしいこと>"
 ```
 
 次の【brief】を待つ。TPM 担当から【dismiss】が来たら `tpm report end --left "<残っている物>"` を打つ。**居場所は自分で閉じない。**

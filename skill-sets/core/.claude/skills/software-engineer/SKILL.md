@@ -48,7 +48,7 @@ tpm hello
 - 成果に Product Manager に決めてほしいことがあれば、ページに書くだけで済ませない。protocol.md の「Product Manager に確かめる」で `tpm ask pm` も送る。
 - 置いたら、出た URL で `tpm report done` を打つ:
   ```sh
-  tpm report done --url <成果の URL> --kind <提案|計画|結果> --summary "<要点>" --remaining "<残り>" --decisions "<決めてほしいこと>"
+  tpm report done --url <成果の URL> --kind <proposal|plan|result> --summary "<要点>" --remaining "<残り>" --decisions "<決めてほしいこと>"
   ```
   「残り」と「決めてほしいこと」は必ず書く（無ければ「なし」）。成果が自分の所で開き、TPM 担当に【done】が行き、課題があれば記録が書かれ、状態が `回答待ち(TPM): 次の依頼` になる。
 

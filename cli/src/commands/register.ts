@@ -3,11 +3,9 @@ import type { Command } from 'commander';
 import { createContext } from '../context.ts';
 import { WAIT, type WaitKind } from '../protocol.ts';
 import { TpmError } from '../skill-sets.ts';
-import { NOTE_KINDS, type NoteKind } from '../tracker/types.ts';
-import { answer, askDevops, askPm, askTpm, dismiss, notify, reportDependabot, reportDocFix, reportDone, reportEnd, reportMerged, show, wait } from './messages.ts';
+import { answer, askDevops, askPm, askTpm, dismiss, DONE_KINDS, doneKind, notify, reportDependabot, reportDocFix, reportDone, reportEnd, reportMerged, show, wait } from './messages.ts';
 
 const collect = (value: string, all: string[]): string[] => [...all, value];
-const DONE_KINDS: NoteKind[] = ['提案', '計画', '結果'];
 
 /** やりとりの命令（状態を替える `wait`・人に見せる `show`・メッセージを送る `ask`・`report`・TPM 担当の `answer`・`notify`・`dismiss`）を命令の木に足す。print は命令の出す行を書き出す。 */
 export function registerMessages(program: Command, print: (lines: string[]) => void): void {
@@ -41,14 +39,14 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
     .action((options: { pr: string, note: string }) => print(reportDocFix(createContext(), options)));
   report.command('done').description('【done】依頼書 1 つの成果を出した')
     .option('--url <URL>', '成果のページ（tpm page put で置いた URL）')
-    .option('--kind <種類>', `課題に書く記録の種類（${DONE_KINDS.join('・')}）`, '結果')
+    .option('--kind <種類>', `成果の種類（${Object.keys(DONE_KINDS).join('・')}。課題には ${Object.values(DONE_KINDS).join('・')} の記録を書く）`, 'result')
     .requiredOption('--summary <要点>')
     .option('--remaining <残り>', '依頼の外で直すとよい物・やらなかった物・merge していない PR（無ければ「なし」）')
     .option('--decisions <決めてほしいこと>', '【ask-pm】で送った項目の題（無ければ「なし」）')
     .option('--point <要点>', '課題の記録に書く要点（3 つまで・繰り返せる）', collect, [] as string[])
     .action((options: { url?: string, kind: string, summary: string, remaining?: string, decisions?: string, point: string[] }) => {
-      if (!(NOTE_KINDS as readonly string[]).includes(options.kind) || !DONE_KINDS.includes(options.kind as NoteKind)) throw new TpmError(`--kind は ${DONE_KINDS.join('・')} のどれかにしてください`);
-      print(reportDone(createContext(), { ...options, kind: options.kind as NoteKind, points: options.point }));
+      const kind = doneKind(options.kind);
+      print(reportDone(createContext(), { ...options, kind, points: options.point }));
     });
   report.command('end').description('【end】【dismiss】を受けて片付けた（課題を閉じる）')
     .option('--url <URL>', '成果のページ（tpm page put で置いた URL）')
