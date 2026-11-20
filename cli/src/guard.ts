@@ -4,6 +4,7 @@
 // 字の一致で見るので、防げるのは「うっかり」まで。script に包んだ命令などはすり抜ける。確実な守りは、担当に渡す権限の方で行う。
 import type { InfraEnv, RolesConfig } from './config.ts';
 import type { RoleName } from './protocol.ts';
+import { shellQuote } from './shell.ts';
 import type { State } from './state.ts';
 
 /** 環境を変えてよい担当。 */
@@ -100,7 +101,7 @@ export function commandOf(stdin: string): string | undefined {
   return input.tool_input.command;
 }
 
-/** 担当の claude に渡す settings（--settings）。Bash の前に tpm guard を呼ぶ hook。 */
+/** 担当の claude に渡す settings（--settings）。Bash の前に tpm guard を呼ぶ hook。hook の命令は shell が読むので、path を引用する。 */
 export function guardSettings(tpmBin: string): string {
-  return JSON.stringify({ hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: `${tpmBin} guard` }] }] } });
+  return JSON.stringify({ hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: `${shellQuote(tpmBin)} guard` }] }] } });
 }
