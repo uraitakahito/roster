@@ -1,0 +1,5 @@
+{
+  "$comment": "VS Code に、当てた .jsonc のコメントと末尾のカンマを許させる（settings.json の json.schemas）。allowComments・allowTrailingCommas は VS Code の語で、JSON Schema の決まりには無い。欄の名や型は見ない。",
+  "allowComments": true,
+  "allowTrailingCommas": true
+}
