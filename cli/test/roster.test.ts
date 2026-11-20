@@ -178,8 +178,8 @@ describe('inbox', () => {
   test('まだ届いていない知らせを、差出人と id を添えて出す', () => {
     const w = world();
     expect(inbox(w.tpm)).toEqual(['まだ届いていない知らせは無い']);
-    const tpm = { ...w.tpm, transport: Object.assign(w.wire, { pending: () => [{ id: 'm1', from: 'Technical Program Manager', text: '【依頼】u' }] }) };
-    expect(inbox(tpm)).toEqual(['--- Technical Program Manager（id m1）', '【依頼】u']);
+    const tpm = { ...w.tpm, transport: Object.assign(w.wire, { pending: () => [{ id: 'm1', from: 'Technical Program Manager', text: '【brief】u' }] }) };
+    expect(inbox(tpm)).toEqual(['--- Technical Program Manager（id m1）', '【brief】u']);
   });
 });
 

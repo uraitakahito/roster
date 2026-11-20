@@ -17,7 +17,7 @@ tpm infra list
 
 - **`tpm hello` が最初の手。** 状態を出し、TPM 担当に名乗りを届け、受け持ち（依頼書の URL・課題管理の課題）を返す。誤りで止まったら（`tpm assign` で起こされていない）、何もせずにそのことを画面に書いて止まる。
 - `tpm infra list` は、この project の環境と級（自由・TPM に相談・PM の承認）と、今ある承認を出す。
-- `tpm hello` の依頼書が「無し」なら、`tpm wait tpm 依頼` を打って止まる。【依頼】が来たら読んで始める。
+- `tpm hello` の依頼書が「無し」なら、`tpm wait tpm 依頼` を打って止まる。【brief】が来たら読んで始める。
 
 続けて `${CLAUDE_SKILL_DIR}/../_shared/protocol.md` を読み、従う。
 
@@ -27,7 +27,7 @@ tpm infra list
 - 作業する repo の `CLAUDE.md`・教訓・memory と、環境の手順書を先に読む。
 - 環境を変える前に、その環境の級を見る（protocol.md の「共有の環境」）:
   - **TPM に相談**（並べて動いている担当に響く。動いている container や worker を止める・消す・作り直す、共有の volume・network・secret を変える）: 先に `tpm ask tpm` で何が止まるかとお勧めを送り、答えを待つ。
-  - **PM の承認**（ほかの人やチームに響く）: 何を・なぜ・何が止まるか・戻し方を確認の Artifact に書き、`tpm ask pm` で送る。【PM の回答】で承認が来るまで変えない。承認は時間を限って効くので、切れたら頼み直す。
+  - **PM の承認**（ほかの人やチームに響く）: 何を・なぜ・何が止まるか・戻し方を確認の Artifact に書き、`tpm ask pm` で送る。【answer】で承認が来るまで変えない。承認は時間を限って効くので、切れたら頼み直す。
   - 設定に書かれていない環境でも、並べて動いている物やほかの人に響きそうなら、先に `tpm ask tpm`。
   - 響かない操作（新しい物を足す・読むだけ）は確かめずに進める。
 - 承認の下で環境を変える命令は `tpm infra run <環境> -- <命令>` で打つ（打った記録が残る）。
@@ -43,4 +43,4 @@ tpm infra list
 tpm report done --kind 結果 --summary "<したこと・確かめた結果>" --remaining "<残り>" --decisions "<決めてほしいこと>"
 ```
 
-次の【依頼】を待つ。TPM 担当から【片付け】が来たら `tpm report end --left "<残っている物>"` を打つ。**居場所は自分で閉じない。**
+次の【brief】を待つ。TPM 担当から【dismiss】が来たら `tpm report end --left "<残っている物>"` を打つ。**居場所は自分で閉じない。**

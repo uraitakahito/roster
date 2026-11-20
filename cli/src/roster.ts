@@ -20,7 +20,7 @@ export interface RoleRecord extends RoleSettings {
   address?: string
   /** 担当が名乗った時刻。 */
   helloAt?: string
-  /** 【片付け】を送ったか。handover は担当の交代（課題は閉じない）。 */
+  /** 【dismiss】を送ったか。handover は担当の交代（課題は閉じない）。 */
   dismissed?: 'done' | 'handover'
 }
 

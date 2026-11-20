@@ -24,7 +24,7 @@ export function hello(ctx: Context, options: { model?: string, effort?: string }
   return [
     `役割: ${ROLES[record.role].label}`,
     `課題の鍵: ${record.key}`,
-    `依頼書: ${record.brief ?? '無し（【依頼】を待つ）'}`,
+    `依頼書: ${record.brief ?? '無し（【brief】を待つ）'}`,
     `課題管理の課題: ${record.issue ?? '無し'}（道具: ${ctx.config.tracker}）`,
     `TPM 担当の宛先: ${tpm.address}`,
     `自分の宛先: ${record.address}`,

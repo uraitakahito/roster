@@ -1,6 +1,6 @@
 # 依頼書のひな形
 
-TPM 担当が Software Engineer 担当・DevOps Engineer 担当に渡す依頼書。HTML の Artifact に書いて publish し、URL を `tpm assign <鍵> … --brief <URL>` で渡す（担当が動いていれば【依頼】で届き、いなければ起こされた担当が `tpm hello` で受け取る）。
+TPM 担当が Software Engineer 担当・DevOps Engineer 担当に渡す依頼書。HTML の Artifact に書いて publish し、URL を `tpm assign <鍵> … --brief <URL>` で渡す（担当が動いていれば【brief】で届き、いなければ起こされた担当が `tpm hello` で受け取る）。
 
 **書かない物**: 連絡の仕方・見出しの表・状態・終わり方・文書の食い違いの扱い・共有の環境の扱い・TPM 担当の宛先。これらは `/software-engineer`・`/devops-engineer` と `_shared/protocol.md`、`tpm` の命令にある。依頼書には、その課題だけのことを書く。
 
@@ -14,7 +14,7 @@ TPM 担当が Software Engineer 担当・DevOps Engineer 担当に渡す依頼�
 | 前提 | その課題だけの決まり（破壊的でよいか・後方互換を考えるか・触ってはいけない物・使う model の指示） |
 | 材料 | 読む物（貼られた文・ファイル・URL）。長い文は `<pre>` でそのまま |
 | TPM が知っていること | 調べ済みのこと・試して駄目だったこと |
-| 成果の形 | 何を出せば終わりか（Artifact・PR）。担当は【完成】の後に次の【依頼】か【片付け】を待つので、「【完成】の後は待つ」とは書かなくてよい |
+| 成果の形 | 何を出せば終わりか（Artifact・PR）。担当は【完成】の後に次の【brief】か【dismiss】を待つので、「【完成】の後は待つ」とは書かなくてよい |
 
 ## 書き方
 

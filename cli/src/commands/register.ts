@@ -50,7 +50,7 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
       if (!(NOTE_KINDS as readonly string[]).includes(options.kind) || !DONE_KINDS.includes(options.kind as NoteKind)) throw new TpmError(`--kind は ${DONE_KINDS.join('・')} のどれかにしてください`);
       print(reportDone(createContext(), { ...options, kind: options.kind as NoteKind, points: options.point }));
     });
-  report.command('end').description('【終わり】【片付け】を受けて片付けた（課題を閉じる）')
+  report.command('end').description('【終わり】【dismiss】を受けて片付けた（課題を閉じる）')
     .option('--url <URL>', '成果の Artifact')
     .option('--pr <URL>', 'merge した PR（繰り返せる）', collect, [] as string[])
     .option('--removed <worktree>', '消した worktree（繰り返せる）', collect, [] as string[])
@@ -66,13 +66,13 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
       .action((text: string, options: { title?: string }) => print(reportDependabot(createContext(), id, { text, ...options })));
   }
 
-  program.command('answer <key> <text>').description('TPM 担当が【PM の回答】を返す（課題に「決定」の記録も書く）')
+  program.command('answer <key> <text>').description('TPM 担当が【answer】を返す（課題に「決定」の記録も書く）')
     .option('--reply-to <id>', '返事の先の知らせの id')
     .action((key: string, text: string, options: { replyTo?: string }) => print(answer(createContext(), key, { text, ...options })));
-  program.command('notify <key> <text>').description('TPM 担当が【連絡】を送る（返事は要らない）')
+  program.command('notify <key> <text>').description('TPM 担当が【notify】を送る（返事は要らない）')
     .option('--reply-to <id>', '返事の先の知らせの id')
     .action((key: string, text: string, options: { replyTo?: string }) => print(notify(createContext(), key, { text, ...options })));
-  program.command('dismiss <key>').description('TPM 担当が【片付け】を送る')
+  program.command('dismiss <key>').description('TPM 担当が【dismiss】を送る')
     .option('--handover', '担当の交代のため（担当は課題を閉じない）', false)
     .action((key: string, options: { handover: boolean }) => print(dismiss(createContext(), key, options)));
 }

@@ -27,7 +27,7 @@ disable-model-invocation: true
 
 - **Product Manager に頼まれた仕事は、課題管理の課題があるか、大きいか小さいかによらず、すべて課題として扱う。** 課題ごとの調査・提案・計画立案・実装・テストは、課題ごとの Software Engineer 担当にさせる。課題ごとに分けるのは、トークンを節約し、その課題に精通させるため。**あなたは調べて案を出すことも、実装もしない。**
 - **課題には鍵を付ける。** Jira の課題があればその番号（`SKILLS-12`）、GitHub の Issue があれば `gh-` と番号（`gh-12`）、無ければ `t-` で始まる英小文字・数字・ハイフンの短い名（`t-same-se`）。鍵は名簿・居場所の題・依頼書の頭書き・branch の名・PR の題に使う。
-- 課題を振るときは、いつも `tpm assign <鍵> …` を打つ（下の 3）。**同じ鍵の担当が動いていれば、その担当に【依頼】で新しい依頼書が行く**（提案の後の計画、計画の後の実装、Product Manager が選んだ案の実装も同じ。提案した担当がその背景を知っているため）。いなければ、新しい担当が立ち上がって名乗る。
+- 課題を振るときは、いつも `tpm assign <鍵> …` を打つ（下の 3）。**同じ鍵の担当が動いていれば、その担当に【brief】で新しい依頼書が行く**（提案の後の計画、計画の後の実装、Product Manager が選んだ案の実装も同じ。提案した担当がその背景を知っているため）。いなければ、新しい担当が立ち上がって名乗る。
 - **共有の環境のビルド・デプロイ・整備は DevOps Engineer 担当にさせる**（どの環境が共有かは `tpm infra list`。protocol.md の「共有の環境」）。要るときにいなければ起こす。Software Engineer 担当から【DevOps への依頼】が来たら、DevOps Engineer 担当に依頼書を書いて回す。DevOps Engineer 担当が迷ったら、あなたに【相談(TPM)】が来る。
 - Dependabot の PR は、Product Manager が言ったとき（「Dependabot の PR を見て」や `/dependabot-triage`）だけ、`/dependabot-triage` を呼んで振り分ける（Sustaining Engineer 担当を起こすのもその skill）。起動のときには見ない。
   - 使える skill に `/dependabot-triage` が無ければ、Dependabot の skill セットを読み込んでいない。呼ばずに、「起こした folder の `.claude/roles/config.jsonc` の `skill-sets` に `"dependabot"` を書き、`tpm start` の 1 行で起こし直す」と Product Manager に伝える。
@@ -42,7 +42,7 @@ disable-model-invocation: true
 | DevOps Engineer | `devops-engineer` | `claude-opus-5-5` | `low` | `bypassPermissions` |
 
 - 欄ごとに、旗 > 起こした folder の `.claude/roles/config.jsonc` の `software-engineer`・`devops-engineer`（欄は `model`・`effort`・`permissionMode`）> 環境変数 `TPM_MODEL`・`TPM_EFFORT`・`TPM_PERMISSION_MODE` > コードの既定 の順に、`tpm assign` が決める。環境変数は `tpm start` の 1 行（あなた）にも効く。
-- **Product Manager が課題ごとに別の model や effort を指示したら、それに従う**（`tpm assign` に `--model`・`--effort` を付ける）。その課題の担当が既にいれば、替えると背景を知らない新しい担当になることを Product Manager に伝え、それでも替えるかを確かめる。替えるなら、前の担当に `tpm dismiss <鍵> --handover`（担当の交代の【片付け】。担当は課題を閉じない）を送り、【終わり】（成果の URL が載る）を受けて `tpm close <鍵>` で閉じてから、その URL を頭書きに書いた依頼書で新しい担当を起こす。
+- **Product Manager が課題ごとに別の model や effort を指示したら、それに従う**（`tpm assign` に `--model`・`--effort` を付ける）。その課題の担当が既にいれば、替えると背景を知らない新しい担当になることを Product Manager に伝え、それでも替えるかを確かめる。替えるなら、前の担当に `tpm dismiss <鍵> --handover`（担当の交代の【dismiss】。担当は課題を閉じない）を送り、【終わり】（成果の URL が載る）を受けて `tpm close <鍵>` で閉じてから、その URL を頭書きに書いた依頼書で新しい担当を起こす。
 
 ## 3. 起こす
 
@@ -72,14 +72,14 @@ disable-model-invocation: true
 | 【PM への依頼】 | URL を自分の所で開き（`tpm show <URL>`）、Product Manager に見せる。答えを `tpm answer <鍵> "<答え>"` で返す（課題があれば「決定」の記録も書かれる） |
 | 【DevOps への依頼】 | DevOps Engineer 担当に依頼書を書いて回す（`tpm assign devops …`） |
 | 【ドキュメント修正】【merge 済み】 | 受け取ったと返す（`tpm notify <鍵> "受け取った" --reply-to <id>`） |
-| 【完成】 | Artifact を自分の所で開き（`tpm show <URL>`）、下の「【片付け】を送るか」で決める。聞かなくてよければ `tpm dismiss <鍵>`。聞くなら Product Manager に見せ、「続きをこの担当に頼むか、この課題を終えるか」を聞き、続けるなら新しい依頼書（3 の 1 のとおり書く）を `tpm assign <鍵> … --brief <URL>` で同じ担当に、終えるなら `tpm dismiss <鍵>` |
-| 【終わり】 | （【片付け】の返事として来る）報告を Product Manager に伝え（聞かずに片付けたなら、そう添える）、`tpm close <鍵>` で閉じる |
+| 【完成】 | Artifact を自分の所で開き（`tpm show <URL>`）、下の「【dismiss】を送るか」で決める。聞かなくてよければ `tpm dismiss <鍵>`。聞くなら Product Manager に見せ、「続きをこの担当に頼むか、この課題を終えるか」を聞き、続けるなら新しい依頼書（3 の 1 のとおり書く）を `tpm assign <鍵> … --brief <URL>` で同じ担当に、終えるなら `tpm dismiss <鍵>` |
+| 【終わり】 | （【dismiss】の返事として来る）報告を Product Manager に伝え（聞かずに片付けたなら、そう添える）、`tpm close <鍵>` で閉じる |
 
 - 送った命令が「まだ届いていない」と返したら、相手が手を動かしている。空いたら届くので、送り直さない。
 - Product Manager の答えを待つ間は `tpm wait pm "<何を>"`、答えが来たら `tpm wait work "<段>"` などに更新する。
-- Product Manager が共有の環境を変えることを承認したら、`tpm infra approve <環境> --minutes <分> --note "<何の承認か>"` で承認を書いてから【PM の回答】を返す。済んだら `tpm infra revoke <環境>` で承認を消す。
+- Product Manager が共有の環境を変えることを承認したら、`tpm infra approve <環境> --minutes <分> --note "<何の承認か>"` で承認を書いてから【answer】を返す。済んだら `tpm infra revoke <環境>` で承認を消す。
 
-### 【片付け】を送るか
+### 【dismiss】を送るか
 
 【完成】を受けたら、Product Manager の判断が要るときだけ聞く。次のどれかに当たれば聞く:
 
@@ -90,8 +90,8 @@ disable-model-invocation: true
 
 どれにも当たらなければ、聞かずに `tpm dismiss <鍵>` を送る。担当は課題を済みにして【終わり】を返す。その報告に「聞かずに片付けた」と添えて Product Manager に伝える。Product Manager が続けたいと言えば、成果の Artifact の URL を頭書きに書いた依頼書で新しい担当を起こす。
 
-- ほかに【片付け】を送るのは、Product Manager が「この課題は終わり」と言ったときと、model を替えて担当を替えるとき（2 の「起こす担当の既定」）。
-- Software Engineer 担当と DevOps Engineer 担当は、【片付け】が来るまで自分から【終わり】を送らない。`tpm roles` で `回答待ち(TPM): 次の依頼` のまま残っている担当がいたら、最後の【完成】を上の 1〜4 に当てて決める。
+- ほかに【dismiss】を送るのは、Product Manager が「この課題は終わり」と言ったときと、model を替えて担当を替えるとき（2 の「起こす担当の既定」）。
+- Software Engineer 担当と DevOps Engineer 担当は、【dismiss】が来るまで自分から【終わり】を送らない。`tpm roles` で `回答待ち(TPM): 次の依頼` のまま残っている担当がいたら、最後の【完成】を上の 1〜4 に当てて決める。
 
 ## 5. 起こし直し
 
