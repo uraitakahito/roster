@@ -58,7 +58,7 @@ export interface RoleDef {
   defaults: RoleSettings
   /** 居場所の題（メッセージの差出人にも使う）。担当の名は略す（記録には label を書く）。TPM 担当は同じ鍵の担当をこの題でも見分けられる。 */
   title: (key: string, short: string) => string
-  /** 【dismiss】を待たずに【終わり】を送ってよいか（PR 1 本を受け持つ担当は、merge のメッセージで終える）。 */
+  /** 【dismiss】を待たずに【end】を送ってよいか（PR 1 本を受け持つ担当は、merge のメッセージで終える）。 */
   endsWithoutDismiss: boolean
 }
 
@@ -100,34 +100,33 @@ export const ROLE_NAMES = Object.keys(ROLES) as RoleName[];
 
 /** 見出し 1 つ。from は送る側、record は課題に書く記録の種類（書かなければ無し）。 */
 export interface Heading {
-  name: string
   from: 'role' | 'tpm'
   record?: NoteKind
 }
 
-/** 見出しの表。鍵は命令の中での呼び名。 */
+/** 見出しの表。鍵は見出しの名（【ask-tpm】など）で、命令の中での呼び名と同じ。 */
 export const HEADINGS = {
-  'ask-tpm': { name: '相談(TPM)', from: 'role' },
-  'ask-pm': { name: 'PM への依頼', from: 'role', record: '確認' },
-  'ask-devops': { name: 'DevOps への依頼', from: 'role' },
-  'doc-fix': { name: 'ドキュメント修正', from: 'role', record: '文書の修正' },
-  'merged': { name: 'merge 済み', from: 'role' },
-  'done': { name: '完成', from: 'role' },
-  'end': { name: '終わり', from: 'role', record: '結果' },
-  'merge-request': { name: 'merge の依頼', from: 'role' },
-  'not-yet': { name: 'まだ', from: 'role' },
-  'recreated': { name: '作り直し', from: 'role' },
-  'brief': { name: 'brief', from: 'tpm' },
-  'answer': { name: 'answer', from: 'tpm', record: '決定' },
-  'notify': { name: 'notify', from: 'tpm' },
-  'dismiss': { name: 'dismiss', from: 'tpm' },
+  'ask-tpm': { from: 'role' },
+  'ask-pm': { from: 'role', record: '確認' },
+  'ask-devops': { from: 'role' },
+  'doc-fix': { from: 'role', record: '文書の修正' },
+  'merged': { from: 'role' },
+  'done': { from: 'role' },
+  'end': { from: 'role', record: '結果' },
+  'merge-request': { from: 'role' },
+  'not-yet': { from: 'role' },
+  'recreated': { from: 'role' },
+  'brief': { from: 'tpm' },
+  'answer': { from: 'tpm', record: '決定' },
+  'notify': { from: 'tpm' },
+  'dismiss': { from: 'tpm' },
 } as const satisfies Record<string, Heading>;
 
-/** 見出しの名前（`ask-tpm` など）。 */
+/** 見出しの名（`ask-tpm` など）。 */
 export type HeadingId = keyof typeof HEADINGS;
 
 /** メッセージの書式。 */
-export const message = (id: HeadingId, body: string): string => `【${HEADINGS[id].name}】${body}`;
+export const message = (id: HeadingId, body: string): string => `【${id}】${body}`;
 
 /** 状態 wait の字。「今、誰が何を待っているか」を 1 つだけ出す。 */
 export const WAIT = {
@@ -141,9 +140,9 @@ export const WAIT = {
 /** 待ちの種類（`tpm wait` の kind）。 */
 export type WaitKind = keyof typeof WAIT;
 
-/** 【完成】の後の待ち。 */
+/** 【done】の後の待ち。 */
 export const WAIT_NEXT_BRIEF = WAIT.tpm('次の依頼');
-/** 【終わり】の後の待ち。 */
+/** 【end】の後の待ち。 */
 export const WAIT_CLOSE = WAIT.tpm('workspace を閉じる');
 
 /** model の id を状態の字にする（claude-opus-5-5 → Opus 5.5）。形が違えばそのまま。 */

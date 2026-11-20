@@ -19,47 +19,47 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
   program.command('show <url>').description('URL を自分の居場所で開いて人に見せる').action((url: string) => print(show(createContext(), url)));
 
   const ask = program.command('ask').description('担当が TPM 担当に頼む');
-  ask.command('tpm <text>').description('【相談(TPM)】困っていること・試したこと・案とお勧め')
+  ask.command('tpm <text>').description('【ask-tpm】困っていること・試したこと・案とお勧め')
     .requiredOption('--waiting-for <何を>', '状態に出す、待っている物')
     .option('--reply-to <id>', '返事の先のメッセージの id')
     .action((text: string, options: { waitingFor: string, replyTo?: string }) => print(askTpm(createContext(), { text, ...options })));
-  ask.command('pm').description('【PM への依頼】確認のページを送る（課題に「確認」の記録も書く）')
+  ask.command('pm').description('【ask-pm】確認のページを送る（課題に「確認」の記録も書く）')
     .requiredOption('--url <URL>', '確認のページ（tpm page put で置いた URL）')
     .requiredOption('--item <題>', '決めてほしい項目の題（繰り返せる）', collect, [] as string[])
     .requiredOption('--waiting-for <何を>', '状態に出す、待っている物')
     .action((options: { url: string, item: string[], waitingFor: string }) => print(askPm(createContext(), { url: options.url, items: options.item, waitingFor: options.waitingFor })));
-  ask.command('devops').description('【DevOps への依頼】共有の環境で DevOps Engineer 担当の手が要る')
+  ask.command('devops').description('【ask-devops】共有の環境で DevOps Engineer 担当の手が要る')
     .requiredOption('--what <何を>').requiredOption('--why <なぜ>').option('--urgent', '急ぎ', false)
     .action((options: { what: string, why: string, urgent: boolean }) => print(askDevops(createContext(), options)));
 
   const report = program.command('report').description('担当が TPM 担当に知らせる');
-  report.command('merged').description('【merge 済み】自分の PR を 1 本 merge した')
+  report.command('merged').description('【merged】自分の PR を 1 本 merge した')
     .requiredOption('--pr <URL>').requiredOption('--note <一言>')
     .action((options: { pr: string, note: string }) => print(reportMerged(createContext(), options)));
-  report.command('doc-fix').description('【ドキュメント修正】文書の食い違いを直した PR を merge した')
+  report.command('doc-fix').description('【doc-fix】文書の食い違いを直した PR を merge した')
     .requiredOption('--pr <URL>').requiredOption('--note <一言>')
     .action((options: { pr: string, note: string }) => print(reportDocFix(createContext(), options)));
-  report.command('done').description('【完成】依頼書 1 つの成果を出した')
+  report.command('done').description('【done】依頼書 1 つの成果を出した')
     .option('--url <URL>', '成果のページ（tpm page put で置いた URL）')
     .option('--kind <種類>', `課題に書く記録の種類（${DONE_KINDS.join('・')}）`, '結果')
     .requiredOption('--summary <要点>')
     .option('--remaining <残り>', '依頼の外で直すとよい物・やらなかった物・merge していない PR（無ければ「なし」）')
-    .option('--decisions <決めてほしいこと>', '【PM への依頼】で送った項目の題（無ければ「なし」）')
+    .option('--decisions <決めてほしいこと>', '【ask-pm】で送った項目の題（無ければ「なし」）')
     .option('--point <要点>', '課題の記録に書く要点（3 つまで・繰り返せる）', collect, [] as string[])
     .action((options: { url?: string, kind: string, summary: string, remaining?: string, decisions?: string, point: string[] }) => {
       if (!(NOTE_KINDS as readonly string[]).includes(options.kind) || !DONE_KINDS.includes(options.kind as NoteKind)) throw new TpmError(`--kind は ${DONE_KINDS.join('・')} のどれかにしてください`);
       print(reportDone(createContext(), { ...options, kind: options.kind as NoteKind, points: options.point }));
     });
-  report.command('end').description('【終わり】【dismiss】を受けて片付けた（課題を閉じる）')
+  report.command('end').description('【end】【dismiss】を受けて片付けた（課題を閉じる）')
     .option('--url <URL>', '成果のページ（tpm page put で置いた URL）')
     .option('--pr <URL>', 'merge した PR（繰り返せる）', collect, [] as string[])
     .option('--removed <worktree>', '消した worktree（繰り返せる）', collect, [] as string[])
     .option('--left <残っている物>', '残っている物（無ければ「なし」）')
     .action((options: { url?: string, pr: string[], removed: string[], left?: string }) => print(reportEnd(createContext(), { ...options, prs: options.pr })));
   for (const [id, description] of [
-    ['merge-request', '【merge の依頼】（Dependabot）PR の merge を頼む'],
-    ['not-yet', '【まだ】（Dependabot）まだ対象でない・rebase に応じない'],
-    ['recreated', '【作り直し】（Dependabot）PR が新しい番号で作り直された'],
+    ['merge-request', '【merge-request】（Dependabot）PR の merge を頼む'],
+    ['not-yet', '【not-yet】（Dependabot）まだ対象でない・rebase に応じない'],
+    ['recreated', '【recreated】（Dependabot）PR が新しい番号で作り直された'],
   ] as const) {
     report.command(`${id} <text>`).description(description)
       .option('--title <題>', '（recreated）新しい番号の居場所の題')

@@ -54,14 +54,14 @@ tpm infra run tpm-pages -- container run -d --name tpm-pages \
 
 ### 止める・Mac を起こし直した後
 
-- 止めると、並べて動いている担当がみな依頼書と成果を開けなくなる。先に【相談(TPM)】を送り、答えを待つ。止めるのは `tpm infra run tpm-pages -- container stop tpm-pages`。
+- 止めると、並べて動いている担当がみな依頼書と成果を開けなくなる。先に【ask-tpm】を送り、答えを待つ。止めるのは `tpm infra run tpm-pages -- container stop tpm-pages`。
 - `container run` に restart の決まりは無いので、Mac を起こし直すと止まったままになる。開けないと頼まれたら、`container system start` の後に `tpm infra run tpm-pages -- container start tpm-pages` を打ち、上の「確かめる」をする。
 
 ### image を上げる
 
 1. 公式の `nginx` の stable の alpine から、公開から 2 週間以上たった版を選ぶ（tag は rebuild で中身が替わるので、digest まで書く）。
 2. この節の 1 行の tag と digest を直す PR を出し、merge する。
-3. 【相談(TPM)】で止める時を決めてから、`container stop tpm-pages`・`container delete tpm-pages` を `tpm infra run tpm-pages --` で打ち、新しい 1 行で起こし直して「確かめる」をする。古い image は `container image delete` で消す。
+3. 【ask-tpm】で止める時を決めてから、`container stop tpm-pages`・`container delete tpm-pages` を `tpm infra run tpm-pages --` で打ち、新しい 1 行で起こし直して「確かめる」をする。古い image は `container image delete` で消す。
 
 ### ほかの project で使う
 

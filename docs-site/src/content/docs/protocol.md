@@ -75,13 +75,13 @@ sequenceDiagram
   TPM->>SE: tpm assign（起こす）
   SE->>TPM: tpm hello（名乗る）
   opt 迷ったとき・決めてほしいとき
-    SE->>TPM: 【相談(TPM)】【PM への依頼】
+    SE->>TPM: 【ask-tpm】【ask-pm】
     TPM->>PM: 確かめる
     TPM->>SE: 【answer】
   end
   loop 依頼書ごと（提案 → 計画 → 実装）
-    SE->>TPM: 【merge 済み】（PR ごと）
-    SE->>TPM: 【完成】（成果のページ）
+    SE->>TPM: 【merged】（PR ごと）
+    SE->>TPM: 【done】（成果のページ）
     alt 残り・決めてほしいことがある、または次の段がある
       TPM->>PM: 見せる。続けるか、終えるか
       TPM->>SE: 続けるなら【brief】（tpm assign を同じ鍵に）
@@ -90,7 +90,7 @@ sequenceDiagram
     end
   end
   TPM->>SE: 【dismiss】（tpm dismiss）
-  SE->>TPM: 【終わり】（課題を閉じる）
+  SE->>TPM: 【end】（課題を閉じる）
   TPM->>PM: 報告する（聞かずに片付けたなら、そう添える）
   TPM->>TPM: tpm close（担当の居場所を閉じる）
 ```
