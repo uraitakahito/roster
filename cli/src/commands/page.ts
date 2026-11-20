@@ -29,6 +29,9 @@ export function pagesUrl(env: NodeJS.ProcessEnv): string {
   return (env.TPM_PAGES_URL || DEFAULT_PAGES_URL).replace(/\/+$/, '');
 }
 
+/** 課題の鍵のページを置く folder（`<置き場>/<状態の folder の名>/<鍵>`）。 */
+export const pageFolder = (ctx: Context, key: string): string => join(pagesDir(ctx.env), basename(ctx.state.dir), key);
+
 /**
  * ページを置く。`<置き場>/<状態の folder の名>/<鍵>/<種類>-<次の番号>.html` に写し、置き場が出しているかを HEAD で見てから URL を返す。
  * project の名を状態の folder の名にするのは、起こされた担当も $TPM_STATE で同じ folder を受け取り、TPM 担当と名がずれないため。
@@ -42,7 +45,7 @@ export function pagePut(ctx: Context, file: string, options: { kind: string, key
   if (!existsSync(file) || !statSync(file).isFile()) throw new TpmError(`file がありません: ${file}`);
   const body = readFileSync(file);
   const project = basename(ctx.state.dir);
-  const folder = join(pagesDir(ctx.env), project, key);
+  const folder = pageFolder(ctx, key);
   mkdirSync(folder, { recursive: true });
   const name = writeNext(folder, options.kind, body);
   const path = join(folder, name);

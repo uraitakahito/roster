@@ -9,7 +9,7 @@ import { world } from './helpers.ts';
 
 const BASE = 'http://127.0.0.1:8800';
 
-/** 置き場を一時の folder にし、curl の HEAD の答えを head で替えた、t-x の担当と TPM 担当の周り。 */
+/** 置き場を一時の folder にし、curl の HEAD の答えを head で替えた、t-x7k2 の担当と TPM 担当の周り。 */
 function setup(head: ExecResult = { status: 0, stdout: '200', stderr: '' }) {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-pages-')));
   const heads: string[][] = [];
@@ -23,7 +23,7 @@ function setup(head: ExecResult = { status: 0, stdout: '200', stderr: '' }) {
       return head;
     },
   });
-  const role = wire(w.role('t-x', 'file:1'));
+  const role = wire(w.role('t-x7k2', 'file:1'));
   const tpm = wire(w.tpm);
   const project = basename(w.tpm.state.dir);
   const html = join(dir, '..', `${basename(dir)}-src.html`);
@@ -34,18 +34,18 @@ function setup(head: ExecResult = { status: 0, stdout: '200', stderr: '' }) {
 describe('tpm page put', () => {
   test('担当は今の鍵の folder に <種類>-1.html で置き、HEAD で確かめて URL を出す。2 度目は -2', () => {
     const s = setup();
-    const path = join(s.dir, s.project, 't-x', 'proposal-1.html');
-    const url = `${BASE}/${s.project}/t-x/proposal-1.html`;
+    const path = join(s.dir, s.project, 't-x7k2', 'proposal-1.html');
+    const url = `${BASE}/${s.project}/t-x7k2/proposal-1.html`;
     expect(pagePut(s.role, s.html, { kind: 'proposal' })).toEqual([`置いた: ${path}`, `URL: ${url}`]);
     expect(readFileSync(path, 'utf8')).toBe('<title>試し</title><p>日本語</p>');
     expect(s.heads).toEqual([['-sI', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', '3', url]]);
-    expect(pagePut(s.role, s.html, { kind: 'proposal' })[1]).toBe(`URL: ${BASE}/${s.project}/t-x/proposal-2.html`);
+    expect(pagePut(s.role, s.html, { kind: 'proposal' })[1]).toBe(`URL: ${BASE}/${s.project}/t-x7k2/proposal-2.html`);
   });
 
   test('TPM 担当と担当で project の名が揃う（状態の folder の名）', () => {
     const s = setup();
-    expect(pagePut(s.tpm, s.html, { kind: 'brief', key: 't-x' })[1]).toBe(`URL: ${BASE}/${s.project}/t-x/brief-1.html`);
-    expect(pagePut(s.role, s.html, { kind: 'brief' })[1]).toBe(`URL: ${BASE}/${s.project}/t-x/brief-2.html`);
+    expect(pagePut(s.tpm, s.html, { kind: 'brief', key: 't-x7k2' })[1]).toBe(`URL: ${BASE}/${s.project}/t-x7k2/brief-1.html`);
+    expect(pagePut(s.role, s.html, { kind: 'brief' })[1]).toBe(`URL: ${BASE}/${s.project}/t-x7k2/brief-2.html`);
   });
 
   test('TPM 担当が --key なしで置くと誤り', () => {
@@ -56,16 +56,16 @@ describe('tpm page put', () => {
   test('先に大きい番号があれば、その次の番号にし、上書きしない', () => {
     const s = setup();
     pagePut(s.role, s.html, { kind: 'plan' });
-    const later = join(s.dir, s.project, 't-x', 'plan-2.html');
+    const later = join(s.dir, s.project, 't-x7k2', 'plan-2.html');
     writeFileSync(later, 'ほかの担当が置いた');
-    expect(pagePut(s.role, s.html, { kind: 'plan' })[1]).toBe(`URL: ${BASE}/${s.project}/t-x/plan-3.html`);
+    expect(pagePut(s.role, s.html, { kind: 'plan' })[1]).toBe(`URL: ${BASE}/${s.project}/t-x7k2/plan-3.html`);
     expect(readFileSync(later, 'utf8')).toBe('ほかの担当が置いた');
   });
 
   test('置き場が応えなければ、file は残して DevOps に頼むよう言う', () => {
     const s = setup({ status: 7, stdout: '000', stderr: '' });
     expect(() => pagePut(s.role, s.html, { kind: 'result' })).toThrow('tpm ask devops');
-    expect(existsSync(join(s.dir, s.project, 't-x', 'result-1.html'))).toBe(true);
+    expect(existsSync(join(s.dir, s.project, 't-x7k2', 'result-1.html'))).toBe(true);
   });
 
   test('置き場が 404 を返せば、folder と mount のずれと言う', () => {
@@ -83,7 +83,7 @@ describe('tpm page put', () => {
   test('$TPM_PAGES_URL で置き場の URL を替えられる（末尾の / は落とす）', () => {
     const s = setup();
     const ctx = { ...s.role, env: { ...s.role.env, TPM_PAGES_URL: 'http://127.0.0.1:9900/' } };
-    expect(pagePut(ctx, s.html, { kind: 'plan' })[1]).toBe(`URL: http://127.0.0.1:9900/${s.project}/t-x/plan-1.html`);
+    expect(pagePut(ctx, s.html, { kind: 'plan' })[1]).toBe(`URL: http://127.0.0.1:9900/${s.project}/t-x7k2/plan-1.html`);
   });
 });
 
@@ -91,14 +91,14 @@ describe('tpm page path', () => {
   test('置いたページの URL を file の path にする', () => {
     const s = setup();
     const url = pagePut(s.role, s.html, { kind: 'confirm' })[1]?.replace('URL: ', '') ?? '';
-    expect(pagePath(s.role, url)).toEqual([join(s.dir, s.project, 't-x', 'confirm-1.html')]);
+    expect(pagePath(s.role, url)).toEqual([join(s.dir, s.project, 't-x7k2', 'confirm-1.html')]);
   });
 
   test('置き場の外の URL・.. を含む URL・無い file は誤り', () => {
     const s = setup();
     expect(() => pagePath(s.role, 'https://claude.ai/artifact/x')).toThrow('置き場');
     expect(() => pagePath(s.role, `${BASE}/${s.project}/../x.html`)).toThrow('file を指す URL ではありません');
-    expect(() => pagePath(s.role, `${BASE}/${s.project}/t-x/plan-9.html`)).toThrow('file がありません');
+    expect(() => pagePath(s.role, `${BASE}/${s.project}/t-x7k2/plan-9.html`)).toThrow('file がありません');
   });
 });
 

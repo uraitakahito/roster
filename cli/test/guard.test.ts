@@ -131,7 +131,7 @@ describe('tpm infra と tpm guard', () => {
     expect(guard(devops(w), hook('aws s3 ls')).allow).toBe(false);
     expect(infraApprove(w.tpm, 'aws-staging', { minutes: 30, note: 'deploy' })).toEqual(['承認を書いた: aws-staging（2026-11-20T12:30:00.000Z まで）']);
     expect(guard(devops(w), hook('aws s3 ls')).allow).toBe(true);
-    expect(guard(w.role('t-x', 'file:2'), hook('aws s3 ls')).allow).toBe(false);
+    expect(guard(w.role('t-x7k2', 'file:2'), hook('aws s3 ls')).allow).toBe(false);
     expect(infraList(w.tpm)).toEqual([
       '- apple-container  自由  match: "container "',
       '- windmill  TPM に相談（DevOps Engineer 担当だけ）  match: "wmill "',

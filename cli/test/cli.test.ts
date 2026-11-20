@@ -171,12 +171,12 @@ describe('古い名の状態', () => {
     const state = join(scratch, `state${n++}`);
     mkdirSync(join(state, 'roles'), { recursive: true });
     writeFileSync(join(state, 'tpm.json'), '{ "address": "file:tpm" }');
-    writeFileSync(join(state, 'roles', 't-x.json'), JSON.stringify({ key: 't-x', role: 'software-engineer', title: '題', cwd: d, addDirs: [] }));
+    writeFileSync(join(state, 'roles', 't-x7k2.json'), JSON.stringify({ key: 't-x7k2', role: 'software-engineer', title: '題', cwd: d, addDirs: [] }));
     // 試験を流す担当の TPM_KEY などを受け継がない
     const out = run(tpm, ['roles'], d, { TPM_PROJECT: d, TPM_STATE: state, TPM_KEY: '', TPM_ADDRESS: '' });
-    expect(out).toMatch(/^名簿:\n- t-x {2}Software Engineer {2}消えた/);
+    expect(out).toMatch(/^名簿:\n- t-x7k2 {2}題 {2}消えた/);
     expect(readdirSync(state).sort()).toEqual(['roles', 'tpm.jsonc']);
-    expect(readdirSync(join(state, 'roles'))).toEqual(['t-x.jsonc']);
+    expect(readdirSync(join(state, 'roles'))).toEqual(['t-x7k2.jsonc']);
   });
 });
 

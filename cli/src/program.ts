@@ -7,7 +7,7 @@ import { guard, infraApprove, infraList, infraRevoke, infraRun } from './command
 import { PAGE_KINDS, pagePath, pagePut } from './commands/page.ts';
 import { registerMessages } from './commands/register.ts';
 import { hello, inbox } from './commands/role-side.ts';
-import { assign, close, roles, type AssignOptions } from './commands/tpm-side.ts';
+import { assign, close, newKey, roles, type AssignOptions } from './commands/tpm-side.ts';
 import { rolesConfigFile } from './config.ts';
 import { createContext } from './context.ts';
 import type { Verdict } from './guard.ts';
@@ -56,6 +56,8 @@ export function buildProgram(): Command {
     });
 
   program.command('roles').description('名簿を、動いている居場所と突き合わせて出す').action(() => print(roles(createContext())));
+  program.command('key').description('課題管理の課題が無い課題の鍵（t- と 4 文字）を、使われていない物から作って出す')
+    .action(() => console.log(newKey(createContext())));
   program.command('assign <key>').description('課題を担当に振る（動いていれば【brief】を送る。いなければ起こし、名乗るまで待つ）')
     .requiredOption('--role <role>', ROLE_NAMES.join('・'))
     .option('--title <短い題>', '居場所の題に付ける短い題')

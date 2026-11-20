@@ -1,12 +1,15 @@
-// TPM 担当が打つ命令: 名乗る（tpmHello。tpm hello から呼ばれる）・名簿を見る（roles）・課題を担当に振る（assign）・閉じる（close）。
+// TPM 担当が打つ命令: 名乗る（tpmHello。tpm hello から呼ばれる）・名簿を見る（roles）・鍵を作る（newKey）・課題を担当に振る（assign）・閉じる（close）。
+import { randomInt } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { shellQuote } from '../shell.ts';
 import type { Context } from '../context.ts';
 import { modelStatus, ROLES, TPM_TITLE, WAIT, type RoleName } from '../protocol.ts';
 import { resolveSettings } from '../settings.ts';
-import { allRoles, assertKey, readRole, removeRole, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
+import { allRoles, assertKey, LOCAL_KEY, readRole, removeRole, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
 import { skillSetDir, TpmError } from '../skill-sets.ts';
 import { brief } from './messages.ts';
+import { pageFolder } from './page.ts';
 
 /** 名乗ったかを見る間（ミリ秒）。 */
 const HELLO_INTERVAL_MS = 2000;
@@ -34,8 +37,25 @@ export function roles(ctx: Context): string[] {
     const alive = r.address !== undefined && seats.some(s => s.address === r.address);
     const wait = alive && r.address !== undefined ? ctx.transport.status(r.address)?.wait : undefined;
     const where = alive ? `${r.address}（${wait ?? '状態なし'}）` : '消えた（居場所が無い。tpm assign で起こし直すか、tpm close で名簿から消す）';
-    return `- ${r.key}  ${ROLES[r.role].label}  ${where}${r.dismissed ? `  dismiss 済み（${r.dismissed === 'handover' ? '交代' : '終わり'}）` : ''}${r.brief ? `  依頼書: ${r.brief}` : ''}`;
+    return `- ${r.key}  ${r.title}  ${where}${r.dismissed ? `  dismiss 済み（${r.dismissed === 'handover' ? '交代' : '終わり'}）` : ''}${r.brief ? `  依頼書: ${r.brief}` : ''}`;
   })];
+}
+
+/** 鍵に使う字: 英小文字と数字から、読み違えやすい 0・o・1・l・i を除いた 31 字。 */
+const SAFE_CHARS = [...'0123456789abcdefghijklmnopqrstuvwxyz'].filter(c => !'0o1li'.includes(c)).join('');
+/** 使われていない鍵を探す回数（31 の 4 乗 ≒ 92 万通りなので、まず 1 回目で見つかる）。 */
+const KEY_TRIES = 100;
+
+/**
+ * 課題管理の課題が無い課題の鍵を作る（`t-` と SAFE_CHARS の 4 文字）。名簿の担当とも、置き場のページの folder（前に使った鍵）ともぶつからない物を返す。
+ * pick は 0 以上 n 未満の整数を返す（試験で替える）。
+ */
+export function newKey(ctx: Context, pick: (n: number) => number = randomInt): string {
+  for (let i = 0; i < KEY_TRIES; i++) {
+    const key = `t-${Array.from({ length: 4 }, () => SAFE_CHARS.charAt(pick(SAFE_CHARS.length))).join('')}`;
+    if (readRole(ctx, key) === undefined && !existsSync(pageFolder(ctx, key))) return key;
+  }
+  throw new TpmError(`使われていない鍵を ${KEY_TRIES} 回で作れませんでした`);
 }
 
 /** `tpm assign` の旗。 */
@@ -63,6 +83,10 @@ export function assign(ctx: Context, key: string, options: AssignOptions): strin
   assertKey(key);
   if (!Number.isFinite(options.wait) || options.wait < 0) throw new TpmError('--wait は 0 以上の数にしてください（0 なら待たない）');
   const existing = readRole(ctx, key);
+  // 名簿にある担当（前の決まりの長い鍵を含む）は、そのまま動き続けられるよう形を問わない。
+  if (existing === undefined && key.startsWith('t-') && !LOCAL_KEY.test(key)) {
+    throw new TpmError(`課題管理の課題が無いときの鍵は、t- と英小文字・数字 4 文字にしてください（tpm key で作る）: ${key}`);
+  }
   if (existing?.address !== undefined && ctx.transport.seats().some(s => s.address === existing.address)) {
     if (options.brief === undefined) throw new TpmError(`${key} の担当はもう動いています（${existing.address}）。新しい依頼書を --brief で渡してください`);
     return brief(ctx, existing, options.brief, options.note);

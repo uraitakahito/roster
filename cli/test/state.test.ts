@@ -27,9 +27,9 @@ describe('stateDir', () => {
 
 describe('State', () => {
   test('書いた物を読める。無ければ undefined', () => {
-    expect(state.read('roles/t-x.jsonc')).toBeUndefined();
-    state.write('roles/t-x.jsonc', { key: 't-x' });
-    expect(state.read('roles/t-x.jsonc')).toEqual({ key: 't-x' });
+    expect(state.read('roles/t-x7k2.jsonc')).toBeUndefined();
+    state.write('roles/t-x7k2.jsonc', { key: 't-x7k2' });
+    expect(state.read('roles/t-x7k2.jsonc')).toEqual({ key: 't-x7k2' });
   });
 
   test('コメントと末尾のカンマのある JSONC を読める', () => {
@@ -50,12 +50,12 @@ describe('State', () => {
 
   test('folder の中の .jsonc を名前順に並べ、消した物と .json は出ない', () => {
     expect(state.list('roles')).toEqual([]);
-    state.write('roles/t-b.jsonc', {});
-    state.write('roles/t-a.jsonc', {});
+    state.write('roles/t-b5c6.jsonc', {});
+    state.write('roles/t-a3b4.jsonc', {});
     writeFileSync(join(state.dir, 'roles', 't-c.json'), '{}');
-    state.remove('roles/t-b.jsonc');
+    state.remove('roles/t-b5c6.jsonc');
     state.remove('roles/nope.jsonc');
-    expect(state.list('roles')).toEqual(['t-a']);
+    expect(state.list('roles')).toEqual(['t-a3b4']);
   });
 
   test('1 行 1 件の記録を足した順に読める', () => {
@@ -77,30 +77,30 @@ describe('migrateLegacyJson', () => {
 
   test('下の folder まで *.json を *.jsonc に替え、中身はそのまま', () => {
     put('tpm.json', '{ "address": "a" }');
-    put('roles/t-x.json', '{ "key": "t-x" }');
+    put('roles/t-x7k2.json', '{ "key": "t-x7k2" }');
     put('file-transport/seats/file-1.json', '{}');
     migrateLegacyJson(state.dir);
-    expect(files()).toEqual(['file-transport/seats/file-1.jsonc', 'roles/t-x.jsonc', 'tpm.jsonc']);
-    expect(state.read('roles/t-x.jsonc')).toEqual({ key: 't-x' });
+    expect(files()).toEqual(['file-transport/seats/file-1.jsonc', 'roles/t-x7k2.jsonc', 'tpm.jsonc']);
+    expect(state.read('roles/t-x7k2.jsonc')).toEqual({ key: 't-x7k2' });
   });
 
   test('.jsonl・書きかけ・.jsonc には触らない', () => {
     put('log.jsonl', '{}\n');
-    put('roles/t-x.json.123.tmp', '{');
+    put('roles/t-x7k2.json.123.tmp', '{');
     put('roles/t-y.jsonc', '{}');
     migrateLegacyJson(state.dir);
-    expect(files()).toEqual(['log.jsonl', 'roles/t-x.json.123.tmp', 'roles/t-y.jsonc']);
+    expect(files()).toEqual(['log.jsonl', 'roles/t-x7k2.json.123.tmp', 'roles/t-y.jsonc']);
   });
 
   test.each([
     ['.jsonc が新しい', 2000, 1000, 'new'],
     ['.json が新しい', 1000, 2000, 'old'],
   ])('両方あれば新しい方を .jsonc に残す（%s）', (_, jsoncAt, jsonAt, kept) => {
-    put('roles/t-x.jsonc', '{ "v": "new" }', jsoncAt);
-    put('roles/t-x.json', '{ "v": "old" }', jsonAt);
+    put('roles/t-x7k2.jsonc', '{ "v": "new" }', jsoncAt);
+    put('roles/t-x7k2.json', '{ "v": "old" }', jsonAt);
     migrateLegacyJson(state.dir);
-    expect(files()).toEqual(['roles/t-x.jsonc']);
-    expect(JSON.parse(readFileSync(join(state.dir, 'roles/t-x.jsonc'), 'utf8'))).toEqual({ v: kept });
+    expect(files()).toEqual(['roles/t-x7k2.jsonc']);
+    expect(JSON.parse(readFileSync(join(state.dir, 'roles/t-x7k2.jsonc'), 'utf8'))).toEqual({ v: kept });
   });
 
   test('移し済み・folder が無いときは何もしない', () => {

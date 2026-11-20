@@ -36,8 +36,8 @@ describe('CmuxTransport', () => {
       ['agent message', { stdout: `Queued message ${ID} for TPM (surface:1).\n` }],
       ['--json agent inbox', json({ messages: [{ id: ID, state: 'delivered' }] })],
     ]);
-    expect(transport.send('workspace:1', 'SE t-x: 題', '【完成】- で始まらない本文')).toEqual({ id: ID, delivered: true });
-    expect(calls[0]).toEqual({ args: ['agent', 'message', 'workspace:1', '--from', 'SE t-x: 題', '-'], input: '【完成】- で始まらない本文' });
+    expect(transport.send('workspace:1', 'SE t-x7k2: 題', '【完成】- で始まらない本文')).toEqual({ id: ID, delivered: true });
+    expect(calls[0]).toEqual({ args: ['agent', 'message', 'workspace:1', '--from', 'SE t-x7k2: 題', '-'], input: '【完成】- で始まらない本文' });
     expect(calls[1]?.args).toEqual(['--json', 'agent', 'inbox', '--surface', 'workspace:1', '--limit', '20']);
   });
 
@@ -70,8 +70,8 @@ describe('CmuxTransport', () => {
 
   test('spawn は居場所を作って宛先を返し、focus を奪わない', () => {
     const { transport, calls } = fake([['--json workspace create', json({ workspace_ref: 'workspace:12', surface_ref: 'surface:3' })]]);
-    expect(transport.spawn({ title: 'Software Engineer t-x: 題', cwd: '/w', command: 'tpm run-role t-x' })).toBe('workspace:12');
-    expect(calls[0]?.args).toEqual(['--json', 'workspace', 'create', '--name', 'Software Engineer t-x: 題', '--cwd', '/w', '--command', 'tpm run-role t-x', '--focus', 'false']);
+    expect(transport.spawn({ title: 'SWE t-x7k2: 題', cwd: '/w', command: 'tpm run-role t-x7k2' })).toBe('workspace:12');
+    expect(calls[0]?.args).toEqual(['--json', 'workspace', 'create', '--name', 'SWE t-x7k2: 題', '--cwd', '/w', '--command', 'tpm run-role t-x7k2', '--focus', 'false']);
   });
 
   test('1,024 バイトを超える命令は起こさずに TpmError', () => {
