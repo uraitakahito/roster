@@ -5,7 +5,7 @@ description: 決まりは protocol.md の文と tpm の CLI に分けてある�
 
 担当どうしのやりとりは、文とコードに分けてある。
 
-- **文**（`skill-sets/core/.claude/skills/_shared/protocol.md`）: いつ・なぜ知らせるか、どの命令を打つか。どの担当もこれを読む。決まりの本文は、このページには写さない（skill が読む原本は `protocol.md`）。
+- **文**（`skill-sets/core/.claude/skills/_shared/protocol.md`）: いつ・なぜ知らせるか、どの命令を打つか。どの担当もこれを読む。
 - **コード**（`cli/src/`）: 見出しの表・知らせの文の形・課題への記録・状態の字・名簿。担当は `tpm` の命令を打ち、命令が道具（cmux・acli・gh）を動かす。
 
 TPM 担当が書く依頼書には、その課題だけのことを書く（ひな形は `skill-sets/core/.claude/skills/tpm/brief-template.md`）。
