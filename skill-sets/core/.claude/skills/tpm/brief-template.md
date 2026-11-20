@@ -1,25 +1,25 @@
 # 依頼書のひな形
 
-TPM 担当が Software Engineer 担当・DevOps Engineer 担当に渡す依頼書。HTML の Artifact に書いて publish し、URL を起動の 1 行の `brief=` か【依頼】で渡す。
+TPM 担当が Software Engineer 担当・DevOps Engineer 担当に渡す依頼書。HTML の Artifact に書いて publish し、URL を `tpm assign <鍵> … --brief <URL>` で渡す（担当が動いていれば【依頼】で届き、いなければ起こされた担当が `tpm hello` で受け取る）。
 
-**書かない物**: 連絡の仕方・見出しの表・サイドバー・終わり方・文書の食い違いの扱い・共有の環境の扱い。これらは `/software-engineer`・`/devops-engineer` と `_shared/protocol.md` にある。依頼書には、その課題だけのことを書く。
+**書かない物**: 連絡の仕方・見出しの表・状態・終わり方・文書の食い違いの扱い・共有の環境の扱い・TPM 担当の宛先。これらは `/software-engineer`・`/devops-engineer` と `_shared/protocol.md`、`tpm` の命令にある。依頼書には、その課題だけのことを書く。
 
 ## 欄
 
 | 欄 | 中身 |
 |---|---|
 | 題 | 何をするか 1 行（例: 「案 2 の計画を立てる」） |
-| 頭書き | 依頼元（TPM の workspace）・課題の鍵（Jira の課題ならその番号。無ければ `t-<短い名>`。`SKILL.md` の 2）・repo か folder・前の依頼書や成果の URL |
+| 頭書き | 課題の鍵（`SKILL.md` の 2）・repo か folder・前の依頼書や成果の URL |
 | やること | 番号付きで。どこまでやるか（提案まで・計画まで・実装まで）をはっきり書く |
 | 前提 | その課題だけの決まり（破壊的でよいか・後方互換を考えるか・触ってはいけない物・使う model の指示） |
 | 材料 | 読む物（貼られた文・ファイル・URL）。長い文は `<pre>` でそのまま |
 | TPM が知っていること | 調べ済みのこと・試して駄目だったこと |
-| 成果の形 | 何を出せば終わりか（Artifact・PR・Jira の課題）と、そのとき送る見出し（既定は【完成】）。担当は【完成】の後に次の【依頼】か【片付け】を待つので、「【完成】の後は待つ」とは書かなくてよい |
+| 成果の形 | 何を出せば終わりか（Artifact・PR）。担当は【完成】の後に次の【依頼】か【片付け】を待つので、「【完成】の後は待つ」とは書かなくてよい |
 
 ## 書き方
 
 - 1 段の読む列。節の題と短い文。図は要る所だけ。
 - 決まった言い回しより、その課題の具体（ファイル名・コマンド・数）を書く。
 - Product Manager が言っていない前提（今の振る舞いを守る など）を足さない。「遅い」「手間」など改善の依頼なら、速くする案の前に「その処理がそもそも要るか」を問わせる。
-- Product Manager の答えが要ることが先にわかっていれば、「Product Manager に確かめること」として依頼書に書き、Software Engineer 担当に確認の Artifact を書かせる（jira.md の「Product Manager に確かめる」）。
-- 「Jira に成果の URL のコメントを足す」は書かなくてよい。担当が jira.md の「誰が・いつ書くか」のとおりに書く。
+- Product Manager の答えが要ることが先にわかっていれば、「Product Manager に確かめること」として依頼書に書き、担当に確認の Artifact を書かせる（protocol.md の「Product Manager に確かめる」）。
+- 「課題に成果の URL のコメントを足す」は書かなくてよい。記録は `tpm` の命令が書く（protocol.md の「記録」）。

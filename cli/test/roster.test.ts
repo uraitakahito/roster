@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { hello } from '../src/commands/role-side.ts';
+import { hello, inbox } from '../src/commands/role-side.ts';
 import { assign, close, init, roles } from '../src/commands/tpm-side.ts';
 import { modelLabel } from '../src/protocol.ts';
 import { readRole, requireRole } from '../src/roster.ts';
@@ -12,7 +12,7 @@ const SE = { role: 'software-engineer', title: '計画と実装', brief: 'https:
 describe('init', () => {
   test('宛先を状態に書き、状態を出し、名簿を出す', () => {
     const w = world();
-    expect(init(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' })).toEqual(['TPM 担当の宛先: file:tpm', '課題管理: none・連携: file', '名簿: 担当はいない']);
+    expect(init(w.tpm)).toEqual(['TPM 担当の宛先: file:tpm', '課題管理: none・連携: file', '名簿: 担当はいない']);
     expect(w.tpm.state.read('tpm.json')).toEqual({ address: 'file:tpm' });
     expect(w.wire.status('file:tpm')).toEqual({ model: 'Opus 5.5 · medium', wait: '作業中: 起動' });
   });
@@ -128,6 +128,15 @@ describe('hello', () => {
     const w = world();
     expect(() => hello(w.tpm)).toThrow(/\$TPM_KEY がありません/);
     expect(() => hello(w.role('t-nope', 'file:9'))).toThrow(/名簿に担当がいません: t-nope/);
+  });
+});
+
+describe('inbox', () => {
+  test('まだ届いていない知らせを、差出人と id を添えて出す', () => {
+    const w = world();
+    expect(inbox(w.tpm)).toEqual(['まだ届いていない知らせは無い']);
+    const tpm = { ...w.tpm, transport: Object.assign(w.wire, { pending: () => [{ id: 'm1', from: 'Technical Program Manager', text: '【依頼】u' }] }) };
+    expect(inbox(tpm)).toEqual(['--- Technical Program Manager（id m1）', '【依頼】u']);
   });
 });
 

@@ -1,19 +1,34 @@
 ---
 title: 設定
-description: 使う側の project に置く .claude/roles/config.json と、Dependabot の skill の設定
+description: 使う側の project に置く .claude/roles/config.json（課題管理・連携・インフラの環境・担当の既定）と、Dependabot の skill の設定
 ---
 
 ## `.claude/roles/config.json`（任意）
 
-TPM 担当を起こした folder に置くと、追加の skill セットと、TPM 担当が起こす担当の既定を替えられる。
+TPM 担当を起こした folder（project）に置くと、道具の選び方・追加の skill セット・起こす担当の既定を替えられる。`tpm` の命令が読む。
 
 | 欄 | 中身 | 無いとき |
 |---|---|---|
-| `skill-sets` | core のほかに加える、追加の skill セットの名前の配列（`cli/bin/tpm` が読む） | core だけ |
-| `software-engineer`・`devops-engineer` | 起こす担当の `model`・`effort`・`permissionMode`（`/tpm` が読む） | `/tpm` の表の既定（Software Engineer 担当は Opus 5.5・medium、DevOps Engineer 担当は Opus 5.5・low、どちらも `bypassPermissions`） |
+| `tracker` | 課題管理の道具。`jira`（acli）・`github`（その folder の repo の Issue。gh）・`none` | `none`（課題に記録を書かない） |
+| `transport` | 担当どうしの連携の道具。`cmux`（`file` は試験用） | `cmux` |
+| `infra` | インフラの環境の宣言。環境の名前（英小文字・数字・`-`）ごとに `guard`（級）と `match`（その環境に触る命令が含む字の配列） | 宣言なし（門は環境を見ない） |
+| `skill-sets` | core のほかに加える、追加の skill セットの名前の配列 | core だけ |
+| `software-engineer`・`devops-engineer` | 起こす担当の `model`・`effort`・`permissionMode` | 既定（Software Engineer 担当は Opus 5.5・medium、DevOps Engineer 担当は Opus 5.5・low、どちらも `bypassPermissions`） |
 
 ```json
 {
+  "tracker": "github",
+  "transport": "cmux",
+  "infra": {
+    "apple-container": {
+      "guard": "free",
+      "match": ["container "]
+    },
+    "aws-staging": {
+      "guard": "pm",
+      "match": ["aws ", "ssh staging"]
+    }
+  },
   "skill-sets": ["dependabot"],
   "software-engineer": {
     "model": "claude-opus-5-5",
@@ -27,6 +42,28 @@ TPM 担当を起こした folder に置くと、追加の skill セットと、T
   }
 }
 ```
+
+### 課題の鍵
+
+| `tracker` | 鍵の形 | 記録 | 課題を閉じる |
+|---|---|---|---|
+| `jira` | `SKILLS-12` | コメント（ADF・段落だけ） | 状態を `完了` に進める |
+| `github` | `gh-12`（`#12`・`12` も受ける） | コメント（Markdown） | `completed` で閉じる |
+| `none` | `t-<短い名>` | 書かない | 何もしない |
+
+課題管理の課題が無い仕事には、どの `tracker` でも `t-<短い名>` の鍵を付ける（記録は書かれない）。
+
+### 環境の級
+
+`guard` には、その環境を変えると誰に響くかを書く。条件を満たさない命令は、門が実行の前に止める（[担当のあいだの決まり](/protocol/#門)）。
+
+| `guard` | 響く先 | 変えてよい担当 | 先に要ること |
+|---|---|---|---|
+| `free` | 自分だけ | どの担当も | 無し |
+| `tpm` | 並べて動いているほかの担当 | DevOps Engineer 担当だけ | TPM 担当に相談 |
+| `pm` | ほかの人・ほかのチーム | DevOps Engineer 担当だけ | Product Manager の承認（TPM 担当が `tpm infra approve <環境> --minutes <分>` で門を開ける） |
+
+`match` は命令の字との一致で見る。広すぎると読むだけの命令も止まり、狭すぎるとすり抜けるので、その環境を変える命令の頭（`aws `・`ssh staging` など）を書く。
 
 ## Dependabot の設定
 
@@ -45,7 +82,6 @@ Dependabot の skill を使う project では、`.claude/roles/config.json` の 
 | `hours` | 依存の version の公開から何時間たったら merge を検討するか | `72` |
 | `model` | Sustaining Engineer 担当の model | `"claude-opus-5-5"` |
 | `effort` | Sustaining Engineer 担当の effort | `"medium"` |
-| `modelLabel` | サイドバーに出す字 | `"Opus 5.5 · medium"` |
 | `permissionMode` | Sustaining Engineer 担当の `--permission-mode` | `"bypassPermissions"` |
 | `mergeMethod` | `gh pr merge` の方法 | `"squash"` |
 | `rebaseWaitMinutes` | `@dependabot rebase` の応じた印 👍 を待つ分 | `20` |

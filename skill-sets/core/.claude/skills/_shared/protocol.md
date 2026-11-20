@@ -2,71 +2,100 @@
 
 TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・DevOps Engineer 担当（`/devops-engineer`）・Sustaining Engineer 担当（`/sustaining-engineer`）が共通に従う決まり。依頼主は Product Manager（利用者）。返答と報告は日本語で書く。
 
+担当どうしのやりとりは、すべて `tpm` の命令でする。`tpm` が、知らせを送る・届いたかを見る・課題に記録を書く・状態を出す、を 1 度にする。連携の道具（cmux など）と課題管理の道具（Jira・GitHub の Issue）の命令は直に打たない（直に打つと記録と状態が抜けるので、門が止める）。どの道具を使うかは、TPM 担当を起こした folder の `.claude/roles/config.json` で決まる。
+
 ## 連絡の仕方
 
-```sh
-cmux agent message <相手の workspace か surface> --from "<自分の workspace の題>" -- "【見出し】本文"
-cmux --json agent inbox --surface <相手の workspace か surface> --limit 3     # 届いたかを見る
-```
-
-- 知らせは相手の hook から届く（打ち込みとぶつからない）。返事は、届いた知らせに書かれた `--reply-to <id>` で返してよい。
-- 宛先と `--surface` には、surface のほか workspace の ref（`workspace:12`）か題（完全一致か、ほかと重ならない頭の部分）を渡せる。workspace を渡すと、その中の選ばれている surface を指す。担当の workspace は surface が 1 つなので、surface を知らなくても `cmux workspace list` の workspace で足りる（起こし直した後も同じ）。同じ題の workspace が 2 つあると、題では `not_found` になる。
-- 送った後は inbox で `delivered` になったかを見る。`queued` のまま相手が入力待ちなら、TPM 担当が `cmux send --workspace <相手の workspace> "<本文>\r"` で打ち込む。
-- `--mark-read` は付けない（`--surface` 無しで打つと、全部の宛先を既読にする）。
-- 自分の surface と workspace は `cmux identify` の `caller`。
+- 知らせは、下の「見出し」の表の命令で送る。命令は「届いた」か「まだ届いていない」を返す。相手が手を動かしている間は届かず、空いたら届くので、送り直さない。
+- 知らせは、手が空いた時に画面に届く。段の区切り（PR を出す前・merge を頼む前）には `tpm inbox` で、まだ届いていない自分宛ての知らせを見る。
+- 届いた知らせには id が付いている。その知らせへの返事は `--reply-to <id>` を付けて送る。
+- 宛先は書かない。担当の知らせは TPM 担当へ行き、TPM 担当は課題の鍵で担当を名指す。
 - **Product Manager に直接聞かない。** Product Manager とのやりとりは、すべて TPM 担当を通す。
+- 命令の使い方は `tpm <命令> --help`。命令が誤りで止まったら、出た文に従って直す（道具の命令に替えて先へ進まない）。
 
 ## 見出し
 
 ### TPM 担当へ
 
-| 見出し | いつ | 本文 |
+| 見出し | いつ | 命令 |
 |---|---|---|
-| 【相談(TPM)】 | TPM 担当に決めてほしいことがある | 困っていること・試したこと・案とお勧め |
-| 【PM への依頼】 | Product Manager に決めてほしいこと・頼むことを Artifact に書いた（jira.md の「Product Manager に確かめる」） | Artifact の URL と各項目の題（頼むことなら要点） |
-| 【DevOps への依頼】 | Apple Container・Windmill など共有の環境で DevOps Engineer 担当の手が要る | 何を・なぜ・急ぎか |
-| 【ドキュメント修正】 | 文書やコメントの食い違いを直した PR を merge した | PR の URL と一言 |
-| 【merge 済み】 | 自分の PR を 1 本 merge した | PR の URL と一言 |
-| 【完成】 | 依頼書の成果（提案・計画などの Artifact）を publish した。依頼書が【計画完成】など別の名を決めていればそれを使う | URL・要点・「残り」（依頼の外で直すとよい物・やらなかった物・merge していない PR。無ければ「なし」）・「決めてほしいこと」（【PM への依頼】で送った項目の題。無ければ「なし」）。TPM 担当はこの 2 つで【片付け】を送るかを決める |
-| 【終わり】 | 【片付け】を受けて片付けた（Sustaining Engineer 担当は PR を merge した後。`/sustaining-engineer`） | 成果の Artifact の URL・merge した PR・消した worktree・残っている物 |
+| 【相談(TPM)】 | TPM 担当に決めてほしいことがある | `tpm ask tpm "<困っていること・試したこと・案とお勧め>" --waiting-for "<何を>"` |
+| 【PM への依頼】 | Product Manager に決めてほしいこと・頼むことを Artifact に書いた（下の「Product Manager に確かめる」） | `tpm ask pm --url <URL> --item "<項目の題>" … --waiting-for "<何を>"` |
+| 【DevOps への依頼】 | 共有の環境で DevOps Engineer 担当の手が要る（下の「共有の環境」） | `tpm ask devops --what "<何を>" --why "<なぜ>" [--urgent]` |
+| 【ドキュメント修正】 | 文書やコメントの食い違いを直した PR を merge した | `tpm report doc-fix --pr <URL> --note "<一言>"` |
+| 【merge 済み】 | 自分の PR を 1 本 merge した | `tpm report merged --pr <URL> --note "<一言>"` |
+| 【完成】 | 依頼書の成果（提案・計画などの Artifact）を publish した | `tpm report done --url <URL> --kind <提案\|計画\|結果> --summary "<要点>" --remaining "<残り>" --decisions "<決めてほしいこと>"` |
+| 【終わり】 | 【片付け】を受けて片付けた（Sustaining Engineer 担当は PR を merge した後） | `tpm report end --url <URL> --pr <URL> … --removed <worktree> … --left "<残っている物>"` |
+
+- 【完成】の「残り」は、依頼の外で直すとよい物・やらなかった物・merge していない PR。「決めてほしいこと」は、【PM への依頼】で送った項目の題。どちらも無ければ「なし」と書く（書かないと送れない）。TPM 担当はこの 2 つで【片付け】を送るかを決める。
+- 【終わり】の「残っている物」は、計画から外れた物・残した物で直した方がよい物。無ければ「なし」。
 
 Dependabot の PR だけで使う見出し（【merge の依頼】【まだ】【作り直し】）は `/sustaining-engineer` と `/dependabot-triage` に書いてある。
 
 ### TPM 担当から
 
-| 見出し | 中身 |
-|---|---|
-| 【依頼】 | 新しい依頼書の URL。Artifact tool の `read` で読み、それに従う |
-| 【PM の回答】 | Product Manager の答え。待ちの表示を作業中に戻して続ける |
-| 【連絡】 | 知っておくこと（Jira の番号など）。返事は要らない |
-| 【TPM の宛先】 | 起こし直した TPM 担当の workspace。これからの知らせは、起こされたときの `tpm=` ではなくここへ送る。返事は要らない |
-| 【片付け】 | この課題に続きは無い（Product Manager が決めたか、TPM 担当が聞かなくてよいと決めた）。worktree・Jira（課題を `完了` に）を済ませて【終わり】を返す。担当の交代のためなら、そう書いてある（課題は続くので、`完了` にはしない） |
+| 見出し | 中身 | 命令（TPM 担当が打つ） |
+|---|---|---|
+| 【依頼】 | 新しい依頼書の URL。Artifact tool の `read` で読み、それに従う | `tpm assign <鍵> --role <役割> --brief <URL>` |
+| 【PM の回答】 | Product Manager の答え。待ちの表示を作業中に戻して続ける | `tpm answer <鍵> "<答え>"` |
+| 【連絡】 | 知っておくこと・受け取ったという返事。返事は要らない | `tpm notify <鍵> "<本文>"` |
+| 【片付け】 | この課題に続きは無い（Product Manager が決めたか、TPM 担当が聞かなくてよいと決めた）。worktree を片付けて【終わり】を返す。担当の交代のためなら、そう書いてある | `tpm dismiss <鍵> [--handover]` |
 
-## サイドバー
+## 状態
 
-- 使う鍵は **`model` と `wait` の 2 つだけ**。新しい鍵を作らない（作ると表示が増える）。
-- `model`: `cmux set-status model "<model> · <effort>" --icon sparkle --priority 90`。字は `Opus 5.5 · medium` の形。
-- `wait`: 「今、誰が何を待っているか」を 1 つだけ。状況が変わるたびに `cmux set-status wait "<字>" --icon hourglass --priority 80` で上書きし、前の表示を残さない。
-  - Product Manager の答えを待つ: `回答待ち(PM): <何を>`
-  - TPM 担当の答えを待つ: `回答待ち(TPM): <何を>`
-  - 自分が動いている: `作業中: <段>`
-  - 待つ時間に限りがあれば添える: `回答待ち(TPM): merge（14:30 まで）`
+- 出すのは **`model` と `wait` の 2 つだけ**。`model` は名乗ったとき（`tpm hello`・`tpm init`）に出る。
+- `wait`: 「今、誰が何を待っているか」を 1 つだけ。状況が変わるたびに上書きする。
+  - 自分が動いている: `tpm wait work "<段>"`（`作業中: <段>`）
+  - Product Manager の答えを待つ: `tpm wait pm "<何を>"`（`回答待ち(PM): <何を>`）
+  - TPM 担当の答えを待つ: `tpm wait tpm "<何を>"`（`回答待ち(TPM): <何を>`）
+  - 待つ時間に限りがあれば添える: `tpm wait tpm "merge（14:30 まで）"`
+- 知らせの命令は、送った後の待ちも出す（`tpm ask …` は回答待ち、`tpm report done` は `回答待ち(TPM): 次の依頼`、`tpm report end` は `回答待ち(TPM): workspace を閉じる`）。答えが来たら `tpm wait work "<段>"` に戻す。
 - **`/model`・`/effort` は打たない**（新しい session の既定まで書き換わる）。model と effort は起動の旗で決まる。
 
-## Jira
+## 記録
 
-Jira の課題にコメントを書く・読む・Product Manager に確かめる・状態を進めるときは、同じ folder の `jira.md` を読み、従う。
+課題管理の課題（`tpm hello` が返す「課題管理の課題」）があれば、知らせの命令が課題にコメントを 1 件書く。課題が無い・課題管理を使わない project では何も書かない。担当が自分で課題にコメントを書いたり、状態を進めたりはしない。
+
+| 命令 | 書く記録（1 行目は `【<種類>】<担当>: <一言>`） |
+|---|---|
+| `tpm report done --kind <種類>` | `提案`・`計画`・`結果`。成果の URL と、`--point` の要点（3 つまで） |
+| `tpm report doc-fix` | `文書の修正`。PR の URL |
+| `tpm ask pm` | `確認`。確認の Artifact の URL と、項目の題 |
+| `tpm answer`（TPM 担当） | `決定`。【PM の回答】を返す前に書かれる |
+| `tpm report end` | `結果`。続けて課題を済みにする（担当の交代の【片付け】のときは済みにしない） |
+
+- 中身は Artifact に書き、記録には写さない。
+- GitHub の Issue を使う project では、PR の題か本文に課題の鍵を書くとき `Refs #12` と書く。`Closes #12` と書くと merge で勝手に閉じ、【片付け】で閉じる決まりとずれる。
+
+## Product Manager に確かめる
+
+文書やコメントの食い違い**以外**で Product Manager に決めてほしいことは、HTML の Artifact（確認の Artifact）に書いて【PM への依頼】で送る。課題管理の課題があってもなくても同じ。
+
+1. 確認の Artifact を作る。項目ごとに、背景・選択肢・お勧めとその訳を書き、比べる物は表か図にする。
+2. publish する。
+3. `tpm ask pm --url <URL> --item "<項目の題>" … --waiting-for "<何を>"` を打つ。確認の Artifact が自分の所で開き、TPM 担当に【PM への依頼】が行き、状態が `回答待ち(PM): <何を>` になる。
+4. 答えは【PM の回答】で来る。
 
 ## 文書の食い違い
 
-TPM 担当は自分で直さず、課題として Software Engineer 担当に回す（`/tpm` の 2）。ほかの担当は、調べている途中で文書やコメントの食い違いを見つけたら、お勧めの直し方で直し、PR を merge まで自分で進める（Product Manager の確認は要らない）。worktree で作業し、PR の題か本文に課題の鍵（Jira の番号か `t-<短い名>`）を入れる。merge したら【ドキュメント修正】で知らせ、成果の Artifact にも一覧で載せる。文書とコードが食い違うときは、コードの方に合わせる。
+TPM 担当は自分で直さず、課題として Software Engineer 担当に回す（`/tpm` の 2）。ほかの担当は、調べている途中で文書やコメントの食い違いを見つけたら、お勧めの直し方で直し、PR を merge まで自分で進める（Product Manager の確認は要らない）。worktree で作業し、PR の題か本文に課題の鍵を入れる。merge したら【ドキュメント修正】で知らせ、成果の Artifact にも一覧で載せる。文書とコードが食い違うときは、コードの方に合わせる。
 
 ## 共有の環境
 
-Apple Container・Windmill など、並べて動いている物に響く環境は、DevOps Engineer 担当のほかは変えない。要るときは【DevOps への依頼】で TPM 担当に送る。
+環境（container・サーバーなど）を変えてよいかは、project の設定に書いた級で決まる。`tpm infra list` が環境と級を出す。
+
+| 級 | 響く先 | 変えてよい担当 | 先に要ること |
+|---|---|---|---|
+| 自由 | 自分だけ | どの担当も | 無し |
+| TPM に相談 | 並べて動いているほかの担当 | DevOps Engineer 担当だけ | 【相談(TPM)】で何が止まるかとお勧めを送り、答えを待つ |
+| PM の承認 | ほかの人・ほかのチーム | DevOps Engineer 担当だけ | 【PM への依頼】で承認を取る。承認は時間を限って効く |
+
+- 自分が変えてよくない環境は、自分では変えず【DevOps への依頼】で TPM 担当に送る。
+- 級の条件を満たさない命令は、門が実行の前に止める。止まったら、出た文のとおりに頼む（別の書き方で通そうとしない）。
+- 設定に書かれていない環境で、並べて動いている物やほかの人に響きそうな物を変えるときも、先に【相談(TPM)】を送る。
 
 ## 終わり方
 
-- Software Engineer 担当と DevOps Engineer 担当は、依頼書 1 つが済むごとに【完成】を送り、`wait` を `回答待ち(TPM): 次の依頼` にして次の【依頼】を待つ。同じ課題の続きは同じ担当が受ける。【片付け】が来るまで自分から終えない。
-- 自分の workspace は自分で閉じない。【終わり】を送った後、`wait` を `回答待ち(TPM): workspace を閉じる` にする。TPM 担当が報告を受けてから閉じる。
+- Software Engineer 担当と DevOps Engineer 担当は、依頼書 1 つが済むごとに【完成】を送り、次の【依頼】を待つ。同じ課題の続きは同じ担当が受ける。【片付け】が来るまで自分から終えない（`tpm report end` は【片付け】の前には送れない）。
+- 自分の居場所（workspace）は自分で閉じない。【終わり】を送った後、TPM 担当が報告を受けてから閉じる。
 - 自分で作った worktree と branch は、merge の後に消す（`git worktree list` に本体だけが残ること）。

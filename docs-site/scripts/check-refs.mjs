@@ -11,12 +11,19 @@
 // 6. 画面の絵（src/assets/screens/）と本文の参照が両方向で揃う
 // 7. skill（SKILL.md）の本文の ${CLAUDE_SKILL_DIR}/… の先が在り、realpath "${CLAUDE_SKILL_DIR}/…" が repo の一番上を指す
 // 8. skill（skill-sets/ の *.md）が「protocol.md の「見出し」」の形で _shared/ の決まりの見出しを名指したら、その見出しが在る
+// 9. skill（skill-sets/ の *.md）に、連携と課題管理の道具の命令（cmux …・acli …）が直に書かれていない
+// 10. skill・原稿・README が書いた tpm <命令> が、cli/src/protocol.ts の COMMANDS に在る
+// 11. skill が書いた見出し（【完成】など）が cli/src/protocol.ts の HEADINGS に在り、HEADINGS の見出しがどれかの skill に在る
 //
 // 7 が要るのは、skill が自分の folder からの相対パスで repo の中の物を読むため。folder を移して
 // ../ の数がずれたときに、skill の読む先が無くなるのを止める。
 //
 // 8 が要るのは、担当どうしの決まり（_shared/）の節を別のファイルへ移したときに、その節を名指す
 // skill の読む先が無くなるのを止めるため。
+//
+// 9〜11 が要るのは、担当のあいだの決まりを文（skill）とコード（cli/src）に分けて持つため。skill は tpm の命令だけを書き、
+// 道具の命令はコードの adapter が打つ。文に道具の命令が戻ったり、文とコードで命令や見出しの名がずれたりするのを止める。
+// cli の依存（node_modules）を入れずに動くように、命令の木ではなく protocol.ts（Node の組み込みだけで読める）を読む。
 //
 // 4 と 5 が要るのは、skill が Pages ではなく原稿の Markdown を読むため。原稿の見出しや表を
 // 直したときに、skill の読む先が無くなるのを止める。
@@ -234,6 +241,60 @@ for (const f of skillFiles) {
       errors.push(`${f}: ${SHARED}${m[1]} に見出し「${m[2]}」が無い`);
   }
 }
+
+// 9. skill に道具の命令を直に書かない（「cmux の表示」のような、命令でない字は数えない）
+for (const f of skillFiles) {
+  const text = readFileSync(join(REPO, f), "utf8");
+  for (const m of text.matchAll(/\b(cmux|acli)\s+[a-z-]+/g))
+    errors.push(
+      `${f}: 道具の命令が直に書いてある: ${m[0]}（tpm の命令に替える）`,
+    );
+}
+
+// 10・11. 文とコードの揃い。protocol.ts は型の import だけなので、Node がそのまま読める
+const { COMMANDS, HEADINGS } = await import(
+  join(REPO, "cli", "src", "protocol.ts")
+);
+const groups = new Set(
+  COMMANDS.filter((c) => c.includes(" ")).map((c) => c.split(" ")[0]),
+);
+const commandFiles = [
+  ...skillFiles,
+  "README.md",
+  ...all.map((p) => relative(REPO, p.file)),
+];
+for (const f of commandFiles) {
+  const text = readFileSync(join(REPO, f), "utf8");
+  // tpm の後に英小文字の語が続く所だけを命令とみる（tpm --help・tpm <命令>・「tpm の命令」は数えない）
+  for (const m of text.matchAll(
+    /(?<![\w/=-])tpm[ \t]+([a-z][a-z-]*)(?:[ \t]+([a-z][a-z-]*))?/g,
+  )) {
+    const [, first, second] = m;
+    if (groups.has(first)) {
+      if (second && !COMMANDS.includes(`${first} ${second}`))
+        errors.push(`${f}: tpm ${first} ${second} という命令は無い`);
+    } else if (!COMMANDS.includes(first)) {
+      errors.push(`${f}: tpm ${first} という命令は無い`);
+    }
+  }
+}
+const headingNames = new Set(Object.values(HEADINGS).map((h) => h.name));
+const written = new Set();
+for (const f of skillFiles) {
+  const text = readFileSync(join(REPO, f), "utf8");
+  for (const m of text.matchAll(/【([^】<>]+)】/g)) {
+    written.add(m[1]);
+    if (!headingNames.has(m[1]))
+      errors.push(
+        `${f}: 見出し【${m[1]}】が cli/src/protocol.ts の HEADINGS に無い`,
+      );
+  }
+}
+for (const name of headingNames)
+  if (!written.has(name))
+    errors.push(
+      `cli/src/protocol.ts: HEADINGS の【${name}】を書いた skill が無い`,
+    );
 
 if (errors.length > 0) {
   for (const e of errors) console.error(`✗ ${e}`);

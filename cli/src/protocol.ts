@@ -5,6 +5,41 @@ import type { NoteKind } from './tracker/types.ts';
 /** TPM 担当の居場所の題（知らせの差出人にも使う）。 */
 export const TPM_TITLE = 'Technical Program Manager';
 
+/**
+ * tpm の命令の一覧。skill と docs が書いた tpm <命令> が在るかを docs-site/scripts/check-refs.mjs がこれで見る
+ * （その検査は cli の依存を入れずに動くので、命令の木ではなくこの表を読む）。命令の木と揃っているかは試験が見る。
+ */
+export const COMMANDS = [
+  'start',
+  'init',
+  'roles',
+  'assign',
+  'close',
+  'hello',
+  'inbox',
+  'wait',
+  'show',
+  'ask tpm',
+  'ask pm',
+  'ask devops',
+  'report merged',
+  'report doc-fix',
+  'report done',
+  'report end',
+  'report merge-request',
+  'report not-yet',
+  'report recreated',
+  'answer',
+  'notify',
+  'dismiss',
+  'infra list',
+  'infra approve',
+  'infra revoke',
+  'infra run',
+  'guard',
+  'run-role',
+] as const;
+
 export interface RoleSettings {
   model: string
   effort: string
@@ -22,6 +57,9 @@ export interface RoleDef {
   /** 【片付け】を待たずに【終わり】を送ってよいか（PR 1 本を受け持つ担当は、merge の知らせで終える）。 */
   endsWithoutDismiss: boolean
 }
+
+/** tpm start が起こす TPM 担当の model など。 */
+export const TPM_SETTINGS: RoleSettings = { model: 'claude-opus-5-5', effort: 'medium', permissionMode: 'bypassPermissions' };
 
 export const ROLES = {
   'software-engineer': {

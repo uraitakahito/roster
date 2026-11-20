@@ -1,7 +1,7 @@
 // cmux の adapter。連携の口を cmux の命令に写す。cmux の言葉（workspace・surface・サイドバー）はこのファイルの外に出さない。
 import type { Exec, ExecResult } from '../exec.ts';
 import { TpmError } from '../skill-sets.ts';
-import type { Delivery, Seat, SpawnOptions, StatusKey, Transport } from './types.ts';
+import type { Delivery, Incoming, Seat, SpawnOptions, StatusKey, Transport } from './types.ts';
 
 /** 状態の鍵ごとの見た目（protocol の「サイドバー」）。 */
 const STATUS_STYLE: Record<StatusKey, string[]> = {
@@ -54,6 +54,12 @@ export class CmuxTransport implements Transport {
     const inbox = this.json(['agent', 'inbox', '--surface', to, '--limit', '20']) as { messages?: { id: string, state: string }[] };
     const state = inbox.messages?.find(m => m.id === id)?.state;
     return state === 'delivered' || state === 'read';
+  }
+
+  pending(): Incoming[] {
+    // --mark-read は付けない（付けると既読になり、hook が届けなくなる）。
+    const inbox = this.json(['agent', 'inbox', '--surface', this.whoami(), '--state', 'queued']) as { messages?: { id: string, sender_name: string, body: string }[] };
+    return (inbox.messages ?? []).map(m => ({ id: m.id, from: m.sender_name, text: m.body }));
   }
 
   spawn(options: SpawnOptions): string {
