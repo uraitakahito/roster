@@ -2,7 +2,7 @@
 
 TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・DevOps Engineer 担当（`/devops-engineer`）・Sustaining Engineer 担当（`/sustaining-engineer`）が共通に従う決まり。依頼主は Product Manager（利用者）。返答と報告は日本語で書く。
 
-担当どうしのやりとりは、すべて `tpm` の命令でする。`tpm` が、知らせを送る・届いたかを見る・課題に記録を書く・状態を出す、を 1 度にする。連携の道具（cmux など）と課題管理の道具（Jira・GitHub の Issue）の命令は直に打たない（直に打つと記録と状態が抜けるので、門が止める）。どの道具を使うかは、TPM 担当を起こした folder の `.claude/roles/config.json` で決まる。
+担当どうしのやりとりは、すべて `tpm` の命令でする。`tpm` が、知らせを送る・届いたかを見る・課題に記録を書く・状態を出す、を 1 度にする。連携の道具（cmux など）と課題管理の道具（Jira・GitHub の Issue）の命令は直に打たない（直に打つと記録と状態が抜けるので、門が止める）。どの道具を使うかは、TPM 担当を起こした folder の `.claude/roles/config.jsonc` で決まる。
 
 ## 連絡の仕方
 

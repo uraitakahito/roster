@@ -33,17 +33,17 @@ describe('listSkills', () => {
 
 describe('explain', () => {
   test('folder を渡さず config も無ければ、そう書き、core だけを並べる', () => {
-    expect(explain({ given: undefined, dir: '/w', root, configFile: '/w/nope.json', skillSets: [] })).toEqual([
+    expect(explain({ given: undefined, dir: '/w', root, configFile: '/w/nope.jsonc', skillSets: [] })).toEqual([
       'folder      /w（今いる folder）',
       `repo        ${root}`,
-      'config      /w/nope.json（なし）',
+      'config      /w/nope.jsonc（なし）',
       'skill-sets  なし（core だけ）',
       `core        ${root}/skill-sets/core → /devops-engineer /tpm`,
     ]);
   });
 
   test('渡した値・config のあり・skill セットごとの skill を書く', () => {
-    const configFile = join(root, 'config.json');
+    const configFile = join(root, 'config.jsonc');
     writeFileSync(configFile, '{}');
     expect(explain({ given: '.', dir: '/w', root, configFile, skillSets: ['empty'] })).toEqual([
       'folder      /w（渡された値: .）',

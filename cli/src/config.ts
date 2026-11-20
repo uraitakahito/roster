@@ -1,6 +1,9 @@
-// 起こす folder の .claude/roles/config.json から、層 1 の道具の選び方（課題管理・連携・インフラ）と、担当ごとの model などの既定を読む。
+// 起こす folder の .claude/roles/config.jsonc から、層 1 の道具の選び方（課題管理・連携・インフラ）と、担当ごとの model などの既定を読む。
 // skill-sets の欄は skill-sets.ts が読む。旗・既定と合わせて決めるのは担当を起こす所（commands/tpm-side.ts）。
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import type { RoleName, RoleSettings } from './protocol.ts';
+import { shellQuote } from './shell.ts';
 import { readConfig, TpmError } from './skill-sets.ts';
 
 /** 課題管理の道具。none は「記録を書かない」。 */
@@ -33,13 +36,26 @@ export interface RolesConfig {
   roles: Partial<Record<RoleName, Partial<RoleSettings>>>
 }
 
-/** config.json で既定を替えられる担当。 */
+/** config.jsonc で既定を替えられる担当。 */
 const CONFIGURABLE_ROLES = ['software-engineer', 'devops-engineer'] as const;
 const ROLE_FIELDS = ['model', 'effort', 'permissionMode'] as const;
 
 const ENV_NAME = /^[a-z0-9-]+$/;
 
-/** config.json を読む。ファイルや欄が無ければ既定（課題管理なし・cmux・環境の宣言なし）。誤りなら TpmError。 */
+/**
+ * project の設定のファイル（<project>/.claude/roles/config.jsonc）。在るかは見ない。
+ * 古い名前の config.json があれば、読まずに名前を替えるよう言って止める（両方は読まない）。
+ */
+export function rolesConfigFile(project: string): string {
+  const dir = join(project, '.claude', 'roles');
+  const legacy = join(dir, 'config.json');
+  if (existsSync(legacy)) {
+    throw new TpmError(`${legacy} は読みません。config.jsonc に名前を替えてください（中身はそのままで読めます）: mv ${shellQuote(legacy)} ${shellQuote(join(dir, 'config.jsonc'))}`);
+  }
+  return join(dir, 'config.jsonc');
+}
+
+/** config.jsonc を読む。ファイルや欄が無ければ既定（課題管理なし・cmux・環境の宣言なし）。誤りなら TpmError。 */
 export function readRolesConfig(configFile: string): RolesConfig {
   const raw = readConfig(configFile);
   const config: Record<string, unknown> = typeof raw === 'object' && raw !== null ? raw as Record<string, unknown> : {};

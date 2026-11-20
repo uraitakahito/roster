@@ -4,11 +4,11 @@ import { join } from 'node:path';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { readSkillSets, TpmError } from '../src/skill-sets.ts';
 
-// skill セット core・dependabot・a-1 を持つ偽の repo と、config.json を置く folder を作る。
+// skill セット core・dependabot・a-1 を持つ偽の repo と、config.jsonc を置く folder を作る。
 let root: string;
 let n = 0;
 const config = (text: string): string => {
-  const file = join(root, `config-${n++}.json`);
+  const file = join(root, `config-${n++}.jsonc`);
   writeFileSync(file, text);
   return file;
 };
@@ -20,7 +20,7 @@ beforeAll(() => {
 
 describe('readSkillSets', () => {
   test('ファイルが無ければ空', () => {
-    expect(readSkillSets(join(root, 'nope.json'), root)).toEqual([]);
+    expect(readSkillSets(join(root, 'nope.jsonc'), root)).toEqual([]);
   });
 
   test('skill-sets の欄が無ければ空', () => {
@@ -36,7 +36,7 @@ describe('readSkillSets', () => {
   });
 
   test.each([
-    ['壊れた JSON', '{ skill-sets: ', /JSON として読めません/],
+    ['壊れた JSON', '{ skill-sets: ', /JSONC として読めません/],
     ['配列でない skill-sets', '{ "skill-sets": "dependabot" }', /skill-sets は skill セットの名前/],
     ['文字列でない要素', '{ "skill-sets": [1] }', /skill-sets は skill セットの名前/],
     ['大文字の名前', '{ "skill-sets": ["Dependabot"] }', /skill-sets は skill セットの名前/],

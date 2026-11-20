@@ -1,11 +1,13 @@
 ---
 title: 設定
-description: 使う側の project に置く .claude/roles/config.json（課題管理・連携・インフラの環境・担当の既定）と、Dependabot の skill の設定
+description: 使う側の project に置く .claude/roles/config.jsonc（課題管理・連携・インフラの環境・担当の既定）と、Dependabot の skill の設定
 ---
 
-## `.claude/roles/config.json`（任意）
+## `.claude/roles/config.jsonc`（任意）
 
-TPM 担当を起こした folder（project）に置くと、道具の選び方・追加の skill セット・起こす担当の既定を替えられる。`tpm` の命令が読む。
+TPM 担当を起こした folder（project）に置くと、道具の選び方・追加の skill セット・起こす担当の既定を替えられる。`tpm` の命令が読む。JSONC（`//`・`/* */` のコメントと、`}`・`]` の前の末尾のカンマを許す JSON）で書く。
+
+古い名前の `.claude/roles/config.json` があると、`tpm` の命令はそれを読まずに止まり、名前を替える `mv` を出す。中身はそのまま JSONC として読めるので、名前を替えるだけで移せる。
 
 | 欄 | 中身 | 無いとき |
 |---|---|---|
@@ -15,31 +17,34 @@ TPM 担当を起こした folder（project）に置くと、道具の選び方�
 | `skill-sets` | core のほかに加える、追加の skill セットの名前の配列 | core だけ |
 | `software-engineer`・`devops-engineer` | 起こす担当の `model`・`effort`・`permissionMode` | 既定（Software Engineer 担当は Opus 5.5・medium、DevOps Engineer 担当は Opus 5.5・low、どちらも `bypassPermissions`） |
 
-```json
+```jsonc
 {
+  // 課題の記録は、この folder の repo の GitHub の Issue に書く
   "tracker": "github",
   "transport": "cmux",
   "infra": {
     "apple-container": {
       "guard": "free",
-      "match": ["container "]
+      "match": ["container "],
     },
+    /* staging はほかのチームも使うので、
+       Product Manager の承認が要る */
     "aws-staging": {
       "guard": "pm",
-      "match": ["aws ", "ssh staging"]
-    }
+      "match": ["aws ", "ssh staging"],
+    },
   },
   "skill-sets": ["dependabot"],
   "software-engineer": {
     "model": "claude-opus-5-5",
     "effort": "high",
-    "permissionMode": "bypassPermissions"
+    "permissionMode": "bypassPermissions",
   },
   "devops-engineer": {
     "model": "claude-opus-5-5",
     "effort": "low",
-    "permissionMode": "bypassPermissions"
-  }
+    "permissionMode": "bypassPermissions",
+  },
 }
 ```
 
@@ -67,7 +72,7 @@ TPM 担当を起こした folder（project）に置くと、道具の選び方�
 
 ## Dependabot の設定
 
-Dependabot の skill を使う project では、`.claude/roles/config.json` の `skill-sets` に `"dependabot"` を書き、次の 2 つを置く。`/tpm` の起動では Dependabot の PR を見ない。Product Manager が言ったときに TPM 担当が `/dependabot-triage` を呼ぶ。skill セットを書かなければ `/dependabot-triage` は使えない。skill セットを書いても 2 つが無いと `/dependabot-triage` と `/sustaining-engineer` は止まる。
+Dependabot の skill を使う project では、`.claude/roles/config.jsonc` の `skill-sets` に `"dependabot"` を書き、次の 2 つを置く。`/tpm` の起動では Dependabot の PR を見ない。Product Manager が言ったときに TPM 担当が `/dependabot-triage` を呼ぶ。skill セットを書かなければ `/dependabot-triage` は使えない。skill セットを書いても 2 つが無いと `/dependabot-triage` と `/sustaining-engineer` は止まる。
 
 ### `.claude/dependabot/config.json`
 

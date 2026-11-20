@@ -40,7 +40,7 @@ describe('assign', () => {
     expect(out).toEqual(['起こした: Software Engineer t-x: 計画と実装（file:1・Opus 5.5 · medium）', '起きた合図（tpm hello）は待っていない']);
   });
 
-  test('model などは 旗 > config.json > 役割の既定 の順で決まる', () => {
+  test('model などは 旗 > config.jsonc > 役割の既定 の順で決まる', () => {
     const w = world({ 'skill-sets': ['dependabot'], 'devops-engineer': { model: 'claude-fable-5-2' } });
     assign(w.tpm, 'devops', { role: 'devops-engineer', wait: 0, effort: 'high' });
     expect(requireRole(w.tpm, 'devops')).toMatchObject({

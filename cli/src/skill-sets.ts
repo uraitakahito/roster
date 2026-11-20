@@ -1,6 +1,7 @@
-// 起こす folder の .claude/roles/config.json から、core のほかに加える追加の skill セット（skill-sets）を読む。
+// 起こす folder の .claude/roles/config.jsonc から、core のほかに加える追加の skill セット（skill-sets）を読む。
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { parseJsonc } from './jsonc.ts';
 
 /** tpm が利用者に見せて止まる誤り。cli は `tpm: <message>` と出して exit 1 にする。 */
 export class TpmError extends Error {}
@@ -8,7 +9,7 @@ export class TpmError extends Error {}
 const SKILL_SET_NAME = /^[a-z0-9-]+$/;
 
 /**
- * config.json の skill-sets を確かめ、追加の skill セットの名前を書いた順に返す（core と重なりは除く）。
+ * config.jsonc の skill-sets を確かめ、追加の skill セットの名前を書いた順に返す（core と重なりは除く）。
  * ファイルや skill-sets の欄が無ければ空。誤りなら TpmError を投げる。
  */
 export function readSkillSets(configFile: string, root: string): string[] {
@@ -21,14 +22,14 @@ export function readSkillSets(configFile: string, root: string): string[] {
   return names;
 }
 
-/** config.json を JSON として読む。ファイルが無ければ undefined。 */
+/** config.jsonc を JSONC（コメントと末尾のカンマを許す JSON）として読む。ファイルが無ければ undefined。 */
 export function readConfig(configFile: string): unknown {
   if (!existsSync(configFile)) return undefined;
   try {
-    return JSON.parse(readFileSync(configFile, 'utf8'));
+    return parseJsonc(readFileSync(configFile, 'utf8'));
   }
   catch (e) {
-    throw new TpmError(`${configFile} を JSON として読めません: ${(e as Error).message}`);
+    throw new TpmError(`${configFile} を JSONC として読めません: ${(e as Error).message}`);
   }
 }
 

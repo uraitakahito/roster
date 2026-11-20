@@ -1,7 +1,7 @@
 // 命令が動くときの周り: どの project の設定と状態を使い、どの道具の adapter を使うか。
 import { realpathSync } from 'node:fs';
 import { join } from 'node:path';
-import { readRolesConfig, type RolesConfig } from './config.ts';
+import { readRolesConfig, rolesConfigFile, type RolesConfig } from './config.ts';
 import { exec as realExec, type Exec } from './exec.ts';
 import { readSkillSets } from './skill-sets.ts';
 import { State, stateDir } from './state.ts';
@@ -14,7 +14,7 @@ import { FileTransport } from './transport/file.ts';
 import type { Transport } from './transport/types.ts';
 
 export interface Context {
-  /** TPM 担当を起こした folder。設定（.claude/roles/config.json）と状態はここで決まる。 */
+  /** TPM 担当を起こした folder。設定（.claude/roles/config.jsonc）と状態はここで決まる。 */
   project: string
   config: RolesConfig
   state: State
@@ -43,7 +43,7 @@ const sleepSync = (ms: number): void => {
 export function createContext(env: NodeJS.ProcessEnv = process.env, cwd: string = process.cwd(), exec: Exec = realExec): Context {
   const project = realpathSync(env.TPM_PROJECT || cwd);
   const root = join(import.meta.dirname, '..', '..');
-  const configFile = join(project, '.claude', 'roles', 'config.json');
+  const configFile = rolesConfigFile(project);
   const config = readRolesConfig(configFile);
   const state = new State(stateDir(project, env));
   const transport = config.transport === 'file' ? new FileTransport(state, env.TPM_ADDRESS || 'file:tpm') : new CmuxTransport(exec);

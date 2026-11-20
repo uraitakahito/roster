@@ -10,7 +10,7 @@ skill は skill セットに分けてあり、`--add-dir` で足した skill セ
 | skill セット | 入るとき | skill |
 |---|---|---|
 | core | いつも（`tpm start` の 1 行と、担当を起こす `tpm assign` が `--add-dir` で渡す） | `/tpm`・`/software-engineer`・`/devops-engineer`・`_shared/protocol.md` |
-| dependabot | 起こす folder の `.claude/roles/config.json` の `skill-sets` に `"dependabot"` と書いたとき（[設定](/configuration/)）。`tpm assign` は、設定に書いた skill セットを起こす担当にも渡す | `/dependabot-triage`・`/sustaining-engineer` |
+| dependabot | 起こす folder の `.claude/roles/config.jsonc` の `skill-sets` に `"dependabot"` と書いたとき（[設定](/configuration/)）。`tpm assign` は、設定に書いた skill セットを起こす担当にも渡す | `/dependabot-triage`・`/sustaining-engineer` |
 
 skill セット `<名前>` の skill は `skill-sets/<名前>/.claude/skills/` に置く。skill セットは `skill-sets/` の下に兄弟の folder で置く（入れ子にすると、外側の skill セットを足したセッションが内側の skill セットの folder を触ったときに、内側の skill まで見つかりうるため）。
 

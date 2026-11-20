@@ -79,7 +79,7 @@ tpm assign "<repo>#<PR>" --role sustaining-engineer --cwd <cwd> \
   --model <config.model> --effort <config.effort> --permission-mode <config.permissionMode>
 ```
 
-- skill セットは、起こした folder の `.claude/roles/config.json` の `skill-sets` に書いた物が足される（core と dependabot。protocol.md は core の skill セット、`/sustaining-engineer` は dependabot の skill セットにある）。
+- skill セットは、起こした folder の `.claude/roles/config.jsonc` の `skill-sets` に書いた物が足される（core と dependabot。protocol.md は core の skill セット、`/sustaining-engineer` は dependabot の skill セットにある）。
 - `tpm assign` は、新しい担当が名乗るまで 90 秒待ち、結果を返す:
   - 「信頼のダイアログで止まっていたので閉じた」: この skills の repo が信頼されていない（別の git の repo なので、信頼済みの folder の下に置いても信頼は及ばない）。出た folder で 1 度 Claude Code を対話で起こして信頼するよう Product Manager に頼む（`${CLAUDE_SKILL_DIR}/../../../../../docs-site/src/content/docs/getting-started.md` の「信頼のダイアログ」）。
   - 「Unknown command」: `skill-sets` に `"dependabot"` が書かれていない。閉じてある。Product Manager に知らせる。
