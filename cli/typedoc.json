@@ -1,0 +1,12 @@
+// TypeDoc はページを作らず、コメントの検査だけに使う（pnpm run doccheck）。
+// 見る物: export した関数・型・class・定数と method に /** */ が無い・{@link} の先が無い・export していない型を表に出している。
+// property（interface の欄・表の中の鍵）には求めない。@param・@returns も求めない（引数は文の中で書く）。
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPointStrategy": "expand",
+  "entryPoints": ["src"],
+  "emit": "none",
+  "validation": { "notExported": true, "invalidLink": true, "notDocumented": true },
+  "requiredToBeDocumented": ["Function", "Class", "Interface", "TypeAlias", "Variable", "Method"],
+  "treatValidationWarningsAsErrors": true
+}
