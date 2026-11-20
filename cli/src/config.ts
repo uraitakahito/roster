@@ -1,5 +1,5 @@
-// 起こす folder の .claude/roles/config.json から、層 1 の道具の選び方（課題管理・連携・インフラ）を読む。
-// skill-sets の欄は skill-sets.ts、担当ごとの model などは担当を起こす所が読む。
+// 起こす folder の .claude/roles/config.json から、層 1 の道具の選び方（課題管理・連携・インフラ）と、担当ごとの model などの既定を読む。
+// skill-sets の欄は skill-sets.ts が読む。旗・既定と合わせて決めるのは担当を起こす所（commands/tpm-side.ts）。
 import type { RoleName, RoleSettings } from './protocol.ts';
 import { readConfig, TpmError } from './skill-sets.ts';
 
