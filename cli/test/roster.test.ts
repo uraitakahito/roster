@@ -89,7 +89,8 @@ describe('assign', () => {
   test('動いている担当の鍵では起こさない。居場所が消えていれば起こし直す', () => {
     const w = world();
     assign(w.tpm, 't-x', SE);
-    expect(() => assign(w.tpm, 't-x', SE)).toThrow(/t-x の担当はもう動いています（file:1）/);
+    expect(() => assign(w.tpm, 't-x', { role: 'software-engineer', wait: 0 })).toThrow(/t-x の担当はもう動いています（file:1）。新しい依頼書を --brief で/);
+    expect(w.wire.seats()).toHaveLength(1);
     w.wire.close('file:1');
     expect(assign(w.tpm, 't-x', SE)[0]).toMatch(/^起こし直した: .*file:2/);
   });
