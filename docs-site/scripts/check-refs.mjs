@@ -71,7 +71,6 @@ for (const p of all) {
 //    <…>・*・空白・$ を含む物は形の説明なので見ない。末尾の :<行> は落とす
 //    在るかは手元の folder でなく git から求める。追跡する物と、まだ add していない新しい物（.gitignore の外）だけを
 //    数え、手元だけの cli/dist/・node_modules/ などは数えない（数えると手元では通り、CI で落ちる）
-//    symlink はその物を見る（cli/bin/tpm は build 前は在らない cli/dist/cli.js を指す）
 const tracked = execFileSync("git", ["ls-files"], {
   cwd: REPO,
   encoding: "utf8",

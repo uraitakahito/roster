@@ -1,4 +1,4 @@
-// build 済みの cli/dist/cli.js を cli/bin/tpm（symlink）経由で動かす。先に pnpm run build が要る。
+// build 済みの cli/dist/cli.js を cli/bin/tpm（sh）経由で動かす。先に pnpm run build が要る。
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
