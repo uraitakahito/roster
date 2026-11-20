@@ -12,7 +12,6 @@ import { createContext } from './context.ts';
 import type { Verdict } from './guard.ts';
 import { ROLE_NAMES, type RoleName } from './protocol.ts';
 import { requireRole } from './roster.ts';
-import { resolveSettings } from './settings.ts';
 import { runRole } from './run-role.ts';
 import { readSkillSets, TpmError } from './skill-sets.ts';
 import { explain } from './verbose.ts';
@@ -52,7 +51,7 @@ export function buildProgram(): Command {
       if (options.verbose) {
         for (const line of explain({ given: folder, dir, root, configFile, skillSets })) process.stderr.write(`tpm: ${line}\n`);
       }
-      console.log(buildCommand(dir, root, skillSets, resolveSettings('tpm', { env: process.env })));
+      console.log(buildCommand(dir, root, skillSets, process.env));
     });
 
   program.command('roles').description('名簿を、動いている居場所と突き合わせて出す').action(() => print(roles(createContext())));

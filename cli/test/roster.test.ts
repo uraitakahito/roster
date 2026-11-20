@@ -5,7 +5,6 @@ import { buildCommand } from '../src/command.ts';
 import { modelLabel, modelStatus } from '../src/protocol.ts';
 import { readRole, requireRole } from '../src/roster.ts';
 import { claudeArgs, roleEnv } from '../src/run-role.ts';
-import { resolveSettings } from '../src/settings.ts';
 import { TpmError } from '../src/skill-sets.ts';
 import { world } from './helpers.ts';
 
@@ -23,7 +22,7 @@ describe('hello（TPM 担当）', () => {
     const env = { TPM_MODEL: 'claude-fable-5-2', TPM_EFFORT: 'high' };
     const w = world({}, env);
     hello(w.tpm);
-    const line = buildCommand('/w', w.tpm.root, [], resolveSettings('tpm', { env }));
+    const line = buildCommand('/w', w.tpm.root, [], env);
     expect(line).toContain(' --model claude-fable-5-2 --effort high ');
     expect(w.wire.status('file:tpm')?.model).toBe(modelStatus('claude-fable-5-2', 'high'));
   });

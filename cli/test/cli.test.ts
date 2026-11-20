@@ -59,6 +59,17 @@ describe('tpm start が出す 1 行', () => {
       .toMatch(/ claude --model claude-fable-5-2 --effort high --permission-mode acceptEdits --settings /);
   });
 
+  test('1 回だけ付けた TPM_MODEL などは、1 行を打つと TPM 担当の claude の環境に入る', () => {
+    const d = folder(null);
+    const fake = join(scratch, `fake-claude-${n++}`);
+    mkdirSync(fake);
+    writeFileSync(join(fake, 'claude'), '#!/bin/sh\nprintf "%s|%s|%s|%s %s" "$TPM_MODEL" "$TPM_EFFORT" "$TPM_PERMISSION_MODE" "$1" "$2"\n', { mode: 0o755 });
+    const line = run(tpm, ['start', d], scratch, { TPM_MODEL: 'claude-fable-5-2', TPM_EFFORT: 'high' });
+    // 1 行を打つ shell には TPM_* が無い（tpm start の前に 1 回だけ付けたとき）
+    const out = execFileSync('/bin/sh', ['-c', line], { encoding: 'utf8', env: env({ PATH: `${fake}:${process.env.PATH ?? ''}` }) });
+    expect(out).toBe('claude-fable-5-2|high||--model claude-fable-5-2');
+  });
+
   test('config.jsonc の担当の欄は TPM 担当の 1 行に効かない', () => {
     const d = folder('{ "software-engineer": { "model": "claude-fable-5-2" } }');
     expect(run(tpm, ['start', d], scratch)).toBe(`cd ${d} && ${head} --add-dir ${root}/skill-sets/core -- /tpm`);
