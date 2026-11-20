@@ -160,10 +160,12 @@ describe('roles と close', () => {
 });
 
 describe('run-role', () => {
-  test('claude の引数は、最初の入力の前に -- を置く', () => {
+  test('claude の引数は、門の hook を付け、最初の入力の前に -- を置く', () => {
     const w = world({ 'skill-sets': ['dependabot'] });
     assign(w.tpm, 'app#12', { role: 'sustaining-engineer', wait: 0 });
-    expect(claudeArgs(requireRole(w.tpm, 'app#12'))).toEqual([
+    expect(claudeArgs(requireRole(w.tpm, 'app#12'), '/r')).toEqual([
+      '--settings',
+      '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"/r/cli/bin/tpm guard"}]}]}}',
       '--model',
       'claude-opus-5-5',
       '--effort',
