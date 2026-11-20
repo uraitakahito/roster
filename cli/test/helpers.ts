@@ -26,8 +26,8 @@ export interface World {
   slept: () => number
 }
 
-/** config は .claude/roles/config.jsonc に書く中身（transport は file に固定する）。 */
-export function world(config: Record<string, unknown> = {}): World {
+/** config は .claude/roles/config.jsonc に書く中身（transport は file に固定する）。env は TPM 担当の周りの環境変数に足す物。 */
+export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessEnv = {}): World {
   const base = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-world-')));
   const project = join(base, 'project');
   mkdirSync(join(project, '.claude', 'roles'), { recursive: true });
@@ -45,7 +45,7 @@ export function world(config: Record<string, unknown> = {}): World {
       slept += 1;
     },
   });
-  const tpm = at({});
+  const tpm = at(env);
   return {
     project,
     calls,

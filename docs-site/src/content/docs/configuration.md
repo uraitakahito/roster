@@ -1,6 +1,6 @@
 ---
 title: 設定
-description: 使う側の project に置く .claude/roles/config.jsonc（課題管理・連携・インフラの環境・担当の既定）と、Dependabot の skill の設定
+description: 使う側の project に置く .claude/roles/config.jsonc（課題管理・連携・インフラの環境・担当の既定）、model などの既定を人ごとに決める環境変数、Dependabot の skill の設定
 ---
 
 ## `.claude/roles/config.jsonc`（任意）
@@ -15,7 +15,7 @@ TPM 担当を起こした folder（project）に置くと、道具の選び方�
 | `transport` | 担当どうしの連携の道具。`cmux`（`file` は試験用） | `cmux` |
 | `infra` | インフラの環境の宣言。環境の名前（英小文字・数字・`-`）ごとに `guard`（級）と `match`（その環境に触る命令が含む字の配列） | 宣言なし（guard は環境を見ない） |
 | `skill-sets` | core のほかに加える、追加の skill セットの名前の配列 | core だけ |
-| `software-engineer`・`devops-engineer` | 起こす担当の `model`・`effort`・`permissionMode` | 既定（Software Engineer 担当は Opus 5.5・medium、DevOps Engineer 担当は Opus 5.5・low、どちらも `bypassPermissions`） |
+| `software-engineer`・`devops-engineer` | 起こす担当の `model`・`effort`・`permissionMode` | [環境変数](#model-などの既定の環境変数任意)、それも無ければ既定（Software Engineer 担当は Opus 5.5・medium、DevOps Engineer 担当は Opus 5.5・low、どちらも `bypassPermissions`） |
 
 ```jsonc
 {
@@ -70,6 +70,34 @@ TPM 担当を起こした folder（project）に置くと、道具の選び方�
 
 `match` は命令の字との一致で見る。広すぎると読むだけの命令も止まり、狭すぎるとすり抜けるので、その環境を変える命令の頭（`aws `・`ssh staging` など）を書く。
 
+## model などの既定の環境変数（任意）
+
+shell の profile などで書くと、すべての project・すべての担当（TPM 担当を含む）の model・effort・permissionMode の既定になる。
+
+| 環境変数 | 決める物 | 例 |
+|---|---|---|
+| `TPM_MODEL` | `--model` | `claude-fable-5-2` |
+| `TPM_EFFORT` | `--effort` | `high` |
+| `TPM_PERMISSION_MODE` | `--permission-mode` | `bypassPermissions` |
+
+欄ごとに、次の順で先に値がある物を使う（空の字は書かなかったものとみなす）。
+
+| 順 | どこ | 効く担当 |
+|---|---|---|
+| 1 | 命令の旗（`tpm assign --model` など。Sustaining Engineer 担当は `.claude/dependabot/config.jsonc` に書いた欄を `/dependabot-triage` が旗にする） | その 1 回 |
+| 2 | `.claude/roles/config.jsonc` の担当の欄 | Software Engineer・DevOps Engineer |
+| 3 | 環境変数 `TPM_MODEL`・`TPM_EFFORT`・`TPM_PERMISSION_MODE` | すべて（TPM 担当を含む） |
+| 4 | コードの既定（TPM 担当・Software Engineer 担当・Sustaining Engineer 担当は Opus 5.5・medium、DevOps Engineer 担当は Opus 5.5・low、どれも `bypassPermissions`） | すべて |
+
+```sh
+# ~/.zshrc など
+export TPM_MODEL=claude-fable-5-2
+export TPM_EFFORT=high
+```
+
+- `tpm start` は環境変数を読んで 1 行の `--model`・`--effort`・`--permission-mode` に入れる。TPM 担当の `tpm init` も同じ値を状態の `model` に出す（effort は、Claude Code が入れる `$CLAUDE_EFFORT` があればそれ）。
+- `tpm assign` は TPM 担当の居場所で動くので、TPM 担当の Claude Code が受け継いだ環境変数を読む。profile に書いて export すれば、TPM 担当にも担当にも効く。`TPM_MODEL=… tpm start` のように 1 行を出すときだけ書いた値は、その 1 行（TPM 担当）にしか効かない。
+
 ## Dependabot の設定
 
 Dependabot の skill を使う project では、`.claude/roles/config.jsonc` の `skill-sets` に `"dependabot"` を書き、次の 2 つを置く。`/tpm` の起動では Dependabot の PR を見ない。Product Manager が言ったときに TPM 担当が `/dependabot-triage` を呼ぶ。skill セットを書かなければ `/dependabot-triage` は使えない。skill セットを書いても 2 つが無いと `/dependabot-triage` と `/sustaining-engineer` は止まる。
@@ -85,9 +113,9 @@ Dependabot の skill を使う project では、`.claude/roles/config.jsonc` の
 | `cwd` | Sustaining Engineer 担当を起こす folder（無ければ使う側の project の folder） | `"/path/to/workspace"` |
 | `maxConcurrent` | 同時に動かす Sustaining Engineer 担当の数 | `3` |
 | `hours` | 依存の version の公開から何時間たったら merge を検討するか | `72` |
-| `model` | Sustaining Engineer 担当の model | `"claude-opus-5-5"` |
-| `effort` | Sustaining Engineer 担当の effort | `"medium"` |
-| `permissionMode` | Sustaining Engineer 担当の `--permission-mode` | `"bypassPermissions"` |
+| `model` | Sustaining Engineer 担当の model（無ければ `TPM_MODEL`、それも無ければ既定） | `"claude-opus-5-5"` |
+| `effort` | Sustaining Engineer 担当の effort（無ければ `TPM_EFFORT`、それも無ければ既定） | `"medium"` |
+| `permissionMode` | Sustaining Engineer 担当の `--permission-mode`（無ければ `TPM_PERMISSION_MODE`、それも無ければ既定） | `"bypassPermissions"` |
 | `mergeMethod` | `gh pr merge` の方法 | `"squash"` |
 | `rebaseWaitMinutes` | `@dependabot rebase` の応じた印 👍 を待つ分 | `20` |
 

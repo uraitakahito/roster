@@ -2,7 +2,8 @@
 import { join } from 'node:path';
 import { shellQuote } from '../shell.ts';
 import type { Context } from '../context.ts';
-import { modelStatus, ROLES, TPM_SETTINGS, TPM_TITLE, WAIT, type RoleName, type RoleSettings } from '../protocol.ts';
+import { modelStatus, ROLES, TPM_TITLE, WAIT, type RoleName } from '../protocol.ts';
+import { resolveSettings } from '../settings.ts';
 import { allRoles, assertKey, readRole, removeRole, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
 import { skillSetDir, TpmError } from '../skill-sets.ts';
 import { brief } from './messages.ts';
@@ -10,11 +11,15 @@ import { brief } from './messages.ts';
 /** 名乗ったかを見る間（ミリ秒）。 */
 const HELLO_INTERVAL_MS = 2000;
 
-/** 名乗る: 居場所の題と状態を出し、自分の宛先を状態に書く。続けて名簿を出す。 */
+/**
+ * 名乗る: 居場所の題と状態を出し、自分の宛先を状態に書く。続けて名簿を出す。
+ * 状態の model は、旗が無ければ起こす 1 行と同じ決め方（resolveSettings）。effort は、旗が無ければ Claude Code が入れる $CLAUDE_EFFORT（実際の effort）を旗と同じに扱う。
+ */
 export function init(ctx: Context, options: { model?: string, effort?: string } = {}): string[] {
   const address = ctx.transport.whoami();
   ctx.transport.setTitle(TPM_TITLE);
-  ctx.transport.setStatus('model', modelStatus(options.model ?? TPM_SETTINGS.model, options.effort ?? ctx.env.CLAUDE_EFFORT ?? TPM_SETTINGS.effort));
+  const settings = resolveSettings('tpm', { flags: { model: options.model, effort: options.effort ?? ctx.env.CLAUDE_EFFORT }, env: ctx.env });
+  ctx.transport.setStatus('model', modelStatus(settings.model, settings.effort));
   ctx.transport.setStatus('wait', WAIT.work('起動'));
   ctx.state.write('tpm.json', { address } satisfies TpmRecord);
   return [`TPM 担当の宛先: ${address}`, `課題管理: ${ctx.config.tracker}・連携: ${ctx.config.transport}`, ...roles(ctx)];
@@ -65,11 +70,7 @@ export function assign(ctx: Context, key: string, options: AssignOptions): strin
     throw new TpmError(`${options.issue} は、この project の課題管理（${ctx.config.tracker}）の鍵ではありません`);
   }
   const def = ROLES[options.role];
-  const settings: RoleSettings = {
-    model: options.model ?? ctx.config.roles[options.role]?.model ?? def.defaults.model,
-    effort: options.effort ?? ctx.config.roles[options.role]?.effort ?? def.defaults.effort,
-    permissionMode: options.permissionMode ?? ctx.config.roles[options.role]?.permissionMode ?? def.defaults.permissionMode,
-  };
+  const settings = resolveSettings(options.role, { flags: options, config: ctx.config.roles[options.role], env: ctx.env });
   const record: RoleRecord = {
     key,
     role: options.role,

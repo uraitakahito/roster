@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'vitest';
 import { hello, inbox } from '../src/commands/role-side.ts';
 import { assign, close, init, roles } from '../src/commands/tpm-side.ts';
-import { modelLabel } from '../src/protocol.ts';
+import { buildCommand } from '../src/command.ts';
+import { modelLabel, modelStatus } from '../src/protocol.ts';
 import { readRole, requireRole } from '../src/roster.ts';
 import { claudeArgs, roleEnv } from '../src/run-role.ts';
+import { resolveSettings } from '../src/settings.ts';
 import { TpmError } from '../src/skill-sets.ts';
 import { world } from './helpers.ts';
 
@@ -15,6 +17,23 @@ describe('init', () => {
     expect(init(w.tpm)).toEqual(['TPM 担当の宛先: file:tpm', '課題管理: none・連携: file', '名簿: 担当はいない']);
     expect(w.tpm.state.read('tpm.json')).toEqual({ address: 'file:tpm' });
     expect(w.wire.status('file:tpm')).toEqual({ model: 'Opus 5.5 · medium', wait: '作業中: 起動' });
+  });
+
+  test('状態の model・effort は、同じ環境変数で tpm start が出す 1 行と揃う', () => {
+    const env = { TPM_MODEL: 'claude-fable-5-2', TPM_EFFORT: 'high' };
+    const w = world({}, env);
+    init(w.tpm);
+    const line = buildCommand('/w', w.tpm.root, [], resolveSettings('tpm', { env }));
+    expect(line).toContain(' --model claude-fable-5-2 --effort high ');
+    expect(w.wire.status('file:tpm')?.model).toBe(modelStatus('claude-fable-5-2', 'high'));
+  });
+
+  test('effort は 旗 > $CLAUDE_EFFORT（実際の effort）> $TPM_EFFORT、model は 旗 > $TPM_MODEL', () => {
+    const w = world({}, { TPM_MODEL: 'claude-fable-5-2', TPM_EFFORT: 'high', CLAUDE_EFFORT: 'low' });
+    init(w.tpm);
+    expect(w.wire.status('file:tpm')?.model).toBe('Fable 5.2 · low');
+    init(w.tpm, { model: 'claude-opus-5-5', effort: 'max' });
+    expect(w.wire.status('file:tpm')?.model).toBe('Opus 5.5 · max');
   });
 });
 
@@ -50,6 +69,15 @@ describe('assign', () => {
       permissionMode: 'bypassPermissions',
       addDirs: [`${w.tpm.root}/skill-sets/core`, `${w.tpm.root}/skill-sets/dependabot`],
     });
+  });
+
+  test('環境変数は config.jsonc の担当の欄に負け、役割の既定に勝つ', () => {
+    const env = { TPM_MODEL: 'claude-sonnet-5-5', TPM_EFFORT: 'high', TPM_PERMISSION_MODE: 'acceptEdits' };
+    const w = world({ 'devops-engineer': { model: 'claude-fable-5-2' } }, env);
+    assign(w.tpm, 'devops', { role: 'devops-engineer', wait: 0 });
+    expect(requireRole(w.tpm, 'devops')).toMatchObject({ model: 'claude-fable-5-2', effort: 'high', permissionMode: 'acceptEdits' });
+    assign(w.tpm, 'gh#1', { role: 'sustaining-engineer', wait: 0, effort: 'low' });
+    expect(requireRole(w.tpm, 'gh#1')).toMatchObject({ model: 'claude-sonnet-5-5', effort: 'low', permissionMode: 'acceptEdits' });
   });
 
   test('担当が名乗るまで待つ', () => {
