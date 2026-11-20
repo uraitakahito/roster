@@ -46,7 +46,7 @@ cd <folder> && PATH=<repo>/cli/bin:"$PATH" claude --model claude-opus-5-5 --effo
 ```sh
 # いつも替える: shell の profile（~/.zshrc など）で export する。TPM 担当にも、TPM 担当が起こす担当にも効く
 export TPM_MODEL=claude-fable-5-2
-export TPM_EFFORT=high
+export TPM_EFFORT=medium
 
 # 1 回だけ替える: tpm start の前に付ける。出る 1 行を打った TPM 担当と、その TPM 担当が起こす担当に効く
 TPM_EFFORT=high /foo/bar/skills/cli/bin/tpm start

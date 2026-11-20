@@ -92,7 +92,7 @@ shell の profile などで書くと、すべての project・すべての担当
 ```sh
 # ~/.zshrc など
 export TPM_MODEL=claude-fable-5-2
-export TPM_EFFORT=high
+export TPM_EFFORT=medium
 ```
 
 - `tpm start` は環境変数を読んで 1 行の `--model`・`--effort`・`--permission-mode` に入れる。TPM 担当が名乗る `tpm hello` も同じ値を状態の `model` に出す（effort は、Claude Code が入れる `$CLAUDE_EFFORT` があればそれ）。
