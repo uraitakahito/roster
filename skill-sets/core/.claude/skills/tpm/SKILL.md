@@ -26,7 +26,7 @@ disable-model-invocation: true
 ## 2. 担当を分ける
 
 - **Product Manager に頼まれた仕事は、課題管理の課題があるか、大きいか小さいかによらず、すべて課題として扱う。** 課題ごとの調査・提案・計画立案・実装・テストは、課題ごとの Software Engineer 担当にさせる。課題ごとに分けるのは、トークンを節約し、その課題に精通させるため。**あなたは調べて案を出すことも、実装もしない。**
-- **課題には鍵を付ける。** Jira の課題があればその番号（`SKILLS-12`）、GitHub の Issue があれば `gh-` と番号（`gh-12`）、無ければ `t-` で始まる英小文字・数字・ハイフンの短い名（`t-same-se`）。鍵は名簿・居場所の題・依頼書の頭書き・branch の名・PR の題に使う。
+- **課題には鍵を付ける。** Jira の課題があればその番号（`SKILLS-12`）、GitHub の Issue があれば `gh-` と番号（`gh-12`）、無ければ `tpm key` が作る `t-` と 4 文字のランダムな英数字（`t-x7k2`）。鍵は手で考えない（`tpm assign` は、名簿に無い `t-` の鍵がこの形でなければ止める）。鍵は名簿・居場所の題・依頼書の頭書き・branch の名・PR の題に使う。`t-` の鍵からは中身が読めないので、中身は `--title` の短い題で言う。
 - 課題を振るときは、いつも `tpm assign <鍵> …` を打つ（下の 3）。**同じ鍵の担当が動いていれば、その担当に【brief】で新しい依頼書が行く**（提案の後の計画、計画の後の実装、Product Manager が選んだ案の実装も同じ。提案した担当がその背景を知っているため）。いなければ、新しい担当が立ち上がって名乗る。
 - **共有の環境のビルド・デプロイ・整備は DevOps Engineer 担当にさせる**（どの環境が共有かは `tpm infra list`。protocol.md の「共有の環境」）。要るときにいなければ起こす。Software Engineer 担当から【DevOps への依頼】が来たら、DevOps Engineer 担当に依頼書を書いて回す。DevOps Engineer 担当が迷ったら、あなたに【相談(TPM)】が来る。
 - Dependabot の PR は、Product Manager が言ったとき（「Dependabot の PR を見て」や `/dependabot-triage`）だけ、`/dependabot-triage` を呼んで振り分ける（Sustaining Engineer 担当を起こすのもその skill）。起動のときには見ない。
@@ -46,13 +46,13 @@ disable-model-invocation: true
 
 ## 3. 起こす
 
-1. 依頼書を HTML の file に書き、`tpm page put <file> --kind brief --key <鍵>` で置く（protocol.md の「ページ」）。出た URL を下の `--brief` に書く。ひな形は `${CLAUDE_SKILL_DIR}/brief-template.md`。決まり文句（連絡の仕方・状態・終わり方）は書かない（担当の skill と protocol.md にある）。
+1. 新しい課題で課題管理の課題が無ければ、`tpm key` で鍵を作る。依頼書を HTML の file に書き、`tpm page put <file> --kind brief --key <鍵>` で置く（protocol.md の「ページ」）。出た URL を下の `--brief` に書く。ひな形は `${CLAUDE_SKILL_DIR}/brief-template.md`。決まり文句（連絡の仕方・状態・終わり方）は書かない（担当の skill と protocol.md にある）。
 2. 振る:
    ```sh
    tpm assign <鍵> --role software-engineer --title "<短い題>" --brief <依頼書の URL> [--issue <課題管理の課題>] [--cwd <課題の folder>]
    tpm assign devops --role devops-engineer [--brief <依頼書の URL>]
    ```
-   - `--title` は居場所の題に付く（`Software Engineer t-same-se: 計画と実装の担当` の形）。DevOps Engineer 担当の鍵は `devops`。
+   - `--title` は居場所の題に付く（`SWE t-x7k2: 計画と実装の担当` の形。サイドバーで切れないよう、全角 15 字ほどまでにする）。DevOps Engineer 担当の鍵は `devops`（題は `DevOps`）。
    - `--issue` は課題管理の課題があるときだけ。付けると、担当のメッセージのたびに課題へ記録が書かれる（protocol.md の「記録」）。
    - `--cwd` は担当を起こす folder（付けなければ、あなたを起こした folder）。信頼済みの folder にする。
    - 担当が動いているときに添える一言は `--note "<一言>"`。

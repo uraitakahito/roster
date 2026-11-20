@@ -12,6 +12,7 @@ export const TPM_TITLE = 'Technical Program Manager';
 export const COMMANDS = [
   'start',
   'roles',
+  'key',
   'assign',
   'close',
   'hello',
@@ -55,7 +56,7 @@ export interface RoleDef {
   /** 起こしたときの最初の入力。 */
   prompt: string
   defaults: RoleSettings
-  /** 居場所の題。TPM 担当は同じ鍵の担当をこの題でも見分けられる。 */
+  /** 居場所の題（メッセージの差出人にも使う）。担当の名は略す（記録には label を書く）。TPM 担当は同じ鍵の担当をこの題でも見分けられる。 */
   title: (key: string, short: string) => string
   /** 【dismiss】を待たずに【終わり】を送ってよいか（PR 1 本を受け持つ担当は、merge のメッセージで終える）。 */
   endsWithoutDismiss: boolean
@@ -70,24 +71,24 @@ export const ROLES = {
     label: 'Software Engineer',
     prompt: '/software-engineer',
     defaults: { model: 'claude-opus-5-5', effort: 'medium', permissionMode: 'bypassPermissions' },
-    /** 居場所の題（`Software Engineer <鍵>: <短い題>`）。 */
-    title: (key, short) => `Software Engineer ${key}: ${short}`,
+    /** 居場所の題（`SWE <鍵>: <短い題>`）。サイドバーで短い題が切れないよう、担当の名を略す。 */
+    title: (key, short) => `SWE ${key}: ${short}`,
     endsWithoutDismiss: false,
   },
   'devops-engineer': {
     label: 'DevOps Engineer',
     prompt: '/devops-engineer',
     defaults: { model: 'claude-opus-5-5', effort: 'low', permissionMode: 'bypassPermissions' },
-    /** 居場所の題。DevOps Engineer 担当は 1 人だけなので、鍵を付けない。 */
-    title: () => 'DevOps Engineer',
+    /** 居場所の題（`DevOps`）。DevOps Engineer 担当は 1 人だけなので、鍵を付けない。 */
+    title: () => 'DevOps',
     endsWithoutDismiss: false,
   },
   'sustaining-engineer': {
     label: 'Sustaining Engineer',
     prompt: '/sustaining-engineer',
     defaults: { model: 'claude-opus-5-5', effort: 'medium', permissionMode: 'bypassPermissions' },
-    /** 居場所の題（`Sustaining Engineer <鍵>`）。 */
-    title: key => `Sustaining Engineer ${key}`,
+    /** 居場所の題（`Sustaining <鍵>`）。 */
+    title: key => `Sustaining ${key}`,
     endsWithoutDismiss: true,
   },
 } as const satisfies Record<string, RoleDef>;

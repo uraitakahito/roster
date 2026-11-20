@@ -14,23 +14,23 @@ beforeEach(() => {
 
 describe('FileTransport', () => {
   test('送ったメッセージは、相手の inbox に届いた順に並ぶ', () => {
-    const first = at('file:1').send('file:tpm', 'SE t-x', '【完成】a');
-    at('file:1').send('file:tpm', 'SE t-x', '【終わり】b', first.id);
+    const first = at('file:1').send('file:tpm', 'SE t-x7k2', '【完成】a');
+    at('file:1').send('file:tpm', 'SE t-x7k2', '【終わり】b', first.id);
     expect(first.delivered).toBe(true);
     expect(at('file:tpm').inbox('file:tpm')).toEqual([
-      { id: first.id, from: 'SE t-x', text: '【完成】a' },
-      { id: expect.any(String) as string, from: 'SE t-x', text: '【終わり】b', replyTo: first.id },
+      { id: first.id, from: 'SE t-x7k2', text: '【完成】a' },
+      { id: expect.any(String) as string, from: 'SE t-x7k2', text: '【終わり】b', replyTo: first.id },
     ]);
     expect(at('file:tpm').inbox('file:1')).toEqual([]);
   });
 
   test('spawn は別々の宛先を返し、命令は動かさずに覚える', () => {
     const tpm = at('file:tpm');
-    const a = tpm.spawn({ title: 'Software Engineer t-a: 題', cwd: '/w', command: 'tpm run-role t-a' });
-    const b = tpm.spawn({ title: 'DevOps Engineer', cwd: '/w', command: 'tpm run-role devops' });
+    const a = tpm.spawn({ title: 'SWE t-a3b4: 題', cwd: '/w', command: 'tpm run-role t-a3b4' });
+    const b = tpm.spawn({ title: 'DevOps', cwd: '/w', command: 'tpm run-role devops' });
     expect(a).not.toBe(b);
-    expect(tpm.seats()).toEqual([{ address: a, title: 'Software Engineer t-a: 題' }, { address: b, title: 'DevOps Engineer' }]);
-    expect(tpm.command(a)).toBe('tpm run-role t-a');
+    expect(tpm.seats()).toEqual([{ address: a, title: 'SWE t-a3b4: 題' }, { address: b, title: 'DevOps' }]);
+    expect(tpm.command(a)).toBe('tpm run-role t-a3b4');
   });
 
   test('状態は自分の居場所に出し、ほかの居場所から読める', () => {
@@ -45,10 +45,10 @@ describe('FileTransport', () => {
 
   test('setTitle は自分の居場所の題を替える', () => {
     const tpm = at('file:tpm');
-    const a = tpm.spawn({ title: 'Sustaining Engineer app#12', cwd: '/w', command: 'c' });
-    at(a).setTitle('Sustaining Engineer app#15');
+    const a = tpm.spawn({ title: 'Sustaining app#12', cwd: '/w', command: 'c' });
+    at(a).setTitle('Sustaining app#15');
     tpm.setTitle('Technical Program Manager');
-    expect(tpm.seats()).toEqual([{ address: a, title: 'Sustaining Engineer app#15' }]);
+    expect(tpm.seats()).toEqual([{ address: a, title: 'Sustaining app#15' }]);
   });
 
   test('close した居場所は一覧と状態から消える', () => {

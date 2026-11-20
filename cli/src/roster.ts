@@ -34,6 +34,9 @@ const KEY = /^[A-Za-z0-9][A-Za-z0-9#._/-]*$/;
 /** 鍵をファイルの名にする（<repo>#<PR> の # と / を替える）。 */
 const fileOf = (key: string): string => `roles/${key.replaceAll(/[^A-Za-z0-9._-]/g, '_')}.jsonc`;
 
+/** 課題管理の課題が無いときの鍵の形（`t-` と英小文字・数字 4 文字。tpm key が作る）。 */
+export const LOCAL_KEY = /^t-[a-z0-9]{4}$/;
+
 /** 課題の鍵が、使ってよい字（英数字と # . _ / -）だけかを見る。違えば止める。 */
 export function assertKey(key: string): void {
   if (!KEY.test(key)) throw new TpmError(`課題の鍵は英数字と # . _ / - だけにしてください: ${key}`);

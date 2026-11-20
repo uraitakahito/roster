@@ -16,7 +16,7 @@ tpm hello
 
 - **これが最初の手。** 状態（`model`・`wait`）を出し、TPM 担当に名乗りを届け、受け持ち（課題の鍵・依頼書の URL・課題管理の課題）を返す。TPM 担当は、これが 90 秒の間に来なければ立ち上がらなかったとみなす。
 - `tpm hello` が誤りで止まったら（`tpm assign` で起こされていない）、何もせずにそのことを画面に書いて止まる。
-- 居場所の題は TPM 担当が `Software Engineer <課題の鍵>: <短い題>` の形で付けてある。替えない。
+- 居場所の題は TPM 担当が `SWE <課題の鍵>: <短い題>` の形で付けてある。替えない。
 
 続けて `${CLAUDE_SKILL_DIR}/../_shared/protocol.md` を読み、従う。メッセージの見出しと命令・状態・記録・文書の食い違い・共有の環境・終わり方はそこにある。
 
@@ -33,7 +33,7 @@ tpm hello
 - 段が変わるたびに `tpm wait work "<段>"` を打つ。
 - **repo を変えるときは git worktree で作業する**（ほかの作業と同時に進むことがあるため）。
   - 置き場所は repo の決まり（`CLAUDE.md`・`.claude/dependabot/rules.md` など）に従う。決まりが無ければ `<repo の親>/<repo の名前>-worktrees/<branch の / を - に>`（repo の中に置かない）。
-  - branch は `<課題の鍵を小文字に>/<段>`（例: `skills-6/rename-roles`・`t-same-se/impl`）。課題の鍵は `tpm hello` が返す。
+  - branch は `<課題の鍵を小文字に>/<段>`（例: `skills-6/rename-roles`・`t-x7k2/impl`）。課題の鍵は `tpm hello` が返す。
   - 本体の checkout は動かさない。動いている物がその checkout を読んでいる repo（この skills の repo など）は、merge の後に `git -C <本体> pull --ff-only` だけをする。
 - PR は main から切った branch で出す。題か本文に課題の鍵（GitHub の Issue なら `Refs #12`。`Closes` は書かない）。CI が緑になってから、自分で merge する（依頼書が TPM 担当の merge を求めたら `tpm ask tpm` で頼む）。merge したら `tpm report merged`。
 - `git add -A`・`git add .` は使わない。ファイルを名指して add する。

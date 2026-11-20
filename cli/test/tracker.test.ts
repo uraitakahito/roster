@@ -96,7 +96,7 @@ describe('GithubTracker', () => {
   test('gh-12・#12・12 を自分の鍵とする', () => {
     const github = new GithubTracker(fake().exec, '/w');
     expect(['gh-12', 'GH-12', '#12', '12'].map(k => github.owns(k))).toEqual([true, true, true, true]);
-    expect(['SKILLS-12', 't-x', 'gh-'].map(k => github.owns(k))).toEqual([false, false, false]);
+    expect(['SKILLS-12', 't-x7k2', 'gh-'].map(k => github.owns(k))).toEqual([false, false, false]);
   });
 
   test('comment は project の folder で、本文を標準入力で渡す', () => {

@@ -14,7 +14,7 @@ tpm hello
 ```
 
 - **これが最初の手。** 状態を出し、TPM 担当に名乗りを届け、受け持ちを返す。「課題の鍵」が受け持つ PR（`<repo>#<PR 番号>`）。誤りで止まったら（`tpm assign` で起こされていない）、何もせずにそのことを画面に書いて止まる。
-- 居場所の題は TPM 担当が `Sustaining Engineer <repo>#<PR>` の形で付けてある。
+- 居場所の題は TPM 担当が `Sustaining <repo>#<PR>` の形で付けてある。
 
 以下、`<repo>#<PR>` を「この PR」と書きます。
 
@@ -67,7 +67,7 @@ node "${CLAUDE_SKILL_DIR}/../../../../../cli/src/release-age.ts" <config.owner>/
 2. **人が commit を足した PR では `@dependabot rebase` を打たない。** Dependabot は余分な commit のある PR をもう rebase しない（公式。`[dependabot skip]` などの印の commit なら上書きされる）。打っても空振りする。代わりに worktree で `git merge origin/main` して push する（**force push はしない**）。
 3. **打ったら、応じた印 👍 を待つ。** 時間は決まっていない（公式は「several minutes」。実測では 1 回目 20 分無反応・2 回目 4 分、10 分無反応のこともあった）。**待つのは `config.rebaseWaitMinutes` 分まで。** 越えたら `tpm report not-yet "rebase に <分> 分応じない"` か `tpm ask tpm` を送る。待つ間は `tpm wait work "rebase を待つ（<打った時刻>）"`。
 4. **rebase で緑が赤になることがある。** audit がいまの勧告の DB で流れ直すため。新しい勧告で audit が赤の間は、衝突していない PR は rebase しない。
-5. **group の PR は閉じて新しい番号で作り直されることがある**（docs には無い・実測）。72 時間は version の公開から数えるので判定は変わらない。作り直されたら、`tpm report recreated "旧 #N → 新 #M" --title "Sustaining Engineer <repo>#<新>"` で知らせ（居場所の題も替わる。名簿の鍵は元の番号のまま）、新しい PR で 2 からやり直す。
+5. **group の PR は閉じて新しい番号で作り直されることがある**（docs には無い・実測）。72 時間は version の公開から数えるので判定は変わらない。作り直されたら、`tpm report recreated "旧 #N → 新 #M" --title "Sustaining <repo>#<新>"` で知らせ（居場所の題も替わる。名簿の鍵は元の番号のまま）、新しい PR で 2 からやり直す。
 6. merge されないまま 30 日たった PR は、Dependabot がもう rebase しない（公式）。
 
 ## 4. merge を頼む
