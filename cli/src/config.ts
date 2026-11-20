@@ -17,7 +17,7 @@ export const TRANSPORTS = ['cmux', 'file'] as const;
 export type Transport = typeof TRANSPORTS[number];
 
 /**
- * 環境の手続き（変える前に要ること）。触ると誰に響くかで決める。
+ * 環境の手続き（変える前に要ること）。触ると誰が困るかで決める。
  * free: 自分だけ（どの担当も断りなく）／tpm: 並べて動く担当（DevOps Engineer 担当だけ・TPM に相談）／
  * pm: ほかの人（DevOps Engineer 担当だけ・Product Manager の承認が要る）。
  */
