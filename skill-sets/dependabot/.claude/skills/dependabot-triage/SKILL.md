@@ -14,10 +14,10 @@ description: Product Manager が言ったときに TPM 担当が Dependabot の 
 ## 0. 設定を読む（最初に必ず）
 
 - `${CLAUDE_SKILL_DIR}/../../../../core/.claude/skills/_shared/protocol.md`（担当のあいだの決まり。連絡の仕方・見出し・状態）
-- `${CLAUDE_PROJECT_DIR}/.claude/dependabot/config.json`（欄は `${CLAUDE_SKILL_DIR}/../../../../../docs-site/src/content/docs/configuration.md` の「`.claude/dependabot/config.json`」の表。以下 `config.<欄>` と書く）
+- `${CLAUDE_PROJECT_DIR}/.claude/dependabot/config.jsonc`（欄は `${CLAUDE_SKILL_DIR}/../../../../../docs-site/src/content/docs/configuration.md` の「`.claude/dependabot/config.jsonc`」の表。以下 `config.<欄>` と書く）
 - `${CLAUDE_PROJECT_DIR}/.claude/dependabot/rules.md`（この project の決まり。**この skill の手順より先に従う**）
 
-無ければ「この project には `.claude/dependabot/` の設定が無い」と言って止まる。
+無ければ「この project には `.claude/dependabot/` の設定が無い」と言って止まる。古い名前の `.claude/dependabot/config.json` があれば、読まずに止まる。`config.jsonc` が無ければ「`config.jsonc` に名前を替えてください（中身はそのままで読めます）。project の folder で `mv .claude/dependabot/config.json .claude/dependabot/config.jsonc`」、両方あれば「`config.json` を消してください（要る中身は先に `config.jsonc` へ移す）」と言う。
 
 決まり:
 

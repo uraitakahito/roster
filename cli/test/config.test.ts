@@ -82,11 +82,18 @@ describe('rolesConfigFile', () => {
     expect(rolesConfigFile(d)).toBe(join(d, '.claude', 'roles', 'config.jsonc'));
   });
 
-  test.each([[['config.json']], [['config.json', 'config.jsonc']]])('config.json があれば、名前を替える mv を言って止める（置いた物: %j）', (files) => {
-    const d = project(files);
+  test('config.json だけがあれば、名前を替える mv を言って止める', () => {
+    const d = project(['config.json']);
     const dir = join(d, '.claude', 'roles');
     expect(() => rolesConfigFile(d)).toThrow(TpmError);
     expect(() => rolesConfigFile(d)).toThrow(`mv ${dir}/config.json ${dir}/config.jsonc`);
+  });
+
+  test('両方あれば、mv を出さずに config.json を消すよう言って止める', () => {
+    const d = project(['config.json', 'config.jsonc']);
+    expect(() => rolesConfigFile(d)).toThrow(TpmError);
+    expect(() => rolesConfigFile(d)).toThrow(/両方あります。config\.json を消してください/);
+    expect(() => rolesConfigFile(d)).not.toThrow(/mv /);
   });
 
   test('mv の path は shell の引用符で囲む（空白のある folder）', () => {
