@@ -1,0 +1,18 @@
+// この repo で TPM 担当を起こしたときの設定（書き方は docs-site の設定のページ）。書いていない欄は既定のまま。
+{
+  "infra": {
+    // 代わりの置き場（Nginx の container）。止めると、並べて動いている担当がみな依頼書と成果を開けなくなる。
+    // 起こし方は docs-site の運用のページの「代わりの置き場（tpm-pages）」。
+    "tpm-pages": {
+      "guard": "tpm",
+      "match": [
+        "--name tpm-pages",
+        "container start tpm-pages",
+        "container stop tpm-pages",
+        "container kill tpm-pages",
+        "container delete tpm-pages",
+        "container rm tpm-pages",
+      ],
+    },
+  },
+}

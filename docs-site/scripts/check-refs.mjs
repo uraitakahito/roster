@@ -97,8 +97,13 @@ const known = new Set(
   ),
 );
 const inRepo = (path) => known.has(path.replace(/\/$/, ""));
+// .claude/ は数えない。原稿の `.claude/…` は使う側の project（TPM 担当を起こす folder）の path を指す。
+// この repo の .claude/roles/config.jsonc は、この repo を使う側として置いた物で、原稿が名指す物ではない
 const topDirs = new Set(
-  committable.filter((f) => f.includes("/")).map((f) => f.split("/")[0]),
+  committable
+    .filter((f) => f.includes("/"))
+    .map((f) => f.split("/")[0])
+    .filter((d) => d !== ".claude"),
 );
 for (const p of all) {
   for (const m of prose(p.text).matchAll(/`([^`\n]+)`/g)) {
