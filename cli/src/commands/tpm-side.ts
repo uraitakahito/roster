@@ -7,7 +7,7 @@ import { allRoles, assertKey, readRole, removeRole, writeRole, type RoleRecord, 
 import { skillSetDir, TpmError } from '../skill-sets.ts';
 import { brief } from './messages.ts';
 
-/** 起きたかを見る間（ミリ秒）。 */
+/** 名乗ったかを見る間（ミリ秒）。 */
 const HELLO_INTERVAL_MS = 2000;
 
 /** 名乗る: 居場所の題と状態を出し、自分の宛先を状態に書く。続けて名簿を出す。 */
@@ -46,7 +46,7 @@ export interface AssignOptions {
   permissionMode?: string
   /** 【依頼】に添える一言。 */
   note?: string
-  /** 起きた合図を待つ秒。0 なら待たない。 */
+  /** 名乗りを待つ秒。0 なら待たない。 */
   wait: number
 }
 
@@ -85,12 +85,12 @@ export function assign(ctx: Context, key: string, options: AssignOptions): strin
   record.address = ctx.transport.spawn({ title: record.title, cwd: record.cwd, command });
   writeRole(ctx, record);
   const head = `${existing ? '起こし直した' : '起こした'}: ${record.title}（${record.address}・${modelStatus(record.model, record.effort)}）`;
-  if (options.wait <= 0) return [head, '起きた合図（tpm hello）は待っていない'];
+  if (options.wait <= 0) return [head, '名乗り（tpm hello）は待っていない'];
   for (let waited = 0; waited < options.wait * 1000; waited += HELLO_INTERVAL_MS) {
-    if (readRole(ctx, key)?.helloAt !== undefined) return [head, '起きた（担当が名乗った）'];
+    if (readRole(ctx, key)?.helloAt !== undefined) return [head, '名乗った（tpm hello が来た）'];
     ctx.sleep(HELLO_INTERVAL_MS);
   }
-  if (readRole(ctx, key)?.helloAt !== undefined) return [head, '起きた（担当が名乗った）'];
+  if (readRole(ctx, key)?.helloAt !== undefined) return [head, '名乗った（tpm hello が来た）'];
   throw new TpmError(notStarted(ctx, record, options.wait));
 }
 
