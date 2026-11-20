@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { hello, inbox } from '../src/commands/role-side.ts';
-import { assign, close, init, roles } from '../src/commands/tpm-side.ts';
+import { assign, close, roles } from '../src/commands/tpm-side.ts';
 import { buildCommand } from '../src/command.ts';
 import { modelLabel, modelStatus } from '../src/protocol.ts';
 import { readRole, requireRole } from '../src/roster.ts';
@@ -11,10 +11,10 @@ import { world } from './helpers.ts';
 
 const SE = { role: 'software-engineer', title: '計画と実装', brief: 'https://claude.ai/artifact/b1', wait: 0 } as const;
 
-describe('init', () => {
-  test('宛先を状態に書き、状態を出し、名簿を出す', () => {
+describe('hello（TPM 担当）', () => {
+  test('$TPM_KEY が無ければ TPM 担当として名乗る: 宛先を状態に書き、状態を出し、名簿を出す', () => {
     const w = world();
-    expect(init(w.tpm)).toEqual(['TPM 担当の宛先: file:tpm', '課題管理: none・連携: file', '名簿: 担当はいない']);
+    expect(hello(w.tpm)).toEqual(['TPM 担当の宛先: file:tpm', '課題管理: none・連携: file', '名簿: 担当はいない']);
     expect(w.tpm.state.read('tpm.json')).toEqual({ address: 'file:tpm' });
     expect(w.wire.status('file:tpm')).toEqual({ model: 'Opus 5.5 · medium', wait: '作業中: 起動' });
   });
@@ -22,7 +22,7 @@ describe('init', () => {
   test('状態の model・effort は、同じ環境変数で tpm start が出す 1 行と揃う', () => {
     const env = { TPM_MODEL: 'claude-fable-5-2', TPM_EFFORT: 'high' };
     const w = world({}, env);
-    init(w.tpm);
+    hello(w.tpm);
     const line = buildCommand('/w', w.tpm.root, [], resolveSettings('tpm', { env }));
     expect(line).toContain(' --model claude-fable-5-2 --effort high ');
     expect(w.wire.status('file:tpm')?.model).toBe(modelStatus('claude-fable-5-2', 'high'));
@@ -30,9 +30,9 @@ describe('init', () => {
 
   test('effort は 旗 > $CLAUDE_EFFORT（実際の effort）> $TPM_EFFORT、model は 旗 > $TPM_MODEL', () => {
     const w = world({}, { TPM_MODEL: 'claude-fable-5-2', TPM_EFFORT: 'high', CLAUDE_EFFORT: 'low' });
-    init(w.tpm);
+    hello(w.tpm);
     expect(w.wire.status('file:tpm')?.model).toBe('Fable 5.2 · low');
-    init(w.tpm, { model: 'claude-opus-5-5', effort: 'max' });
+    hello(w.tpm, { model: 'claude-opus-5-5', effort: 'max' });
     expect(w.wire.status('file:tpm')?.model).toBe('Opus 5.5 · max');
   });
 });
@@ -82,7 +82,7 @@ describe('assign', () => {
 
   test('担当が名乗るまで待つ', () => {
     const w = world();
-    init(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
+    hello(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
     let n = 0;
     const tpm = {
       ...w.tpm,
@@ -145,7 +145,7 @@ describe('assign', () => {
 describe('hello', () => {
   test('状態を出し、名簿に宛先と時刻を書き、受け持ちを返す', () => {
     const w = world();
-    init(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
+    hello(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
     assign(w.tpm, 't-x', { ...SE, model: 'claude-fable-5-2' });
     expect(hello(w.role('t-x', 'file:1'))).toEqual([
       '役割: Software Engineer',
@@ -159,10 +159,19 @@ describe('hello', () => {
     expect(w.wire.status('file:1')).toEqual({ model: 'Fable 5.2 · medium', wait: '作業中: 依頼書を読む' });
   });
 
-  test('起こされた担当でなければ止まる', () => {
+  test('名簿にいない鍵なら止まる', () => {
+    expect(() => hello(world().role('t-nope', 'file:9'))).toThrow(/名簿に担当がいません: t-nope/);
+  });
+
+  test('担当が --model・--effort を付けたら止まり、名簿も状態も書かない', () => {
     const w = world();
-    expect(() => hello(w.tpm)).toThrow(/\$TPM_KEY がありません/);
-    expect(() => hello(w.role('t-nope', 'file:9'))).toThrow(/名簿に担当がいません: t-nope/);
+    hello(w.tpm);
+    assign(w.tpm, 't-x', SE);
+    const se = w.role('t-x', 'file:1');
+    expect(() => hello(se, { model: 'claude-fable-5-2' })).toThrow(/--model・--effort は TPM 担当が名乗るときだけ使う/);
+    expect(() => hello(se, { effort: 'high' })).toThrow(TpmError);
+    expect(requireRole(w.tpm, 't-x').helloAt).toBeUndefined();
+    expect(w.wire.status('file:1')).toBeUndefined();
   });
 });
 
@@ -178,7 +187,7 @@ describe('inbox', () => {
 describe('roles と close', () => {
   test('動いている担当は状態を、消えた担当は消えたと出す', () => {
     const w = world();
-    init(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
+    hello(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
     assign(w.tpm, 't-a', SE);
     assign(w.tpm, 'app#12', { role: 'sustaining-engineer', wait: 0 });
     hello(w.role('t-a', 'file:1'));

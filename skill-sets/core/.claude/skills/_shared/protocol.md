@@ -43,7 +43,7 @@ Dependabot の PR だけで使う見出し（【merge の依頼】【まだ】�
 
 ## 状態
 
-- 出すのは **`model` と `wait` の 2 つだけ**。`model` は名乗ったとき（`tpm hello`・`tpm init`）に出る。
+- 出すのは **`model` と `wait` の 2 つだけ**。`model` は名乗ったとき（`tpm hello`）に出る。
 - `wait`: 「今、誰が何を待っているか」を 1 つだけ。状況が変わるたびに上書きする。
   - 自分が動いている: `tpm wait work "<段>"`（`作業中: <段>`）
   - Product Manager の答えを待つ: `tpm wait pm "<何を>"`（`回答待ち(PM): <何を>`）

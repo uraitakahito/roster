@@ -59,10 +59,10 @@ export function allRoles(ctx: Context): RoleRecord[] {
   return ctx.state.list('roles').map(name => ctx.state.read<RoleRecord>(`roles/${name}.json`)).filter(r => r !== undefined);
 }
 
-/** TPM 担当の宛先を読む。`tpm init` の前なら止める。 */
+/** TPM 担当の宛先を読む。`tpm hello` の前なら止める。 */
 export function requireTpm(ctx: Context): TpmRecord {
   const tpm = ctx.state.read<TpmRecord>('tpm.json');
-  if (tpm === undefined) throw new TpmError('TPM 担当の宛先がありません（TPM 担当が tpm init を打つ）');
+  if (tpm === undefined) throw new TpmError('TPM 担当の宛先がありません（TPM 担当が tpm hello を打つ）');
   return tpm;
 }
 
