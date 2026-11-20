@@ -27,17 +27,17 @@ describe('1 つの課題の 1 周（課題管理なし）', () => {
     const w = started();
     const FROM = 'SWE t-x7k2: 計画と実装';
 
-    expect(askTpm(w.se, { text: '案 A と B で迷う。お勧めは A', waitingFor: '案の選択' })).toEqual(['送った: 【相談(TPM)】→ file:tpm（届いた）', '状態: 回答待ち(TPM): 案の選択']);
+    expect(askTpm(w.se, { text: '案 A と B で迷う。お勧めは A', waitingFor: '案の選択' })).toEqual(['送った: 【ask-tpm】→ file:tpm（届いた）', '状態: 回答待ち(TPM): 案の選択']);
     const asked = w.wire.inbox('file:tpm')[0];
-    expect(asked).toMatchObject({ from: FROM, text: '【相談(TPM)】案 A と B で迷う。お勧めは A' });
+    expect(asked).toMatchObject({ from: FROM, text: '【ask-tpm】案 A と B で迷う。お勧めは A' });
     notify(w.tpm, 't-x7k2', { text: 'A で進める', ...(asked ? { replyTo: asked.id } : {}) });
     expect(w.wire.inbox('file:1')[0]).toMatchObject({ from: 'Technical Program Manager', text: '【notify】A で進める', replyTo: asked?.id });
 
     expect(wait(w.se, 'work', '実装')).toEqual(['状態: 作業中: 実装']);
     reportMerged(w.se, { pr: PR, note: '段 1 を入れた' });
     expect(reportDone(w.se, { url: OUT, kind: '計画', summary: 'PR 2 本の計画', remaining: 'なし', decisions: 'なし', points: [] })).toEqual([
-      '送った: 【完成】→ file:tpm（届いた）',
-      '状態: 回答待ち(TPM): 次の依頼（次の【brief】か【dismiss】を待つ。自分から【終わり】を送らない）',
+      '送った: 【done】→ file:tpm（届いた）',
+      '状態: 回答待ち(TPM): 次の依頼（次の【brief】か【dismiss】を待つ。自分から【end】を送らない）',
     ]);
     expect(waitOf(w, 'file:1')).toBe('回答待ち(TPM): 次の依頼');
 
@@ -51,34 +51,34 @@ describe('1 つの課題の 1 周（課題管理なし）', () => {
     dismiss(w.tpm, 't-x7k2', { handover: false });
     expect(roles(w.tpm)[1]).toMatch(/dismiss 済み（終わり）/);
     expect(reportEnd(w.se, { url: OUT, prs: [PR], removed: ['skills-worktrees/t-x-impl'], left: 'なし' })).toEqual([
-      '送った: 【終わり】→ file:tpm（届いた）',
+      '送った: 【end】→ file:tpm（届いた）',
       '状態: 回答待ち(TPM): workspace を閉じる（居場所は自分で閉じない）',
     ]);
     close(w.tpm, 't-x7k2');
 
     expect(texts(w, 'file:tpm')).toEqual([
-      '【相談(TPM)】案 A と B で迷う。お勧めは A',
-      `【merge 済み】${PR} 段 1 を入れた`,
-      `【完成】${OUT} 要点: PR 2 本の計画／残り: なし／決めてほしいこと: なし`,
-      `【完成】${OUT} 要点: 実装した／残り: なし／決めてほしいこと: なし`,
-      `【終わり】成果: ${OUT}／merge した PR: ${PR}／消した worktree: skills-worktrees/t-x-impl／残っている物: なし`,
+      '【ask-tpm】案 A と B で迷う。お勧めは A',
+      `【merged】${PR} 段 1 を入れた`,
+      `【done】${OUT} 要点: PR 2 本の計画／残り: なし／決めてほしいこと: なし`,
+      `【done】${OUT} 要点: 実装した／残り: なし／決めてほしいこと: なし`,
+      `【end】成果: ${OUT}／merge した PR: ${PR}／消した worktree: skills-worktrees/t-x-impl／残っている物: なし`,
     ]);
     expect(texts(w, 'file:1')).toEqual([
       '【notify】A で進める',
       '【brief】https://claude.ai/artifact/b2 計画の実装',
-      '【dismiss】この課題に続きは無い。worktree と課題を片付けて【終わり】を返す。',
+      '【dismiss】この課題に続きは無い。worktree と課題を片付けて【end】を返す。',
     ]);
     expect(roles(w.tpm)).toEqual(['名簿: 担当はいない']);
     expect(w.calls).toEqual([]);
     // 送ったメッセージは log.jsonl に残る
-    expect(w.tpm.state.lines<{ heading: string }>('log.jsonl').map(l => l.heading)).toEqual(['相談(TPM)', 'notify', 'merge 済み', '完成', 'brief', '完成', 'dismiss', '終わり']);
+    expect(w.tpm.state.lines<{ heading: string }>('log.jsonl').map(l => l.heading)).toEqual(['ask-tpm', 'notify', 'merged', 'done', 'brief', 'done', 'dismiss', 'end']);
   });
 });
 
 describe('課題への記録（GitHub の Issue）', () => {
   const bodies = (w: World): string[] => w.calls.filter(c => c.args[1] === 'comment').map(c => c.options?.input ?? '');
 
-  test('決まりの時に 1 件ずつ書き、【終わり】で課題を閉じる', () => {
+  test('決まりの時に 1 件ずつ書き、【end】で課題を閉じる', () => {
     const w = started({ tracker: 'github' }, 'gh-12');
     askPm(w.se, { url: 'https://claude.ai/artifact/c1', items: ['案の選択', '切り替えの単位'], waitingFor: '案と単位' });
     answer(w.tpm, 't-x7k2', { text: '(1) 案 A (2) project ごと\n細かい事は依頼書に' });
@@ -97,11 +97,11 @@ describe('課題への記録（GitHub の Issue）', () => {
     expect(w.calls.at(-1)?.args).toEqual(['issue', 'close', '12', '--reason', 'completed']);
     expect(w.calls.every(c => c.cmd === 'gh' && c.options?.cwd === w.project)).toBe(true);
     expect(out).toContain('課題を閉じた: gh-12');
-    expect(texts(w, 'file:tpm')[0]).toBe('【PM への依頼】https://claude.ai/artifact/c1 項目: (1) 案の選択 (2) 切り替えの単位');
+    expect(texts(w, 'file:tpm')[0]).toBe('【ask-pm】https://claude.ai/artifact/c1 項目: (1) 案の選択 (2) 切り替えの単位');
     expect(texts(w, 'file:1')[0]).toBe('【answer】(1) 案 A (2) project ごと\n細かい事は依頼書に');
   });
 
-  test('【PM への依頼】は確認のページを自分の所で開き、状態を回答待ち(PM) にする', () => {
+  test('【ask-pm】は確認のページを自分の所で開き、状態を回答待ち(PM) にする', () => {
     const w = started();
     askPm(w.se, { url: 'https://claude.ai/artifact/c1', items: ['案の選択'], waitingFor: '案の選択' });
     expect(w.tpm.state.lines('file-transport/shown.jsonl')).toEqual([{ at: 'file:1', url: 'https://claude.ai/artifact/c1' }]);
@@ -125,7 +125,7 @@ describe('課題への記録（GitHub の Issue）', () => {
   });
 });
 
-describe('【完成】と【終わり】に要る欄', () => {
+describe('【done】と【end】に要る欄', () => {
   test.each([
     ['残り', { decisions: 'なし' }, /--remaining（残り） を書いてください/],
     ['決めてほしいこと', { remaining: 'なし' }, /--decisions（決めてほしいこと） を書いてください/],
@@ -136,10 +136,10 @@ describe('【完成】と【終わり】に要る欄', () => {
     expect(texts(w, 'file:tpm')).toEqual([]);
   });
 
-  test('成果の URL が無い【完成】（DevOps Engineer 担当）は、要点から書く', () => {
+  test('成果の URL が無い【done】（DevOps Engineer 担当）は、要点から書く', () => {
     const w = started();
     reportDone(w.se, { kind: '結果', summary: 'container を作り直した', remaining: 'なし', decisions: 'なし', points: [] });
-    expect(texts(w, 'file:tpm')).toEqual(['【完成】要点: container を作り直した／残り: なし／決めてほしいこと: なし']);
+    expect(texts(w, 'file:tpm')).toEqual(['【done】要点: container を作り直した／残り: なし／決めてほしいこと: なし']);
   });
 
   test('記録の要点は 3 つまで', () => {
@@ -148,7 +148,7 @@ describe('【完成】と【終わり】に要る欄', () => {
     expect(texts(w, 'file:tpm')).toEqual([]);
   });
 
-  test('残っている物が無ければ【終わり】を送らない', () => {
+  test('残っている物が無ければ【end】を送らない', () => {
     const w = started();
     dismiss(w.tpm, 't-x7k2', { handover: false });
     expect(() => reportEnd(w.se, { prs: [], removed: [] })).toThrow(/--left/);
@@ -156,10 +156,10 @@ describe('【完成】と【終わり】に要る欄', () => {
 });
 
 describe('ほかのメッセージ', () => {
-  test('【DevOps への依頼】は何を・なぜ・急ぎかを並べる', () => {
+  test('【ask-devops】は何を・なぜ・急ぎかを並べる', () => {
     const w = started();
     askDevops(w.se, { what: 'windmill の worker を作り直す', why: '設定を変えた', urgent: false });
-    expect(texts(w, 'file:tpm')).toEqual(['【DevOps への依頼】何を: windmill の worker を作り直す／なぜ: 設定を変えた／急ぎ: いいえ']);
+    expect(texts(w, 'file:tpm')).toEqual(['【ask-devops】何を: windmill の worker を作り直す／なぜ: 設定を変えた／急ぎ: いいえ']);
   });
 
   test('Dependabot の見出し。PR 1 本の担当は【dismiss】を待たずに終われる', () => {
@@ -175,10 +175,10 @@ describe('ほかのメッセージ', () => {
     reportEnd(su, { prs: [PR], removed: [], left: 'なし' });
     expect(w.wire.seats()).toEqual([{ address: 'file:1', title: 'Sustaining app#15' }]);
     expect(texts(w, 'file:tpm')).toEqual([
-      '【作り直し】旧 #12 → 新 #15',
-      '【まだ】eligibleAt 2026-11-21T03:00:00Z',
-      `【merge の依頼】${PR}／CI: 緑`,
-      `【終わり】成果: なし／merge した PR: ${PR}／消した worktree: なし／残っている物: なし`,
+      '【recreated】旧 #12 → 新 #15',
+      '【not-yet】eligibleAt 2026-11-21T03:00:00Z',
+      `【merge-request】${PR}／CI: 緑`,
+      `【end】成果: なし／merge した PR: ${PR}／消した worktree: なし／残っている物: なし`,
     ]);
     expect(w.wire.inbox('file:tpm').at(-1)?.from).toBe('Sustaining app#15');
   });

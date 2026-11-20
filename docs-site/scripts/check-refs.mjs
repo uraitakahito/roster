@@ -13,7 +13,7 @@
 // 8. skill（skill-sets/ の *.md）が「protocol.md の「見出し」」の形で _shared/ の決まりの見出しを名指したら、その見出しが在る
 // 9. skill（skill-sets/ の *.md）に、連携と課題管理の道具の命令（cmux …・acli …）が直に書かれていない
 // 10. skill・原稿・README が書いた tpm <命令> が、cli/src/protocol.ts の COMMANDS に在る
-// 11. skill が書いた見出し（【完成】など）が cli/src/protocol.ts の HEADINGS に在り、HEADINGS の見出しがどれかの skill に在る
+// 11. skill が書いた見出し（【done】など）が cli/src/protocol.ts の HEADINGS に在り、HEADINGS の見出しがどれかの skill に在る
 //
 // 7 が要るのは、skill が自分の folder からの相対パスで repo の中の物を読むため。folder を移して
 // ../ の数がずれたときに、skill の読む先が無くなるのを止める。
@@ -283,7 +283,7 @@ for (const f of commandFiles) {
     }
   }
 }
-const headingNames = new Set(Object.values(HEADINGS).map((h) => h.name));
+const headingNames = new Set(Object.keys(HEADINGS));
 const written = new Set();
 for (const f of skillFiles) {
   const text = readFileSync(join(REPO, f), "utf8");

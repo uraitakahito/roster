@@ -25,7 +25,7 @@ tpm hello
 - `${CLAUDE_PROJECT_DIR}/.claude/dependabot/config.jsonc`（欄は `${CLAUDE_SKILL_DIR}/../../../../../docs-site/src/content/docs/configuration.md` の「`.claude/dependabot/config.jsonc`」の表。以下 `config.<欄>` と書く）
 - `${CLAUDE_PROJECT_DIR}/.claude/dependabot/rules.md`（この project の決まり。**この skill の手順より先に従う**）
 
-この skill の folder（`${CLAUDE_SKILL_DIR}` の 5 つ上の repo）は**直さない**（protocol.md の「文書の食い違い」の例外）。直したい所を見つけたら TPM 担当に【相談(TPM)】で知らせる。
+この skill の folder（`${CLAUDE_SKILL_DIR}` の 5 つ上の repo）は**直さない**（protocol.md の「文書の食い違い」の例外）。直したい所を見つけたら TPM 担当に【ask-tpm】で知らせる。
 
 ## 1. 読む
 
@@ -78,7 +78,7 @@ CI が全部緑で、2 の判定が 0 のとき:
 tpm report merge-request "<PR の URL>／CI: 緑／公開から <最も新しい version の hours> 時間（eligibleAt <時刻>・depsSource <diff か commit-message>）／変えた物: <無し か 足した commit・別の PR>"
 ```
 
-TPM 担当に【merge の依頼】が行き、状態が `回答待ち(TPM): merge` になる。
+TPM 担当に【merge-request】が行き、状態が `回答待ち(TPM): merge` になる。
 
 ## 5. 困ったら
 
@@ -91,5 +91,5 @@ TPM 担当に【merge の依頼】が行き、状態が `回答待ち(TPM): merg
 TPM 担当から merge 済みのメッセージ（【notify】）を受けたら:
 
 1. 3 で作った worktree があれば消す。
-2. `tpm report end --pr <PR の URL> --removed <消した worktree> … --left "<merge の commit／残した物>"` を打つ（PR 1 本の担当は、【dismiss】を待たずに【終わり】を送ってよい）。
+2. `tpm report end --pr <PR の URL> --removed <消した worktree> … --left "<merge の commit／残した物>"` を打つ（PR 1 本の担当は、【dismiss】を待たずに【end】を送ってよい）。
 3. **居場所は自分で閉じない。** TPM 担当が報告を受け取った後に閉じる。

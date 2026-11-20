@@ -54,7 +54,7 @@ describe('環境の手続き', () => {
 
 describe('道具の直打ち', () => {
   test.each([
-    'cmux agent message workspace:1 --from x -- "【完成】…"',
+    'cmux agent message workspace:1 --from x -- "【done】…"',
     'cmux set-status wait "作業中: 読む" --icon hourglass',
     'cmux workspace create --name x --cwd /w --command y',
     'cd /w && cmux workspace close workspace:3 --force',

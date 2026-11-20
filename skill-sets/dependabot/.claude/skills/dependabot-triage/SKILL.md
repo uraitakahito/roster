@@ -24,7 +24,7 @@ description: Product Manager が言ったときに TPM 担当が Dependabot の 
 - 対象は `config.owner` の `config.repos` の repo だけ。
 - 時間（`config.hours`・既定 72）は **依存の version の公開から** 数える。group の PR は中のいちばん新しい version の公開から。version は PR の差分から読み、依存の依存も数える。
 - 届かない PR は、Sustaining Engineer 担当を起こさず、表に「いつ対象になるか」を出して次の回に回す。
-- merge は TPM 担当の権限で決める。居場所は、merge と【終わり】の報告を受け取った後に TPM 担当が閉じる。
+- merge は TPM 担当の権限で決める。居場所は、merge と【end】の報告を受け取った後に TPM 担当が閉じる。
 
 ## 1. 集める
 
@@ -93,12 +93,12 @@ Sustaining Engineer 担当から届くメッセージ:
 
 | 見出し | すること |
 |---|---|
-| 【merge の依頼】 | CI が緑か（`gh pr checks`）、`release-age.ts` がまだ 0 か、差分が依頼のとおりかを自分で見てから `gh pr merge <PR> --repo <config.owner>/<repo> --<config.mergeMethod>`（repo の作法が違えばそれに従う）。merge の commit を `tpm notify "<repo>#<PR>" "merge した: <commit>"` で返す。 |
-| 【相談(TPM)】 | 答える（`tpm notify`）。Product Manager の判断が要るなら、Product Manager に聞いてから答える。 |
-| 【PM への依頼】 | URL の確認のページを自分の所で開き（`tpm show <URL>`）、Product Manager に見せる。答えを `tpm answer` で返す。 |
-| 【まだ】 | 時間の【まだ】なら表の「待ち」に戻し、その担当は 5 と同じに閉じる。`rebase に … 分応じない` の【まだ】なら、もう一度待たせるか、worktree で `origin/main` を merge させるかを決めて返す。 |
-| 【作り直し】 | group の PR が閉じて新しい番号で作り直された。表の行を新しい番号に替え、同じ Sustaining Engineer 担当に新しい番号で続けさせる（居場所の題は担当が替える。名簿の鍵は元の `<repo>#<旧>` のまま）。判定は変わらない。 |
-| 【終わり】 | 5 へ。 |
+| 【merge-request】 | CI が緑か（`gh pr checks`）、`release-age.ts` がまだ 0 か、差分が依頼のとおりかを自分で見てから `gh pr merge <PR> --repo <config.owner>/<repo> --<config.mergeMethod>`（repo の作法が違えばそれに従う）。merge の commit を `tpm notify "<repo>#<PR>" "merge した: <commit>"` で返す。 |
+| 【ask-tpm】 | 答える（`tpm notify`）。Product Manager の判断が要るなら、Product Manager に聞いてから答える。 |
+| 【ask-pm】 | URL の確認のページを自分の所で開き（`tpm show <URL>`）、Product Manager に見せる。答えを `tpm answer` で返す。 |
+| 【not-yet】 | 時間の【not-yet】なら表の「待ち」に戻し、その担当は 5 と同じに閉じる。`rebase に … 分応じない` の【not-yet】なら、もう一度待たせるか、worktree で `origin/main` を merge させるかを決めて返す。 |
+| 【recreated】 | group の PR が閉じて新しい番号で作り直された。表の行を新しい番号に替え、同じ Sustaining Engineer 担当に新しい番号で続けさせる（居場所の題は担当が替える。名簿の鍵は元の `<repo>#<旧>` のまま）。判定は変わらない。 |
+| 【end】 | 5 へ。 |
 
 命令が「まだ届いていない」と返しても送り直さない（protocol.md の「連絡の仕方」）。
 
@@ -106,8 +106,8 @@ Sustaining Engineer 担当から届くメッセージ:
 
 Sustaining Engineer 担当の手順（`${CLAUDE_SKILL_DIR}/../sustaining-engineer/SKILL.md` の 3a）と同じ要点。
 
-- 応じた印は 👍。時間は決まっていない（実測で 20 分無反応のことがある）。Sustaining Engineer 担当は `config.rebaseWaitMinutes` 分待って越えたら【まだ】か【相談(TPM)】を送ってくる。
-- group の PR は閉じて新しい番号で作り直されることがある。判定は変わらないので、**新しい番号で引き継ぐ**（【作り直し】）。
+- 応じた印は 👍。時間は決まっていない（実測で 20 分無反応のことがある）。Sustaining Engineer 担当は `config.rebaseWaitMinutes` 分待って越えたら【not-yet】か【ask-tpm】を送ってくる。
+- group の PR は閉じて新しい番号で作り直されることがある。判定は変わらないので、**新しい番号で引き継ぐ**（【recreated】）。
 - rebase で audit がいまの勧告の DB で流れ直し、緑の PR が赤になることがある。新しい勧告で audit が赤の間は、衝突していない PR を rebase させない。
 - 人が commit を足した PR は Dependabot がもう rebase しない（`[dependabot skip]` の印の commit なら上書きされる）。その PR では rebase を打たせず、worktree で `origin/main` を merge して push させる（force push はしない）。
 - 衝突は Dependabot が頼まなくても自分で rebase する。まず数分待たせる。
@@ -115,13 +115,13 @@ Sustaining Engineer 担当の手順（`${CLAUDE_SKILL_DIR}/../sustaining-enginee
 
 ## 5. 閉じる
 
-【終わり】（か【まだ】）を受け取ったら:
+【end】（か【not-yet】）を受け取ったら:
 
 ```sh
 tpm close "<repo>#<PR>"
 ```
 
-鍵は起こしたときの番号（【作り直し】の後も元の番号）。閉じた後、表の「待ち」に対象の PR があれば 3 に戻る。
+鍵は起こしたときの番号（【recreated】の後も元の番号）。閉じた後、表の「待ち」に対象の PR があれば 3 に戻る。
 
 ## 終わったら
 

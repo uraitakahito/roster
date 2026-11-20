@@ -19,18 +19,18 @@ TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・De
 
 | 見出し | いつ | 命令 |
 |---|---|---|
-| 【相談(TPM)】 | TPM 担当に決めてほしいことがある | `tpm ask tpm "<困っていること・試したこと・案とお勧め>" --waiting-for "<何を>"` |
-| 【PM への依頼】 | Product Manager に決めてほしいこと・頼むことを確認のページに書いて置いた（下の「Product Manager に確かめる」） | `tpm ask pm --url <URL> --item "<項目の題>" … --waiting-for "<何を>"` |
-| 【DevOps への依頼】 | 共有の環境で DevOps Engineer 担当の手が要る（下の「共有の環境」） | `tpm ask devops --what "<何を>" --why "<なぜ>" [--urgent]` |
-| 【ドキュメント修正】 | 文書やコメントの食い違いを直した PR を merge した | `tpm report doc-fix --pr <URL> --note "<一言>"` |
-| 【merge 済み】 | 自分の PR を 1 本 merge した | `tpm report merged --pr <URL> --note "<一言>"` |
-| 【完成】 | 依頼書の成果（提案・計画・結果のページ）を置いた | `tpm report done --url <URL> --kind <提案\|計画\|結果> --summary "<要点>" --remaining "<残り>" --decisions "<決めてほしいこと>"` |
-| 【終わり】 | 【dismiss】を受けて片付けた（Sustaining Engineer 担当は PR を merge した後） | `tpm report end --url <URL> --pr <URL> … --removed <worktree> … --left "<残っている物>"` |
+| 【ask-tpm】 | TPM 担当に決めてほしいことがある | `tpm ask tpm "<困っていること・試したこと・案とお勧め>" --waiting-for "<何を>"` |
+| 【ask-pm】 | Product Manager に決めてほしいこと・頼むことを確認のページに書いて置いた（下の「Product Manager に確かめる」） | `tpm ask pm --url <URL> --item "<項目の題>" … --waiting-for "<何を>"` |
+| 【ask-devops】 | 共有の環境で DevOps Engineer 担当の手が要る（下の「共有の環境」） | `tpm ask devops --what "<何を>" --why "<なぜ>" [--urgent]` |
+| 【doc-fix】 | 文書やコメントの食い違いを直した PR を merge した | `tpm report doc-fix --pr <URL> --note "<一言>"` |
+| 【merged】 | 自分の PR を 1 本 merge した | `tpm report merged --pr <URL> --note "<一言>"` |
+| 【done】 | 依頼書の成果（提案・計画・結果のページ）を置いた | `tpm report done --url <URL> --kind <提案\|計画\|結果> --summary "<要点>" --remaining "<残り>" --decisions "<決めてほしいこと>"` |
+| 【end】 | 【dismiss】を受けて片付けた（Sustaining Engineer 担当は PR を merge した後） | `tpm report end --url <URL> --pr <URL> … --removed <worktree> … --left "<残っている物>"` |
 
-- 【完成】の「残り」は、依頼の外で直すとよい物・やらなかった物・merge していない PR。「決めてほしいこと」は、【PM への依頼】で送った項目の題。どちらも無ければ「なし」と書く（書かないと送れない）。TPM 担当はこの 2 つで【dismiss】を送るかを決める。
-- 【終わり】の「残っている物」は、計画から外れた物・残した物で直した方がよい物。無ければ「なし」。
+- 【done】の「残り」は、依頼の外で直すとよい物・やらなかった物・merge していない PR。「決めてほしいこと」は、【ask-pm】で送った項目の題。どちらも無ければ「なし」と書く（書かないと送れない）。TPM 担当はこの 2 つで【dismiss】を送るかを決める。
+- 【end】の「残っている物」は、計画から外れた物・残した物で直した方がよい物。無ければ「なし」。
 
-Dependabot の PR だけで使う見出し（【merge の依頼】【まだ】【作り直し】）は `/sustaining-engineer` と `/dependabot-triage` に書いてある。
+Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【recreated】）は `/sustaining-engineer` と `/dependabot-triage` に書いてある。
 
 ### TPM 担当から
 
@@ -39,7 +39,7 @@ Dependabot の PR だけで使う見出し（【merge の依頼】【まだ】�
 | 【brief】 | 新しい依頼書の URL。下の「ページ」のとおり読み、それに従う | `tpm assign <鍵> --role <役割> --brief <URL>` |
 | 【answer】 | Product Manager の答え。待ちの表示を作業中に戻して続ける | `tpm answer <鍵> "<答え>"` |
 | 【notify】 | 知っておくこと・受け取ったという返事。返事は要らない | `tpm notify <鍵> "<本文>"` |
-| 【dismiss】 | この課題に続きは無い（Product Manager が決めたか、TPM 担当が聞かなくてよいと決めた）。worktree を片付けて【終わり】を返す。担当の交代のためなら、そう書いてある | `tpm dismiss <鍵> [--handover]` |
+| 【dismiss】 | この課題に続きは無い（Product Manager が決めたか、TPM 担当が聞かなくてよいと決めた）。worktree を片付けて【end】を返す。担当の交代のためなら、そう書いてある | `tpm dismiss <鍵> [--handover]` |
 
 ## 状態
 
@@ -79,16 +79,16 @@ Dependabot の PR だけで使う見出し（【merge の依頼】【まだ】�
 
 ## Product Manager に確かめる
 
-文書やコメントの食い違い**以外**で Product Manager に決めてほしいことは、確認のページに書いて【PM への依頼】で送る。課題管理の課題があってもなくても同じ。
+文書やコメントの食い違い**以外**で Product Manager に決めてほしいことは、確認のページに書いて【ask-pm】で送る。課題管理の課題があってもなくても同じ。
 
 1. 確認のページを HTML の file に書く。項目ごとに、背景・選択肢・お勧めとその訳を書き、比べる物は表か図にする。
 2. `tpm page put <file> --kind confirm` で置く（上の「ページ」）。
-3. 出た URL で `tpm ask pm --url <URL> --item "<項目の題>" … --waiting-for "<何を>"` を打つ。確認のページが自分の所で開き、TPM 担当に【PM への依頼】が行き、状態が `回答待ち(PM): <何を>` になる。
+3. 出た URL で `tpm ask pm --url <URL> --item "<項目の題>" … --waiting-for "<何を>"` を打つ。確認のページが自分の所で開き、TPM 担当に【ask-pm】が行き、状態が `回答待ち(PM): <何を>` になる。
 4. 答えは【answer】で来る。
 
 ## 文書の食い違い
 
-TPM 担当は自分で直さず、課題として Software Engineer 担当に回す（`/tpm` の 2）。ほかの担当は、調べている途中で文書やコメントの食い違いを見つけたら、お勧めの直し方で直し、PR を merge まで自分で進める（Product Manager の確認は要らない）。worktree で作業し、PR の題か本文に課題の鍵を入れる。merge したら【ドキュメント修正】で知らせ、成果のページにも一覧で載せる。文書とコードが食い違うときは、コードの方に合わせる。
+TPM 担当は自分で直さず、課題として Software Engineer 担当に回す（`/tpm` の 2）。ほかの担当は、調べている途中で文書やコメントの食い違いを見つけたら、お勧めの直し方で直し、PR を merge まで自分で進める（Product Manager の確認は要らない）。worktree で作業し、PR の題か本文に課題の鍵を入れる。merge したら【doc-fix】で知らせ、成果のページにも一覧で載せる。文書とコードが食い違うときは、コードの方に合わせる。
 
 ## 共有の環境
 
@@ -97,15 +97,15 @@ TPM 担当は自分で直さず、課題として Software Engineer 担当に回
 | 手続き | 響く先 | 変えてよい担当 | 先に要ること |
 |---|---|---|---|
 | 自由 | 自分だけ | どの担当も | 無し |
-| TPM に相談 | 並べて動いているほかの担当 | DevOps Engineer 担当だけ | 【相談(TPM)】で何が止まるかとお勧めを送り、答えを待つ |
-| PM の承認 | ほかの人・ほかのチーム | DevOps Engineer 担当だけ | 【PM への依頼】で承認を取る。承認は時間を限って効く |
+| TPM に相談 | 並べて動いているほかの担当 | DevOps Engineer 担当だけ | 【ask-tpm】で何が止まるかとお勧めを送り、答えを待つ |
+| PM の承認 | ほかの人・ほかのチーム | DevOps Engineer 担当だけ | 【ask-pm】で承認を取る。承認は時間を限って効く |
 
-- 自分が変えてよくない環境は、自分では変えず【DevOps への依頼】で TPM 担当に送る。
+- 自分が変えてよくない環境は、自分では変えず【ask-devops】で TPM 担当に送る。
 - 手続きを踏んでいない命令は、guard が実行の前に止める。止まったら、出た文のとおりに頼む（別の書き方で通そうとしない）。
-- 設定に書かれていない環境で、並べて動いている物やほかの人に響きそうな物を変えるときも、先に【相談(TPM)】を送る。
+- 設定に書かれていない環境で、並べて動いている物やほかの人に響きそうな物を変えるときも、先に【ask-tpm】を送る。
 
 ## 終わり方
 
-- Software Engineer 担当と DevOps Engineer 担当は、依頼書 1 つが済むごとに【完成】を送り、次の【brief】を待つ。同じ課題の続きは同じ担当が受ける。【dismiss】が来るまで自分から終えない（`tpm report end` は【dismiss】の前には送れない）。
-- 自分の居場所（workspace）は自分で閉じない。【終わり】を送った後、TPM 担当が報告を受けてから閉じる。
+- Software Engineer 担当と DevOps Engineer 担当は、依頼書 1 つが済むごとに【done】を送り、次の【brief】を待つ。同じ課題の続きは同じ担当が受ける。【dismiss】が来るまで自分から終えない（`tpm report end` は【dismiss】の前には送れない）。
+- 自分の居場所（workspace）は自分で閉じない。【end】を送った後、TPM 担当が報告を受けてから閉じる。
 - 自分で作った worktree と branch は、merge の後に消す（`git worktree list` に本体だけが残ること）。

@@ -1,7 +1,7 @@
 // 見出しの付いたメッセージを送る命令。送る・届いたかを見る・課題に記録を書く・状態を替える、を 1 度にする。
 // 担当が打つ物（ask・report・wait）と、TPM 担当が打つ物（answer・notify・dismiss・show）。brief は命令でなく、assign の中で使う。
 import type { Context } from '../context.ts';
-import { HEADINGS, message, ROLES, TPM_TITLE, WAIT, WAIT_CLOSE, WAIT_NEXT_BRIEF, type HeadingId, type WaitKind } from '../protocol.ts';
+import { message, ROLES, TPM_TITLE, WAIT, WAIT_CLOSE, WAIT_NEXT_BRIEF, type HeadingId, type WaitKind } from '../protocol.ts';
 import { requireRole, requireSelf, requireTpm, writeRole, type RoleRecord } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
 import { MAX_POINTS, type Note, type NoteKind, type NoteLink } from '../tracker/types.ts';
@@ -24,8 +24,8 @@ interface Sent {
 function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: string, body: string, replyTo?: string): string {
   const text = message(id, body);
   const d = ctx.transport.send(to, from, text, replyTo);
-  ctx.state.append('log.jsonl', { at: ctx.now().toISOString(), key, heading: HEADINGS[id].name, from, to, text, id: d.id, delivered: d.delivered } satisfies Sent);
-  return `送った: 【${HEADINGS[id].name}】→ ${to}（${d.delivered ? '届いた' : '相手が手を動かしているので、まだ届いていない。空いたら届く'}）`;
+  ctx.state.append('log.jsonl', { at: ctx.now().toISOString(), key, heading: id, from, to, text, id: d.id, delivered: d.delivered } satisfies Sent);
+  return `送った: 【${id}】→ ${to}（${d.delivered ? '届いた' : '相手が手を動かしているので、まだ届いていない。空いたら届く'}）`;
 }
 
 /** 担当から TPM 担当へ。 */
@@ -68,7 +68,7 @@ export function wait(ctx: Context, kind: WaitKind, what: string): string[] {
   return [`状態: ${text}`];
 }
 
-/** TPM 担当に決めてほしいことを送り（【相談(TPM)】）、状態を回答待ちにする。 */
+/** TPM 担当に決めてほしいことを送り（【ask-tpm】）、状態を回答待ちにする。 */
 export function askTpm(ctx: Context, options: { text: string, waitingFor: string, replyTo?: string }): string[] {
   const self = requireSelf(ctx);
   return [toTpm(ctx, self, 'ask-tpm', options.text, options.replyTo), ...wait(ctx, 'tpm', options.waitingFor)];
@@ -90,18 +90,18 @@ export function askPm(ctx: Context, options: { url: string, items: string[], wai
   return [...recorded, toTpm(ctx, self, 'ask-pm', body), ...wait(ctx, 'pm', options.waitingFor)];
 }
 
-/** 共有の環境で DevOps Engineer 担当の手が要ることを、TPM 担当に送る（【DevOps への依頼】）。 */
+/** 共有の環境で DevOps Engineer 担当の手が要ることを、TPM 担当に送る（【ask-devops】）。 */
 export function askDevops(ctx: Context, options: { what: string, why: string, urgent: boolean }): string[] {
   const self = requireSelf(ctx);
   return [toTpm(ctx, self, 'ask-devops', `何を: ${options.what}／なぜ: ${options.why}／急ぎ: ${options.urgent ? 'はい' : 'いいえ'}`)];
 }
 
-/** 自分の PR を 1 本 merge したと知らせる（【merge 済み】）。 */
+/** 自分の PR を 1 本 merge したと知らせる（【merged】）。 */
 export function reportMerged(ctx: Context, options: { pr: string, note: string }): string[] {
   return [toTpm(ctx, requireSelf(ctx), 'merged', `${options.pr} ${options.note}`)];
 }
 
-/** 文書やコメントの食い違いを直した PR を merge したと知らせ、課題があれば記録を書く（【ドキュメント修正】）。 */
+/** 文書やコメントの食い違いを直した PR を merge したと知らせ、課題があれば記録を書く（【doc-fix】）。 */
 export function reportDocFix(ctx: Context, options: { pr: string, note: string }): string[] {
   const self = requireSelf(ctx);
   const recorded = record(ctx, self, { kind: '文書の修正', role: ROLES[self.role].label, summary: options.note, links: [{ label: 'PR（merge 済み）', url: options.pr }], points: [] });
@@ -116,7 +116,7 @@ export interface DoneOptions {
   summary: string
   /** 依頼の外で直すとよい物・やらなかった物・merge していない PR。無ければ「なし」。 */
   remaining?: string
-  /** 【PM への依頼】で送った項目の題。無ければ「なし」。 */
+  /** 【ask-pm】で送った項目の題。無ければ「なし」。 */
   decisions?: string
   points: string[]
 }
@@ -137,7 +137,7 @@ export function reportDone(ctx: Context, options: DoneOptions): string[] {
   const body = `${options.url === undefined ? '' : `${options.url} `}要点: ${options.summary}／残り: ${remaining}／決めてほしいこと: ${decisions}`;
   const sent = toTpm(ctx, self, 'done', body);
   ctx.transport.setStatus('wait', WAIT_NEXT_BRIEF);
-  return [...recorded, sent, `状態: ${WAIT_NEXT_BRIEF}（次の【brief】か【dismiss】を待つ。自分から【終わり】を送らない）`];
+  return [...recorded, sent, `状態: ${WAIT_NEXT_BRIEF}（次の【brief】か【dismiss】を待つ。自分から【end】を送らない）`];
 }
 
 /** `tpm report end` の旗。 */
@@ -153,7 +153,7 @@ export interface EndOptions {
 export function reportEnd(ctx: Context, options: EndOptions): string[] {
   const self = requireSelf(ctx);
   if (self.dismissed === undefined && !ROLES[self.role].endsWithoutDismiss) {
-    throw new TpmError('【dismiss】がまだ来ていません。【完成】の後は次の【brief】か【dismiss】を待ち、自分から【終わり】を送らない');
+    throw new TpmError('【dismiss】がまだ来ていません。【done】の後は次の【brief】か【dismiss】を待ち、自分から【end】を送らない');
   }
   const left = required(options.left, '--left（残っている物）');
   const links: NoteLink[] = [
@@ -219,8 +219,8 @@ export function notify(ctx: Context, key: string, options: { text: string, reply
 export function dismiss(ctx: Context, key: string, options: { handover: boolean }): string[] {
   const role = requireRole(ctx, key);
   const body = options.handover
-    ? '担当の交代のため（課題は続くので、課題は閉じない）。worktree を片付けて【終わり】を返す。'
-    : 'この課題に続きは無い。worktree と課題を片付けて【終わり】を返す。';
+    ? '担当の交代のため（課題は続くので、課題は閉じない）。worktree を片付けて【end】を返す。'
+    : 'この課題に続きは無い。worktree と課題を片付けて【end】を返す。';
   const sent = toRole(ctx, role, 'dismiss', body);
   role.dismissed = options.handover ? 'handover' : 'done';
   writeRole(ctx, role);

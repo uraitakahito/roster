@@ -36,8 +36,8 @@ describe('CmuxTransport', () => {
       ['agent message', { stdout: `Queued message ${ID} for TPM (surface:1).\n` }],
       ['--json agent inbox', json({ messages: [{ id: ID, state: 'delivered' }] })],
     ]);
-    expect(transport.send('workspace:1', 'SE t-x7k2: 題', '【完成】- で始まらない本文')).toEqual({ id: ID, delivered: true });
-    expect(calls[0]).toEqual({ args: ['agent', 'message', 'workspace:1', '--from', 'SE t-x7k2: 題', '-'], input: '【完成】- で始まらない本文' });
+    expect(transport.send('workspace:1', 'SE t-x7k2: 題', '【done】- で始まらない本文')).toEqual({ id: ID, delivered: true });
+    expect(calls[0]).toEqual({ args: ['agent', 'message', 'workspace:1', '--from', 'SE t-x7k2: 題', '-'], input: '【done】- で始まらない本文' });
     expect(calls[1]?.args).toEqual(['--json', 'agent', 'inbox', '--surface', 'workspace:1', '--limit', '20']);
   });
 
