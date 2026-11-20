@@ -1,0 +1,12 @@
+// この repo を VS Code で開いたときの設定。
+// .jsonc は JSONC（コメントと末尾のカンマを許す）で、PR の検査（docs-site の format:check）は
+// Prettier の --parser jsonc の形（複数行の最後に末尾のカンマ）を求める。VS Code は知らない .jsonc の
+// 末尾のカンマに警告（jsonc(519)）を出すので、jsonc.schema.json を当てて許させる。
+{
+  "json.schemas": [
+    {
+      "fileMatch": ["**/*.jsonc"],
+      "url": "./.vscode/jsonc.schema.json"
+    }
+  ]
+}

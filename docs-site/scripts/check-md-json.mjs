@@ -1,4 +1,4 @@
-// repo の Markdown の中の ```json と ```jsonc の塊を見る（pnpm run format:check）。
+// repo の Markdown の中の ```json と ```jsonc の塊と、*.jsonc の file を見る（pnpm run format:check）。
 //
 // 1. 読める（<id> などの置き字は、文字列の中にある限り読める）。json は JSON.parse、jsonc は tpm が
 //    config.jsonc を読むのと同じ parseJsonc（cli/src/jsonc.ts。Node が型を消して動かす）で読む
@@ -6,7 +6,9 @@
 //
 // md の本文（表・日本語の折り返し）は Prettier に触らせないので、md を Prettier に掛けずに
 // 塊だけを取り出して比べる。直すときは、塊を Prettier の --parser json（jsonc）に通した形に書き換える。
-// 対象は git が追跡する *.md と、まだ add していない新しい *.md（.gitignore の外）。
+// 対象は git が追跡する *.md・*.jsonc と、まだ add していない新しい物（.gitignore の外）。
+// *.jsonc の file（.claude/roles/config.jsonc など）は、file 全体を 1 つの jsonc の塊として同じに見る。
+// VS Code が末尾のカンマに警告を出さないのは .vscode/settings.json が .vscode/jsonc.schema.json を当てるから。
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -51,24 +53,34 @@ async function checkBlock({ parser, code }) {
   return null;
 }
 
-const files = execFileSync(
-  "git",
-  ["ls-files", "--cached", "--others", "--exclude-standard", "*.md"],
-  { cwd: REPO, encoding: "utf8" },
-)
-  .split("\n")
-  .filter(Boolean);
+/** git が追跡する物と、まだ add していない新しい物のうち、pattern に合う file */
+const repoFiles = (pattern) =>
+  execFileSync(
+    "git",
+    ["ls-files", "--cached", "--others", "--exclude-standard", pattern],
+    { cwd: REPO, encoding: "utf8" },
+  )
+    .split("\n")
+    .filter(Boolean);
+
 const errors = [];
 let count = 0;
-for (const f of files) {
+for (const f of repoFiles("*.md")) {
   for (const b of jsonBlocks(readFileSync(join(REPO, f), "utf8"))) {
     count++;
     const error = await checkBlock(b);
     if (error) errors.push(`${f}:${b.line}: ${error}`);
   }
 }
+let fileCount = 0;
+for (const f of repoFiles("*.jsonc")) {
+  fileCount++;
+  const code = readFileSync(join(REPO, f), "utf8");
+  const error = await checkBlock({ parser: "jsonc", code });
+  if (error) errors.push(`${f}: ${error}`);
+}
 if (errors.length > 0) {
   for (const e of errors) console.error(`✗ ${e}`);
   process.exit(1);
 }
-console.log(`✓ check-md-json: ${count} 塊`);
+console.log(`✓ check-md-json: ${count} 塊・${fileCount} file`);

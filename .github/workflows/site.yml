@@ -4,7 +4,7 @@ name: site
 #
 # astro build だけでは守りにならない —— .md のページは中で何が落ちても exit 0 になる。
 # だから build と一緒に docs-site/scripts/check-refs.mjs を必ず通す（pnpm run check）。
-# docs-site の code（.ts と scripts/）の整形と、repo の md の中の ```json・```jsonc の塊も、Prettier の既定の設定で見る
+# docs-site の code（.ts と scripts/）の整形と、repo の md の中の ```json・```jsonc の塊と *.jsonc の file も、Prettier の既定の設定で見る
 # （pnpm run format:check。md の本文は Prettier に掛けない）。
 #
 # **paths で絞らない。** 検査は docs の外（README・skill-sets/・cli/ など）も読むので、
