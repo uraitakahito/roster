@@ -1,7 +1,20 @@
 ---
 title: はじめる
-description: install・build と、TPM 担当を起こす 1 行の出し方。信頼のダイアログ
+description: Node と pnpm の入れ方・install・build と、TPM 担当を起こす 1 行の出し方。信頼のダイアログ
 ---
+
+## Node と pnpm を入れる
+
+Node の version は repo の一番上の `.node-version` で決める（GitHub Actions も同じファイルを読む）。nodenv で入れる。
+
+```sh
+cd </foo/bar/skills> # skillsの置き場所
+nodenv install       # .node-version の version を入れる（入っていれば何もしない）
+npm install -g corepack && corepack enable && nodenv rehash   # pnpm を出す（Node 25 から corepack は Node に入っていない）
+pnpm -v              # packageManager（package.json）の版が出る
+```
+
+pnpm は Node の version ごとに入る。`.node-version` を上げたら、新しい version でもう 1 度 corepack を入れる。合わない Node で `pnpm install` を打つと、`engines.node` の誤りで止まる（`pnpm-workspace.yaml` の `engineStrict`）。
 
 ## 起動のしかた
 

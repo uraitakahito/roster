@@ -1,2 +1,6 @@
 # 公開から 2 日（2880 分）たっていない version は入れない。
 minimumReleaseAge: 2880
+
+# package.json の engines.node（>=26）に合わない Node では install を止める。
+# version は repo の一番上の .node-version で決める（nodenv が読む）。
+engineStrict: true
