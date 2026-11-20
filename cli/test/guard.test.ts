@@ -28,7 +28,7 @@ describe('touched', () => {
   });
 });
 
-describe('環境の級', () => {
+describe('環境の手続き', () => {
   test.each<[string, string, RoleName | undefined, Approval | undefined, boolean]>([
     ['どの環境にも当たらない', 'git status', 'software-engineer', undefined, true],
     ['自由は、どの担当も', 'container restart web', 'software-engineer', undefined, true],
@@ -82,7 +82,7 @@ describe('道具の直打ち', () => {
     expect(ask('gh issue view 12 --json comments', 'software-engineer', undefined, 'github').allow).toBe(true);
   });
 
-  test('TPM_RAW=1 を付けた直打ちは通すが、環境の級には効かない', () => {
+  test('TPM_RAW=1 を付けた直打ちは通すが、環境の手続きには効かない', () => {
     expect(ask('TPM_RAW=1 cmux workspace close workspace:3 --force', 'software-engineer').allow).toBe(true);
     expect(ask('TPM_RAW=1 aws s3 rm x', 'software-engineer').allow).toBe(false);
   });
@@ -142,7 +142,7 @@ describe('tpm infra と tpm guard', () => {
     expect(infraList(w.tpm)[2]).toContain('承認なし');
   });
 
-  test('承認を書けるのは TPM 担当だけ。級が PM の承認の環境だけ', () => {
+  test('承認を書けるのは TPM 担当だけ。手続きが PM の承認の環境だけ', () => {
     const w = world({ infra });
     expect(() => infraApprove(devops(w), 'aws-staging', { minutes: 30 })).toThrow(/承認を書くのは TPM 担当/);
     expect(() => infraApprove(w.tpm, 'windmill', { minutes: 30 })).toThrow(/承認は要りません/);
@@ -150,7 +150,7 @@ describe('tpm infra と tpm guard', () => {
     expect(() => infraApprove(w.tpm, 'aws-staging', { minutes: 0 })).toThrow(/--minutes/);
   });
 
-  test('infra run は級を見てから打ち、記録を残す', () => {
+  test('infra run は手続きを見てから打ち、記録を残す', () => {
     const w = world({ infra });
     expect(() => infraRun(devops(w), 'aws-staging', ['deploy.sh'])).toThrow(/Product Manager の承認が要ります/);
     expect(w.calls).toEqual([]);

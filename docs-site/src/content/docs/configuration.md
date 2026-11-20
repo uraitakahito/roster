@@ -13,7 +13,7 @@ TPM 担当を起こした folder（project）に置くと、道具の選び方�
 |---|---|---|
 | `tracker` | 課題管理の道具。`jira`（acli）・`github`（その folder の repo の Issue。gh）・`none` | `none`（課題に記録を書かない） |
 | `transport` | 担当どうしの連携の道具。`cmux`（`file` は試験用） | `cmux` |
-| `infra` | インフラの環境の宣言。環境の名前（英小文字・数字・`-`）ごとに `guard`（級）と `match`（その環境に触る命令が含む字の配列） | 宣言なし（guard は環境を見ない） |
+| `infra` | インフラの環境の宣言。環境の名前（英小文字・数字・`-`）ごとに `guard`（手続き）と `match`（その環境に触る命令が含む字の配列） | 宣言なし（guard は環境を見ない） |
 | `skill-sets` | core のほかに加える、追加の skill セットの名前の配列 | core だけ |
 | `software-engineer`・`devops-engineer` | 起こす担当の `model`・`effort`・`permissionMode` | [環境変数](#model-などの既定の環境変数任意)、それも無ければ既定（Software Engineer 担当は Opus 5.5・medium、DevOps Engineer 担当は Opus 5.5・low、どちらも `bypassPermissions`） |
 
@@ -58,9 +58,9 @@ TPM 担当を起こした folder（project）に置くと、道具の選び方�
 
 課題管理の課題が無い仕事には、どの `tracker` でも `t-<短い名>` の鍵を付ける（記録は書かれない）。
 
-### 環境の級
+### 環境の手続き
 
-`guard` には級（その環境を変えると誰に響くか）を書く。級の条件を満たさない命令は、guard（`tpm guard`）が実行の前に止める（[担当のあいだの決まり](/protocol/#guard)）。
+`guard` には手続き（その環境を変える前に要ること。変えると誰に響くかで決める）を書く。手続きを踏んでいない命令は、guard（`tpm guard`）が実行の前に止める（[担当のあいだの決まり](/protocol/#guard)）。
 
 | `guard` | 響く先 | 変えてよい担当 | 先に要ること |
 |---|---|---|---|
