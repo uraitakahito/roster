@@ -43,7 +43,7 @@ tpm infra run tpm-pages -- container run -d --name tpm-pages \
 ```
 
 - `-p` には必ず `127.0.0.1:` を書く。`-p 8800:80` と書くと LAN に開く。
-- 8800 が使われていたら別の port にし、この節の URL と 1 行を合わせて直す。
+- 8800 が使われていたら別の port にし、この節の URL と 1 行を合わせて直す。担当が `tpm page put` で使う URL も、環境変数 `TPM_PAGES_URL`（[設定](/configuration/)）で合わせる。
 
 ### 確かめる
 

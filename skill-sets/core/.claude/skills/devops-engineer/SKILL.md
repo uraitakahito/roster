@@ -23,21 +23,22 @@ tpm infra list
 
 ## 1. 進める
 
-- 依頼書を Artifact tool の `read` で読み、どこまでやるかに従う。依頼が続けて来たら、同じ居場所で 1 つずつ受ける。
+- 依頼書を `tpm page path <URL>` で file の path にして読み（protocol.md の「ページ」）、どこまでやるかに従う。依頼が続けて来たら、同じ居場所で 1 つずつ受ける。
 - 作業する repo の `CLAUDE.md`・教訓・memory と、環境の手順書を先に読む。
 - 環境を変える前に、その環境の手続きを見る（protocol.md の「共有の環境」）:
   - **TPM に相談**（並べて動いている担当に響く。動いている container や worker を止める・消す・作り直す、共有の volume・network・secret を変える）: 先に `tpm ask tpm` で何が止まるかとお勧めを送り、答えを待つ。
-  - **PM の承認**（ほかの人やチームに響く）: 何を・なぜ・何が止まるか・戻し方を確認の Artifact に書き、`tpm ask pm` で送る。【answer】で承認が来るまで変えない。承認は時間を限って効くので、切れたら頼み直す。
+  - **PM の承認**（ほかの人やチームに響く）: 何を・なぜ・何が止まるか・戻し方を確認のページに書き、`tpm ask pm` で送る。【answer】で承認が来るまで変えない。承認は時間を限って効くので、切れたら頼み直す。
   - 設定に書かれていない環境でも、並べて動いている物やほかの人に響きそうなら、先に `tpm ask tpm`。
   - 響かない操作（新しい物を足す・読むだけ）は確かめずに進める。
 - 承認の下で環境を変える命令は `tpm infra run <環境> -- <命令>` で打つ（打った記録が残る）。
 - repo を変えるときは `/software-engineer` と同じく git worktree で作業し、PR を出して CI が緑になってから merge する（置き場所・branch の名前・片付け方は `${CLAUDE_SKILL_DIR}/../software-engineer/SKILL.md` の 2 と 4）。merge したら `tpm report merged`。
 - 動いたことを示してから「できた」と言う（container の状態・log・health check・job の結果）。
 - 迷ったら `tpm ask tpm`。
+- ページの置き場（環境 `tpm-pages`）を起こす・止める・直すのもこの担当。手順は docs-site の運用のページ（`docs-site/src/content/docs/operations.md` の「代わりの置き場」）。止まっていると、ほかの担当は依頼書も成果も開けない。
 
 ## 2. 終わり
 
-依頼 1 つが済んだら、`tpm report done` で、したこと・確かめた結果・「残り」・「決めてほしいこと」（無ければ「なし」）を送る（Product Manager に決めてほしいことがあれば、protocol.md の「Product Manager に確かめる」で `tpm ask pm` も）。成果の Artifact が無ければ `--url` は付けない:
+依頼 1 つが済んだら、`tpm report done` で、したこと・確かめた結果・「残り」・「決めてほしいこと」（無ければ「なし」）を送る（Product Manager に決めてほしいことがあれば、protocol.md の「Product Manager に確かめる」で `tpm ask pm` も）。成果のページが無ければ `--url` は付けない:
 
 ```sh
 tpm report done --kind 結果 --summary "<したこと・確かめた結果>" --remaining "<残り>" --decisions "<決めてほしいこと>"

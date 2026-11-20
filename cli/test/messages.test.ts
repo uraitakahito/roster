@@ -101,7 +101,7 @@ describe('課題への記録（GitHub の Issue）', () => {
     expect(texts(w, 'file:1')[0]).toBe('【answer】(1) 案 A (2) project ごと\n細かい事は依頼書に');
   });
 
-  test('【PM への依頼】は確認の Artifact を自分の所で開き、状態を回答待ち(PM) にする', () => {
+  test('【PM への依頼】は確認のページを自分の所で開き、状態を回答待ち(PM) にする', () => {
     const w = started();
     askPm(w.se, { url: 'https://claude.ai/artifact/c1', items: ['案の選択'], waitingFor: '案の選択' });
     expect(w.tpm.state.lines('file-transport/shown.jsonl')).toEqual([{ at: 'file:1', url: 'https://claude.ai/artifact/c1' }]);

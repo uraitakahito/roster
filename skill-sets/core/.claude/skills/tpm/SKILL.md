@@ -46,7 +46,7 @@ disable-model-invocation: true
 
 ## 3. 起こす
 
-1. 依頼書を HTML の Artifact に書いて publish する。ひな形は `${CLAUDE_SKILL_DIR}/brief-template.md`。決まり文句（連絡の仕方・状態・終わり方）は書かない（担当の skill と protocol.md にある）。
+1. 依頼書を HTML の file に書き、`tpm page put <file> --kind brief --key <鍵>` で置く（protocol.md の「ページ」）。出た URL を下の `--brief` に書く。ひな形は `${CLAUDE_SKILL_DIR}/brief-template.md`。決まり文句（連絡の仕方・状態・終わり方）は書かない（担当の skill と protocol.md にある）。
 2. 振る:
    ```sh
    tpm assign <鍵> --role software-engineer --title "<短い題>" --brief <依頼書の URL> [--issue <課題管理の課題>] [--cwd <課題の folder>]
@@ -72,7 +72,7 @@ disable-model-invocation: true
 | 【PM への依頼】 | URL を自分の所で開き（`tpm show <URL>`）、Product Manager に見せる。答えを `tpm answer <鍵> "<答え>"` で返す（課題があれば「決定」の記録も書かれる） |
 | 【DevOps への依頼】 | DevOps Engineer 担当に依頼書を書いて回す（`tpm assign devops …`） |
 | 【ドキュメント修正】【merge 済み】 | 受け取ったと返す（`tpm notify <鍵> "受け取った" --reply-to <id>`） |
-| 【完成】 | Artifact を自分の所で開き（`tpm show <URL>`）、下の「【dismiss】を送るか」で決める。聞かなくてよければ `tpm dismiss <鍵>`。聞くなら Product Manager に見せ、「続きをこの担当に頼むか、この課題を終えるか」を聞き、続けるなら新しい依頼書（3 の 1 のとおり書く）を `tpm assign <鍵> … --brief <URL>` で同じ担当に、終えるなら `tpm dismiss <鍵>` |
+| 【完成】 | 成果のページを自分の所で開き（`tpm show <URL>`）、下の「【dismiss】を送るか」で決める。聞かなくてよければ `tpm dismiss <鍵>`。聞くなら Product Manager に見せ、「続きをこの担当に頼むか、この課題を終えるか」を聞き、続けるなら新しい依頼書（3 の 1 のとおり書く）を `tpm assign <鍵> … --brief <URL>` で同じ担当に、終えるなら `tpm dismiss <鍵>` |
 | 【終わり】 | （【dismiss】の返事として来る）報告を Product Manager に伝え（聞かずに片付けたなら、そう添える）、`tpm close <鍵>` で閉じる |
 
 - 送った命令が「まだ届いていない」と返したら、相手が手を動かしている。空いたら届くので、送り直さない。
@@ -88,7 +88,7 @@ disable-model-invocation: true
 3. 依頼書の段が最後でない（提案まで・計画までの依頼書）。
 4. Product Manager が、この課題では終える前に見せるよう言った。
 
-どれにも当たらなければ、聞かずに `tpm dismiss <鍵>` を送る。担当は課題を済みにして【終わり】を返す。その報告に「聞かずに片付けた」と添えて Product Manager に伝える。Product Manager が続けたいと言えば、成果の Artifact の URL を頭書きに書いた依頼書で新しい担当を起こす。
+どれにも当たらなければ、聞かずに `tpm dismiss <鍵>` を送る。担当は課題を済みにして【終わり】を返す。その報告に「聞かずに片付けた」と添えて Product Manager に伝える。Product Manager が続けたいと言えば、成果のページの URL を頭書きに書いた依頼書で新しい担当を起こす。
 
 - ほかに【dismiss】を送るのは、Product Manager が「この課題は終わり」と言ったときと、model を替えて担当を替えるとき（2 の「起こす担当の既定」）。
 - Software Engineer 担当と DevOps Engineer 担当は、【dismiss】が来るまで自分から【終わり】を送らない。`tpm roles` で `回答待ち(TPM): 次の依頼` のまま残っている担当がいたら、最後の【完成】を上の 1〜4 に当てて決める。

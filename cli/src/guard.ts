@@ -59,7 +59,7 @@ export function judgeEnv(name: string, env: InfraEnv, role: RoleName | undefined
   const expired = approval === undefined ? '' : `（承認は ${approval.until} で切れた）`;
   return {
     allow: false,
-    reason: `環境 ${name} は、ほかの人と共有です。変えるには Product Manager の承認が要ります${expired}。何を・なぜ・何が止まるかを確認の Artifact に書き、tpm ask pm で送ってください。承認されたら TPM 担当が tpm infra approve ${name} で承認を書きます。`,
+    reason: `環境 ${name} は、ほかの人と共有です。変えるには Product Manager の承認が要ります${expired}。何を・なぜ・何が止まるかを確認のページに書き（tpm page put）、tpm ask pm で送ってください。承認されたら TPM 担当が tpm infra approve ${name} で承認を書きます。`,
   };
 }
 

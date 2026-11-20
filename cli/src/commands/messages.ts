@@ -44,7 +44,7 @@ function toRole(ctx: Context, role: RoleRecord, id: HeadingId, body: string, rep
 /** 課題に記録を書く。課題が無い・課題管理を使わない project なら書かない。 */
 function record(ctx: Context, role: RoleRecord, note: Note): string[] {
   if (role.issue === undefined || !ctx.tracker.owns(role.issue)) return [];
-  if (note.kind !== '確認' && note.points.length > MAX_POINTS) throw new TpmError(`記録の要点は ${MAX_POINTS} つまでにしてください（中身は Artifact に書く）`);
+  if (note.kind !== '確認' && note.points.length > MAX_POINTS) throw new TpmError(`記録の要点は ${MAX_POINTS} つまでにしてください（中身はページに書く）`);
   ctx.tracker.comment(role.issue, note);
   return [`記録を書いた: ${role.issue}【${note.kind}】`];
 }
@@ -74,7 +74,7 @@ export function askTpm(ctx: Context, options: { text: string, waitingFor: string
   return [toTpm(ctx, self, 'ask-tpm', options.text, options.replyTo), ...wait(ctx, 'tpm', options.waitingFor)];
 }
 
-/** Product Manager に決めてほしいことを書いた確認の Artifact を、TPM 担当に送る。 */
+/** Product Manager に決めてほしいことを書いた確認のページを、TPM 担当に送る。 */
 export function askPm(ctx: Context, options: { url: string, items: string[], waitingFor: string }): string[] {
   const self = requireSelf(ctx);
   if (options.items.length === 0) throw new TpmError('--item で、決めてほしい項目の題を 1 つ以上書いてください');
