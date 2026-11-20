@@ -39,6 +39,23 @@ cd <folder> && PATH=<repo>/cli/bin:"$PATH" claude --model claude-opus-5-5 --effo
 
 **最初の入力は `--` の後に置く**（`--add-dir` は後ろの語もまとめて folder として読むため）。
 
+### model と effort を替える
+
+上の 1 行の `--model claude-opus-5-5 --effort medium --permission-mode bypassPermissions` は既定。替えるときは 1 行を書き替えず、環境変数 `TPM_MODEL`・`TPM_EFFORT`・`TPM_PERMISSION_MODE` を書いてから `tpm start` を打つ。
+
+```sh
+# いつも替える: shell の profile（~/.zshrc など）で export する。TPM 担当にも、TPM 担当が起こす担当にも効く
+export TPM_MODEL=claude-fable-5-2
+export TPM_EFFORT=high
+
+# 1 回だけ替える: tpm start の前に付ける。出る 1 行（TPM 担当）にだけ効き、TPM 担当が起こす担当には効かない
+TPM_EFFORT=high /foo/bar/skills/cli/bin/tpm start
+```
+
+1 回だけ替えたときは、TPM 担当の状態の `model` が既定のままに見える（TPM 担当の Claude Code に `TPM_MODEL` が渡らないため）。いつも使う値は profile に書く。
+
+欄ごとに、命令の旗（`tpm assign --model` など）> `.claude/roles/config.jsonc` の担当の欄 > 環境変数 > コードの既定 の順で、先に値がある物が使われる。project の config に `"devops-engineer": { "effort": "low" }` と書いてあれば、`TPM_EFFORT=high` でもその project の DevOps Engineer 担当は low のまま。表は[設定](/configuration/#model-などの既定の環境変数任意)。
+
 ## 信頼のダイアログ
 
 `--add-dir` の先が信頼されていないと、対話で起こしたときに「Adding a new directory … trust?」のダイアログで止まる（既定は No・`-p` では出ない）。
