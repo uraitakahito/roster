@@ -31,9 +31,9 @@ export function hello(ctx: Context, options: { model?: string, effort?: string }
   ];
 }
 
-/** 自分宛てで、まだ届いていない知らせを出す。届くのは手が空いた時なので、段の区切り（PR を出す前・merge を頼む前）に見る。 */
+/** 自分宛てで、まだ届いていないメッセージを出す。届くのは手が空いた時なので、段の区切り（PR を出す前・merge を頼む前）に見る。 */
 export function inbox(ctx: Context): string[] {
   const pending = ctx.transport.pending();
-  if (pending.length === 0) return ['まだ届いていない知らせは無い'];
+  if (pending.length === 0) return ['まだ届いていないメッセージは無い'];
   return pending.flatMap(m => [`--- ${m.from}（id ${m.id}）`, m.text]);
 }

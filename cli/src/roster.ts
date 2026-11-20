@@ -24,7 +24,7 @@ export interface RoleRecord extends RoleSettings {
   dismissed?: 'done' | 'handover'
 }
 
-/** TPM 担当の宛先（tpm.jsonc）。担当は知らせを送るたびにここを読むので、TPM 担当を起こし直しても知らせ直さなくてよい。 */
+/** TPM 担当の宛先（tpm.jsonc）。担当はメッセージを送るたびにここを読むので、TPM 担当を起こし直しても知らせ直さなくてよい。 */
 export interface TpmRecord {
   address: string
 }

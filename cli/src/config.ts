@@ -11,7 +11,7 @@ export const TRACKERS = ['jira', 'github', 'none'] as const;
 /** 課題管理の道具の名前。 */
 export type Tracker = typeof TRACKERS[number];
 
-/** 担当どうしの連携の道具。file は試験用（ファイルに知らせを書くだけ）。 */
+/** 担当どうしの連携の道具。file は試験用（ファイルにメッセージを書くだけ）。 */
 export const TRANSPORTS = ['cmux', 'file'] as const;
 /** 連携の道具の名前。 */
 export type Transport = typeof TRANSPORTS[number];

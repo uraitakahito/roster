@@ -6,7 +6,7 @@ description: 決まりは protocol.md の文と tpm の CLI に分けてある�
 担当どうしのやりとりは、文とコードに分けてある。
 
 - **文**（`skill-sets/core/.claude/skills/_shared/protocol.md`）: いつ・なぜ知らせるか、どの命令を打つか。どの担当もこれを読む。
-- **コード**（`cli/src/`）: 見出しの表・知らせの文の形・課題への記録・状態の字・名簿。担当は `tpm` の命令を打ち、命令が道具（cmux・acli・gh）を動かす。
+- **コード**（`cli/src/`）: 見出しの表・メッセージの書式・課題への記録・状態の字・名簿。担当は `tpm` の命令を打ち、命令が道具（cmux・acli・gh）を動かす。
 
 TPM 担当が書く依頼書には、その課題だけのことを書く（ひな形は `skill-sets/core/.claude/skills/tpm/brief-template.md`）。
 
@@ -18,7 +18,7 @@ TPM 担当が書く依頼書には、その課題だけのことを書く（ひ�
 |---|---|---|
 | 役割 | 誰が何を受け持つか | `skill-sets/` の `SKILL.md` |
 | 決まり | 見出し・順番・記録・名簿 | `protocol.md` の文と、`cli/src/protocol.ts`・`cli/src/roster.ts`・`cli/src/commands/` |
-| 連携の道具 | 知らせを送る・担当を起こす・状態を出す | `cli/src/transport/`（`cmux`・試験用の `file`） |
+| 連携の道具 | メッセージを送る・担当を起こす・状態を出す | `cli/src/transport/`（`cmux`・試験用の `file`） |
 | 課題管理の道具 | 課題に記録を書く・読む・課題を閉じる | `cli/src/tracker/`（`jira`・`github`・`none`） |
 | guard | 共有の環境と、道具の直打ちを止める | `cli/src/guard.ts`（Claude Code の hook から呼ばれる） |
 
@@ -37,10 +37,10 @@ flowchart TB
 
 | ファイル | 中身 |
 |---|---|
-| `tpm.jsonc` | TPM 担当の宛先。担当は知らせを送るたびに読むので、TPM 担当を起こし直しても担当に知らせ直さなくてよい |
+| `tpm.jsonc` | TPM 担当の宛先。担当はメッセージを送るたびに読むので、TPM 担当を起こし直しても担当に知らせ直さなくてよい |
 | `roles/<鍵>.jsonc` | 名簿。課題の鍵 → 役割・居場所の宛先・依頼書・課題管理の課題 |
 | `approvals/<環境>.jsonc` | Product Manager の承認と期限 |
-| `log.jsonl`・`infra.jsonl` | 送った知らせと、`tpm infra run` で打った命令の記録 |
+| `log.jsonl`・`infra.jsonl` | 送ったメッセージと、`tpm infra run` で打った命令の記録 |
 
 1 件 1 ファイルの物は、`config.jsonc` と同じく JSONC（コメントと末尾のカンマを許す JSON）として読む。`tpm` は読んだ値を書き直すので、手で足したコメントは書き直しで消える。足していく記録は 1 行 1 件の JSON（JSON Lines）のまま。古い名の `*.json` が残っていれば、`tpm` が最初に動いたときに `*.jsonc` に名前を替えて移す。
 
@@ -54,7 +54,7 @@ flowchart TB
 
 ## 見出しの流れ
 
-担当どうしは、`tpm` の命令で見出しの付いた知らせを送り合う。Software Engineer 担当の 1 つの課題では、おおよそ次の順に流れる（見出しと命令の一覧は `protocol.md`）。
+担当どうしは、`tpm` の命令で見出しの付いたメッセージを送り合う。Software Engineer 担当の 1 つの課題では、おおよそ次の順に流れる（見出しと命令の一覧は `protocol.md`）。
 
 ```mermaid
 sequenceDiagram

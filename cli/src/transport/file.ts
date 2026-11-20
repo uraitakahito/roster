@@ -1,4 +1,4 @@
-// 試験用の adapter。知らせ・居場所・状態を、状態の folder の下のファイルに書くだけ（命令は動かさない）。
+// 試験用の adapter。メッセージ・居場所・状態を、状態の folder の下のファイルに書くだけ（命令は動かさない）。
 // cmux 無しで決まりの 1 周を試すためと、連携の口が cmux の形に寄りすぎていないかを確かめるためにある。
 import type { State } from '../state.ts';
 import type { Delivery, Incoming, Seat, SpawnOptions, StatusKey, Transport } from './types.ts';
@@ -8,7 +8,7 @@ interface FileSeat extends Seat {
   command: string
 }
 
-/** ファイルに書いた知らせ 1 件。 */
+/** ファイルに書いたメッセージ 1 件。 */
 export interface FileMessage {
   id: string
   from: string
@@ -20,7 +20,7 @@ const DIR = 'file-transport';
 /** 宛先（file:3 など）をファイルの名に使える字にする。 */
 const fileName = (address: string): string => address.replaceAll(/[^A-Za-z0-9._-]/g, '-');
 
-/** 知らせ・居場所・状態を、状態の folder の下のファイルに書く adapter（試験用）。 */
+/** メッセージ・居場所・状態を、状態の folder の下のファイルに書く adapter（試験用）。 */
 export class FileTransport implements Transport {
   private readonly state: State;
   private readonly self: string;
@@ -42,12 +42,12 @@ export class FileTransport implements Transport {
     return { id, delivered: true };
   }
 
-  /** 宛先に届いた知らせ（試験が読む）。 */
+  /** 宛先に届いたメッセージ（試験が読む）。 */
   inbox(address: string): FileMessage[] {
     return this.state.lines<FileMessage>(`${DIR}/inbox/${fileName(address)}.jsonl`);
   }
 
-  /** file の連携は送った時に届くので、届いていない知らせは無い。 */
+  /** file の連携は送った時に届くので、届いていないメッセージは無い。 */
   pending(): Incoming[] {
     return [];
   }
