@@ -9,6 +9,7 @@ import { realpathSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { Command, CommanderError } from 'commander';
 import { buildCommand } from './command.ts';
+import { debugCommand } from './debug.ts';
 import { readSkillSets, TpmError } from './skill-sets.ts';
 import { explain } from './verbose.ts';
 
@@ -46,6 +47,7 @@ function main(argv: string[]): void {
       }
       console.log(buildCommand(dir, root, skillSets));
     });
+  program.addCommand(debugCommand());
 
   try {
     program.parse(argv);
