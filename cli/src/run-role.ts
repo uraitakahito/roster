@@ -2,12 +2,19 @@
 // 起動の命令に長さの上限がある道具（cmux は 1,024 バイト）でも、model・skill セット・最初の入力を気にせず渡せる。
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
+import { guardSettings } from './guard.ts';
 import { ROLES } from './protocol.ts';
 import type { RoleRecord } from './roster.ts';
 
-/** claude の引数。--add-dir は後ろの語もまとめて folder として読むので、最初の入力の前に -- を置く。 */
-export function claudeArgs(record: RoleRecord): string[] {
+/**
+ * claude の引数。--add-dir は後ろの語もまとめて folder として読むので、最初の入力の前に -- を置く。
+ * --settings で門（tpm guard）の hook を付ける。hook の拒否は bypassPermissions でも効く。
+ * --add-dir の先の settings の hook は読まれないので、ここで渡す。
+ */
+export function claudeArgs(record: RoleRecord, root: string): string[] {
   return [
+    '--settings',
+    guardSettings(join(root, 'cli', 'bin', 'tpm')),
     '--model',
     record.model,
     '--effort',
@@ -35,7 +42,7 @@ export function roleEnv(record: RoleRecord, project: string, state: string, root
 
 /** claude を起こし、終わるまで待って終了コードを返す。 */
 export function runRole(record: RoleRecord, project: string, state: string, root: string, env: NodeJS.ProcessEnv = process.env): number {
-  const r = spawnSync('claude', claudeArgs(record), { cwd: record.cwd, env: roleEnv(record, project, state, root, env), stdio: 'inherit' });
+  const r = spawnSync('claude', claudeArgs(record, root), { cwd: record.cwd, env: roleEnv(record, project, state, root, env), stdio: 'inherit' });
   if (r.error) throw r.error;
   return r.status ?? 1;
 }

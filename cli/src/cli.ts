@@ -5,10 +5,11 @@
 // folder を渡さなければ今いる folder。追加の skill セットは folder の .claude/roles/config.json の skill-sets で選ぶ。
 // --verbose なら、読んだ config・追加の skill セット・skill セットごとの skill を stderr に出す（stdout は 1 行のまま）。
 // cli/bin/tpm（sh）が本当の在り処の path でこれを node で直に動かす（build は無い。nodenv が repo の .node-version を読むため）。repo は自分の在り処（import.meta.dirname）から求める。
-import { realpathSync, statSync } from 'node:fs';
+import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { Command, CommanderError } from 'commander';
 import { buildCommand } from './command.ts';
+import { guard, infraApprove, infraList, infraRevoke, infraRun } from './commands/infra.ts';
 import { registerMessages } from './commands/register.ts';
 import { hello } from './commands/role-side.ts';
 import { assign, close, init, roles, type AssignOptions } from './commands/tpm-side.ts';
@@ -78,6 +79,33 @@ function main(argv: string[]): void {
   program.command('close <key>').description('担当の居場所を閉じ、名簿から消す').action((key: string) => print(close(createContext(), key)));
   program.command('hello').description('担当が名乗る（起きた合図。受け持ちを返す）').action(() => print(hello(createContext())));
   registerMessages(program, print);
+  const infra = program.command('infra').description('インフラの環境の宣言と承認');
+  infra.command('list').description('環境・級・承認を出す').action(() => print(infraList(createContext())));
+  infra.command('approve <env>').description('TPM 担当が、Product Manager の承認を時間付きで書く')
+    .requiredOption('--minutes <分>', '承認が効く分')
+    .option('--note <一言>', '何の承認か')
+    .action((name: string, options: { minutes: string, note?: string }) => print(infraApprove(createContext(), name, { ...options, minutes: Number(options.minutes) })));
+  infra.command('revoke <env>').description('TPM 担当が承認を消す').action((name: string) => print(infraRevoke(createContext(), name)));
+  infra.command('run <env> <command...>').description('環境を名指して命令を打ち、記録を残す（tpm infra run <env> -- <命令>）')
+    .action((name: string, command: string[]) => {
+      const r = infraRun(createContext(), name, command);
+      print(r.lines);
+      process.exit(r.status);
+    });
+  program.command('guard').description('（hook が呼ぶ）標準入力の命令を通すか止めるかを決める')
+    .action(() => {
+      // 設定を読めないときも止める（門を素通りさせない）。
+      let verdict;
+      try {
+        verdict = guard(createContext(), readFileSync(0, 'utf8'));
+      }
+      catch (e) {
+        verdict = { allow: false as const, reason: `門が命令を見られません: ${(e as Error).message}` };
+      }
+      if (verdict.allow) return;
+      process.stderr.write(`tpm guard: ${verdict.reason}\n`);
+      process.exit(2);
+    });
   program.command('run-role <key>').description('（連携の道具が動かす）名簿を読んで担当の claude を起こす')
     .requiredOption('--project <folder>', 'TPM 担当を起こした folder')
     .requiredOption('--state <folder>', '状態の folder')
