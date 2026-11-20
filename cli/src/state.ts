@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 /**
- * project の状態の folder。$XDG_STATE_HOME（無ければ ~/.local/state）の tpm/<project の path の / を - に替えた名>。
+ * project の状態の folder。$XDG_STATE_HOME（無ければ ~/.local/state）の `tpm/<project の path の / を - に替えた名>`。
  * $TPM_STATE があればそれ（起こされた担当は、起こした側と同じ folder をこれで受け取る。shell の環境変数が違っても取り違えない）。
  */
 export function stateDir(project: string, env: NodeJS.ProcessEnv = process.env): string {

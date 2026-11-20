@@ -6,7 +6,7 @@ import type { NoteKind } from './tracker/types.ts';
 export const TPM_TITLE = 'Technical Program Manager';
 
 /**
- * tpm の命令の一覧。skill と docs が書いた tpm <命令> が在るかを docs-site/scripts/check-refs.mjs がこれで見る
+ * tpm の命令の一覧。skill と docs が書いた `tpm <命令>` が在るかを docs-site/scripts/check-refs.mjs がこれで見る
  * （その検査は cli の依存を入れずに動くので、命令の木ではなくこの表を読む）。命令の木と揃っているかは試験が見る。
  */
 export const COMMANDS = [
