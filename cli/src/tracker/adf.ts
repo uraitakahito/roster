@@ -1,7 +1,8 @@
 // Jira のコメントの形（Atlassian Document Format）。段落だけで書く（箇条書きや taskList は、読み返すときに消える道具がある）。
 import { noteHead, type Note } from './types.ts';
 
-interface AdfText {
+/** ADF の字の node。リンクは link の mark で付ける。 */
+export interface AdfText {
   type: 'text'
   text: string
   marks?: { type: 'link', attrs: { href: string } }[]

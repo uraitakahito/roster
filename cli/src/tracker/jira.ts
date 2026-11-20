@@ -10,6 +10,7 @@ import type { Note, Tracker, TrackerComment } from './types.ts';
 /** 課題を済みにするときの状態の名前。 */
 const DONE_STATUS = '完了';
 
+/** Jira の課題に記録を書く adapter。 */
 export class JiraTracker implements Tracker {
   private readonly exec: Exec;
 

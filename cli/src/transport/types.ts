@@ -20,6 +20,7 @@ export interface Incoming {
   text: string
 }
 
+/** 居場所を作るときに渡す物。title は居場所の題、cwd は命令を動かす folder。 */
 export interface SpawnOptions {
   title: string
   cwd: string
@@ -30,6 +31,7 @@ export interface SpawnOptions {
 /** サイドバーなどに出す状態の鍵。この 2 つだけを使う。 */
 export type StatusKey = 'model' | 'wait';
 
+/** 連携の口。道具ごとの adapter（`cmux.ts`・`file.ts`）がこの形を持つ。 */
 export interface Transport {
   /** 自分の宛先。 */
   whoami(): string

@@ -11,6 +11,7 @@ export function noteToMarkdown(note: Note): string {
   return [noteHead(note), ...note.links.map(l => `${l.label}: ${l.url}`), ...note.points].join('\n\n');
 }
 
+/** GitHub の Issue に記録を書く adapter。 */
 export class GithubTracker implements Tracker {
   private readonly exec: Exec;
   private readonly project: string;
