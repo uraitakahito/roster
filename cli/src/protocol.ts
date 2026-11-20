@@ -35,6 +35,8 @@ export const COMMANDS = [
   'infra approve',
   'infra revoke',
   'infra run',
+  'page put',
+  'page path',
   'guard',
   'run-role',
 ] as const;

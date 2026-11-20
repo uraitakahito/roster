@@ -46,6 +46,16 @@ flowchart TB
 
 名簿は「鍵 → 宛先」を覚えるだけで、動いているかは毎回、連携の道具に聞く。`tpm roles` は、名簿にあって居場所が無い担当を「消えた」と出す。
 
+## ページの置き場
+
+依頼書・確認・提案・計画・結果の HTML を置く、この Mac だけの置き場。local の folder を読むだけで mount した Nginx の container が、`127.0.0.1` だけで待ち受ける（起こし方は [運用](/operations/)。起こす・止めるのは DevOps Engineer 担当）。
+
+- `tpm page put <file> --kind <種類>` が、file を `<置き場の folder>/<状態の folder の名>/<鍵>/<種類>-<番号>.html` に写し、置き場が応えるのを確かめてから URL を出す。種類は `brief`・`confirm`・`proposal`・`plan`・`result`。鍵は担当なら今の課題の鍵、TPM 担当は `--key` で書く。番号は同じ鍵・同じ種類の次の番号で、前の版は上書きしない。
+- 置き場が応えなければ、file は置いたまま止まる。`tpm ask devops` で起こすよう頼む。
+- `tpm page path <URL>` が、置き場の URL を file の path にする（Read tool で読むため）。
+- project の名に状態の folder の名を使うので、TPM 担当と、起こされた担当とで URL がずれない。課題の folder の URL（`…/<鍵>/`）は、その課題のページの一覧を出す。
+- 置き場の folder と URL は、環境変数 `TPM_PAGES_DIR`・`TPM_PAGES_URL` で替えられる（[設定](/configuration/)）。
+
 ## 状態
 
 各担当は、連携の道具の表示（cmux ならサイドバー）に `model` と `wait` の 2 つだけを出す。`wait` は「今、誰が何を待っているか」を 1 つだけ出し、状況が変わるたびに上書きする（`tpm wait` などのやりとりの命令が出す。字の形は `protocol.md` の「状態」）。

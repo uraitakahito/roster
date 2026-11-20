@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { Command, CommanderError } from 'commander';
 import { buildCommand } from './command.ts';
 import { guard, infraApprove, infraList, infraRevoke, infraRun } from './commands/infra.ts';
+import { PAGE_KINDS, pagePath, pagePut } from './commands/page.ts';
 import { registerMessages } from './commands/register.ts';
 import { hello, inbox } from './commands/role-side.ts';
 import { assign, close, roles, type AssignOptions } from './commands/tpm-side.ts';
@@ -91,6 +92,14 @@ export function buildProgram(): Command {
       print(r.lines);
       process.exit(r.status);
     });
+
+  const page = program.command('page').description('依頼書と成果のページを、代わりの置き場（127.0.0.1 の Nginx）に置く・読む');
+  page.command('put <file>').description('ページを置き場に写し、URL を出す（置き場が応えなければ止まる）')
+    .requiredOption('--kind <種類>', PAGE_KINDS.join('・'))
+    .option('--key <鍵>', '課題の鍵（担当は $TPM_KEY。TPM 担当は要る）')
+    .action((file: string, options: { kind: string, key?: string }) => print(pagePut(createContext(), file, options)));
+  page.command('path <url>').description('置き場の URL を file の path にする（Read tool で読むため）')
+    .action((url: string) => print(pagePath(createContext(), url)));
 
   program.command('guard').description('（hook が呼ぶ）標準入力の命令を通すか止めるかを決める')
     .action(() => {
