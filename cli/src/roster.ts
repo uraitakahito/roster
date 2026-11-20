@@ -24,7 +24,7 @@ export interface RoleRecord extends RoleSettings {
   dismissed?: 'done' | 'handover'
 }
 
-/** TPM 担当の宛先（tpm.json）。担当は知らせを送るたびにここを読むので、TPM 担当を起こし直しても知らせ直さなくてよい。 */
+/** TPM 担当の宛先（tpm.jsonc）。担当は知らせを送るたびにここを読むので、TPM 担当を起こし直しても知らせ直さなくてよい。 */
 export interface TpmRecord {
   address: string
 }
@@ -32,7 +32,7 @@ export interface TpmRecord {
 const KEY = /^[A-Za-z0-9][A-Za-z0-9#._/-]*$/;
 
 /** 鍵をファイルの名にする（<repo>#<PR> の # と / を替える）。 */
-const fileOf = (key: string): string => `roles/${key.replaceAll(/[^A-Za-z0-9._-]/g, '_')}.json`;
+const fileOf = (key: string): string => `roles/${key.replaceAll(/[^A-Za-z0-9._-]/g, '_')}.jsonc`;
 
 /** 課題の鍵が、使ってよい字（英数字と # . _ / -）だけかを見る。違えば止める。 */
 export function assertKey(key: string): void {
@@ -56,12 +56,12 @@ export const removeRole = (ctx: Context, key: string): void => ctx.state.remove(
 
 /** 名簿の全員。 */
 export function allRoles(ctx: Context): RoleRecord[] {
-  return ctx.state.list('roles').map(name => ctx.state.read<RoleRecord>(`roles/${name}.json`)).filter(r => r !== undefined);
+  return ctx.state.list('roles').map(name => ctx.state.read<RoleRecord>(`roles/${name}.jsonc`)).filter(r => r !== undefined);
 }
 
 /** TPM 担当の宛先を読む。`tpm hello` の前なら止める。 */
 export function requireTpm(ctx: Context): TpmRecord {
-  const tpm = ctx.state.read<TpmRecord>('tpm.json');
+  const tpm = ctx.state.read<TpmRecord>('tpm.jsonc');
   if (tpm === undefined) throw new TpmError('TPM 担当の宛先がありません（TPM 担当が tpm hello を打つ）');
   return tpm;
 }

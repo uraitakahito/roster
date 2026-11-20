@@ -14,7 +14,7 @@ describe('hello（TPM 担当）', () => {
   test('$TPM_KEY が無ければ TPM 担当として名乗る: 宛先を状態に書き、状態を出し、名簿を出す', () => {
     const w = world();
     expect(hello(w.tpm)).toEqual(['TPM 担当の宛先: file:tpm', '課題管理: none・連携: file', '名簿: 担当はいない']);
-    expect(w.tpm.state.read('tpm.json')).toEqual({ address: 'file:tpm' });
+    expect(w.tpm.state.read('tpm.jsonc')).toEqual({ address: 'file:tpm' });
     expect(w.wire.status('file:tpm')).toEqual({ model: 'Opus 5.5 · medium', wait: '作業中: 起動' });
   });
 

@@ -53,38 +53,38 @@ export class FileTransport implements Transport {
   }
 
   spawn(options: SpawnOptions): string {
-    const n = (this.state.read<number>(`${DIR}/next.json`) ?? 1);
-    this.state.write(`${DIR}/next.json`, n + 1);
+    const n = (this.state.read<number>(`${DIR}/next.jsonc`) ?? 1);
+    this.state.write(`${DIR}/next.jsonc`, n + 1);
     const seat: FileSeat = { address: `file:${n}`, ...options };
-    this.state.write(`${DIR}/seats/${fileName(seat.address)}.json`, seat);
+    this.state.write(`${DIR}/seats/${fileName(seat.address)}.jsonc`, seat);
     return seat.address;
   }
 
   /** 居場所で動かすはずだった命令（試験が読む）。 */
   command(address: string): string | undefined {
-    return this.state.read<FileSeat>(`${DIR}/seats/${fileName(address)}.json`)?.command;
+    return this.state.read<FileSeat>(`${DIR}/seats/${fileName(address)}.jsonc`)?.command;
   }
 
   seats(): Seat[] {
     return this.state.list(`${DIR}/seats`)
-      .map(name => this.state.read<FileSeat>(`${DIR}/seats/${name}.json`))
+      .map(name => this.state.read<FileSeat>(`${DIR}/seats/${name}.jsonc`))
       .filter(s => s !== undefined)
       .map(s => ({ address: s.address, title: s.title }));
   }
 
   status(address: string): Record<string, string> | undefined {
-    return this.state.read<Record<string, string>>(`${DIR}/status/${fileName(address)}.json`);
+    return this.state.read<Record<string, string>>(`${DIR}/status/${fileName(address)}.jsonc`);
   }
 
   setTitle(title: string): void {
-    const file = `${DIR}/seats/${fileName(this.self)}.json`;
+    const file = `${DIR}/seats/${fileName(this.self)}.jsonc`;
     const seat = this.state.read<FileSeat>(file);
     // 起こされていない居場所（TPM 担当）は一覧に載らないので、題を覚える先が無い。
     if (seat !== undefined) this.state.write(file, { ...seat, title });
   }
 
   setStatus(key: StatusKey, text: string): void {
-    this.state.write(`${DIR}/status/${fileName(this.self)}.json`, { ...this.status(this.self), [key]: text });
+    this.state.write(`${DIR}/status/${fileName(this.self)}.jsonc`, { ...this.status(this.self), [key]: text });
   }
 
   screen(): string {
@@ -96,7 +96,7 @@ export class FileTransport implements Transport {
   }
 
   close(address: string): void {
-    this.state.remove(`${DIR}/seats/${fileName(address)}.json`);
-    this.state.remove(`${DIR}/status/${fileName(address)}.json`);
+    this.state.remove(`${DIR}/seats/${fileName(address)}.jsonc`);
+    this.state.remove(`${DIR}/status/${fileName(address)}.jsonc`);
   }
 }

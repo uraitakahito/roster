@@ -1,6 +1,6 @@
 // cli/src/cli.ts を cli/bin/tpm（sh）経由で動かす。
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, test } from 'vitest';
@@ -162,6 +162,21 @@ describe('誤りなら 1 行を出さずに止まる', () => {
     const r = runFailing(args);
     expect(r.status).toBe(2);
     expect(r.stdout).toBe('');
+  });
+});
+
+describe('古い名の状態', () => {
+  test('tpm.json・roles/*.json を置いた状態の folder でも、最初の命令が .jsonc に移して名簿を出す', () => {
+    const d = folder('{ "transport": "file" }');
+    const state = join(scratch, `state${n++}`);
+    mkdirSync(join(state, 'roles'), { recursive: true });
+    writeFileSync(join(state, 'tpm.json'), '{ "address": "file:tpm" }');
+    writeFileSync(join(state, 'roles', 't-x.json'), JSON.stringify({ key: 't-x', role: 'software-engineer', title: '題', cwd: d, addDirs: [] }));
+    // 試験を流す担当の TPM_KEY などを受け継がない
+    const out = run(tpm, ['roles'], d, { TPM_PROJECT: d, TPM_STATE: state, TPM_KEY: '', TPM_ADDRESS: '' });
+    expect(out).toMatch(/^名簿:\n- t-x {2}Software Engineer {2}消えた/);
+    expect(readdirSync(state).sort()).toEqual(['roles', 'tpm.jsonc']);
+    expect(readdirSync(join(state, 'roles'))).toEqual(['t-x.jsonc']);
   });
 });
 
