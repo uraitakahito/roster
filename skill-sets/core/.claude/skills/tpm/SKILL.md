@@ -88,10 +88,10 @@ disable-model-invocation: true
 | 見出し | すること |
 |---|---|
 | 【ask-tpm】 | 課題の概要をもとに答える（`tpm notify <鍵> "<答え>" --reply-to <id>`）。Product Manager の判断が要るなら、Product Manager に聞いてから答える |
-| 【ask-pm】 | URL を自分の所で開き（`tpm show <URL>`）、Product Manager に見せる。答えを `tpm answer <鍵> "<答え>"` で返す（課題があれば「決定」の記録も書かれる） |
+| 【ask-pm】 | Product Manager に、確認のページの URL と項目を伝える（ページは置き場の一覧の UI の新着に出ている。その場で開いて見せる時だけ `tpm show <URL>`）。答えを `tpm answer <鍵> "<答え>"` で返す（課題があれば「決定」の記録も書かれる） |
 | 【ask-devops】 | DevOps Engineer 担当に依頼書を書いて回す（`tpm assign devops …`） |
 | 【doc-fix】【merged】 | 受け取ったと返す（`tpm notify <鍵> "受け取った" --reply-to <id>`） |
-| 【done】 | 成果のページを自分の所で開き（`tpm show <URL>`）、下の「【dismiss】を送るか」で決める。聞かなくてよければ `tpm dismiss <鍵>`。聞くなら Product Manager に見せ、「続きをこの担当に頼むか、この課題を終えるか」を聞き、続けるなら新しい依頼書（3 の 1 のとおり書く）を `tpm assign <鍵> … --brief <URL>` で同じ担当に、終えるなら `tpm dismiss <鍵>` |
+| 【done】 | 成果のページを読み（`tpm page path <URL>`）、下の「【dismiss】を送るか」で決める。聞かなくてよければ `tpm dismiss <鍵>`。聞くなら Product Manager に URL を伝え（その場で開いて見せる時だけ `tpm show <URL>`）、「続きをこの担当に頼むか、この課題を終えるか」を聞き、続けるなら新しい依頼書（3 の 1 のとおり書く）を `tpm assign <鍵> … --brief <URL>` で同じ担当に、終えるなら `tpm dismiss <鍵>` |
 | 【end】 | （【dismiss】の返事として来る）報告を Product Manager に伝え（聞かずに片付けたなら、そう添える）、`tpm close <鍵>` で閉じる |
 
 - 送った命令が「まだ届いていない」と返したら、相手が手を動かしている。空いたら届くので、送り直さない。
