@@ -2,6 +2,7 @@
 import { randomInt } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { assertSummary } from '../brief.ts';
 import { shellQuote } from '../shell.ts';
 import type { Context } from '../context.ts';
 import { modelStatus, ROLES, TPM_TITLE, WAIT, type RoleName } from '../protocol.ts';
@@ -99,6 +100,8 @@ export function assign(ctx: Context, key: string, options: AssignOptions): strin
   if (options.issue !== undefined && !ctx.tracker.owns(options.issue)) {
     throw new TpmError(`${options.issue} は、この project の課題管理（${ctx.config.tracker}）の鍵ではありません`);
   }
+  // 新しい担当（交代を含む）は背景を知らないので、依頼書に課題の概要の節を求める。続きの【brief】には求めない。
+  if (options.brief !== undefined) assertSummary(ctx, key, options.brief);
   // 居場所を作る前に読む（読めなければ、担当を起こさずに止まる）。
   const copy = issueCopy(ctx, options.issue ?? key, key, options.noIssueCopy);
   const def = ROLES[options.role];

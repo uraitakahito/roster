@@ -3,9 +3,8 @@ import { answer, askDevops, askPm, askTpm, dismiss, doneKind, notify, reportDepe
 import { hello } from '../src/commands/role-side.ts';
 import { assign, close, roles } from '../src/commands/tpm-side.ts';
 import { requireRole } from '../src/roster.ts';
-import { world, type World } from './helpers.ts';
+import { BRIEF, world, type World } from './helpers.ts';
 
-const BRIEF = 'https://claude.ai/artifact/b1';
 const OUT = 'https://claude.ai/artifact/o1';
 const PR = 'https://github.com/o/r/pull/7';
 const TPM = { model: 'claude-opus-5-5', effort: 'medium' };

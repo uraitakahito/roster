@@ -27,7 +27,7 @@ TPM 担当が Software Engineer 担当・DevOps Engineer 担当に渡す依頼�
 
 ## 課題の概要の節
 
-`<section id="summary">` で囲む。課題があれば `tpm issue view <鍵>` で読んでから書き、課題が無ければ Product Manager の言葉から書く（`SKILL.md` の 2 の「振る前に課題をつかむ」）。
+`<section id="summary">` で囲む。新しい担当を起こすとき、`tpm assign` はこの節が無いか、見出しを除いて 40 字に足りなければ止まる（中身の良し悪しは見ないので、字の数を満たすために埋めない）。課題があれば `tpm issue view <鍵>` で読んでから書き、課題が無ければ Product Manager の言葉から書く（`SKILL.md` の 2 の「振る前に課題をつかむ」）。
 
 ```html
 <section id="summary">

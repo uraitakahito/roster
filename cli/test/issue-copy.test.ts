@@ -9,10 +9,10 @@ import { assign, roles } from '../src/commands/tpm-side.ts';
 import type { Context } from '../src/context.ts';
 import type { Exec } from '../src/exec.ts';
 import { requireRole } from '../src/roster.ts';
-import { world } from './helpers.ts';
+import { BRIEF, world } from './helpers.ts';
 
 const TPM = { model: 'claude-opus-5-5', effort: 'medium' };
-const SE = { role: 'software-engineer', title: '提案', brief: 'https://claude.ai/artifact/b1', wait: 0 } as const;
+const SE = { role: 'software-engineer', title: '提案', brief: BRIEF, wait: 0 } as const;
 
 const JIRA = JSON.stringify({
   key: 'SKILLS-14',
