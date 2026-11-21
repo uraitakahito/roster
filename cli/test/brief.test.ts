@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { summaryText, SUMMARY_MIN } from '../src/brief.ts';
-import { DEFAULT_PAGES_URL } from '../src/commands/page.ts';
+import { DEFAULT_PAGES_URL } from '../src/commands/store.ts';
 import { hello } from '../src/commands/role-side.ts';
 import { assign } from '../src/commands/tpm-side.ts';
 import { BRIEF, world } from './helpers.ts';

@@ -2,7 +2,9 @@
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DEFAULT_PAGES_URL, type PageRecord } from '../src/commands/page.ts';
+import { FILE_TYPES, type FileRecord } from '../src/commands/file.ts';
+import type { PageRecord } from '../src/commands/page.ts';
+import { DEFAULT_PAGES_URL } from '../src/commands/store.ts';
 import { createContext, type Context } from '../src/context.ts';
 import type { Exec, ExecOptions, ExecResult } from '../src/exec.ts';
 import { FileTransport } from '../src/transport/file.ts';
@@ -21,6 +23,7 @@ export interface Call {
 /**
  * 偽の置き場: tpm が打つ curl を受け、本物（pagetray）と同じ決まりで答える。
  * 番号は種類ごとに今の最大＋1（消した番号も数える）、名指した番号が使われているか消した番号なら 409。消した URL は 410。本物との揃いは、CI のつなぎの段が見る。
+ * file（/api/files）も同じ決まり。番号は名と拡張子ごと。
  */
 export class FakeStore {
   /** 置かれたページ（置き場の中の path → 記録と本文）。 */
@@ -33,6 +36,12 @@ export class FakeStore {
   api: string | undefined = '1';
   /** 置く要求の答えを替える（置き場が断る時の試験）。 */
   refuse: { code: number, body: string } | undefined;
+  /** 置かれた file（置き場の中の path → 記録と中身）。 */
+  files = new Map<string, { record: FileRecord, body: Buffer }>();
+  /** 消した file の path。 */
+  removedFiles = new Set<string>();
+  /** true の間、file のエンドポイントが無い（0.4.0 より前の置き場。404 を返す）。 */
+  noFiles = false;
 
   /** curl の引数を読んで答える。答えの形は `<本文>\n<HTTP の code>`（-o があれば本文は file に書く）。 */
   curl(args: string[], options?: ExecOptions): ExecResult {
@@ -44,6 +53,10 @@ export class FakeStore {
       return { status: 0, stdout: `${out === undefined ? body.toString() : ''}\n${code} ${this.api ?? ''}`, stderr: '' };
     };
     const q = url.searchParams;
+    if (url.pathname === '/api/files' || url.pathname.split('/')[3] === 'files') {
+      if (this.noFiles) return reply(404, '');
+      return this.file(args, url, reply);
+    }
     if (args.includes('DELETE')) {
       const gone = [...this.pages.values()].map(p => p.record)
         .filter(r => r.project === q.get('project') && (['key', 'kind', 'n'] as const).every(f => !q.has(f) || q.get(f) === String(r[f])))
@@ -90,6 +103,63 @@ export class FakeStore {
     if (this.removed.has(decodeURIComponent(url.pathname))) return reply(410, '{"error":"そのページは消した（2026-11-21T00:00:00.000Z）"}');
     return page === undefined ? reply(404, '{"error":"そのページは無い"}') : reply(200, page.body);
   }
+
+  /** file のエンドポイントと中身。 */
+  private file(args: string[], url: URL, reply: (code: number, body: Buffer | string) => ExecResult): ExecResult {
+    const q = url.searchParams;
+    const all = [...this.files.values()].map(f => f.record);
+    if (url.pathname !== '/api/files') {
+      const path = decodeURIComponent(url.pathname);
+      if (this.removedFiles.has(path)) return reply(410, '{"error":"その file は消した"}');
+      const file = this.files.get(path);
+      return file === undefined ? reply(404, '{"error":"その file は無い"}') : reply(200, file.body);
+    }
+    if (args.includes('DELETE')) {
+      const gone = all.filter(r => r.project === q.get('project') && (!q.has('key') || q.get('key') === r.key)
+        && (!q.has('name') || q.get('name') === `${r.name}.${r.ext}`) && (!q.has('n') || q.get('n') === String(r.n))).map(r => r.path);
+      for (const path of gone) {
+        this.files.delete(path);
+        this.removedFiles.add(path);
+      }
+      return reply(200, JSON.stringify({ removed: gone }));
+    }
+    if (args.includes('POST')) {
+      if (this.refuse !== undefined) return reply(this.refuse.code, this.refuse.body);
+      const body = readFileSync((args[args.indexOf('--data-binary') + 1] ?? '').slice(1));
+      const [project, key, name] = [q.get('project') ?? '', q.get('key') ?? '', q.get('name') ?? ''];
+      const [stem = '', ext = ''] = name.split('.');
+      if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(stem) || body.length === 0) return reply(400, '{"error":"引数が決まりに合わない"}');
+      const type = args.find(a => a.startsWith('Content-Type: '))?.slice('Content-Type: '.length) ?? '';
+      if (!Object.hasOwn(FILE_TYPES, ext) || type.split(';')[0] !== FILE_TYPES[ext]?.split(';')[0]) return reply(415, '{"error":"受けない種類"}');
+      const prefix = `/${project}/${key}/files/${stem}-`;
+      const taken = [...this.files.keys(), ...this.removedFiles].filter(p => p.startsWith(prefix) && p.endsWith(`.${ext}`) && /^\d+$/.test(p.slice(prefix.length, -ext.length - 1)))
+        .map(p => Number.parseInt(p.slice(prefix.length), 10));
+      const n = Number(q.get('n') ?? Math.max(0, ...taken) + 1);
+      if (taken.includes(n)) return reply(409, '{"error":"その番号は、もう使われている"}');
+      const record: FileRecord = {
+        project,
+        key,
+        name: stem,
+        ext,
+        n,
+        type: FILE_TYPES[ext] ?? '',
+        size: body.length,
+        sha256: '0'.repeat(64),
+        role: q.get('role') ?? '',
+        workspace: q.get('workspace') ?? '',
+        created_at: q.get('created_at') ?? `2026-11-20T13:00:${String(this.files.size).padStart(2, '0')}.000Z`,
+        path: `/${project}/${key}/files/${stem}-${n}.${ext}`,
+      };
+      this.files.set(record.path, { record, body });
+      return reply(201, JSON.stringify({ ...record, url: `${url.origin}${record.path}` }));
+    }
+    const found = all
+      .filter(r => (['project', 'key', 'role', 'workspace'] as const).every(f => !q.has(f) || q.get(f) === r[f]))
+      .filter(r => !q.has('q') || `${r.name}.${r.ext}`.includes(q.get('q') ?? ''))
+      .sort((a, b) => (q.get('sort') === 'created_at' ? 1 : -1) * a.created_at.localeCompare(b.created_at))
+      .slice(0, Number(q.get('limit') ?? 100));
+    return reply(200, JSON.stringify({ files: found }));
+  }
 }
 
 export interface World {
@@ -102,7 +172,7 @@ export interface World {
   role: (key: string, address: string) => Context
   /** file の連携（届いたメッセージ・起こす命令を読む）。 */
   wire: FileTransport
-  /** 偽の置き場（tpm page put・path・list・import・delete と、tpm assign の課題の写しが使う）。 */
+  /** 偽の置き場（tpm page …・tpm file … と、tpm assign の課題の写しが使う）。 */
   store: FakeStore
   /** sleep で待った回数。 */
   slept: () => number

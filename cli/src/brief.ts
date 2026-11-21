@@ -2,7 +2,8 @@
 // 節は `<section id="summary">`（tpm/brief-template.md）。字の一致で見て、HTML の parser は使わない。中身の良し悪しは見ない。
 import { readFileSync } from 'node:fs';
 import type { Context } from './context.ts';
-import { isPageUrl, pagePath } from './commands/page.ts';
+import { pagePath } from './commands/page.ts';
+import { isPageUrl } from './commands/store.ts';
 import { TpmError } from './skill-sets.ts';
 
 /** 概要の節に要る字の数（見出しを除く）。見出しだけの空の節を止めるため。 */

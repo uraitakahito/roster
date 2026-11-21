@@ -89,9 +89,15 @@ Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【
 - 読む: `tpm page path <URL>` で file の path にして Read tool で読む（この Mac の控えの path。控えに無ければ置き場から取る。前の置き場の `8800` の URL も読める）。
 - 探す: `tpm page list`（今の project の新しい順）。`--key <Key>`・`--role <役割>`・`--workspace <宛先>`・`--kind <種類>`・`--q <語>` で絞り、`--json` で記録を出す。Product Manager は、置き場の一覧の UI（`http://127.0.0.1:8801/`）で同じように絞って見る。
 - 開く: ページは自動では開かない（`tpm ask pm`・`tpm report done` も開かない）。Product Manager は、置き場の一覧の UI（`http://127.0.0.1:8801/`）を 1 つ開いておき、新着の印で気づいて読む。その場で開いて人に見せる時だけ `tpm show <URL>`。
-- 消す: **消してよいのは TPM 担当だけ**（戻せない）。試しに置いた・置き間違えたページは、担当は自分で消さず、`tpm ask tpm` で URL と訳を送って頼む（担当の居場所からの `tpm page delete` と、置き場に消す要求を直に送る `curl`、置き場の CLI の `pagetray page delete` は止まる）。TPM 担当は `tpm page delete <URL>…`（Key ごとなら `--key <Key>`、project ごとなら `--project <名>`）で消す物を見て、`--yes` を付けて消す。控えの file も消える。消したページの URL は 410 を返し、その番号は 2 度使われない。
+- 消す: **消してよいのは TPM 担当だけ**（戻せない）。試しに置いた・置き間違えたページは、担当は自分で消さず、`tpm ask tpm` で URL と訳を送って頼む（担当の居場所からの `tpm page delete` と、置き場に消す要求を直に送る `curl`、置き場の CLI の `pagetray page delete` は止まる）。TPM 担当は `tpm page delete <URL>…`（Key ごとなら `--key <Key>`、project ごとなら `--project <名>`。その Key・project の file も一緒に消える）で消す物を見て、`--yes` を付けて消す。控えの file も消える。消したページの URL は 410 を返し、その番号は 2 度使われない。
 - 置き場が応えなければ、ページは置けない（`tpm page put` が止まる。番号を置き場が決めるため）。控えにあるページは読める。`tpm ask devops --what "置き場（pagetray）を起こす" --why "<何が置けないか>"` で頼む。自分では container を起こさない。
 - 図があった方がわかりやすい所は図を入れる。
+- file（画像・PDF・字の file）: ページに付ける画面の写し・図・log は、置き場に上げて、ページから相対で参照する。受けるのは png・jpg・jpeg・gif・webp・pdf・txt・log・md・csv・json で、1 つ 16 MiB まで（動画・HTML・SVG は受けない）。
+  - 上げる: `tpm file put <file> --reviewed`（TPM 担当は `--key <Key>` も）。画像と PDF は、上げる前に Read tool で見て、token・鍵・個人の情報・ほかの人の画面・この Mac の path が写っていないか確かめる（`--reviewed` が無いと止まる）。字の file は秘密の形を走査し、当たれば行の番号を出して止まる。置き場での名は元の名から作り（`--name <語>.<拡張子>` で替えられる）、番号は置き場が付ける。同じ名で上げ直すと次の番号になり、前の物は残る。
+  - ページには、出た `ページからの参照:` の形で相対に書く（同じ Key なら `<img src="files/<語>-<n>.<拡張子>">`、別の Key なら `../<Key>/files/…`）。置き場でも控えでも同じ形で開く。
+  - 読む: `tpm file path <URL>` で file の path にして Read tool で読む。`tpm page path` も、ページが参照する file を控えに写し、`参照の file:` の行に path を出す。探すのは `tpm file list`。
+  - 消す: ページと同じく TPM 担当だけ。担当は `tpm ask tpm` で URL と訳を送って頼む（秘密を上げてしまった時は、すぐ）。TPM 担当は `tpm file delete <URL>…` で消す物と、それを参照しているページを見て、`--yes` を付けて消す。
+  - 「置き場（pagetray）の版が古く、file を扱えません」と出たら、`tpm ask devops` で置き場の版を上げるよう頼む。
 
 ## Product Manager に確かめる
 
