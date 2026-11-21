@@ -84,7 +84,3 @@ pagetray の新しい版が出て、この repo の `.pagetray-version` が上�
 ### ほかの project で使う
 
 置き場は Mac に 1 つで、どの project の担当も同じ置き場を使う（一覧の UI では project で絞れる）。ほかの project で TPM 担当を起こすときも、その project の `.claude/roles/config.jsonc` に、この repo と同じ `infra.pagetray` の宣言を写す（写さないと、その project の担当は止める命令を断りなく打てる。[設定](/configuration/#環境の手続き)）。
-
-### 前の置き場（tpm-pagestore）
-
-pagetray に分ける前の container `tpm-pagestore`（image `tpm-pagestore:a8bdb88`・volume `tpm-pagestore-data`）は、入れ替えた後も、戻す先として止めたまま残してある。**起こさない**（同じ port を取り合い、古い DB を見せてしまう）。Mac を起こし直した後に起こすのは `pagetray`。消すのは、TPM 担当に聞いてから（`tpm infra run tpm-pagestore -- …`）。消したら、設定の `tpm-pagestore` の宣言と、この節を消す。
