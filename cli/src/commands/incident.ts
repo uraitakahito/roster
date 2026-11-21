@@ -1,5 +1,7 @@
 // tpm incident …: 台帳（思わぬ出来事の記録）を書く・見直す・扱いを決める・追いかける。
-// 書く（add）のは TPM 担当（担当と Auditor は tpm report incident。messages.ts）。見直す・扱いを決める・追いかけるのは TPM 担当と Auditor。
+// 書く（add）のは TPM 担当（担当と Auditor は tpm report incident。messages.ts）。見直す・追いかけるのは TPM 担当と Auditor。
+// 種類のある件（出来事）を「調べない」「済み」にできるのは Auditor だけ（TPM 担当の誤りの件を、TPM 担当が自分で決めないため）。
+// 種類の無い件（「残り」と「PM の手」）は、TPM 担当も決められる。
 import type { Command } from 'commander';
 import { createContext, type Context } from '../context.ts';
 import { actor } from '../evidence.ts';
@@ -43,7 +45,7 @@ export function incidentAdd(ctx: Context, key: string, options: AddOptions): str
   requireTpmSide(ctx);
   assertKey(key);
   const incident = addIncident(ctx, { key, source: 'add', text: options.text, type: incidentType(options.type), tags: options.tags, severe: options.severe, ...(options.msg === undefined ? {} : { msg: options.msg }) });
-  return [`台帳に書いた: ${incidentLine(incident)}`, ...tagLines(ctx, incident), ...(incident.severe ? ['重い件: 見直しを待たずに、調べを振る'] : [])];
+  return [`台帳に書いた: ${incidentLine(incident)}`, ...tagLines(ctx, incident), ...(incident.severe ? ['重い件: すぐ Product Manager に伝える（監査を呼ぶなら、Audit の席で /audit <番号>）'] : [])];
 }
 
 /** `tpm incident review` の旗。 */
@@ -93,6 +95,12 @@ function decide(ctx: Context, numbers: string[], status: IncidentStatus, fields:
   if (numbers.length === 0) throw new TpmError('件の番号を 1 つ以上書いてください');
   // 先にみな読む（番号の誤りがあれば、どれも書き替えない）。
   const incidents = numbers.map(n => requireIncident(ctx, numberOf(n)));
+  if ((status === 'dropped' || status === 'closed') && roleOf(ctx.env) !== 'auditor') {
+    const typed = incidents.filter(i => i.type !== undefined);
+    if (typed.length > 0) {
+      throw new TpmError(`出来事（種類のある件）を「${STATUS_LABEL[status]}」にできるのは Auditor だけです: ${typed.map(i => `#${i.n}`).join('・')}。どれも書き替えていません。「残り」と「PM の手」（種類の無い件）だけを名指して打ち直してください。出来事は、Product Manager が Audit の席で /audit を呼んだ時に、Auditor が決めます`);
+    }
+  }
   return incidents.map((incident) => {
     const next: Incident = { ...incident, ...fields, status, decidedAt: ctx.now().toISOString(), decidedBy: actor(ctx.env) };
     writeIncident(ctx, next);
@@ -112,12 +120,12 @@ export function incidentAssign(ctx: Context, numbers: string[], options: { to?: 
   return decide(ctx, numbers, 'assigned', { to });
 }
 
-/** 調べないと決めた（訳を書く）。 */
+/** 調べないと決めた（訳を書く）。出来事は Auditor だけ。 */
 export function incidentDrop(ctx: Context, numbers: string[], options: { why?: string }): string[] {
   return decide(ctx, numbers, 'dropped', { why: given(options.why, '--why "<調べない訳>"') });
 }
 
-/** 改善が済んだ（直した PR・教訓・訳のどれかを結ぶ）。 */
+/** 改善が済んだ（直した PR・教訓・訳のどれかを結ぶ）。出来事は Auditor だけ。 */
 export function incidentClose(ctx: Context, numbers: string[], options: { pr?: string, lesson?: string, why?: string }): string[] {
   const fields = Object.fromEntries(Object.entries(options).filter(([, v]) => v !== undefined && v.trim() !== ''));
   if (Object.keys(fields).length === 0) throw new TpmError('--pr <直した PR>・--lesson "<教訓の file と一言>"・--why "<訳>" のどれかを書いてください（何で済んだかを結ぶ）');
@@ -231,10 +239,10 @@ export function registerIncident(program: Command, print: (lines: string[]) => v
   incident.command('assign <n...>').description('調べを振った（振り先の課題の Key を結ぶ）')
     .option('--to <Key>', '振り先の課題の Key')
     .action((n: string[], options: { to?: string }) => print(incidentAssign(createContext(), n, options)));
-  incident.command('drop <n...>').description('調べないと決めた')
+  incident.command('drop <n...>').description('調べないと決めた（出来事は Auditor だけ。「残り」と「PM の手」は TPM 担当も）')
     .option('--why <訳>', '調べない訳')
     .action((n: string[], options: { why?: string }) => print(incidentDrop(createContext(), n, options)));
-  incident.command('close <n...>').description('改善が済んだ（直した PR・教訓・訳のどれかを結ぶ）')
+  incident.command('close <n...>').description('改善が済んだ（直した PR・教訓・訳のどれかを結ぶ。出来事は Auditor だけ）')
     .option('--pr <URL>', '直した PR')
     .option('--lesson <教訓>', '改善を入れた教訓（file と一言）')
     .option('--why <訳>', 'PR も教訓も無く済んだ訳')

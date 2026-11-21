@@ -28,7 +28,7 @@ describe('台帳に書く', () => {
       '台帳に書いた: #3 [重い] 安全性 AI-21 11-20 12:00「画面の操作を頼んだ」 tag: 権限・pm-hand msg: m-1',
       '権限: これで 3 件目（前: #1 t-8zuk・#2 t-3m36）',
       'pm-hand: 初めて',
-      '重い件: 見直しを待たずに、調べを振る',
+      '重い件: すぐ Product Manager に伝える（監査を呼ぶなら、Audit の席で /audit <番号>）',
     ]);
     expect(readIncidents(w.tpm)[2]).toEqual({ n: 3, at: '2026-11-20T12:00:00.000Z', key: 'AI-21', by: 'tpm', role: 'tpm', source: 'add', type: 'safety', text: '画面の操作を頼んだ', tags: ['権限', 'pm-hand'], msg: 'm-1', severe: true, status: 'open' });
   });
@@ -132,7 +132,7 @@ describe('台帳を見直す・扱いを決める', () => {
       '振った: #2 信頼性 AI-22 11-20 12:00「うその【merged】」 tag: 行き違い 振った: t-k4wd',
     ]);
     incidentDrop(w.tpm, ['4'], { why: '1 度きり' });
-    expect(incidentClose(w.tpm, ['1'], { pr: 'https://github.com/o/r/pull/9' })[0]).toMatch(/^済み: #1 .* 済み: https:\/\/github.com\/o\/r\/pull\/9$/);
+    expect(incidentClose(auditorOf(w), ['1'], { pr: 'https://github.com/o/r/pull/9' })[0]).toMatch(/^済み: #1 .* 済み: https:\/\/github.com\/o\/r\/pull\/9$/);
     expect(incidentReview(w.tpm)).toEqual(['台帳: 未決の件は無い']);
     expect(incidentReview(w.tpm, { all: true })[0]).toBe('台帳: 振った 2・調べない 1・済み 1');
     expect(readIncidents(w.tpm).map(i => [i.status, i.to ?? i.why ?? i.pr, i.decidedAt])).toEqual([
@@ -143,12 +143,36 @@ describe('台帳を見直す・扱いを決める', () => {
     ]);
   });
 
+  test('出来事（種類のある件）を「調べない」「済み」にできるのは Auditor だけ。「残り」と「PM の手」は TPM 担当も決められる', () => {
+    const w = ledger();
+    reportDone(w.se, { kind: 'result', summary: 's', remaining: '古い image が残っている', decisions: 'なし', points: [] });
+    expect(() => incidentDrop(w.tpm, ['1'], { why: '1 度きり' })).toThrow('出来事（種類のある件）を「調べない」にできるのは Auditor だけです: #1。どれも書き替えていません');
+    expect(() => incidentClose(w.tpm, ['2', '3'], { pr: 'https://github.com/o/r/pull/9' })).toThrow('を「済み」にできるのは Auditor だけです: #2・#3');
+    // 出来事が 1 つでも混じっていれば、「残り」も書き替えない。
+    expect(() => incidentDrop(w.tpm, ['4', '1', '5'], { why: 'x' })).toThrow(/Auditor だけです: #1。/);
+    expect(readIncidents(w.tpm).every(i => i.status === 'open')).toBe(true);
+    // tag と振り先は、TPM 担当も付けられる（通った改善を課題にして振った時）。
+    incidentTag(w.tpm, '1', ['権限']);
+    incidentAssign(w.tpm, ['1'], { to: 't-k4wd' });
+    incidentDrop(w.tpm, ['4'], { why: 'Product Manager が見送った' });
+    incidentClose(w.tpm, ['5'], { why: '消した' });
+    incidentDrop(auditorOf(w), ['2'], { why: '訂正済み' });
+    incidentClose(auditorOf(w), ['3'], { pr: 'https://github.com/o/r/pull/9' });
+    expect(readIncidents(w.tpm).map(i => [i.type ?? i.source, i.status, i.decidedBy?.role])).toEqual([
+      ['efficiency', 'assigned', 'tpm'],
+      ['reliability', 'dropped', 'auditor'],
+      ['safety', 'closed', 'auditor'],
+      ['pm-hand', 'dropped', 'tpm'],
+      ['remaining', 'closed', 'tpm'],
+    ]);
+  });
+
   test('要る旗が無い・番号が無いときは、どれも書き替えない', () => {
     const w = ledger();
     expect(() => incidentAssign(w.tpm, ['1'], {})).toThrow(/--to/);
-    expect(() => incidentDrop(w.tpm, ['1'], { why: ' ' })).toThrow(/--why/);
-    expect(() => incidentClose(w.tpm, ['1'], {})).toThrow(/--pr .*--lesson .*--why/);
-    expect(() => incidentDrop(w.tpm, ['1', '9'], { why: 'x' })).toThrow('台帳に #9 はありません');
+    expect(() => incidentDrop(w.tpm, ['4'], { why: ' ' })).toThrow(/--why/);
+    expect(() => incidentClose(w.tpm, ['4'], {})).toThrow(/--pr .*--lesson .*--why/);
+    expect(() => incidentDrop(w.tpm, ['4', '9'], { why: 'x' })).toThrow('台帳に #9 はありません');
     expect(() => incidentDrop(w.tpm, ['x'], { why: 'x' })).toThrow(/件の番号/);
     expect(() => incidentDrop(w.tpm, [], { why: 'x' })).toThrow(/1 つ以上/);
     expect(readIncidents(w.tpm).every(i => i.status === 'open')).toBe(true);
@@ -190,7 +214,7 @@ describe('台帳を見直す・扱いを決める', () => {
   test('未決の件があれば、名簿の終わりに 1 行出す', () => {
     const w = ledger();
     expect(roles(w.tpm).at(-1)).toBe('台帳: 未決 4 件（重い 1）。tpm incident review で見る');
-    incidentDrop(w.tpm, ['1', '2', '3', '4'], { why: '試し' });
+    incidentDrop(auditorOf(w), ['1', '2', '3', '4'], { why: '試し' });
     expect(roles(w.tpm).at(-1)).toMatch(/^- t-x7k2/);
   });
 });
@@ -214,7 +238,9 @@ describe('追いかけの一覧（tpm incident follow）', () => {
     incidentAssign(w.tpm, ['1'], { to: 't-k4wd' });
     add(w, 't-x7k2', '振る件', { type: 'safety' });
     incidentAssign(w.tpm, ['6'], { to: 't-x7k2' });
-    incidentClose(w.tpm, ['2', '3'], { pr: 'https://github.com/o/r/pull/9' });
+    // #2 は、誰が決めたかの欄ができる前に TPM 担当が済みにした件（欄が無い）。#3 は Auditor が済みにした件。
+    w.tpm.state.write('incidents/2.jsonc', { ...readIncidents(w.tpm)[1], status: 'closed', pr: 'https://github.com/o/r/pull/9', decidedAt: '2026-11-21T00:00:00.000Z' });
+    incidentClose({ ...auditorOf(w), now: w.tpm.now }, ['3'], { pr: 'https://github.com/o/r/pull/9' });
     incidentDrop(w.tpm, ['4'], { why: '1 度きり' });
     at(w, '2026-11-22T06:00:00.000Z');
     add(w, 'AI-24', '行き違い 3', { tags: ['行き違い'] });
@@ -227,19 +253,18 @@ describe('追いかけの一覧（tpm incident follow）', () => {
       '- 行き違い: 済み 2 件（#2・#3）の後に 1 件（#7）',
       '古い残り（未決の「残り」と「PM の手」。古い順）: 1 件',
       '- #5 残り t-x7k2 11-20 12:00「【done】の残り: 本体の checkout が main より古い」（3 日）',
-      'TPM 担当の決め（調べない・済み）: 3 件',
+      'TPM 担当の決め（調べない・済み）: 2 件',
       '- #2 信頼性 AI-22 11-20 12:00「行き違い 1」 tag: 行き違い 済み: https://github.com/o/r/pull/9（決めた: 11-21 00:00）',
-      '- #3 効率性 t-3m36 11-20 12:00「行き違い 2」 tag: 行き違い 済み: https://github.com/o/r/pull/9（決めた: 11-21 00:00）',
       '- #4 PM の手 tpm 11-20 12:00「Jira の画面」 tag: pm-hand 調べない: 1 度きり（決めた: 11-21 00:00）',
     ]);
     // --since より後に決めた件だけ。Auditor が決めた件は「TPM 担当の決め」に出ない。
     incidentDrop(auditorOf(w), ['7'], { why: '訂正済み' });
     expect(incidentFollow(w.tpm, { since: '2026-11-21' }).at(-1)).toBe('TPM 担当の決め（調べない・済み。2026-11-21 より後）: 無い');
-    expect(incidentFollow(w.tpm, { since: '2026-11-20' }).filter(l => l.startsWith('- #')).slice(-3).map(l => l.slice(2, 4))).toEqual(['#2', '#3', '#4']);
+    expect(incidentFollow(w.tpm, { since: '2026-11-20' }).filter(l => l.startsWith('- #')).slice(-2).map(l => l.slice(2, 4))).toEqual(['#2', '#4']);
     expect(() => incidentFollow(w.tpm, { since: 'きのう' })).toThrow(/--since は日付/);
     const json = JSON.parse(incidentFollow(w.tpm, { json: true })[0] ?? '') as { assigned: unknown[], recurred: { tag: string }[], remaining: unknown[], decided: unknown[] };
     // 後で「調べない」にした件も、済みの後に起きた事には変わりないので、再発に数える。
-    expect([json.assigned.length, json.recurred.length, json.remaining.length, json.decided.length]).toEqual([2, 1, 1, 3]);
+    expect([json.assigned.length, json.recurred.length, json.remaining.length, json.decided.length]).toEqual([2, 1, 1, 2]);
   });
 
   test('何も無ければ、段ごとに「無い」と出す。扱いは変えない', () => {

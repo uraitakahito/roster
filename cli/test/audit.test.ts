@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
@@ -46,6 +46,13 @@ function at(w: { tpm: Context, auditor: Context }, iso: string): void {
   w.tpm.now = () => new Date(iso);
   w.auditor.now = w.tpm.now;
 }
+
+describe('この repo の skill', () => {
+  test('tpm audit start が起こす skill /audit と、Auditor が読む規程・手順がある', () => {
+    const skills = join(import.meta.dirname, '..', '..', 'skill-sets', 'core', '.claude', 'skills');
+    for (const file of ['audit/SKILL.md', '_shared/audit-charter.md', '_shared/audit.md']) expect(existsSync(join(skills, file)), file).toBe(true);
+  });
+});
 
 describe('tpm audit start', () => {
   test('Product Manager が打つと、名簿に Auditor の行を書き、居場所を作る。記録に残る', () => {
