@@ -135,6 +135,48 @@ describe('tpm page put', () => {
     expect(s.curls()).toEqual([]);
   });
 
+  test('#45 の形: 担当は、TPM 担当からの未読があれば、確認・提案・計画・結果のページを置く前に 1 度止まり、打ち直すと置く', () => {
+    const s = setup();
+    s.w.wire.hold('file:1');
+    for (const [i, kind] of ['confirm', 'proposal', 'plan', 'result'].entries()) {
+      const { id } = s.w.wire.send('file:1', 'Technical Program Manager', `【answer】案 B にする ${i}`);
+      const before = s.curls().length;
+      expect(() => pagePut(s.role, s.html, { kind })).toThrow([
+        'TPM 担当から、まだ読んでいないメッセージが 1 件あります。ページを置いていません。',
+        `--- Technical Program Manager（id ${id}）`,
+        `【answer】案 B にする ${i}`,
+        '--- ここまで',
+        '読んだうえで、同じ命令を打ち直せば置きます（事情が変わっていたら、ページを書き直して打つ）。',
+      ].join('\n'));
+      // 止まった回は、置き場に頼まない
+      expect(s.curls()).toHaveLength(before);
+      expect(pagePut(s.role, s.html, { kind })[1]).toBe(`URL: ${BASE}/${s.project}/t-x7k2/${kind}-1.html`);
+    }
+    expect(s.tpm.state.lines<{ gate: string }>('gate.jsonl').map(l => l.gate)).toEqual(['unread', 'unread', 'unread', 'unread']);
+  });
+
+  test('依頼書・課題の写し・時系列・監査のページは、未読があっても止めない', () => {
+    const s = setup();
+    s.w.wire.hold('file:1');
+    s.w.wire.send('file:1', 'Technical Program Manager', '【notify】知らせ');
+    for (const kind of ['brief', 'issue', 'timeline', 'audit']) expect(pagePut(s.role, s.html, { kind })[1]).toBe(`URL: ${BASE}/${s.project}/t-x7k2/${kind}-1.html`);
+    // 見せていないので、次の確認のページでは止まる
+    expect(() => pagePut(s.role, s.html, { kind: 'confirm' })).toThrow(/1 件あります。ページを置いていません。/);
+  });
+
+  test('TPM 担当は、--key の担当から来た未読だけで止まる', () => {
+    const s = setup();
+    s.w.wire.hold('file:tpm');
+    s.w.wire.send('file:tpm', 'SWE t-b2c3', '【done】別の課題');
+    expect(pagePut(s.tpm, s.html, { kind: 'confirm', key: 't-x7k2' })[1]).toContain('/t-x7k2/confirm-1.html');
+    s.w.wire.send('file:tpm', 'SWE t-x7k2', '【ask-tpm】前提が変わった');
+    expect(() => pagePut(s.tpm, s.html, { kind: 'confirm', key: 't-x7k2' })).toThrow(/^t-x7k2 の担当から、まだ読んでいないメッセージが 1 件あります。ページを置いていません。[\s\S]*前提が変わった/);
+    expect(pagePut(s.tpm, s.html, { kind: 'confirm', key: 't-x7k2' })[1]).toContain('/t-x7k2/confirm-2.html');
+    // 名簿に無い Key では見ない
+    s.w.wire.send('file:tpm', 'SWE t-x7k2', '【ask-tpm】もう 1 つ');
+    expect(pagePut(s.tpm, s.html, { kind: 'confirm', key: 't-zzzz' })[1]).toContain('/t-zzzz/confirm-1.html');
+  });
+
   test('tpm を使う project でない folder（scratchpad など）からは、置き場に頼む前に止める', () => {
     const s = setup();
     const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-scratch-')));
