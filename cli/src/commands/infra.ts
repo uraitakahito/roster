@@ -2,9 +2,10 @@
 import { OWN_LABEL } from '../config.ts';
 import type { Context } from '../context.ts';
 import { recordGuardStop } from '../evidence.ts';
-import { commandOf, judge, judgeEnv, readApprovals, removeApproval, writeApproval, type Verdict } from '../guard.ts';
+import { commandOf, judge, judgeEnv, judgeWrite, readApprovals, removeApproval, writeApproval, writeOf, type Verdict } from '../guard.ts';
 import { ROLE_NAMES, type RoleName } from '../protocol.ts';
 import { TpmError } from '../skill-sets.ts';
+import { pagesDir } from './store.ts';
 
 const GUARD_LABEL = { free: '自由', tpm: 'TPM に相談（DevOps Engineer 担当だけ）', pm: 'PM の承認（DevOps Engineer 担当だけ）' } as const;
 
@@ -70,8 +71,18 @@ export function infraRun(ctx: Context, name: string, command: string[]): { lines
   return { lines: [r.stdout.trimEnd(), r.stderr.trimEnd()].filter(l => l !== ''), status: r.status };
 }
 
-/** hook の標準入力を読んで決める。Bash でなければ通す。止めた命令は guard.jsonl に残す。 */
+/** hook の標準入力を読んで決める。Bash と、file を書き替える道具のほかは通す。止めた命令は guard.jsonl に残す。 */
 export function guard(ctx: Context, stdin: string): Verdict {
+  const write = writeOf(stdin);
+  if (write !== undefined) {
+    const verdict = judgeWrite(write, roleOf(ctx.env), [
+      { name: 'project の folder', dir: ctx.project },
+      { name: '状態の folder', dir: ctx.state.dir },
+      { name: 'ページの控えの folder', dir: pagesDir(ctx.env) },
+    ]);
+    if (!verdict.allow) recordGuardStop(ctx, `${write.tool} ${write.path ?? ''}`, verdict.reason);
+    return verdict;
+  }
   const command = commandOf(stdin);
   if (command === undefined) return { allow: true };
   const verdict = judge({ command, role: roleOf(ctx.env), config: ctx.config, approvals: readApprovals(ctx.state, ctx.config.infra), now: ctx.now() });

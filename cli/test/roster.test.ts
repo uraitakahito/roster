@@ -6,7 +6,7 @@ import { hello, inbox } from '../src/commands/role-side.ts';
 import { assign, close, configLines, newKey, recordingTo, roles } from '../src/commands/tpm-side.ts';
 import { createContext } from '../src/context.ts';
 import { buildCommand } from '../src/command.ts';
-import { modelLabel, modelStatus } from '../src/protocol.ts';
+import { modelLabel, modelStatus, ROLES } from '../src/protocol.ts';
 import { readRole, requireRole, writeRole } from '../src/roster.ts';
 import { claudeArgs, roleEnv } from '../src/run-role.ts';
 import { TpmError } from '../src/skill-sets.ts';
@@ -41,6 +41,14 @@ describe('hello（TPM 担当）', () => {
 });
 
 describe('assign', () => {
+  test('Auditor の席は、TPM 担当の tpm assign では起こせない（役割でも Key でも）', () => {
+    const w = world();
+    expect(() => assign(w.tpm, 't-x7k2', { role: 'auditor', wait: 0 })).toThrow(/Auditor の席（Key audit）は、Product Manager が起こします/);
+    expect(() => assign(w.tpm, 'audit', { ...SE })).toThrow(/Auditor の席（Key audit）は、Product Manager が起こします/);
+    expect(roles(w.tpm)).toEqual(['名簿: 担当はいない']);
+    expect(w.wire.seats()).toEqual([]);
+  });
+
   test('名簿に書き、短い命令で居場所を作る', () => {
     const w = world();
     const out = assign(w.tpm, 't-x7k2', SE);
@@ -356,6 +364,13 @@ describe('run-role', () => {
       '--',
       '/sustaining-engineer',
     ]);
+  });
+
+  test('Auditor の席の hook は、file を書き替える道具も見る。最初の入力は名乗るだけ', () => {
+    const args = claudeArgs({ key: 'audit', role: 'auditor', title: 'Audit', cwd: '/p', addDirs: ['/r/skill-sets/core'], ...ROLES.auditor.defaults }, '/r');
+    expect(args[1]).toBe('{"hooks":{"PreToolUse":[{"matcher":"Bash|Edit|Write|NotebookEdit","hooks":[{"type":"command","command":"/r/cli/bin/tpm guard"}]}]}}');
+    expect(args.slice(2, 8)).toEqual(['--model', 'claude-fable-5-2', '--effort', 'high', '--permission-mode', 'bypassPermissions']);
+    expect(args.slice(-2)).toEqual(['--', '/audit hello']);
   });
 
   test('担当に project・状態の folder・Key・役割と、tpm の在り処を渡し、置き場の CLI に消させない', () => {

@@ -16,7 +16,7 @@ TPM 担当を起こした folder（project）に置くと、道具の選び方�
 | `infra` | インフラの環境の宣言。環境の名前（英小文字・数字・`-`）ごとに `guard`（手続き）と `match`（その環境に触る命令が含む字の配列） | 宣言なし（guard は環境を見ない） |
 | `skill-sets` | core のほかに加える、追加の skill セットの名前の配列 | core だけ |
 | `folders` | 設定を集める folder（project の folder からの path）の配列。書くと、直下を探さずに書いた folder だけを集める。`[]` なら集めない | 直下の folder のうち、設定がある物を全部集める |
-| `software-engineer`・`devops-engineer` | 起こす担当の `model`・`effort`・`permissionMode` | [環境変数](#model-などの既定の環境変数任意)、それも無ければ既定（Software Engineer 担当は Opus 5.5・medium、DevOps Engineer 担当は Opus 5.5・low、どちらも `bypassPermissions`） |
+| `software-engineer`・`devops-engineer`・`auditor` | 起こす担当の `model`・`effort`・`permissionMode` | [環境変数](#model-などの既定の環境変数任意)、それも無ければ既定（Software Engineer 担当は Opus 5.5・medium、DevOps Engineer 担当は Opus 5.5・low、Auditor は Fable 5.2・high、どれも `bypassPermissions`） |
 
 ```jsonc
 {
@@ -46,6 +46,11 @@ TPM 担当を起こした folder（project）に置くと、道具の選び方�
     "effort": "low",
     "permissionMode": "bypassPermissions",
   },
+  "auditor": {
+    "model": "claude-fable-5-2",
+    "effort": "high",
+    "permissionMode": "bypassPermissions",
+  },
 }
 ```
 
@@ -67,7 +72,7 @@ ai/                               ← ここで tpm start（設定は任意）
 | `tracker` | 道具ごとに、宣言した設定を覚える（`none` は足さない）。記録を書く先は、課題の Key の形で選ぶ（下の「[課題の Key](#課題の-key)」）。`gh-12` の記録は、`github` を宣言した folder の repo の Issue に書く（`gh` をその folder で打つ）。`github` を宣言した設定が 2 つ以上あると、`gh-` の Key がどの repo の Issue かが決まらないので止まる（`folders` で 1 つに絞る） |
 | `infra` | 環境の名前ごとに合わせる。同じ名前がいくつもの設定にあれば、`match` は足し、`guard` は厳しい方（`pm` > `tpm` > `free`）にする。どこで打った命令にも効く。`tpm infra list` と guard が止めた文に、宣言した設定が出る |
 | `skill-sets` | 全部を足す（project の folder が先、次に直下の folder を名前の順。重なりは除く）。TPM 担当（`tpm start`）にも、起こす担当にも効く |
-| `software-engineer`・`devops-engineer` | 合わせない。**担当を起こす folder**（`tpm assign --cwd`）の設定 > project の folder の設定 の順に、欄ごとに先に値がある物を使う |
+| `software-engineer`・`devops-engineer`・`auditor` | 合わせない。**担当を起こす folder**（`tpm assign --cwd`）の設定 > project の folder の設定 の順に、欄ごとに先に値がある物を使う。Auditor は project の folder で起きるので、project の folder の設定だけ |
 | `transport` | project の folder の設定だけ（直下の folder の値は読まない） |
 
 どの値がどの設定から来たかは、TPM 担当の `tpm hello` が出す。上の図の folder で起こすと、次のように出る（直下に設定のある folder が無ければ、`設定: <file>` と `課題管理: …・連携: …` の 2 行。設定の file が無いための値には「（既定）」が付く）。
@@ -135,9 +140,9 @@ shell の profile などで書くと、すべての project・すべての担当
 | 順 | どこ | 効く担当 |
 |---|---|---|
 | 1 | 命令の旗（`tpm assign --model` など。Sustaining Engineer 担当は `.claude/dependabot/config.jsonc` に書いた欄を `/dependabot-triage` が旗にする） | その 1 回 |
-| 2 | `.claude/roles/config.jsonc` の担当の欄 | Software Engineer・DevOps Engineer |
+| 2 | `.claude/roles/config.jsonc` の担当の欄 | Software Engineer・DevOps Engineer・Auditor |
 | 3 | 環境変数 `TPM_MODEL`・`TPM_EFFORT`・`TPM_PERMISSION_MODE` | すべて（TPM 担当を含む） |
-| 4 | コードの既定（TPM 担当・Software Engineer 担当・Sustaining Engineer 担当は Opus 5.5・medium、DevOps Engineer 担当は Opus 5.5・low、どれも `bypassPermissions`） | すべて |
+| 4 | コードの既定（TPM 担当・Software Engineer 担当・Sustaining Engineer 担当は Opus 5.5・medium、DevOps Engineer 担当は Opus 5.5・low、Auditor は Fable 5.2・high、どれも `bypassPermissions`） | すべて |
 
 ```sh
 # ~/.zshrc など
@@ -176,11 +181,12 @@ tpm banner check   # 設定と hook を確かめる
 
 ```jsonc
 {
-  // 役割: tpm・software-engineer・devops-engineer・sustaining-engineer・dependabot-triage と、ほかをまとめる "*"
+  // 役割: tpm・software-engineer・devops-engineer・sustaining-engineer・auditor と、ほかをまとめる "*"
   // きっかけ: turn（答え終わった）・idle（入力待ちの催促）・ask（許可/質問）
   // 値: "show"（出す）・"hide"（消す）・"pm-wait"（その回に tpm wait pm を打った時だけ出す）
   "banner": {
     "tpm": { "turn": "pm-wait", "idle": "hide", "ask": "show" },
+    "auditor": { "turn": "pm-wait", "idle": "hide", "ask": "show" },
     "*": { "turn": "hide", "idle": "hide", "ask": "show" },
   },
   // バナーを消す時に一緒に消す物: sound・paneFlash・reorderWorkspace
@@ -189,6 +195,7 @@ tpm banner check   # 設定と hook を確かめる
 ```
 
 - 役割の欄は、書いたきっかけだけを上書きする（`"devops-engineer": { "turn": "show" }` なら、DevOps Engineer 担当の答え終わったも出す）。
+- 役割の名は `cli/src/protocol.ts` の `ROLES` の名と `tpm`。ここに無い名を書くと、hook は設定を読めないとして止まる（`/dependabot-triage` は TPM 担当が呼ぶ skill で、役割ではない）。
 - `pm-wait` は「前に答え終わった時より後に `tpm wait pm` を打った」回だけ出す。TPM 担当は手が空くと `回答待ち(PM): 指示` のまま待つので、状態の字だけでは、担当のメッセージをひとりで片付けた回まで鳴ってしまうため。TPM 担当は Product Manager に返して手を止める前に `tpm wait pm` を打つ。
 - 設定を読めない間、hook はバナーを消さず、記録に訳を書く。`tpm banner check` が誤りを出す。
 - hook が決めたことは、project の状態の folder の `banner.jsonl` に 1 行ずつ書く（7 日で消す）。`tpm banner log` が新しい順に出す。

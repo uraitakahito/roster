@@ -85,6 +85,9 @@ export interface RoleDef {
 /** tpm start が起こす TPM 担当の model など。 */
 export const TPM_SETTINGS: RoleSettings = { model: 'claude-opus-5-5', effort: 'medium', permissionMode: 'bypassPermissions' };
 
+/** Auditor の席の課題の Key（席は project に 1 つだけ）。 */
+export const AUDIT_KEY = 'audit';
+
 /** 担当の種類（TPM 担当は別。TPM_TITLE・TPM_SETTINGS）。 */
 export const ROLES = {
   'software-engineer': {
@@ -110,6 +113,15 @@ export const ROLES = {
     /** 居場所の題（`Sustaining <Key>`）。 */
     title: key => `Sustaining ${key}`,
     endsWithoutDismiss: true,
+  },
+  'auditor': {
+    label: 'Auditor',
+    /** 起きたら名乗って待つ。監査は Product Manager がその席で `/audit` を呼んで始める。 */
+    prompt: '/audit hello',
+    defaults: { model: 'claude-fable-5-2', effort: 'high', permissionMode: 'bypassPermissions' },
+    /** 居場所の題（`Audit`）。Auditor の席は 1 つだけなので、Key を付けない。 */
+    title: () => 'Audit',
+    endsWithoutDismiss: false,
   },
 } as const satisfies Record<string, RoleDef>;
 

@@ -46,8 +46,8 @@ describe('readRolesConfig', () => {
   });
 
   test('担当ごとの model などは、書いた欄だけを返す', () => {
-    const file = config('{ "software-engineer": { "model": "claude-fable-5-2", "effort": "high" }, "devops-engineer": {} }');
-    expect(readRolesConfig(file).roles).toEqual({ 'software-engineer': { model: 'claude-fable-5-2', effort: 'high' }, 'devops-engineer': {} });
+    const file = config('{ "software-engineer": { "model": "claude-fable-5-2", "effort": "high" }, "devops-engineer": {}, "auditor": { "effort": "medium" } }');
+    expect(readRolesConfig(file).roles).toEqual({ 'software-engineer': { model: 'claude-fable-5-2', effort: 'high' }, 'devops-engineer': {}, 'auditor': { effort: 'medium' } });
   });
 
   test.each([

@@ -1,11 +1,15 @@
-// guard: 担当が打つ shell の命令を、実行の前に見て、通すか止めるかを決める（Claude Code の PreToolUse hook から呼ばれる）。
-// 止めるのは 3 つ。(1) project の設定（infra。直下の folder の設定の宣言も合わせる）に書いた環境に触る命令で、手続きを踏んでいない物。
+// guard: 担当が使う道具を、実行の前に見て、通すか止めるかを決める（Claude Code の PreToolUse hook から呼ばれる）。
+// 止めるのは 4 つ。(1) project の設定（infra。直下の folder の設定の宣言も合わせる）に書いた環境に触る命令で、手続きを踏んでいない物。
 // (2) 連携と課題管理の道具の直打ち（tpm を通さないと、記録と状態が抜ける）。
 // (3) 担当が置き場のページと file を消す命令: 消す要求を直に送る curl と、置き場の CLI（pagetray）の消す命令
 //     （消してよいのは TPM 担当だけ。tpm page delete・tpm file delete も担当からは止まる）。
+// (4) Auditor が repo・設定・記録を変えること: project の folder・状態の folder・ページの控えの下への書き込み（Edit・Write・NotebookEdit）と、
+//     git・gh の変える命令（Auditor は見て勧めるだけで、直さない）。
 // (1) は命令の字全体に match の字が含まれるかで見る（共有の環境は、疑わしければ止める）。
-// (2)・(3) は命令を単純な命令に分け、その頭（実際に打つ道具の命令）だけを見る。commit の文・grep の型・here-document に道具の名が入っても止めない。
-// どちらも字で見るので、防げるのは「うっかり」まで。script に包んだ命令などはすり抜ける。確実な守りは、担当に渡す権限の方で行う。
+// (2)〜(4) の shell の命令は、単純な命令に分け、その頭（実際に打つ道具の命令）だけを見る。commit の文・grep の型・here-document に道具の名が入っても止めない。
+// どれも字で見るので、防げるのは「うっかり」まで。script に包んだ命令や、shell の redirect での書き込みはすり抜ける。確実な守りは、担当に渡す権限の方で行う。
+import { existsSync, realpathSync } from 'node:fs';
+import { basename, dirname, join, resolve, sep } from 'node:path';
 import { envLabel, type InfraEnv, type RolesConfig } from './config.ts';
 import type { RoleName } from './protocol.ts';
 import { shellQuote, splitCommands } from './shell.ts';
@@ -13,6 +17,12 @@ import type { State } from './state.ts';
 
 /** 環境を変えてよい担当。 */
 const INFRA_ROLE: RoleName = 'devops-engineer';
+
+/** 見て勧めるだけで、repo・設定・記録を変えない担当。 */
+const READ_ONLY_ROLE: RoleName = 'auditor';
+
+/** file を書き替える道具（hook が、shell の命令のほかに見る物）。 */
+export const WRITE_TOOLS = ['Edit', 'Write', 'NotebookEdit'] as const;
 
 /** 承認 1 件（`approvals/<環境>.jsonc`）。until を過ぎたら効かない。 */
 export interface Approval {
@@ -51,7 +61,48 @@ const PAGETRAY_REMOVE = [
 const removesPages = (head: string): boolean =>
   (REMOVE_PAGES.test(head) && REMOVE_ENDPOINTS.some(endpoint => head.includes(endpoint))) || PAGETRAY_REMOVE.some(pattern => pattern.test(head));
 
-/** 命令の頭にこれを書くと、道具の直打ちを通す（tpm 自身の開発と試しのため。環境の手続きには効かない）。 */
+/** git の、命令の前に置く旗のうち、値を取る物（`git -C <folder> pull` の pull を命令と読むため）。 */
+const GIT_VALUE_FLAGS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path']);
+/** git の、repo か checkout を変える命令。 */
+const GIT_CHANGES = new Set(['add', 'am', 'apply', 'checkout', 'cherry-pick', 'clean', 'commit', 'merge', 'mv', 'pull', 'push', 'rebase', 'reset', 'restore', 'revert', 'rm', 'stash', 'switch']);
+/** git の、引数が読むだけの形なら通す命令と、通す引数（どれにも当たらない引数があれば、変える命令とみなす）。 */
+const GIT_READ_ARGS: Record<string, RegExp> = {
+  branch: /^(?:-a|-r|-v|-vv|-l|--all|--remotes|--list|--verbose|--show-current|--no-color)$/,
+  tag: /^(?:-l|-n\d*|--list)$/,
+  worktree: /^list$|^--porcelain$/,
+};
+/** gh の、変える命令（`gh <語> <語>` の 2 語）。 */
+const GH_CHANGES = /^gh (?:pr (?:create|merge|close|edit|ready|reopen|review|comment)|issue (?:create|edit|delete|reopen|close|comment)|release (?:create|delete|edit|upload)|repo (?:create|delete|edit|rename|archive|sync)|workflow (?:run|enable|disable)|run (?:rerun|cancel|delete)|(?:secret|variable|label) (?:set|delete|create|edit))\b/;
+/** gh api の、書き込みになる旗（-X GET のほかの method と、欄を送る旗。欄を送ると POST になる）。 */
+const GH_API_WRITES = /^(?:-f|-F|--field|--raw-field|--input)$/;
+
+/** git の命令の語から、命令の名と、その後ろの引数を取り出す。命令が無ければ undefined。 */
+function gitCommand(words: string[]): { name: string, args: string[] } | undefined {
+  let i = 1;
+  while (i < words.length && (words[i] ?? '').startsWith('-')) i += GIT_VALUE_FLAGS.has(words[i] ?? '') ? 2 : 1;
+  const name = words[i];
+  return name === undefined ? undefined : { name, args: words.slice(i + 1) };
+}
+
+/** 単純な命令（語の並び）が、repo・checkout・GitHub の側を変える git・gh の命令か。 */
+function changesRepo(words: string[]): boolean {
+  if (words[0] === 'git') {
+    const git = gitCommand(words);
+    if (git === undefined) return false;
+    if (GIT_CHANGES.has(git.name)) return true;
+    const read = GIT_READ_ARGS[git.name];
+    return read !== undefined && git.args.some(a => !read.test(a));
+  }
+  if (words[0] !== 'gh') return false;
+  if (GH_CHANGES.test(words.join(' '))) return true;
+  if (words[1] !== 'api') return false;
+  const args = words.slice(2);
+  const method = args.findIndex(a => a === '-X' || a === '--method');
+  const named = args.find(a => /^(?:-X|--method=)./.test(a))?.replace(/^(?:-X|--method=)/, '') ?? (method === -1 ? undefined : args[method + 1]);
+  return (named !== undefined && named.toUpperCase() !== 'GET') || (named === undefined && args.some(a => GH_API_WRITES.test(a)));
+}
+
+/** 命令の頭にこれを書くと、道具の直打ちを通す（tpm 自身の開発と試しのため。環境の手続きと、Auditor の守りには効かない）。 */
 export const RAW = 'TPM_RAW=1';
 
 /** guard に聞く 1 件。打った命令と、決めるのに要る設定・承認・時刻。 */
@@ -93,8 +144,15 @@ export function judge(asked: Asked): Verdict {
     const verdict = judgeEnv(name, env, asked.role, asked.approvals[name], asked.now);
     if (!verdict.allow) return verdict;
   }
+  const commands = splitCommands(asked.command);
+  if (asked.role === READ_ONLY_ROLE) {
+    const change = commands.find(changesRepo);
+    if (change !== undefined) {
+      return { allow: false, reason: `Auditor は repo を変えません（${change.slice(0, 3).join(' ')}）。直すことは、監査のページの勧告に書いてください（直すのは、Product Manager が通した後に振られた担当）。` };
+    }
+  }
   if (!asked.command.includes(RAW)) {
-    const heads = splitCommands(asked.command).map(words => words.join(' '));
+    const heads = commands.map(words => words.join(' '));
     if (asked.role !== undefined && heads.some(removesPages)) {
       return { allow: false, reason: `ページと file を消せるのは TPM 担当だけです。消すページや file の URL と訳を、tpm ask tpm で TPM 担当に送って頼んでください。tpm 自身の開発や試しで直に打つなら、命令の頭に ${RAW} を付けてください。` };
     }
@@ -133,7 +191,56 @@ export function commandOf(stdin: string): string | undefined {
   return input.tool_input.command;
 }
 
-/** 担当の claude に渡す settings（--settings）。Bash の前に tpm guard を呼ぶ hook。hook の命令は shell が読むので、path を引用する。 */
-export function guardSettings(tpmBin: string): string {
-  return JSON.stringify({ hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: `${shellQuote(tpmBin)} guard` }] }] } });
+/** file を書き替える道具の呼び出し 1 件。path は書く先（入力から読めなければ undefined）。 */
+export interface WriteCall {
+  tool: string
+  path: string | undefined
+}
+
+/** hook の標準入力（PreToolUse）から、file を書き替える道具の呼び出しを取り出す。WRITE_TOOLS でなければ undefined。 */
+export function writeOf(stdin: string): WriteCall | undefined {
+  const input = JSON.parse(stdin) as { tool_name?: string, tool_input?: { file_path?: unknown, notebook_path?: unknown } };
+  if (!(WRITE_TOOLS as readonly string[]).includes(input.tool_name ?? '')) return undefined;
+  const path = input.tool_input?.file_path ?? input.tool_input?.notebook_path;
+  return { tool: input.tool_name ?? '', path: typeof path === 'string' && path !== '' ? path : undefined };
+}
+
+/** path を、symbolic link をたどった絶対 path にする。まだ無い file は、在るいちばん近い親までをたどる。 */
+function realPath(path: string): string {
+  const rest: string[] = [];
+  let dir = resolve(path);
+  while (!existsSync(dir) && dirname(dir) !== dir) {
+    rest.unshift(basename(dir));
+    dir = dirname(dir);
+  }
+  return join(realpathSync(dir), ...rest);
+}
+
+/** Auditor が書き替えない folder（名は、止めた訳に出す字）。 */
+export interface Protected {
+  name: string
+  dir: string
+}
+
+/**
+ * file を書き替える道具を通すか。Auditor は、守る folder（project・状態・ページの控え）の下を書き替えない。
+ * 書く先を読めない呼び出しも止める（疑わしければ止める）。ほかの担当と TPM 担当は通す。
+ */
+export function judgeWrite(call: WriteCall, role: RoleName | undefined, roots: Protected[]): Verdict {
+  if (role !== READ_ONLY_ROLE) return { allow: true };
+  const how = '監査のページの file は一時の folder（$TMPDIR など）に書いて tpm page put で置き、見つけた食い違いは監査のページに挙げてください。';
+  if (call.path === undefined) return { allow: false, reason: `Auditor の ${call.tool} の書く先を読めないので止めます。${how}` };
+  const path = realPath(call.path);
+  const hit = roots.find(r => path === realPath(r.dir) || path.startsWith(`${realPath(r.dir)}${sep}`));
+  if (hit === undefined) return { allow: true };
+  return { allow: false, reason: `Auditor は、${hit.name} の下を書き替えません（repo・設定・記録は変えない）: ${path}。${how}` };
+}
+
+/**
+ * 担当の claude に渡す settings（--settings）。道具の前に tpm guard を呼ぶ hook。hook の命令は shell が読むので、path を引用する。
+ * 見る道具は Bash。Auditor の席だけ、file を書き替える道具（WRITE_TOOLS）も見る（ほかの担当では、書くたびに hook を動かさない）。
+ */
+export function guardSettings(tpmBin: string, role?: RoleName): string {
+  const matcher = role === READ_ONLY_ROLE ? ['Bash', ...WRITE_TOOLS].join('|') : 'Bash';
+  return JSON.stringify({ hooks: { PreToolUse: [{ matcher, hooks: [{ type: 'command', command: `${shellQuote(tpmBin)} guard` }] }] } });
 }

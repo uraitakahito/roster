@@ -36,10 +36,12 @@ export interface BannerConfig {
   withBanner: WithBanner[]
 }
 
-/** 既定: TPM 担当が Product Manager を待つ回と、どこでも許可/質問だけ出す。消す時は音も消す。 */
+/** 既定: TPM 担当と Auditor が Product Manager を待つ回と、どこでも許可/質問だけ出す。消す時は音も消す。 */
 export const DEFAULT_BANNER: BannerConfig = {
   banner: {
     'tpm': { turn: 'pm-wait', idle: 'hide', ask: 'show' },
+    // Auditor は Product Manager へじかに報告するので、報告して待つ回だけ出す。
+    'auditor': { turn: 'pm-wait', idle: 'hide', ask: 'show' },
     '*': { turn: 'hide', idle: 'hide', ask: 'show' },
   },
   withBanner: ['sound'],

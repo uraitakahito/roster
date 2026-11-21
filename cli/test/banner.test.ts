@@ -52,6 +52,12 @@ describe('toBannerConfig', () => {
     expect(c.banner.tpm).toEqual(DEFAULT_BANNER.banner.tpm);
   });
 
+  test('Auditor の既定は TPM 担当と同じ（Product Manager を待つ回だけ出す）。* を書いても替わらない', () => {
+    expect(DEFAULT_BANNER.banner.auditor).toEqual({ turn: 'pm-wait', idle: 'hide', ask: 'show' });
+    expect(toBannerConfig({ banner: { '*': { turn: 'show' } } }).banner.auditor).toEqual({ turn: 'pm-wait', idle: 'hide', ask: 'show' });
+    expect(toBannerConfig({ banner: { auditor: { turn: 'show' } } }).banner.auditor).toEqual({ turn: 'show', idle: 'hide', ask: 'show' });
+  });
+
   test('知らない欄・役割・きっかけ・値は止める', () => {
     expect(() => toBannerConfig({ banners: {} })).toThrow(/知らない欄: banners/);
     expect(() => toBannerConfig({ banner: { pm: { turn: 'show' } } })).toThrow(/知らない役割: pm/);
