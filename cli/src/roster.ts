@@ -14,6 +14,8 @@ export interface RoleRecord extends RoleSettings {
   addDirs: string[]
   /** いちばん新しい依頼書の URL。 */
   brief?: string
+  /** 起こしたときに渡した依頼書の URL（担当は tpm hello で受ける）。前の版で起こした担当には、この欄が無い（その担当の最初の依頼書は、済んでいない物に数えない）。 */
+  firstBrief?: string
   /** 課題管理の課題の Key（あれば）。 */
   issue?: string
   /** いちばん新しい課題の写しのページの URL（tpm assign が置く）。 */
