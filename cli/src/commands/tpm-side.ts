@@ -6,6 +6,7 @@ import { assertSummary } from '../brief.ts';
 import { shellQuote } from '../shell.ts';
 import { describeTrackers, OWN_LABEL, readRolesConfig, rolesConfigFile, sourceLabel, type ConfigSource } from '../config.ts';
 import type { Context } from '../context.ts';
+import { syncDeliveries } from '../evidence.ts';
 import { modelStatus, ROLES, TPM_TITLE, WAIT, type RoleName } from '../protocol.ts';
 import { resolveSettings } from '../settings.ts';
 import { allRoles, assertKey, LOCAL_KEY, readRole, removeRole, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
@@ -30,6 +31,8 @@ export function tpmHello(ctx: Context, options: { model?: string, effort?: strin
   ctx.transport.setStatus('model', modelStatus(settings.model, settings.effort));
   ctx.transport.setStatus('wait', WAIT.work('起動'));
   ctx.state.write('tpm.jsonc', { address } satisfies TpmRecord);
+  // 連携の道具が古いメッセージを捨てる前に、届いた時刻を写す。
+  syncDeliveries(ctx);
   return [`TPM 担当の宛先: ${address}`, ...configLines(ctx), ...bannerHint(ctx), ...roles(ctx)];
 }
 
@@ -255,6 +258,8 @@ export function close(ctx: Context, key: string): string[] {
   const record = readRole(ctx, key);
   if (record === undefined) throw new TpmError(`名簿に担当がいません: ${key}`);
   const alive = record.address !== undefined && ctx.transport.seats().some(s => s.address === record.address);
+  // 閉じる前に、この担当とのメッセージの届いた時刻を写す。
+  syncDeliveries(ctx);
   if (alive && record.address !== undefined) ctx.transport.close(record.address);
   removeRole(ctx, key);
   return [`閉じた: ${record.title}${alive ? `（${record.address}）` : '（居場所はもう無かった）'}`];

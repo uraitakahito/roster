@@ -1,7 +1,7 @@
 // cmux の adapter。連携の口を cmux の命令に写す。cmux の言葉（workspace・surface・サイドバー）はこのファイルの外に出さない。
 import type { Exec, ExecResult } from '../exec.ts';
 import { TpmError } from '../skill-sets.ts';
-import type { Delivery, Incoming, Seat, SpawnOptions, StatusKey, Transport } from './types.ts';
+import type { Delivery, Incoming, MessageTrace, Seat, SpawnOptions, StatusKey, Transport } from './types.ts';
 
 /** 状態の鍵ごとの見た目（protocol の「サイドバー」）。 */
 const STATUS_STYLE: Record<StatusKey, string[]> = {
@@ -15,6 +15,22 @@ const DELIVERY_INTERVAL_MS = 500;
 
 /** 起動の命令の上限（バイト）。超えると cmux は黙って実行しない。 */
 const COMMAND_LIMIT = 1024;
+
+/** cmux が覚えているメッセージの数の上限（これより古い物は捨てられる）。 */
+const HISTORY_LIMIT = 1000;
+
+/** cmux の受信箱の 1 件のうち、時刻に使う欄（時刻は UNIX の秒）。 */
+interface CmuxMessage {
+  id: string
+  created_at?: number | null
+  delivered_at?: number | null
+  read_at?: number | null
+  in_reply_to?: string | null
+}
+
+/** UNIX の秒を ISO の字にする。無ければ欄ごと落とす。 */
+const iso = <K extends string>(key: K, seconds: number | null | undefined): Partial<Record<K, string>> =>
+  typeof seconds === 'number' ? { [key]: new Date(seconds * 1000).toISOString() } as Record<K, string> : {};
 
 /** ms ミリ秒だけ止まる。試験では待たない物に替える。 */
 export type Sleep = (ms: number) => void;
@@ -62,6 +78,26 @@ export class CmuxTransport implements Transport {
     // --mark-read は付けない（付けると既読になり、hook が届けなくなる）。
     const inbox = this.json(['agent', 'inbox', '--surface', this.whoami(), '--state', 'queued']) as { messages?: { id: string, sender_name: string, body: string }[] };
     return (inbox.messages ?? []).map(m => ({ id: m.id, from: m.sender_name, text: m.body }));
+  }
+
+  history(): MessageTrace[] {
+    // --surface を付けないと、閉じた居場所の分も含めて返る。記録のための読みなので、読めなくても命令は止めない。
+    const r = this.exec('cmux', ['--json', 'agent', 'inbox', '--limit', String(HISTORY_LIMIT)]);
+    if (r.status !== 0) return [];
+    let messages: CmuxMessage[];
+    try {
+      messages = (JSON.parse(r.stdout) as { messages?: CmuxMessage[] }).messages ?? [];
+    }
+    catch {
+      return [];
+    }
+    return messages.map(m => ({
+      id: m.id,
+      ...iso('sentAt', m.created_at),
+      ...iso('deliveredAt', m.delivered_at),
+      ...iso('readAt', m.read_at),
+      ...(typeof m.in_reply_to === 'string' ? { replyTo: m.in_reply_to } : {}),
+    }));
   }
 
   spawn(options: SpawnOptions): string {
