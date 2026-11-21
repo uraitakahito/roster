@@ -55,6 +55,7 @@ disable-model-invocation: true
   - **課題管理の課題がある**: `tpm issue view <Key>` で読む（その道具を宣言した設定が無い project でも読める。protocol.md の「課題を読む」）。
   - **URL だけ渡された**（Jira や GitHub の Issue の URL）: URL から Key（`AI-14`・`gh-12`）を読み取り、`tpm issue view <Key>` で読む。Key はそのまま課題の Key にする。読めなければ推して振らず、Product Manager に認証か中身の貼り付けを頼む。
   - **課題が無い**（Product Manager の言葉だけ）: その言葉を原文のまま依頼書の「材料」に貼り、概要とわからない所を書く。足りなければ振る前に聞く。
+  - **案をいくつか出させる**（提案まで。続きの依頼書でも）: 目的（Product Manager が何のために決めたいか）と案の軸（何を変えて案を分けるか）を依頼書に書く。目的が読めなければ振る前に聞く。軸は、聞くか、担当に選ばせると書く（`${CLAUDE_SKILL_DIR}/brief-template.md` の「書き方」）。
 - 概要は依頼書の「課題の概要」の節に書く（`${CLAUDE_SKILL_DIR}/brief-template.md`）。新しい担当を起こすとき（交代を含む）、`tpm assign` は節が無いか見出しを除いて 40 字に足りなければ、担当を起こさずに止まる。同じ担当に続きを送る依頼書には要らない（担当はもう背景を知っている。`tpm assign` も見ない）。
 
 ### 起こす担当の既定
