@@ -25,8 +25,8 @@ description: この repo を別の folder へ移す手順、Node の version の
 
 | 物 | 値 |
 |---|---|
-| container | `tpm-pagestore`（`127.0.0.1:8801` → 中の 8080。メモリは Apple Container の下限の 200 MiB、CPU は 1） |
-| URL | `http://127.0.0.1:8801/`（一覧の UI。ページは `/<状態の folder の名>/<鍵>/<種類>-<番号>.html`） |
+| container | `tpm-pagestore`（`127.0.0.1:8801` と `127.0.0.1:8800` → 中の 8080。メモリは Apple Container の下限の 200 MiB、CPU は 1） |
+| URL | `http://127.0.0.1:8801/`（一覧の UI。ページは `/<状態の folder の名>/<鍵>/<種類>-<番号>.html`）。`http://127.0.0.1:8800/` は前の置き場（Nginx）の port で、前に置いたページの URL と、ページの中の link を同じ path で開けるように、同じ container が待ち受ける |
 | 控えの folder | `~/.local/share/tpm/pages/`（`tpm` が、置いた・読んだページをこの Mac に写す所。container には mount しない） |
 | DB | 名前つきの volume `tpm-pagestore-data`（中の `/data/pages.db`）。Mac の folder は mount しない |
 | image | この Mac で `pagestore/Containerfile` から作る `tpm-pagestore:<commit の短い名>`。registry には上げない |
@@ -48,20 +48,22 @@ container build --progress plain -t tpm-pagestore:$(git rev-parse --short HEAD) 
 container volume create tpm-pagestore-data     # 初めての時だけ
 tpm infra run tpm-pagestore -- container run -d --name tpm-pagestore \
   -p 127.0.0.1:8801:8080 \
+  -p 127.0.0.1:8800:8080 \
   -v tpm-pagestore-data:/data \
   -m 200M -c 1 \
   tpm-pagestore:<commit の短い名>
 ```
 
 - `-p` には必ず `127.0.0.1:` を書く。`-p 8801:8080` と書くと LAN に開く。
+- 2 行目の `-p`（8800）は、前の置き場の URL のため。前の置き場（下の tpm-pages）が動いている間は 8800 がふさがっていて起きないので、先にそちらを止めて消す。
 - 8801 が使われていたら別の port にし、この節の URL と 1 行を合わせて直す。担当が使う URL も、環境変数 `TPM_PAGES_URL`（[設定](/configuration/)）で合わせる。
 - 起きる時に、まだ当てていない移行の SQL（`pagestore/migrations/`）を DB に当てる。
 
 ### 確かめる
 
 1. `container list` で `tpm-pagestore` が `running`。
-2. `lsof -nP -iTCP:8801 -sTCP:LISTEN` が `127.0.0.1:8801` だけを出す。
-3. `curl -s http://127.0.0.1:8801/healthz` が `ok` を返し、`curl -s 'http://127.0.0.1:8801/api/pages?limit=1'` が JSON を返す。browser で `http://127.0.0.1:8801/` が一覧を出す。
+2. `lsof -nP -iTCP:8801 -iTCP:8800 -sTCP:LISTEN` が `127.0.0.1:8801` と `127.0.0.1:8800` だけを出す（`*:` で始まる行があれば LAN に開いている）。
+3. `curl -s http://127.0.0.1:8801/healthz` が `ok` を返し、`curl -s 'http://127.0.0.1:8801/api/pages?limit=1'` が JSON を返す。browser で `http://127.0.0.1:8801/` が一覧を出す。`curl -s http://127.0.0.1:8800/healthz` も `ok` を返す。
 4. `container logs tpm-pagestore` の頭に `pagestore <版> listen=0.0.0.0:8080 db=/data/pages.db` が出ている。
 5. `container stats --no-stream tpm-pagestore` のメモリが数 MiB〜20 MiB ほど（初めて起こした直後と、たくさん置いた直後は、OS が file を覚えている分で 50 MiB を超えることがある。起こし直すと戻る）。
 
