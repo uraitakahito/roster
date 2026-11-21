@@ -7,7 +7,7 @@
     "mermaid は 11 系: astro-mermaid が peer で ^10 || ^11 を要求する。",
     "外す条件: astro-mermaid が、mermaid 12 を peer で受ける版を出したとき。"
   ],
-  "name": "skills-docs-site",
+  "name": "roster-docs-site",
   "type": "module",
   "private": true,
   "packageManager": "pnpm@11.26.0",

@@ -3,11 +3,11 @@
 // Starlight のサイドバーやナビは slug 経由で base を付けるが、MD/MDX 本文に書かれた
 // [text](/page/) は素通しになるため、ここで補正する。既に base 付きのリンクは二重に付けない。
 //
-// フロントマター（hero.actions.link 等）はこの pipeline を通らない。そちらは /skills/page/ と直接書く。
+// フロントマター（hero.actions.link 等）はこの pipeline を通らない。そちらは /roster/page/ と直接書く。
 import { defineHastPlugin } from "satteri";
 
 // astro.config.ts の base と同じ
-const BASE = "/skills";
+const BASE = "/roster";
 
 export default defineHastPlugin({
   name: "rebase-links",

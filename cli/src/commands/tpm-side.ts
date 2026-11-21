@@ -83,7 +83,7 @@ export function configLines(ctx: Context): string[] {
   ];
 }
 
-/** 課題の記録の先（「jira（skills の設定）」）。project の folder 自身の設定なら道具の名だけ。 */
+/** 課題の記録の先（「jira（roster の設定）」）。project の folder 自身の設定なら道具の名だけ。 */
 export function recordingTo(ctx: Context, issue: string): string {
   const to = route(ctx.config.trackers, ctx.exec, issue);
   if (to === undefined) return 'none';

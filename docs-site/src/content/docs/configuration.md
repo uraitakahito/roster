@@ -60,7 +60,7 @@ TPM 担当を起こした folder（project）に置くと、道具の選び方�
 
 ```text
 ai/                               ← ここで tpm start（設定は任意）
-├── skills/.claude/roles/config.jsonc     { "tracker": "jira", "infra": { "pagetray": … } }
+├── roster/.claude/roles/config.jsonc     { "tracker": "jira", "infra": { "pagetray": … } }
 ├── web/.claude/roles/config.jsonc        { "tracker": "github", "skill-sets": ["dependabot"] }
 └── notes/                                （設定が無い folder は集めない）
 ```
@@ -81,15 +81,15 @@ ai/                               ← ここで tpm start（設定は任意）
 TPM 担当の宛先: workspace:1
 設定（この folder と直下の folder を合わせた物）:
 - この folder  /path/to/ai/.claude/roles/config.jsonc（無い）
-- skills  課題管理: jira・infra: pagetray
+- roster  課題管理: jira・infra: pagetray
 - web  課題管理: github・skill-sets: dependabot
-課題管理: Jira の Key（AI-12 の形）→ jira（skills）／gh- の Key → github（web）／t- の Key → 記録しない
+課題管理: Jira の Key（AI-12 の形）→ jira（roster）／gh- の Key → github（web）／t- の Key → 記録しない
 連携: cmux（既定）
-infra: pagetray（skills）（手続きは tpm infra list）
+infra: pagetray（roster）（手続きは tpm infra list）
 名簿: 担当はいない
 ```
 
-`tpm assign` は、担当を起こした folder（`folder:`）と、`--issue` を付けたときの記録の先（`課題の記録: jira（skills の設定）`）を出す。下の repo をいくつも触る課題の担当は、`--cwd` を付けずに project の folder で起こす（どの repo も、その worktree の置き場も下に入る）。
+`tpm assign` は、担当を起こした folder（`folder:`）と、`--issue` を付けたときの記録の先（`課題の記録: jira（roster の設定）`）を出す。下の repo をいくつも触る課題の担当は、`--cwd` を付けずに project の folder で起こす（どの repo も、その worktree の置き場も下に入る）。
 
 設定のどれか 1 つでも読めない（JSONC の誤り・欄の誤り）と、`tpm` の命令は誤りのある file を名指して止まる。guard も「命令を見られない」として、その project の担当の shell の命令をすべて止める（守りを素通りさせないため）。直下の repo の設定を書き替えたら、`tpm start -v <folder>` で読めることを確かめる（読んだ設定の file が `config` の行に並ぶ）。
 

@@ -1,6 +1,6 @@
 name: docs
 
-# docs-site/ を GitHub Pages（https://uraitakahito.github.io/skills/）に出す。
+# docs-site/ を GitHub Pages（https://uraitakahito.github.io/roster/）に出す。
 #
 # **main への push のたびに出す。** この repo にはタグが無く、main がそのまま使われる版なので、
 # 公開する docs も main の docs にする。github-pages の環境も、main からの deploy だけを許す。

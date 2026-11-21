@@ -8,7 +8,7 @@ description: Node と pnpm の入れ方・install と、TPM 担当を起こす 1
 Node の version は repo の一番上の `.node-version` で決める（GitHub Actions も同じファイルを読む）。nodenv で入れる。
 
 ```sh
-cd </foo/bar/skills> # skillsの置き場所
+cd </foo/bar/roster> # rosterの置き場所
 nodenv install       # .node-version の version を入れる（入っていれば何もしない）
 npm install -g corepack && corepack enable && nodenv rehash   # pnpm を出す（Node 25 から corepack は Node に入っていない）
 pnpm -v              # packageManager（package.json）の版が出る
@@ -21,14 +21,14 @@ pnpm は Node の version ごとに入る。`.node-version` を上げたら、�
 `cli/bin/tpm start` が出す 1 行を写して打つ。
 
 ```sh
-cd </foo/bar/skills> # skillsの置き場所
+cd </foo/bar/roster> # rosterの置き場所
 pnpm --dir cli install --frozen-lockfile   # build は無い（tpm は src/ を node で直に動かす）
 cd </your/workspace> # あなたが作業する場所
-/foo/bar/skills/cli/bin/tpm start --verbose             # 今いる folder で TPM 担当を起こす 1 行を出す
-/foo/bar/skills/cli/bin/tpm start --verbose <folder>    # その folder で起こす 1 行を出す
+/foo/bar/roster/cli/bin/tpm start --verbose             # 今いる folder で TPM 担当を起こす 1 行を出す
+/foo/bar/roster/cli/bin/tpm start --verbose <folder>    # その folder で起こす 1 行を出す
 ```
 
-`tpm start` は claude を起こさない。folder と、その直下の folder の `.claude/roles/config.jsonc`（[設定](/configuration/#直下の-folder-の設定)）を読み、`skill-sets` を確かめて、次の 1 行を出すだけ。それをそのまま打てばClaude Codeが適切に起動する。`PATH=…` は、TPM 担当が `tpm` を名前だけで打てるようにする。`--settings` は、shell の命令を実行の前に `tpm guard` に見せる hook（[担当のあいだの決まり](/protocol/#guard)）。`<repo>` は skills を置いた場所（上の例なら `/foo/bar/skills`）に替わる。違う場所に置いたときも、`<repo>` のところだけが変わる（場所に空白などがあれば `tpm start` が引用符も付けるので、出た 1 行をそのまま写す）。
+`tpm start` は claude を起こさない。folder と、その直下の folder の `.claude/roles/config.jsonc`（[設定](/configuration/#直下の-folder-の設定)）を読み、`skill-sets` を確かめて、次の 1 行を出すだけ。それをそのまま打てばClaude Codeが適切に起動する。`PATH=…` は、TPM 担当が `tpm` を名前だけで打てるようにする。`--settings` は、shell の命令を実行の前に `tpm guard` に見せる hook（[担当のあいだの決まり](/protocol/#guard)）。`<repo>` は roster を置いた場所（上の例なら `/foo/bar/roster`）に替わる。違う場所に置いたときも、`<repo>` のところだけが変わる（場所に空白などがあれば `tpm start` が引用符も付けるので、出た 1 行をそのまま写す）。
 
 ```sh
 # skill-sets が無い（既定）
@@ -49,7 +49,7 @@ export TPM_MODEL=claude-fable-5-2
 export TPM_EFFORT=medium
 
 # 1 回だけ替える: tpm start の前に付ける。出る 1 行を打った TPM 担当と、その TPM 担当が起こす担当に効く
-TPM_EFFORT=high /foo/bar/skills/cli/bin/tpm start
+TPM_EFFORT=high /foo/bar/roster/cli/bin/tpm start
 ```
 
 `tpm start` は、書いてある `TPM_MODEL`・`TPM_EFFORT`・`TPM_PERMISSION_MODE` を 1 行の頭（`PATH=…` の隣）にも写す。1 回だけ付けた値も TPM 担当の Claude Code の環境に入るので、TPM 担当の状態の `model` と、`tpm assign` で起こす担当に、profile に書いたときと同じに効く。
