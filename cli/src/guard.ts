@@ -25,8 +25,8 @@ export type Verdict = { allow: true } | { allow: false, reason: string };
 const DIRECT: [pattern: RegExp, instead: string][] = [
   [/^cmux agent message\b/, 'tpm ask …・tpm report …（担当）、tpm notify・tpm answer・tpm dismiss（TPM 担当）'],
   [/^cmux set-status\b/, 'tpm wait <work|pm|tpm> "<何を>"'],
-  [/^cmux (workspace create|new-workspace)\b/, 'tpm assign <鍵> --role …'],
-  [/^cmux (workspace close|close-workspace)\b/, 'tpm close <鍵>'],
+  [/^cmux (workspace create|new-workspace)\b/, 'tpm assign <Key> --role …'],
+  [/^cmux (workspace close|close-workspace)\b/, 'tpm close <Key>'],
   [/^acli jira workitem (comment create|transition)\b/, 'tpm report …・tpm ask pm・tpm answer（記録は命令が書く）'],
   [/^gh issue (comment|close)\b/, 'tpm report …・tpm ask pm・tpm answer（記録は命令が書く）'],
 ];

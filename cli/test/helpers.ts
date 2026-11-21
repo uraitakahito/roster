@@ -82,7 +82,7 @@ export interface World {
   calls: Call[]
   /** TPM 担当の周り。 */
   tpm: Context
-  /** 鍵 key の担当の周り（address は居場所の宛先）。 */
+  /** key の担当の周り（address は居場所の宛先）。 */
   role: (key: string, address: string) => Context
   /** file の連携（届いたメッセージ・起こす命令を読む）。 */
   wire: FileTransport

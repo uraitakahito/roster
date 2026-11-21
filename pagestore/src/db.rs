@@ -219,7 +219,7 @@ impl Db {
             r#"select role as "value!: String", count(*) as "count!: i64", '' as "note!: String"
                from pages group by role order by 2 desc, 1"#
         );
-        // workspace の ID だけでは何の居場所かわからないので、その ID で置かれた鍵を添える。
+        // workspace の ID だけでは何の居場所かわからないので、その ID で置かれた Key を添える。
         let workspaces = sqlx::query_as!(
             Count,
             r#"select workspace as "value!: String", count(*) as "count!: i64",

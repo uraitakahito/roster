@@ -9,7 +9,7 @@ TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・De
 - メッセージは、下の「見出し」の表の命令で送る。命令は「届いた」か「まだ届いていない」を返す。相手が手を動かしている間は届かず、空いたら届くので、送り直さない。
 - メッセージは、手が空いた時に画面に届く。段の区切り（PR を出す前・merge を頼む前）には `tpm inbox` で、まだ届いていない自分宛てのメッセージを見る。
 - 届いたメッセージには id が付いている。そのメッセージへの返事は `--reply-to <id>` を付けて送る。
-- 宛先は書かない。担当のメッセージは TPM 担当へ行き、TPM 担当は課題の鍵で担当を名指す。
+- 宛先は書かない。担当のメッセージは TPM 担当へ行き、TPM 担当は課題の Key で担当を名指す。
 - **Product Manager に直接聞かない。** Product Manager とのやりとりは、すべて TPM 担当を通す。
 - 命令の使い方は `tpm <命令> --help`。命令が誤りで止まったら、出た文に従って直す（道具の命令に替えて先へ進まない）。
 
@@ -36,10 +36,10 @@ Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【
 
 | 見出し | 中身 | 命令（TPM 担当が打つ） |
 |---|---|---|
-| 【brief】 | 新しい依頼書の URL。下の「ページ」のとおり読み、それに従う | `tpm assign <鍵> --role <役割> --brief <URL>` |
-| 【answer】 | Product Manager の答え。待ちの表示を作業中に戻して続ける | `tpm answer <鍵> "<答え>"` |
-| 【notify】 | 知っておくこと・受け取ったという返事。返事は要らない | `tpm notify <鍵> "<本文>"` |
-| 【dismiss】 | この課題に続きは無い（Product Manager が決めたか、TPM 担当が聞かなくてよいと決めた）。worktree を片付けて【end】を返す。担当の交代のためなら、そう書いてある | `tpm dismiss <鍵> [--handover]` |
+| 【brief】 | 新しい依頼書の URL。下の「ページ」のとおり読み、それに従う | `tpm assign <Key> --role <役割> --brief <URL>` |
+| 【answer】 | Product Manager の答え。待ちの表示を作業中に戻して続ける | `tpm answer <Key> "<答え>"` |
+| 【notify】 | 知っておくこと・受け取ったという返事。返事は要らない | `tpm notify <Key> "<本文>"` |
+| 【dismiss】 | この課題に続きは無い（Product Manager が決めたか、TPM 担当が聞かなくてよいと決めた）。worktree を片付けて【end】を返す。担当の交代のためなら、そう書いてある | `tpm dismiss <Key> [--handover]` |
 
 ## 状態
 
@@ -65,25 +65,25 @@ Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【
 | `tpm report end` | `結果`。続けて課題を済みにする（担当の交代の【dismiss】のときは済みにしない） |
 
 - 中身はページに書き、記録には写さない。
-- GitHub の Issue を使う project では、PR の題か本文に課題の鍵を書くとき `Refs #12` と書く。`Closes #12` と書くと merge で勝手に閉じ、【dismiss】で閉じる決まりとずれる。
+- GitHub の Issue を使う project では、PR の題か本文に課題の Key を書くとき `Refs #12` と書く。`Closes #12` と書くと merge で勝手に閉じ、【dismiss】で閉じる決まりとずれる。
 
 ## 課題を読む
 
-課題の鍵が Jira（`SKILLS-12`）か GitHub の Issue（`gh-12`）の形なら、課題の題・状態・本文・コメントを `tpm issue view <鍵>` で読む。
+課題の Key が Jira（`SKILLS-12`）か GitHub の Issue（`gh-12`）の形なら、課題の題・状態・本文・コメントを `tpm issue view <Key>` で読む。
 
-- 課題管理が `none` の project でも読める（`none` は `tpm` の命令が課題に記録を書かないというだけで、課題は鍵の形で道具を選んで読む）。
+- 課題管理が `none` の project でも読める（`none` は `tpm` の命令が課題に記録を書かないというだけで、課題は Key の形で道具を選んで読む）。
 - `tpm hello` が `課題の中身:` の行を返したら、依頼書と一緒に読む。依頼書に Jira や GitHub の URL しか無くても、まずこれで読む。
-- 読めなければ、出た誤りのとおりに鍵と道具の認証を確かめる。認証が無ければ `tpm ask tpm` で、Product Manager に login を頼むことを送る。
-- `t-` の鍵には課題管理の課題が無い。中身は依頼書にある。
-- 課題の写し: 鍵が読める形なら、`tpm assign` が振るたびに課題を読み、写しのページ（`issue-<番号>.html`）を置く。`tpm hello` と【brief】が `課題の写し: <URL>` を返したら、依頼書と一緒に読む（振ったときの中身。新しい中身は `tpm issue view`）。読めないまま振られたら `課題の写し: 無し（<訳>）` と出る。
+- 読めなければ、出た誤りのとおりに Key と道具の認証を確かめる。認証が無ければ `tpm ask tpm` で、Product Manager に login を頼むことを送る。
+- `t-` の Key には課題管理の課題が無い。中身は依頼書にある。
+- 課題の写し: Key が読める形なら、`tpm assign` が振るたびに課題を読み、写しのページ（`issue-<番号>.html`）を置く。`tpm hello` と【brief】が `課題の写し: <URL>` を返したら、依頼書と一緒に読む（振ったときの中身。新しい中身は `tpm issue view`）。読めないまま振られたら `課題の写し: 無し（<訳>）` と出る。
 
 ## ページ
 
 依頼書・確認・提案・計画・結果は、HTML の file に書いて、この Mac の置き場（`127.0.0.1` の pagestore。ページを DB に持つサーバーで、起こすのは DevOps Engineer 担当）に置く。置いた物を「ページ」と言う。Artifact tool（publish・read・open）は、依頼書と成果には使わない。
 
-- 置く: `tpm page put <file> --kind <brief|confirm|proposal|plan|result|issue>`。担当の鍵は今の課題の鍵。TPM 担当は `--key <鍵>` を付ける。出た `URL:` を、`tpm assign --brief`・`tpm ask pm --url`・`tpm report done --url` に書く。番号は置き場が決める。同じ種類を置き直すと次の番号になり、前の版は残る。置いた担当の役割と居場所の宛先も、置き場が覚える。
+- 置く: `tpm page put <file> --kind <brief|confirm|proposal|plan|result|issue>`。担当の Key は今の課題の Key。TPM 担当は `--key <Key>` を付ける。出た `URL:` を、`tpm assign --brief`・`tpm ask pm --url`・`tpm report done --url` に書く。番号は置き場が決める。同じ種類を置き直すと次の番号になり、前の版は残る。置いた担当の役割と居場所の宛先も、置き場が覚える。
 - 読む: `tpm page path <URL>` で file の path にして Read tool で読む（この Mac の控えの path。控えに無ければ置き場から取る。前の置き場の `8800` の URL も読める）。
-- 探す: `tpm page list`（今の project の新しい順）。`--key <鍵>`・`--role <役割>`・`--workspace <宛先>`・`--kind <種類>`・`--q <語>` で絞り、`--json` で記録を出す。Product Manager は、置き場の一覧の UI（`http://127.0.0.1:8801/`）で同じように絞って見る。
+- 探す: `tpm page list`（今の project の新しい順）。`--key <Key>`・`--role <役割>`・`--workspace <宛先>`・`--kind <種類>`・`--q <語>` で絞り、`--json` で記録を出す。Product Manager は、置き場の一覧の UI（`http://127.0.0.1:8801/`）で同じように絞って見る。
 - 開く: ページは自動では開かない（`tpm ask pm`・`tpm report done` も開かない）。Product Manager は、置き場の一覧の UI（`http://127.0.0.1:8801/`）を 1 つ開いておき、新着の印で気づいて読む。その場で開いて人に見せる時だけ `tpm show <URL>`。
 - 置き場が応えなければ、ページは置けない（`tpm page put` が止まる。番号を置き場が決めるため）。控えにあるページは読める。`tpm ask devops --what "置き場（tpm-pagestore）を起こす" --why "<何が置けないか>"` で頼む。自分では container を起こさない。
 - 図があった方がわかりやすい所は図を入れる。
@@ -99,7 +99,7 @@ Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【
 
 ## 文書の食い違い
 
-TPM 担当は自分で直さず、課題として Software Engineer 担当に回す（`/tpm` の 2）。ほかの担当は、調べている途中で文書やコメントの食い違いを見つけたら、お勧めの直し方で直し、PR を merge まで自分で進める（Product Manager の確認は要らない）。worktree で作業し、PR の題か本文に課題の鍵を入れる。merge したら【doc-fix】で知らせ、成果のページにも一覧で載せる。文書とコードが食い違うときは、コードの方に合わせる。
+TPM 担当は自分で直さず、課題として Software Engineer 担当に回す（`/tpm` の 2）。ほかの担当は、調べている途中で文書やコメントの食い違いを見つけたら、お勧めの直し方で直し、PR を merge まで自分で進める（Product Manager の確認は要らない）。worktree で作業し、PR の題か本文に課題の Key を入れる。merge したら【doc-fix】で知らせ、成果のページにも一覧で載せる。文書とコードが食い違うときは、コードの方に合わせる。
 
 ## 共有の環境
 

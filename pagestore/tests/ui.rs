@@ -9,7 +9,7 @@ use http_body_util::BodyExt;
 use serde_json::Value;
 use tower::ServiceExt;
 
-/// 役割・workspace・鍵・種類の違う 4 枚を、1 日ずつずらして置く。
+/// 役割・workspace・Key・種類の違う 4 枚を、1 日ずつずらして置く。
 async fn seeded() -> Server {
     let s = Server::start().await;
     let at = |day: u8| format!("created_at=2026-11-{day:02}T00:00:00Z");
@@ -76,7 +76,7 @@ async fn the_index_lists_every_page_newest_first_with_the_filter_choices() {
     // サイドメニューの見出しは「Key」（「鍵」とは書かない）。
     assert!(page.contains("<h2>Key</h2>"));
     assert!(!page.contains("<h2>鍵</h2>"));
-    // workspace の ID には、その ID で置かれた鍵を添える。ID の無い分は「不明」。
+    // workspace の ID には、その ID で置かれた Key を添える。ID の無い分は「不明」。
     assert!(page.contains(r#"<a href="/?workspace=w%3A3"><span>w:3<small>B-2</small></span><span class="n">1</span></a>"#));
     assert!(
         page.contains(

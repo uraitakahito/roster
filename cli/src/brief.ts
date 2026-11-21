@@ -31,8 +31,8 @@ export function assertSummary(ctx: Context, key: string, url: string): void {
   if (text === undefined) {
     throw new TpmError([
       `依頼書（${url}）に課題の概要の節がありません。`,
-      `振る前に課題を読み（Jira・GitHub の Issue の鍵なら tpm issue view <鍵>）、依頼書に <section id="summary"> を書いてください（ひな形は tpm/brief-template.md の「課題の概要の節」）。`,
-      '課題が無い仕事（t- の鍵）では、Product Manager の言葉から概要を書きます。',
+      `振る前に課題を読み（Jira・GitHub の Issue の Key なら tpm issue view <Key>）、依頼書に <section id="summary"> を書いてください（ひな形は tpm/brief-template.md の「課題の概要の節」）。`,
+      '課題が無い仕事（t- の Key）では、Product Manager の言葉から概要を書きます。',
     ].join('\n'));
   }
   const length = [...text].length;

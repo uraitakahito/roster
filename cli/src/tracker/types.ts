@@ -52,7 +52,7 @@ export interface TrackerIssue {
 
 /** 課題管理の口。道具ごとの adapter（`jira.ts`・`github.ts`・`none.ts`）がこの形を持つ。 */
 export interface Tracker {
-  /** この道具の課題の鍵か。 */
+  /** この道具の課題の Key か。 */
   owns(key: string): boolean
   /** 課題の題・状態・本文・コメントを読む。 */
   view(key: string): TrackerIssue

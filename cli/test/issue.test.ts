@@ -25,7 +25,7 @@ const JIRA = JSON.stringify({
 });
 
 describe('tpm issue view', () => {
-  test('課題管理が none の project でも、Jira の鍵なら acli で読む', () => {
+  test('課題管理が none の project でも、Jira の Key なら acli で読む', () => {
     const { exec, calls } = fake({ stdout: JIRA });
     const ctx = { ...world().tpm, exec };
     expect(issueView(ctx, 'SKILLS-14')).toEqual([
@@ -39,7 +39,7 @@ describe('tpm issue view', () => {
     expect(calls[0]?.cmd).toBe('acli');
   });
 
-  test('GitHub の Issue の鍵なら gh で読み、URL とコメントの書き手を出す', () => {
+  test('GitHub の Issue の Key なら gh で読み、URL とコメントの書き手を出す', () => {
     const { exec, calls } = fake({
       stdout: JSON.stringify({ title: 'T', state: 'OPEN', url: 'https://github.com/o/r/issues/12', body: '', comments: [{ id: 'IC_1', body: 'c', author: { login: 'pm' }, createdAt: '2026-11-20T01:00:00Z' }] }),
     });
@@ -56,9 +56,9 @@ describe('tpm issue view', () => {
     expect(calls[0]?.cmd).toBe('gh');
   });
 
-  test('t- の鍵は道具を打たずに止まる', () => {
+  test('t- の Key は道具を打たずに止まる', () => {
     const { exec, calls } = fake({});
-    expect(() => issueView({ ...world().tpm, exec }, 't-x7k2')).toThrow(/課題管理の課題の鍵ではありません/);
+    expect(() => issueView({ ...world().tpm, exec }, 't-x7k2')).toThrow(/課題管理の課題の Key ではありません/);
     expect(calls).toHaveLength(0);
   });
 

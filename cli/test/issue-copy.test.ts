@@ -50,7 +50,7 @@ describe('課題の写しのページ', () => {
 });
 
 describe('tpm assign が課題の写しを作る', () => {
-  test('課題管理が none でも、Jira の鍵なら写しを置き、名簿・担当の hello・tpm roles に URL を出す', () => {
+  test('課題管理が none でも、Jira の Key なら写しを置き、名簿・担当の hello・tpm roles に URL を出す', () => {
     const w = world();
     const tpm = withAcli(w.tpm, { status: 0, stdout: JIRA, stderr: '' });
     hello(tpm, TPM);
@@ -74,7 +74,7 @@ describe('tpm assign が課題の写しを作る', () => {
     expect(w.wire.inbox('file:1').map(m => m.text)).toEqual([`【brief】https://claude.ai/artifact/b2 課題の写し: ${page} 計画まで`]);
   });
 
-  test('t- の鍵と Dependabot の PR の鍵では写しを作らず、道具も打たない', () => {
+  test('t- の Key と Dependabot の PR の Key では写しを作らず、道具も打たない', () => {
     const w = world();
     hello(w.tpm, TPM);
     assign(w.tpm, 't-x7k2', SE);

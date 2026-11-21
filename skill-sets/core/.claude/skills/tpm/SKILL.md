@@ -18,7 +18,7 @@ disable-model-invocation: true
    ```
    - **これが最初の手。** 居場所の題と状態（`model`・`wait`）を出し、自分の宛先を覚えさせ、project の道具（課題管理・連携）と名簿を返す。担当はメッセージを送るたびにこの宛先を読むので、起こし直しても担当に知らせ直さなくてよい。
    - `tpm start` の 1 行と違う model で起こされていたら（Product Manager が 1 行の `--model` を書き替えた、など）、`tpm hello --model <model の id>` で打ち直す。
-2. 名簿を読む。動いている担当がいれば、課題の鍵と担当の対応を覚える（鍵は下の 2）。「消えた」と出た担当は、居場所がもう無い。Product Manager に伝え、続けるなら `tpm assign` で起こし直し、終えるなら `tpm close <鍵>` で名簿から消す。
+2. 名簿を読む。動いている担当がいれば、課題の Key と担当の対応を覚える（Key は下の 2）。「消えた」と出た担当は、居場所がもう無い。Product Manager に伝え、続けるなら `tpm assign` で起こし直し、終えるなら `tpm close <Key>` で名簿から消す。
 3. `tpm wait pm 指示` を打ち、Product Manager の指示を待つ。
 
 名簿は `tpm roles` でいつでも見られる（動いているか・`wait` の字・依頼書）。
@@ -26,8 +26,8 @@ disable-model-invocation: true
 ## 2. 担当を分ける
 
 - **Product Manager に頼まれた仕事は、課題管理の課題があるか、大きいか小さいかによらず、すべて課題として扱う。** 課題ごとの調査・提案・計画立案・実装・テストは、課題ごとの Software Engineer 担当にさせる。課題ごとに分けるのは、トークンを節約し、その課題に精通させるため。**あなたは repo や資料を調べて案を出すことも、実装もしない。** ただし課題そのものは読み、概要をつかんでから振る（下の「振る前に課題をつかむ」）。
-- **課題には鍵を付ける。** Jira の課題があればその番号（`SKILLS-12`）、GitHub の Issue があれば `gh-` と番号（`gh-12`）、無ければ `tpm key` が作る `t-` と 4 文字のランダムな英数字（`t-x7k2`）。鍵は手で考えない（`tpm assign` は、名簿に無い `t-` の鍵がこの形でなければ止める）。鍵は名簿・居場所の題・依頼書の頭書き・branch の名・PR の題に使う。`t-` の鍵からは中身が読めないので、中身は `--title` の短い題で言う。Jira・GitHub の Issue の課題の中身は、課題管理が none の project でも `tpm issue view <鍵>` で読める（protocol.md の「課題を読む」）。
-- 課題を振るときは、いつも `tpm assign <鍵> …` を打つ（下の 3）。**同じ鍵の担当が動いていれば、その担当に【brief】で新しい依頼書が行く**（提案の後の計画、計画の後の実装、Product Manager が選んだ案の実装も同じ。提案した担当がその背景を知っているため）。いなければ、新しい担当が立ち上がって名乗る。
+- **課題には Key を付ける。** Jira の課題があればその番号（`SKILLS-12`）、GitHub の Issue があれば `gh-` と番号（`gh-12`）、無ければ `tpm key` が作る `t-` と 4 文字のランダムな英数字（`t-x7k2`）。Key は手で考えない（`tpm assign` は、名簿に無い `t-` の Key がこの形でなければ止める）。Key は名簿・居場所の題・依頼書の頭書き・branch の名・PR の題に使う。`t-` の Key からは中身が読めないので、中身は `--title` の短い題で言う。Jira・GitHub の Issue の課題の中身は、課題管理が none の project でも `tpm issue view <Key>` で読める（protocol.md の「課題を読む」）。
+- 課題を振るときは、いつも `tpm assign <Key> …` を打つ（下の 3）。**同じ Key の担当が動いていれば、その担当に【brief】で新しい依頼書が行く**（提案の後の計画、計画の後の実装、Product Manager が選んだ案の実装も同じ。提案した担当がその背景を知っているため）。いなければ、新しい担当が立ち上がって名乗る。
 - **共有の環境のビルド・デプロイ・整備は DevOps Engineer 担当にさせる**（どの環境が共有かは `tpm infra list`。protocol.md の「共有の環境」）。要るときにいなければ起こす。Software Engineer 担当から【ask-devops】が来たら、DevOps Engineer 担当に依頼書を書いて回す。DevOps Engineer 担当が迷ったら、あなたに【ask-tpm】が来る。
 - Dependabot の PR は、Product Manager が言ったとき（「Dependabot の PR を見て」や `/dependabot-triage`）だけ、`/dependabot-triage` を呼んで振り分ける（Sustaining Engineer 担当を起こすのもその skill）。起動のときには見ない。
   - 使える skill に `/dependabot-triage` が無ければ、Dependabot の skill セットを読み込んでいない。呼ばずに、「起こした folder の `.claude/roles/config.jsonc` の `skill-sets` に `"dependabot"` を書き、`tpm start` の 1 行で起こし直す」と Product Manager に伝える。
@@ -45,8 +45,8 @@ disable-model-invocation: true
   | わからない所・食い違う所を挙げ、要れば Product Manager に聞いてから振る | 原因を突き止める・試す・案を考えて比べる |
 
 - 場合ごとに:
-  - **課題管理の課題がある**: `tpm issue view <鍵>` で読む（課題管理が none の project でも読める。protocol.md の「課題を読む」）。
-  - **URL だけ渡された**（Jira や GitHub の Issue の URL）: URL から鍵（`SKILLS-14`・`gh-12`）を読み取り、`tpm issue view <鍵>` で読む。鍵はそのまま課題の鍵にする。読めなければ推して振らず、Product Manager に認証か中身の貼り付けを頼む。
+  - **課題管理の課題がある**: `tpm issue view <Key>` で読む（課題管理が none の project でも読める。protocol.md の「課題を読む」）。
+  - **URL だけ渡された**（Jira や GitHub の Issue の URL）: URL から Key（`SKILLS-14`・`gh-12`）を読み取り、`tpm issue view <Key>` で読む。Key はそのまま課題の Key にする。読めなければ推して振らず、Product Manager に認証か中身の貼り付けを頼む。
   - **課題が無い**（Product Manager の言葉だけ）: その言葉を原文のまま依頼書の「材料」に貼り、概要とわからない所を書く。足りなければ振る前に聞く。
 - 概要は依頼書の「課題の概要」の節に書く（`${CLAUDE_SKILL_DIR}/brief-template.md`）。新しい担当を起こすとき（交代を含む）、`tpm assign` は節が無いか見出しを除いて 40 字に足りなければ、担当を起こさずに止まる。同じ担当に続きを送る依頼書には要らない（担当はもう背景を知っている。`tpm assign` も見ない）。
 
@@ -60,21 +60,21 @@ disable-model-invocation: true
 | DevOps Engineer | `devops-engineer` | `claude-opus-5-5` | `low` | `bypassPermissions` |
 
 - 欄ごとに、旗 > 起こした folder の `.claude/roles/config.jsonc` の `software-engineer`・`devops-engineer`（欄は `model`・`effort`・`permissionMode`）> 環境変数 `TPM_MODEL`・`TPM_EFFORT`・`TPM_PERMISSION_MODE` > コードの既定 の順に、`tpm assign` が決める。環境変数は `tpm start` の 1 行（あなた）にも効く。
-- **Product Manager が課題ごとに別の model や effort を指示したら、それに従う**（`tpm assign` に `--model`・`--effort` を付ける）。その課題の担当が既にいれば、替えると背景を知らない新しい担当になることを Product Manager に伝え、それでも替えるかを確かめる。替えるなら、前の担当に `tpm dismiss <鍵> --handover`（担当の交代の【dismiss】。担当は課題を閉じない）を送り、【end】（成果の URL が載る）を受けて `tpm close <鍵>` で閉じてから、その URL を頭書きに書いた依頼書で新しい担当を起こす。
+- **Product Manager が課題ごとに別の model や effort を指示したら、それに従う**（`tpm assign` に `--model`・`--effort` を付ける）。その課題の担当が既にいれば、替えると背景を知らない新しい担当になることを Product Manager に伝え、それでも替えるかを確かめる。替えるなら、前の担当に `tpm dismiss <Key> --handover`（担当の交代の【dismiss】。担当は課題を閉じない）を送り、【end】（成果の URL が載る）を受けて `tpm close <Key>` で閉じてから、その URL を頭書きに書いた依頼書で新しい担当を起こす。
 
 ## 3. 起こす
 
-1. 新しい課題で課題管理の課題が無ければ、`tpm key` で鍵を作る。依頼書を HTML の file に書き、`tpm page put <file> --kind brief --key <鍵>` で置く（protocol.md の「ページ」）。出た URL を下の `--brief` に書く。ひな形は `${CLAUDE_SKILL_DIR}/brief-template.md`。新しい担当を起こす依頼書には「課題の概要」の節を書く（2 の「振る前に課題をつかむ」）。決まり文句（連絡の仕方・状態・終わり方）は書かない（担当の skill と protocol.md にある）。
+1. 新しい課題で課題管理の課題が無ければ、`tpm key` で Key を作る。依頼書を HTML の file に書き、`tpm page put <file> --kind brief --key <Key>` で置く（protocol.md の「ページ」）。出た URL を下の `--brief` に書く。ひな形は `${CLAUDE_SKILL_DIR}/brief-template.md`。新しい担当を起こす依頼書には「課題の概要」の節を書く（2 の「振る前に課題をつかむ」）。決まり文句（連絡の仕方・状態・終わり方）は書かない（担当の skill と protocol.md にある）。
 2. 振る:
    ```sh
-   tpm assign <鍵> --role software-engineer --title "<短い題>" --brief <依頼書の URL> [--issue <課題管理の課題>] [--cwd <課題の folder>]
+   tpm assign <Key> --role software-engineer --title "<短い題>" --brief <依頼書の URL> [--issue <課題管理の課題>] [--cwd <課題の folder>]
    tpm assign devops --role devops-engineer [--brief <依頼書の URL>]
    ```
-   - `--title` は居場所の題に付く（`SWE t-x7k2: 計画と実装の担当` の形。サイドバーで切れないよう、全角 15 字ほどまでにする）。DevOps Engineer 担当の鍵は `devops`（題は `DevOps`）。
+   - `--title` は居場所の題に付く（`SWE t-x7k2: 計画と実装の担当` の形。サイドバーで切れないよう、全角 15 字ほどまでにする）。DevOps Engineer 担当の Key は `devops`（題は `DevOps`）。
    - `--issue` は課題管理の課題があるときだけ。付けると、担当のメッセージのたびに課題へ記録が書かれる（protocol.md の「記録」）。
    - `--cwd` は担当を起こす folder（付けなければ、あなたを起こした folder）。信頼済みの folder にする。
    - 担当が動いているときに添える一言は `--note "<一言>"`。
-   - 鍵（`--issue` があればそれ）が Jira・GitHub の Issue の形なら、`tpm assign` は振るたびに課題を読み、写しのページを置いて URL を担当に渡す（続きの【brief】でも作り直す）。読めなければ、担当を起こさずに止まる。認証を直すか、Product Manager に中身を貼ってもらって依頼書に写したうえで、`--no-issue-copy "<訳>"` を付けて振り直す（訳は担当に届く）。
+   - Key（`--issue` があればそれ）が Jira・GitHub の Issue の形なら、`tpm assign` は振るたびに課題を読み、写しのページを置いて URL を担当に渡す（続きの【brief】でも作り直す）。読めなければ、担当を起こさずに止まる。認証を直すか、Product Manager に中身を貼ってもらって依頼書に写したうえで、`--no-issue-copy "<訳>"` を付けて振り直す（訳は担当に届く）。
 3. `tpm assign` は、新しい担当が名乗るまで 90 秒待ち、結果を返す:
    - 「名乗った」: そのまま続ける。
    - 「信頼のダイアログで止まっていたので閉じた」: 出た folder で 1 度 Claude Code を対話で起こして信頼するよう Product Manager に頼む。
@@ -87,12 +87,12 @@ disable-model-invocation: true
 
 | 見出し | すること |
 |---|---|
-| 【ask-tpm】 | 課題の概要をもとに答える（`tpm notify <鍵> "<答え>" --reply-to <id>`）。Product Manager の判断が要るなら、Product Manager に聞いてから答える |
-| 【ask-pm】 | Product Manager に、確認のページの URL と項目を伝える（ページは置き場の一覧の UI の新着に出ている。その場で開いて見せる時だけ `tpm show <URL>`）。答えを `tpm answer <鍵> "<答え>"` で返す（課題があれば「決定」の記録も書かれる） |
+| 【ask-tpm】 | 課題の概要をもとに答える（`tpm notify <Key> "<答え>" --reply-to <id>`）。Product Manager の判断が要るなら、Product Manager に聞いてから答える |
+| 【ask-pm】 | Product Manager に、確認のページの URL と項目を伝える（ページは置き場の一覧の UI の新着に出ている。その場で開いて見せる時だけ `tpm show <URL>`）。答えを `tpm answer <Key> "<答え>"` で返す（課題があれば「決定」の記録も書かれる） |
 | 【ask-devops】 | DevOps Engineer 担当に依頼書を書いて回す（`tpm assign devops …`） |
-| 【doc-fix】【merged】 | 受け取ったと返す（`tpm notify <鍵> "受け取った" --reply-to <id>`） |
-| 【done】 | 成果のページを読み（`tpm page path <URL>`）、下の「【dismiss】を送るか」で決める。聞かなくてよければ `tpm dismiss <鍵>`。聞くなら Product Manager に URL を伝え（その場で開いて見せる時だけ `tpm show <URL>`）、「続きをこの担当に頼むか、この課題を終えるか」を聞き、続けるなら新しい依頼書（3 の 1 のとおり書く）を `tpm assign <鍵> … --brief <URL>` で同じ担当に、終えるなら `tpm dismiss <鍵>` |
-| 【end】 | （【dismiss】の返事として来る）報告を Product Manager に伝え（聞かずに片付けたなら、そう添える）、`tpm close <鍵>` で閉じる |
+| 【doc-fix】【merged】 | 受け取ったと返す（`tpm notify <Key> "受け取った" --reply-to <id>`） |
+| 【done】 | 成果のページを読み（`tpm page path <URL>`）、下の「【dismiss】を送るか」で決める。聞かなくてよければ `tpm dismiss <Key>`。聞くなら Product Manager に URL を伝え（その場で開いて見せる時だけ `tpm show <URL>`）、「続きをこの担当に頼むか、この課題を終えるか」を聞き、続けるなら新しい依頼書（3 の 1 のとおり書く）を `tpm assign <Key> … --brief <URL>` で同じ担当に、終えるなら `tpm dismiss <Key>` |
+| 【end】 | （【dismiss】の返事として来る）報告を Product Manager に伝え（聞かずに片付けたなら、そう添える）、`tpm close <Key>` で閉じる |
 
 - 送った命令が「まだ届いていない」と返したら、相手が手を動かしている。空いたら届くので、送り直さない。
 - Product Manager の答えを待つ間は `tpm wait pm "<何を>"`、答えが来たら `tpm wait work "<段>"` などに更新する。
@@ -107,7 +107,7 @@ disable-model-invocation: true
 3. 依頼書の段が最後でない（提案まで・計画までの依頼書）。
 4. Product Manager が、この課題では終える前に見せるよう言った。
 
-どれにも当たらなければ、聞かずに `tpm dismiss <鍵>` を送る。担当は課題を済みにして【end】を返す。その報告に「聞かずに片付けた」と添えて Product Manager に伝える。Product Manager が続けたいと言えば、成果のページの URL を頭書きに書いた依頼書で新しい担当を起こす。
+どれにも当たらなければ、聞かずに `tpm dismiss <Key>` を送る。担当は課題を済みにして【end】を返す。その報告に「聞かずに片付けた」と添えて Product Manager に伝える。Product Manager が続けたいと言えば、成果のページの URL を頭書きに書いた依頼書で新しい担当を起こす。
 
 - ほかに【dismiss】を送るのは、Product Manager が「この課題は終わり」と言ったときと、model を替えて担当を替えるとき（2 の「起こす担当の既定」）。
 - Software Engineer 担当と DevOps Engineer 担当は、【dismiss】が来るまで自分から【end】を送らない。`tpm roles` で `回答待ち(TPM): 次の依頼` のまま残っている担当がいたら、最後の【done】を上の 1〜4 に当てて決める。

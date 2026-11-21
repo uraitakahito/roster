@@ -79,7 +79,7 @@ describe('ADF', () => {
 });
 
 describe('JiraTracker', () => {
-  test('Jira の鍵だけを自分の物とする', () => {
+  test('Jira の Key だけを自分の物とする', () => {
     const jira = new JiraTracker(fake().exec);
     expect(['SKILLS-12', 'AB2-1'].map(k => jira.owns(k))).toEqual([true, true]);
     expect(['t-same-se', 'gh-12', 'skills-12', '12'].map(k => jira.owns(k))).toEqual([false, false, false, false]);
@@ -134,7 +134,7 @@ describe('GithubTracker', () => {
     expect(noteToMarkdown(note)).toBe(`【計画】Software Engineer: 案 B の計画（PR 2 本）\n\n計画: ${URL}\n\n<要点>`);
   });
 
-  test('gh-12・#12・12 を自分の鍵とする', () => {
+  test('gh-12・#12・12 を自分の Key とする', () => {
     const github = new GithubTracker(fake().exec, '/w');
     expect(['gh-12', 'GH-12', '#12', '12'].map(k => github.owns(k))).toEqual([true, true, true, true]);
     expect(['SKILLS-12', 't-x7k2', 'gh-'].map(k => github.owns(k))).toEqual([false, false, false]);
@@ -168,7 +168,7 @@ describe('GithubTracker', () => {
     expect(calls[0]?.args).toEqual(['issue', 'close', '12', '--reason', 'completed']);
   });
 
-  test('鍵の形が違えば gh を打たずに TpmError', () => {
+  test('Key の形が違えば gh を打たずに TpmError', () => {
     const { exec, calls } = fake();
     expect(() => new GithubTracker(exec, '/w').close('SKILLS-12')).toThrow(/gh-12 の形/);
     expect(calls).toHaveLength(0);
@@ -176,7 +176,7 @@ describe('GithubTracker', () => {
 });
 
 describe('NoneTracker', () => {
-  test('どの鍵も持たず、何も書かない', () => {
+  test('どの Key も持たず、何も書かない', () => {
     const none = new NoneTracker();
     expect(none.owns()).toBe(false);
     none.comment();

@@ -57,19 +57,19 @@ export function buildProgram(): Command {
     });
 
   program.command('roles').description('名簿を、動いている居場所と突き合わせて出す').action(() => print(roles(createContext())));
-  program.command('key').description('課題管理の課題が無い課題の鍵（t- と 4 文字）を、使われていない物から作って出す')
+  program.command('key').description('課題管理の課題が無い課題の Key（t- と 4 文字）を、使われていない物から作って出す')
     .action(() => console.log(newKey(createContext())));
   program.command('assign <key>').description('課題を担当に振る（動いていれば【brief】を送る。いなければ起こし、名乗るまで待つ）')
     .requiredOption('--role <role>', ROLE_NAMES.join('・'))
     .option('--title <短い題>', '居場所の題に付ける短い題')
     .option('--brief <URL>', '依頼書の URL')
-    .option('--issue <課題>', '課題管理の課題の鍵')
+    .option('--issue <課題>', '課題管理の課題の Key')
     .option('--cwd <folder>', '担当を起こす folder（既定は project）')
     .option('--model <model>', '担当の model（既定は config.jsonc の担当の欄・$TPM_MODEL・担当の既定の順）')
     .option('--effort <effort>', '担当の effort（既定は config.jsonc の担当の欄・$TPM_EFFORT・担当の既定の順）')
     .option('--permission-mode <mode>', '担当の permission mode（既定は config.jsonc の担当の欄・$TPM_PERMISSION_MODE・担当の既定の順）')
     .option('--note <一言>', '【brief】に添える一言（担当が動いているとき）')
-    .option('--no-issue-copy <訳>', '課題（Jira・GitHub の Issue の鍵）の写しのページを作らずに振る。訳は担当に届く')
+    .option('--no-issue-copy <訳>', '課題（Jira・GitHub の Issue の Key）の写しのページを作らずに振る。訳は担当に届く')
     .option('--wait <秒>', '起こした担当の tpm hello を待つ秒（0 なら待たない）', '90')
     .action((key: string, { issueCopy, ...options }: Omit<AssignOptions, 'wait' | 'role' | 'noIssueCopy'> & { wait: string, role: string, issueCopy: true | string }) => {
       if (!(ROLE_NAMES as string[]).includes(options.role)) throw new TpmError(`--role は ${ROLE_NAMES.join('・')} のどれかにしてください`);
@@ -100,18 +100,18 @@ export function buildProgram(): Command {
     });
 
   const issue = program.command('issue').description('課題管理の課題（Jira・GitHub の Issue）を読む');
-  issue.command('view <key>').description('課題の題・状態・本文・コメントを出す（課題管理が none の project でも、鍵の形で道具を選んで読む）')
+  issue.command('view <key>').description('課題の題・状態・本文・コメントを出す（課題管理が none の project でも、Key の形で道具を選んで読む）')
     .action((key: string) => print(issueView(createContext(), key)));
 
   const page = program.command('page').description('依頼書と成果のページを、置き場（127.0.0.1 の pagestore）に置く・読む・探す');
   page.command('put <file>').description('ページを置き場に置き、控えを写して URL を出す（置き場が応えなければ置けない）')
     .requiredOption('--kind <種類>', PAGE_KINDS.join('・'))
-    .option('--key <鍵>', '課題の鍵（担当は $TPM_KEY。TPM 担当は要る）')
+    .option('--key <Key>', '課題の Key（担当は $TPM_KEY。TPM 担当は要る）')
     .action((file: string, options: { kind: string, key?: string }) => print(pagePut(createContext(), file, options)));
   page.command('path <url>').description('置き場の URL を控えの file の path にする（Read tool で読むため。控えに無ければ置き場から取る）')
     .action((url: string) => print(pagePath(createContext(), url)));
   page.command('list').description('置き場のページを絞って探す（今の project の新しい順）')
-    .option('--key <鍵>', '課題の鍵')
+    .option('--key <Key>', '課題の Key')
     .option('--role <役割>', '置いた担当の役割（tpm・software-engineer など。前の置き場から入れた物は unknown）')
     .option('--workspace <宛先>', '置いた担当の居場所の宛先（workspace:12 など）')
     .option('--kind <種類>', PAGE_KINDS.join('・'))

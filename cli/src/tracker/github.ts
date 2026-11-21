@@ -3,7 +3,7 @@ import type { Exec } from '../exec.ts';
 import { TpmError } from '../skill-sets.ts';
 import { noteHead, type Note, type Tracker, type TrackerComment, type TrackerIssue } from './types.ts';
 
-/** 鍵は gh-12（workspace の題や branch に使う形）。#12 と 12 も受ける。 */
+/** Key は gh-12（workspace の題や branch に使う形）。#12 と 12 も受ける。 */
 const KEY = /^(?:gh-|#)?(\d+)$/i;
 
 /** 記録を Markdown にする。段落は空行で分ける。 */
@@ -72,7 +72,7 @@ export class GithubTracker implements Tracker {
 
   private number(key: string): string {
     const n = KEY.exec(key)?.[1];
-    if (n === undefined) throw new TpmError(`GitHub の Issue の鍵ではありません（gh-12 の形）: ${key}`);
+    if (n === undefined) throw new TpmError(`GitHub の Issue の Key ではありません（gh-12 の形）: ${key}`);
     return n;
   }
 

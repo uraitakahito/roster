@@ -107,7 +107,7 @@ describe('tpm page put', () => {
     expect(readFileSync(join(folder, aside[0] ?? ''), 'utf8')).toBe('置き場を通さずに置かれた物');
   });
 
-  test('種類が表に無い・file が無い・鍵に使えない字があれば、置き場に頼む前に誤り', () => {
+  test('種類が表に無い・file が無い・Key に使えない字があれば、置き場に頼む前に誤り', () => {
     const s = setup();
     expect(() => pagePut(s.role, s.html, { kind: 'memo' })).toThrow('--kind');
     expect(() => pagePut(s.role, join(s.dir, 'nope.html'), { kind: 'plan' })).toThrow('file がありません');
@@ -175,7 +175,7 @@ describe('tpm page path', () => {
 });
 
 describe('tpm page list', () => {
-  /** 役割・鍵・種類の違う 3 枚を置く。 */
+  /** 役割・Key・種類の違う 3 枚を置く。 */
   function seeded() {
     const s = setup();
     pagePut(s.tpm, s.html, { kind: 'brief', key: 't-x7k2' });
