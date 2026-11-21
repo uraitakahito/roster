@@ -50,7 +50,7 @@ export interface TrackerIssue {
   comments: TrackerComment[]
 }
 
-/** 課題管理の口。道具ごとの adapter（`jira.ts`・`github.ts`・`none.ts`）がこの形を持つ。 */
+/** 課題管理の口。道具ごとの adapter（`jira.ts`・`github.ts`）と、Key の形でそれを選ぶ `routed.ts` がこの形を持つ。 */
 export interface Tracker {
   /** この道具の課題の Key か。 */
   owns(key: string): boolean

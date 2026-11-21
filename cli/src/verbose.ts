@@ -9,7 +9,8 @@ export interface Resolved {
   given: string | undefined
   dir: string
   root: string
-  configFile: string
+  /** 読む設定の file（起こす folder の物が先頭、次に直下の folder の物）。 */
+  configFiles: string[]
   skillSets: string[]
 }
 
@@ -34,7 +35,7 @@ export function explain(r: Resolved): string[] {
   return [
     line('folder', `${r.dir}（${r.given === undefined ? '今いる folder' : `渡された値: ${r.given}`}）`),
     line('repo', r.root),
-    line('config', `${r.configFile}（${existsSync(r.configFile) ? 'あり' : 'なし'}）`),
+    ...r.configFiles.map(f => line('config', `${f}（${existsSync(f) ? 'あり' : 'なし'}）`)),
     line('skill-sets', r.skillSets.length ? `${r.skillSets.join(' ')}（config の skill-sets から。core と重なりは除いた）` : 'なし（core だけ）'),
     ...skillSets.map((s) => {
       const dir = skillSetDir(r.root, s);

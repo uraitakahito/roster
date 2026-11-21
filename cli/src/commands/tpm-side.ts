@@ -1,9 +1,10 @@
 // TPM 担当が打つ命令: 名乗る（tpmHello。tpm hello から呼ばれる）・名簿を見る（roles）・Key を作る（newKey）・課題を担当に振る（assign）・閉じる（close）。
 import { randomInt } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { assertSummary } from '../brief.ts';
 import { shellQuote } from '../shell.ts';
+import { describeTrackers, readRolesConfig, rolesConfigFile, TRACKERS } from '../config.ts';
 import type { Context } from '../context.ts';
 import { modelStatus, ROLES, TPM_TITLE, WAIT, type RoleName } from '../protocol.ts';
 import { resolveSettings } from '../settings.ts';
@@ -28,7 +29,12 @@ export function tpmHello(ctx: Context, options: { model?: string, effort?: strin
   ctx.transport.setStatus('model', modelStatus(settings.model, settings.effort));
   ctx.transport.setStatus('wait', WAIT.work('起動'));
   ctx.state.write('tpm.jsonc', { address } satisfies TpmRecord);
-  return [`TPM 担当の宛先: ${address}`, `課題管理: ${ctx.config.tracker}・連携: ${ctx.config.transport}`, ...bannerHint(ctx), ...roles(ctx)];
+  return [`TPM 担当の宛先: ${address}`, `課題管理: ${declaredTrackers(ctx)}・連携: ${ctx.config.transport}`, ...bannerHint(ctx), ...roles(ctx)];
+}
+
+/** 合わせた設定が宣言している課題管理の道具（「jira」「jira・github」）。どれも宣言していなければ none。 */
+function declaredTrackers(ctx: Context): string {
+  return TRACKERS.filter(t => t !== 'none' && ctx.config.trackers[t].length > 0).join('・') || 'none';
 }
 
 /** cmux の連携で、cmux.json に Mac のバナーの hook が無ければ 1 行出す（TPM 担当が Product Manager に伝える）。 */
@@ -111,19 +117,20 @@ export function assign(ctx: Context, key: string, options: AssignOptions): strin
     return brief(ctx, existing, options.brief, options.note);
   }
   if (options.issue !== undefined && !ctx.tracker.owns(options.issue)) {
-    throw new TpmError(`${options.issue} は、この project の課題管理（${ctx.config.tracker}）の Key ではありません`);
+    throw new TpmError(`${options.issue} に記録を書く課題管理が、どの設定にもありません（読んだ設定: ${describeTrackers(ctx.config.sources)}）。記録するなら、その課題を扱う repo の .claude/roles/config.jsonc に "tracker"（jira・github）を書いてください`);
   }
   // 新しい担当（交代を含む）は背景を知らないので、依頼書に課題の概要の節を求める。続きの【brief】には求めない。
   if (options.brief !== undefined) assertSummary(ctx, key, options.brief);
   // 居場所を作る前に読む（読めなければ、担当を起こさずに止まる）。
   const copy = issueCopy(ctx, options.issue ?? key, key, options.noIssueCopy);
   const def = ROLES[options.role];
-  const settings = resolveSettings(options.role, { flags: options, config: ctx.config.roles[options.role], env: ctx.env });
+  const cwd = options.cwd ?? ctx.project;
+  const settings = resolveSettings(options.role, { flags: options, config: roleDefaults(ctx, options.role, cwd), env: ctx.env });
   const record: RoleRecord = {
     key,
     role: options.role,
     title: def.title(key, options.title ?? '課題'),
-    cwd: options.cwd ?? ctx.project,
+    cwd,
     addDirs: ['core', ...ctx.skillSets].map(s => skillSetDir(ctx.root, s)),
     ...settings,
     ...(options.brief === undefined ? {} : { brief: options.brief }),
@@ -142,6 +149,16 @@ export function assign(ctx: Context, key: string, options: AssignOptions): strin
   }
   if (readRole(ctx, key)?.helloAt !== undefined) return [head, '名乗った（tpm hello が来た）'];
   throw new TpmError(notStarted(ctx, record, options.wait));
+}
+
+/**
+ * 設定に書いた担当の既定。欄ごとに、担当を起こす folder（--cwd）の設定が先、次に project の folder の設定。
+ * 直下の folder の設定どうしは合わせない（担当は 1 人で値は 1 つなので、起こす folder で決める）。
+ */
+function roleDefaults(ctx: Context, role: RoleName, cwd: string): Partial<Record<'model' | 'effort' | 'permissionMode', string>> {
+  const dir = resolve(cwd);
+  const here = dir === ctx.project ? {} : readRolesConfig(rolesConfigFile(dir)).roles[role];
+  return { ...ctx.config.roles[role], ...here };
 }
 
 /**

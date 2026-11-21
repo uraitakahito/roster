@@ -1,11 +1,11 @@
 // guard: 担当が打つ shell の命令を、実行の前に見て、通すか止めるかを決める（Claude Code の PreToolUse hook から呼ばれる）。
-// 止めるのは 3 つ。(1) project の設定（infra）に書いた環境に触る命令で、手続きを踏んでいない物。
+// 止めるのは 3 つ。(1) project の設定（infra。直下の folder の設定の宣言も合わせる）に書いた環境に触る命令で、手続きを踏んでいない物。
 // (2) 連携と課題管理の道具の直打ち（tpm を通さないと、記録と状態が抜ける）。
 // (3) 担当が置き場のページを消す要求を直に送る curl（消してよいのは TPM 担当だけ。tpm page delete も担当からは止まる）。
 // (1) は命令の字全体に match の字が含まれるかで見る（共有の環境は、疑わしければ止める）。
 // (2)・(3) は命令を単純な命令に分け、その頭（実際に打つ道具の命令）だけを見る。commit の文・grep の型・here-document に道具の名が入っても止めない。
 // どちらも字で見るので、防げるのは「うっかり」まで。script に包んだ命令などはすり抜ける。確実な守りは、担当に渡す権限の方で行う。
-import type { InfraEnv, RolesConfig } from './config.ts';
+import { envLabel, type InfraEnv, type RolesConfig } from './config.ts';
 import type { RoleName } from './protocol.ts';
 import { shellQuote, splitCommands } from './shell.ts';
 import type { State } from './state.ts';
@@ -43,7 +43,7 @@ export interface Asked {
   command: string
   /** 打った担当。TPM 担当と、tpm が起こしていない session は undefined。 */
   role: RoleName | undefined
-  config: Pick<RolesConfig, 'infra' | 'tracker'>
+  config: Pick<RolesConfig, 'infra' | 'trackers'>
   /** 環境の名前 → 承認。 */
   approvals: Record<string, Approval | undefined>
   now: Date
@@ -58,14 +58,14 @@ export function touched(command: string, infra: Record<string, InfraEnv>): strin
 export function judgeEnv(name: string, env: InfraEnv, role: RoleName | undefined, approval: Approval | undefined, now: Date): Verdict {
   if (env.guard === 'free') return { allow: true };
   if (role !== INFRA_ROLE) {
-    return { allow: false, reason: `環境 ${name} を変えてよいのは DevOps Engineer 担当だけです。tpm ask devops --what … --why … で TPM 担当に頼んでください。` };
+    return { allow: false, reason: `環境 ${envLabel(name, env)} を変えてよいのは DevOps Engineer 担当だけです。tpm ask devops --what … --why … で TPM 担当に頼んでください。` };
   }
   if (env.guard === 'tpm') return { allow: true };
   if (approval !== undefined && now.getTime() < Date.parse(approval.until)) return { allow: true };
   const expired = approval === undefined ? '' : `（承認は ${approval.until} で切れた）`;
   return {
     allow: false,
-    reason: `環境 ${name} は、ほかの人と共有です。変えるには Product Manager の承認が要ります${expired}。何を・なぜ・何が止まるかを確認のページに書き（tpm page put）、tpm ask pm で送ってください。承認されたら TPM 担当が tpm infra approve ${name} で承認を書きます。`,
+    reason: `環境 ${envLabel(name, env)} は、ほかの人と共有です。変えるには Product Manager の承認が要ります${expired}。何を・なぜ・何が止まるかを確認のページに書き（tpm page put）、tpm ask pm で送ってください。承認されたら TPM 担当が tpm infra approve ${name} で承認を書きます。`,
   };
 }
 
@@ -83,8 +83,8 @@ export function judge(asked: Asked): Verdict {
       return { allow: false, reason: `ページを消せるのは TPM 担当だけです。消すページの URL と訳を、tpm ask tpm で TPM 担当に送って頼んでください。tpm 自身の開発や試しで直に打つなら、命令の頭に ${RAW} を付けてください。` };
     }
     for (const [pattern, instead] of DIRECT) {
-      // 課題管理に GitHub の Issue を使わない project では、gh issue は課題管理の道具ではない。
-      if (pattern.source.startsWith('^gh issue') && asked.config.tracker !== 'github') continue;
+      // どの設定も課題管理に GitHub の Issue を使わない project では、gh issue は課題管理の道具ではない。
+      if (pattern.source.startsWith('^gh issue') && asked.config.trackers.github.length === 0) continue;
       if (heads.some(h => pattern.test(h))) {
         return { allow: false, reason: `道具を直に打つと、記録と状態が抜けます。代わりに: ${instead}。tpm 自身の開発や試しで直に打つなら、命令の頭に ${RAW} を付けてください。` };
       }

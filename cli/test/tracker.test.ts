@@ -1,11 +1,12 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
+import type { ConfigSource, Tracker as TrackerName } from '../src/config.ts';
 import type { Exec, ExecOptions, ExecResult } from '../src/exec.ts';
 import { TpmError } from '../src/skill-sets.ts';
 import { adfToText, noteToAdf } from '../src/tracker/adf.ts';
 import { GithubTracker, noteToMarkdown } from '../src/tracker/github.ts';
 import { JiraTracker } from '../src/tracker/jira.ts';
-import { NoneTracker } from '../src/tracker/none.ts';
+import { route, RoutedTracker } from '../src/tracker/routed.ts';
 import type { Note } from '../src/tracker/types.ts';
 
 const URL = 'https://claude.ai/artifact/abc';
@@ -175,12 +176,44 @@ describe('GithubTracker', () => {
   });
 });
 
-describe('NoneTracker', () => {
-  test('どの Key も持たず、何も書かない', () => {
-    const none = new NoneTracker();
-    expect(none.owns()).toBe(false);
-    none.comment();
-    none.close();
-    expect(() => none.view('SKILLS-1')).toThrow(TpmError);
+/** tracker を宣言した設定（/w/<name> の folder）。 */
+const source = (name: string, tracker: TrackerName): ConfigSource =>
+  ({ name, dir: `/w/${name}`, file: `/w/${name}/.claude/roles/config.jsonc`, exists: true, written: ['tracker'], config: { tracker, transport: 'cmux', infra: {}, roles: {} } });
+
+describe('route・RoutedTracker', () => {
+  const jira = source('skills', 'jira');
+  const web = source('web', 'github');
+
+  test('Key の形で道具を選ぶ。gh は、github を宣言した設定の folder で打つ', () => {
+    const { exec, calls } = fake();
+    const trackers = { jira: [jira], github: [web] };
+    expect(route(trackers, exec, 'SKILLS-12')).toEqual({ tool: 'jira', source: jira });
+    expect(route(trackers, exec, 'gh-12')).toEqual({ tool: 'github', source: web });
+    expect(route(trackers, exec, 't-x7k2')).toBeUndefined();
+    const tracker = new RoutedTracker(trackers, exec);
+    tracker.comment('gh-12', note);
+    tracker.close('SKILLS-12');
+    expect(calls.map(c => [c.cmd, c.options?.cwd])).toEqual([['gh', '/w/web'], ['acli', undefined]]);
+  });
+
+  test('宣言した設定が無い道具の Key は持たず、何も打たない', () => {
+    const { exec, calls } = fake();
+    const onlyJira = new RoutedTracker({ jira: [jira], github: [] }, exec);
+    expect(onlyJira.owns('SKILLS-12')).toBe(true);
+    expect(onlyJira.owns('gh-12')).toBe(false);
+    const none = new RoutedTracker({ jira: [], github: [] }, exec);
+    expect(none.owns('SKILLS-12')).toBe(false);
+    expect(() => none.view('SKILLS-12')).toThrow(TpmError);
+    expect(() => none.comment('gh-12', note)).toThrow(/課題管理の課題ではありません: gh-12/);
+    expect(calls).toHaveLength(0);
+  });
+
+  test('github を宣言した設定が 2 つ以上なら、gh- の Key は止まる（Jira の Key は通る）', () => {
+    const { exec, calls } = fake();
+    const tracker = new RoutedTracker({ jira: [jira], github: [web, source('api', 'github')] }, exec);
+    expect(() => tracker.owns('gh-12')).toThrow(/どの repo の Issue かが決まりません.*\/w\/web\/\.claude\/roles\/config\.jsonc・\/w\/api\/\.claude\/roles\/config\.jsonc.*folders で/);
+    expect(tracker.owns('SKILLS-12')).toBe(true);
+    expect(tracker.owns('t-x7k2')).toBe(false);
+    expect(calls).toHaveLength(0);
   });
 });

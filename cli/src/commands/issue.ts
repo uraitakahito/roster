@@ -7,7 +7,10 @@ import { JiraTracker } from '../tracker/jira.ts';
 import type { Tracker, TrackerComment, TrackerIssue } from '../tracker/types.ts';
 import { putPage } from './page.ts';
 
-/** Key を読める道具。設定の道具が持つ Key ならそれ、無ければ Key の形で選ぶ（Jira が先。t- の Key はどれも持たない）。 */
+/**
+ * Key を読める道具。設定の道具が持つ Key ならそれ（gh- の Key は、github を宣言した設定の folder の repo）、
+ * 無ければ Key の形で選ぶ（Jira が先。gh は project の folder で打つ。t- の Key はどれも持たない）。
+ */
 export function issueTracker(ctx: Context, key: string): Tracker | undefined {
   return [ctx.tracker, new JiraTracker(ctx.exec), new GithubTracker(ctx.exec, ctx.project)].find(t => t.owns(key));
 }

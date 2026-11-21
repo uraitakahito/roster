@@ -104,7 +104,41 @@ describe('tpm start が出す 1 行', () => {
   test('symlink から呼んでも repo を正しく求める', () => {
     const link = join(scratch, 'tpm-link');
     symlinkSync(tpm, link);
-    expect(run(link, ['start'], scratch)).toMatch(new RegExp(`--add-dir ${root}/skill-sets/core -- /tpm$`));
+    // scratch の直下には、ほかの試験が設定を置いた folder がある（その skill-sets も足される）ので、空の folder で打つ。
+    expect(run(link, ['start'], folder(null))).toMatch(new RegExp(`--add-dir ${root}/skill-sets/core -- /tpm$`));
+  });
+});
+
+describe('直下の folder の設定', () => {
+  /** 直下に、設定のある folder（a・b）と、設定の無い folder（c）・見ない folder（.hidden・node_modules）を持つ folder。 */
+  const parent = (own: string | null): string => {
+    const d = folder(own);
+    const put = (name: string, text: string | null): void => {
+      mkdirSync(join(d, name, '.claude', 'roles'), { recursive: true });
+      if (text !== null) writeFileSync(join(d, name, '.claude', 'roles', 'config.jsonc'), text);
+    };
+    put('b', '{ "skill-sets": ["dependabot"] }');
+    put('a', '{ "tracker": "jira" }');
+    put('c', null);
+    put('.hidden', '{ "skill-sets": ["nope"] }');
+    put('node_modules', '{ "skill-sets": ["nope"] }');
+    return d;
+  };
+
+  test('直下の folder の skill-sets も足し、-v は読んだ設定を並べる', () => {
+    const d = parent(null);
+    const r = spawnSync(tpm, ['start', '-v', d], { cwd: scratch, encoding: 'utf8', env: env() });
+    expect(r.stdout.trimEnd()).toBe(`cd ${d} && ${head} --add-dir ${root}/skill-sets/core ${root}/skill-sets/dependabot -- /tpm`);
+    expect(r.stderr.split('\n').filter(l => l.startsWith('tpm: config'))).toEqual([
+      `tpm: config      ${d}/.claude/roles/config.jsonc（なし）`,
+      `tpm: config      ${d}/a/.claude/roles/config.jsonc（あり）`,
+      `tpm: config      ${d}/b/.claude/roles/config.jsonc（あり）`,
+    ]);
+  });
+
+  test('folders を書けば、書いた folder だけを集める', () => {
+    expect(run(tpm, ['start', parent('{ "folders": ["a"] }')], scratch)).toMatch(/--add-dir \S+\/skill-sets\/core -- \/tpm$/);
+    expect(run(tpm, ['start', parent('{ "folders": [] }')], scratch)).toMatch(/--add-dir \S+\/skill-sets\/core -- \/tpm$/);
   });
 });
 
@@ -192,7 +226,8 @@ describe('命令の一覧', () => {
   });
 
   test('決まりの誤りは tpm: で始まる 1 行を出して exit 1', () => {
-    const r = spawnSync(tpm, ['ask', 'tpm', 'x', '--waiting-for', 'y'], { cwd: scratch, encoding: 'utf8', env: { ...process.env, TPM_KEY: '', TPM_STATE: join(scratch, 'state') } });
+    // scratch の直下には、ほかの試験がわざと誤りを書いた設定がある（集めて読むと止まる）ので、空の folder で打つ。受け継いだ $TPM_PROJECT も消す。
+    const r = spawnSync(tpm, ['ask', 'tpm', 'x', '--waiting-for', 'y'], { cwd: folder(null), encoding: 'utf8', env: { ...process.env, TPM_PROJECT: '', TPM_KEY: '', TPM_STATE: join(scratch, 'state') } });
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(/^tpm: \$TPM_KEY がありません/);
   });
