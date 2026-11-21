@@ -4,7 +4,7 @@ import { modelStatus, ROLES, WAIT } from '../protocol.ts';
 import { requireSelf, requireTpm, writeRole } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
 import { issueTracker } from './issue.ts';
-import { issueCopyLine } from './messages.ts';
+import { issueCopyLine, markShown } from './messages.ts';
 import { recordingTo, tpmHello } from './tpm-side.ts';
 
 /**
@@ -41,5 +41,7 @@ export function hello(ctx: Context, options: { model?: string, effort?: string }
 export function inbox(ctx: Context): string[] {
   const pending = ctx.transport.pending();
   if (pending.length === 0) return ['まだ届いていないメッセージは無い'];
+  // ここで見せた物では、送る前の検査（assertRead）は止まらない。
+  markShown(ctx, pending);
   return pending.flatMap(m => [`--- ${m.from}（id ${m.id}）`, m.text]);
 }

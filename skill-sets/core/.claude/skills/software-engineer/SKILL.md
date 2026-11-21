@@ -36,7 +36,7 @@ tpm hello
   - 置き場所は repo の決まり（`CLAUDE.md`・`.claude/dependabot/rules.md` など）に従う。決まりが無ければ `<repo の親>/<repo の名前>-worktrees/<branch の / を - に>`（repo の中に置かない）。
   - branch は `<課題の Key を小文字に>/<段>`（例: `ai-6/rename-roles`・`t-x7k2/impl`）。課題の Key は `tpm hello` が返す。
   - 本体の checkout は動かさない。動いている物がその checkout を読んでいる repo（この skills の repo など）は、merge の後に `git -C <本体> pull --ff-only` だけをする。
-- PR は main から切った branch で出す。題か本文に課題の Key（GitHub の Issue なら `Refs #12`。`Closes` は書かない）。CI が緑になってから、自分で merge する（依頼書が TPM 担当の merge を求めたら `tpm ask tpm` で頼む）。merge したら `tpm report merged`。
+- PR は main から切った branch で出す。題か本文に課題の Key（GitHub の Issue なら `Refs #12`。`Closes` は書かない）。CI が緑になってから、自分で merge する（依頼書が TPM 担当の merge を求めたら `tpm ask tpm` で頼む）。merge したら `tpm report merged`（PR が merge 済みでなければ、送らずに止まる。merge の命令と 1 行に続けて書かず、merge できたのを見てから打つ）。
 - `git add -A`・`git add .` は使わない。ファイルを名指して add する。
 - 動くことを示してから「できた」と言う。試験を流し、要るなら実際に起こして見る。
 - 環境（container・サーバーなど）を変える前に、protocol.md の「共有の環境」を見る。自分が変えてよくない環境は、自分では変えず `tpm ask devops`。

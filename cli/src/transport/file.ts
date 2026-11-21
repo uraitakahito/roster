@@ -39,7 +39,21 @@ export class FileTransport implements Transport {
     const id = `m${this.inbox(to).length + 1}-${fileName(to)}`;
     const message: FileMessage = { id, from, text, ...(replyTo === undefined ? {} : { replyTo }) };
     this.state.append(`${DIR}/inbox/${fileName(to)}.jsonl`, message);
-    return { id, delivered: true };
+    return { id, delivered: this.heldFrom(to) === undefined };
+  }
+
+  /** 宛先を「手を動かしている」にする（試験用）。これより後に送った物は、release まで届かない（pending に出る）。 */
+  hold(address: string): void {
+    this.state.write(`${DIR}/held/${fileName(address)}.jsonc`, this.inbox(address).length);
+  }
+
+  /** hold をやめる（溜まっていた物は届いたことになる）。 */
+  release(address: string): void {
+    this.state.remove(`${DIR}/held/${fileName(address)}.jsonc`);
+  }
+
+  private heldFrom(address: string): number | undefined {
+    return this.state.read<number>(`${DIR}/held/${fileName(address)}.jsonc`);
   }
 
   /** 宛先に届いたメッセージ（試験が読む）。 */
@@ -47,9 +61,10 @@ export class FileTransport implements Transport {
     return this.state.lines<FileMessage>(`${DIR}/inbox/${fileName(address)}.jsonl`);
   }
 
-  /** file の連携は送った時に届くので、届いていないメッセージは無い。 */
+  /** file の連携は送った時に届くので、hold した宛先のほかは、届いていないメッセージは無い。 */
   pending(): Incoming[] {
-    return [];
+    const from = this.heldFrom(this.self);
+    return from === undefined ? [] : this.inbox(this.self).slice(from).map(m => ({ id: m.id, from: m.from, text: m.text }));
   }
 
   spawn(options: SpawnOptions): string {

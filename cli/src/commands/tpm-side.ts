@@ -13,7 +13,7 @@ import { readSkillSets, skillSetDir, TpmError } from '../skill-sets.ts';
 import { route } from '../tracker/routed.ts';
 import { findHook } from './banner.ts';
 import { copyIssue, issueTracker } from './issue.ts';
-import { brief } from './messages.ts';
+import { assertRead, brief } from './messages.ts';
 import { pageFolder } from './page.ts';
 
 /** 名乗ったかを見る間（ミリ秒）。 */
@@ -160,6 +160,8 @@ export function assign(ctx: Context, key: string, options: AssignOptions): strin
   }
   if (existing?.address !== undefined && ctx.transport.seats().some(s => s.address === existing.address)) {
     if (options.brief === undefined) throw new TpmError(`${key} の担当はもう動いています（${existing.address}）。新しい依頼書を --brief で渡してください`);
+    // 写しを置く前に、送る前の検査を通す（止まった回に写しだけが増えないように）。
+    assertRead(ctx, `${existing.key} の担当`, existing.title);
     // 続きのときも写しを作り直す（コメントが増えているため）。
     Object.assign(existing, issueCopy(ctx, existing.issue ?? key, key, options.noIssueCopy));
     return brief(ctx, existing, options.brief, options.note);
