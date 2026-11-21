@@ -83,6 +83,13 @@ describe('課題への記録（GitHub の Issue）', () => {
     expect(bodies(w)).toEqual([`【計画】Software Engineer: PR 2 本の計画\n\n計画: ${OUT}`]);
   });
 
+  test('--kind audit は、監査のページの URL を【監査】で書く', () => {
+    const w = started({ tracker: 'github' }, 'gh-12');
+    reportDone(w.se, { url: OUT, kind: 'audit', summary: '原因 2 つと改善案 3 つ', remaining: 'なし', decisions: 'どの改善をするか', points: [] });
+    expect(bodies(w)).toEqual([`【監査】Software Engineer: 原因 2 つと改善案 3 つ\n\n監査: ${OUT}`]);
+    expect(() => doneKind('監査')).toThrow('--kind 監査 は audit に替わりました（--kind audit）');
+  });
+
   test('決まりの時に 1 件ずつ書き、【end】で課題を閉じる', () => {
     const w = started({ tracker: 'github' }, 'gh-12');
     askPm(w.se, { url: 'https://claude.ai/artifact/c1', items: ['案の選択', '切り替えの単位'], waitingFor: '案と単位' });
@@ -134,8 +141,8 @@ describe('課題への記録（GitHub の Issue）', () => {
 });
 
 describe('tpm report done --kind', () => {
-  test('page put と同じ語（proposal・plan・result）を受ける', () => {
-    expect(['proposal', 'plan', 'result'].map(doneKind)).toEqual(['proposal', 'plan', 'result']);
+  test('page put と同じ語（proposal・plan・result・audit）を受ける', () => {
+    expect(['proposal', 'plan', 'result', 'audit'].map(doneKind)).toEqual(['proposal', 'plan', 'result', 'audit']);
   });
 
   test('前の値（提案・計画・結果）は誤りにして、替わりの値を案内する', () => {
@@ -145,7 +152,7 @@ describe('tpm report done --kind', () => {
   });
 
   test('ほかの値は誤りにする', () => {
-    for (const value of ['brief', 'confirm', '確認', 'toString', '']) expect(() => doneKind(value)).toThrow('--kind は proposal・plan・result のどれかにしてください');
+    for (const value of ['brief', 'confirm', '確認', 'toString', '']) expect(() => doneKind(value)).toThrow('--kind は proposal・plan・result・audit のどれかにしてください');
   });
 });
 

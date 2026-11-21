@@ -142,11 +142,23 @@ tpm incident add <Key> "<起きた事実>" --type <reliability|safety|efficiency
 
 | 決め | 命令 |
 |---|---|
-| 調べる | `tpm incident timeline <番号>` で時系列のページを作り（**読まなくてよい。**URL を依頼書の「材料」に貼る）、担当に振り（Product Manager に聞いてから）、`tpm incident assign <番号>… --to <振り先の Key>` |
+| 調べる | 下の「振る」 |
 | 調べない（1 度きりで害が無い） | `tpm incident drop <番号>… --why "<訳>"` |
 | もう直っている | `tpm incident close <番号>… --pr <直した PR の URL>`（教訓に入れただけなら `--lesson "<file と一言>"`） |
 
 - 同じ tag が 3 件たまったら、1 件ずつは軽くても調べに回す（`review` が tag ごとの件数を出す）。
 - 「[重い]」の件は、見直しを待たずにその場で振る。
-- 改善の PR が merge されたら、`tpm incident close <番号> --pr <URL>` で済みにする。
+- 見直した結果（調べる件・調べない件とその訳）を Product Manager に伝え、調べる件を振ってよいかを聞く。
 
+### 振る
+
+1. `tpm incident timeline <番号>` で、件ごとに時系列のページを作る（**読まなくてよい。**出た URL を依頼書の「材料」に貼る）。
+2. 監査の依頼書を書く（`${CLAUDE_SKILL_DIR}/brief-template.md` の「監査の依頼書」）。起きた事実は台帳のまま写し、推した原因は書かない。
+3. **新しい Software Engineer 担当に振る**（`tpm key` で Key を作る。Product Manager が課題を作れば、その Key）。関わった担当やあなたの誤りを、本人に調べさせないため。件が 1 つの課題の中で閉じていて軽いとき（行き違い 1 回など）は、関わった担当に続きの【brief】で振ってよい。
+4. `tpm incident assign <番号>… --to <振り先の Key>` で、件に振り先を結ぶ。
+
+### 出す・済みにする
+
+- 監査の担当の【done】（`--kind audit`）を受けたら、監査のページの URL と、【ask-pm】の項目（どの改善をするか）を Product Manager に伝える。
+- Product Manager が通した改善は、いつもの課題として担当に振る。改善の PR の【merged】を受けたら、`tpm incident close <番号>… --pr <URL>` で済みにする（教訓に入れただけなら `--lesson "<file と一言>"`）。
+- Product Manager が見送った件は、`tpm incident drop <番号>… --why "Product Manager が見送った"`。

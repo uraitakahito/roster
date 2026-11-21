@@ -273,7 +273,7 @@ export function reportDocFix(ctx: Context, options: { pr: string, note: string, 
 }
 
 /** `tpm report done --kind` の値（`tpm page put --kind` と同じ語）と、課題に書く記録の種類。 */
-export const DONE_KINDS = { proposal: '提案', plan: '計画', result: '結果' } as const satisfies Record<string, NoteKind>;
+export const DONE_KINDS = { proposal: '提案', plan: '計画', result: '結果', audit: '監査' } as const satisfies Record<string, NoteKind>;
 /** `tpm report done --kind` に書ける値。 */
 export type DoneKind = keyof typeof DONE_KINDS;
 

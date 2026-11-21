@@ -130,7 +130,9 @@ ${rows.join('\n')}
 
 /**
  * 件の番号か課題の Key を受け、時系列のページを置いて URL を返す。
- * 番号なら、引き金のメッセージ（無ければ件を書いた時刻）の前後 minutes 分を拾い、件に URL を結ぶ。Key なら、その Key の記録をみな拾う。
+ * 番号なら、引き金のメッセージの前後 minutes 分を拾い、件に URL を結ぶ。引き金が無い件は、出来事がいつかが分からない
+ * （件は、出来事のしばらく後に書かれることが多い）ので、その Key の初めから、件を書いた minutes 分後までを拾う。
+ * Key なら、その Key の記録をみな拾う。
  */
 export function incidentTimeline(ctx: Context, target: string, options: { minutes?: number } = {}): string[] {
   const minutes = options.minutes ?? DEFAULT_MINUTES;
@@ -153,13 +155,14 @@ export function incidentTimeline(ctx: Context, target: string, options: { minute
     key = incident.key;
     const trigger = incident.msg === undefined ? undefined : ctx.state.lines<Sent>('log.jsonl').find(l => l.id === incident?.msg);
     const center = Date.parse(trigger?.at ?? incident.at);
-    const window = { from: new Date(center - minutes * 60_000).toISOString(), to: new Date(center + minutes * 60_000).toISOString() };
+    const window = { from: trigger === undefined ? '' : new Date(center - minutes * 60_000).toISOString(), to: new Date(center + minutes * 60_000).toISOString() };
     events = collect(ctx, key, window, incident.msg);
     title = `台帳 #${incident.n}（${key}）の時系列`;
     lead = [
       `件: ${incidentLine(incident)}`,
-      `${trigger === undefined ? '件を書いた時刻' : '引き金のメッセージ'}（${hms(new Date(center).toISOString())}）の前後 ${minutes} 分の、${key} の記録（${events.length} 行）。`,
-      ...(incident.msg !== undefined && trigger === undefined ? [`引き金のメッセージ（id ${incident.msg}）は log.jsonl に無かったので、件を書いた時刻を真ん中にした。`] : []),
+      trigger === undefined
+        ? `引き金のメッセージが${incident.msg === undefined ? '書かれていない' : `（id ${incident.msg}）log.jsonl に無い`}ので、${key} の初めから、件を書いた時刻（${hms(incident.at)}）の ${minutes} 分後までの記録を並べた（${events.length} 行）。`
+        : `引き金のメッセージ（${hms(trigger.at)}）の前後 ${minutes} 分の、${key} の記録（${events.length} 行）。`,
     ];
   }
   if (events.length === 0) throw new TpmError(`${key} の記録がありません（Key を確かめる。記録は state の log.jsonl など）`);

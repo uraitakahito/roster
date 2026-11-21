@@ -92,13 +92,18 @@ describe('tpm incident timeline', () => {
     expect(incidentTimeline(w.se, 't-x7k2')[0]).toMatch(/timeline-2\.html$/);
   });
 
-  test('引き金のメッセージが記録に無ければ、件を書いた時刻を真ん中にする。記録が無い Key・無い番号・誤った分は止まる', () => {
+  test('引き金のメッセージが無い件は、Key の初めから、件を書いた少し後までを拾う（件は出来事の後で書かれる）。記録が無い Key・無い番号・誤った分は止まる', () => {
     const w = crossed();
-    w.tpm.now = clock('12:02:10');
-    incidentAdd(w.tpm, 't-x7k2', { text: 'x', type: 'safety', tags: [], msg: 'no-such-id', severe: false });
-    incidentTimeline(w.tpm, '1', { minutes: 5 });
-    const html = [...w.store.pages.values()].find(p => p.record.kind === 'timeline')?.body.toString() ?? '';
-    expect(html).toContain('引き金のメッセージ（id no-such-id）は log.jsonl に無かったので、件を書いた時刻を真ん中にした。');
+    // 出来事（12:00〜12:02）の 1 時間後に、引き金を書かずに件を書く。
+    w.tpm.now = clock('13:00:00');
+    incidentAdd(w.tpm, 't-x7k2', { text: 'x', type: 'safety', tags: [], severe: false });
+    incidentAdd(w.tpm, 't-x7k2', { text: 'y', type: 'safety', tags: [], msg: 'no-such-id', severe: false });
+    expect(incidentTimeline(w.tpm, '1', { minutes: 5 })[0]).toMatch(/^時系列を置いた（7 行）/);
+    incidentTimeline(w.tpm, '2', { minutes: 5 });
+    const [first, second] = [...w.store.pages.values()].filter(p => p.record.kind === 'timeline').map(p => p.body.toString());
+    expect(first).toContain('引き金のメッセージが書かれていないので、t-x7k2 の初めから、件を書いた時刻（13:00:00）の 5 分後までの記録を並べた（7 行）。');
+    expect(first).toContain('【ask-tpm】tag を打ってよいか');
+    expect(second).toContain('引き金のメッセージが（id no-such-id）log.jsonl に無いので、');
     expect(() => incidentTimeline(w.tpm, 't-zzzz')).toThrow(/t-zzzz の記録がありません/);
     expect(() => incidentTimeline(w.tpm, '9')).toThrow('台帳に #9 はありません');
     expect(() => incidentTimeline(w.tpm, '1', { minutes: 0 })).toThrow(/--minutes/);
