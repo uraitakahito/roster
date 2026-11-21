@@ -57,6 +57,8 @@ export interface Incident {
   lesson?: string
   /** 調べない訳（dropped）・PR も教訓も無く済んだ訳（closed）。 */
   why?: string
+  /** 時系列のページの URL（tpm incident timeline が置いた、いちばん新しい物）。 */
+  timeline?: string
   /** 扱いを替えた時刻。 */
   decidedAt?: string
 }
@@ -122,6 +124,7 @@ export function incidentLine(i: Incident): string {
   const extra = [
     ...(i.tags.length === 0 ? [] : [`tag: ${i.tags.join('・')}`]),
     ...(i.msg === undefined ? [] : [`msg: ${i.msg}`]),
+    ...(i.timeline === undefined ? [] : [`時系列: ${i.timeline}`]),
     ...(i.status === 'open' ? [] : [`${STATUS_LABEL[i.status]}${[i.to, i.pr, i.lesson, i.why].filter(v => v !== undefined).map(v => `: ${v}`).join('')}`]),
   ];
   return `#${i.n}${i.severe ? ' [重い]' : ''} ${kind} ${i.key} ${i.at.slice(5, 16).replace('T', ' ')}「${i.text}」${extra.map(e => ` ${e}`).join('')}`;

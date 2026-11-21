@@ -4,6 +4,7 @@ import { createContext, type Context } from '../context.ts';
 import { addIncident, assertTags, incidentLine, incidentType, INCIDENT_TYPES, readIncidents, requireIncident, STATUS_LABEL, tagLines, writeIncident, type Incident, type IncidentStatus } from '../incidents.ts';
 import { assertKey } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
+import { DEFAULT_MINUTES, incidentTimeline } from './timeline.ts';
 
 /** 台帳を見直す・扱いを決めるのは TPM 担当だけ（担当は書くだけ）。 */
 function requireTpmSide(ctx: Context): void {
@@ -142,4 +143,7 @@ export function registerIncident(program: Command, print: (lines: string[]) => v
     .option('--lesson <教訓>', '改善を入れた教訓（file と一言）')
     .option('--why <訳>', 'PR も教訓も無く済んだ訳')
     .action((n: string[], options: { pr?: string, lesson?: string, why?: string }) => print(incidentClose(createContext(), n, options)));
+  incident.command('timeline <target>').description('件の番号か課題の Key の前後の記録を、時刻の順に 1 枚のページにして置く（依頼書に URL を貼る）')
+    .option('--minutes <分>', '件の前後に拾う分（番号を名指した時）', String(DEFAULT_MINUTES))
+    .action((target: string, options: { minutes: string }) => print(incidentTimeline(createContext(), target, { minutes: Number(options.minutes) })));
 }

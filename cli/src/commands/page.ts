@@ -10,7 +10,7 @@ import { roleOf } from './infra.ts';
 import { call, compareStored, down, fetchTo, inStore, KEY, localPath, pagesDir, pagesUrl, PROJECT, reason, removeLocal, requireKey, selfAddress, writeCopy } from './store.ts';
 
 /** ページの種類。file の名の頭になる（`<種類>-<番号>.html`）。置き場は名の一覧を持たないので、種類を足すのはここだけ。 */
-export const PAGE_KINDS = ['brief', 'confirm', 'proposal', 'plan', 'result', 'issue'] as const;
+export const PAGE_KINDS = ['brief', 'confirm', 'proposal', 'plan', 'result', 'issue', 'timeline'] as const;
 /** ページの種類の名前。 */
 export type PageKind = typeof PAGE_KINDS[number];
 

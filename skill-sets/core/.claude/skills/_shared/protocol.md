@@ -86,6 +86,7 @@ Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【
 - session の権限で断られた命令は、`--tag 権限` を付けて書く。別の書き方で通そうとしない。
 - すぐ止めないと害が広がる物は `--severe` を付ける。TPM 担当が、見直しを待たずに調べを振る。
 - 【done】の「残り」と【end】の「残っている物」は、「なし」でなければ命令が台帳に入れる（書き直さなくてよい）。TPM 担当が Product Manager に手の操作を頼んだ回（`tpm wait pm "<何を>" --hand`）も入る。
+- `tpm incident timeline <件の番号|課題の Key>` が、その前後の記録（メッセージと届いた時刻・課題管理への書き込み・guard と入口の検査が止めた回・`wait` の移り）を時刻の順に 1 枚のページにして置く。届く前に相手が次を送った所には「行き違い」の印が付く。原因を調べる担当が読む。
 - TPM 担当は `tpm incident add <Key> "<起きた事実>" --type <種類>` で書き、`tpm incident review` で見直す（`/tpm` の「監査」）。見直す・扱いを決める命令は、担当からは打てない。
 - **台帳・送ったメッセージの記録（state の `*.jsonl`）は、メッセージや命令の字を持つ。この Mac の外（課題管理のコメント・PR の本文・公開の site）に写さない。**【incident】は課題管理に記録を書かない。
 
@@ -105,6 +106,7 @@ Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【
 
 - 置く: `tpm page put <file> --kind <brief|confirm|proposal|plan|result|issue>`。担当の Key は今の課題の Key。TPM 担当は `--key <Key>` を付ける。出た `URL:` を、`tpm assign --brief`・`tpm ask pm --url`・`tpm report done --url` に書く。番号は置き場が決める。同じ種類を置き直すと次の番号になり、前の版は残る。置いた担当の役割と居場所の宛先も、置き場が覚える。
 - 読む: `tpm page path <URL>` で file の path にして Read tool で読む（この Mac の控えの path。控えに無ければ置き場から取る。前の置き場の `8800` の URL も読める）。
+- 時系列のページ（種類は `timeline`）は、`tpm incident timeline` が state の記録から作って置く（下の「思わぬ出来事」）。手では置かない。
 - 探す: `tpm page list`（今の project の新しい順）。`--key <Key>`・`--role <役割>`・`--workspace <宛先>`・`--kind <種類>`・`--q <語>` で絞り、`--json` で記録を出す。Product Manager は、置き場の一覧の UI（`http://127.0.0.1:8801/`）で同じように絞って見る。
 - 開く: ページは自動では開かない（`tpm ask pm`・`tpm report done` も開かない）。Product Manager は、置き場の一覧の UI（`http://127.0.0.1:8801/`）を 1 つ開いておき、新着の印で気づいて読む。その場で開いて人に見せる時だけ `tpm show <URL>`。
 - 消す: **消してよいのは TPM 担当だけ**（戻せない）。試しに置いた・置き間違えたページは、担当は自分で消さず、`tpm ask tpm` で URL と訳を送って頼む（担当の居場所からの `tpm page delete` と、置き場に消す要求を直に送る `curl`、置き場の CLI の `pagetray page delete` は止まる）。TPM 担当は `tpm page delete <URL>…`（Key ごとなら `--key <Key>`、project ごとなら `--project <名>`。その Key・project の file も一緒に消える）で消す物を見て、`--yes` を付けて消す。控えの file も消える。消したページの URL は 410 を返し、その番号は 2 度使われない。
