@@ -105,7 +105,7 @@ export function buildProgram(): Command {
   issue.command('view <key>').description('課題の題・状態・本文・コメントを出す（課題管理が none の project でも、Key の形で道具を選んで読む）')
     .action((key: string) => print(issueView(createContext(), key)));
 
-  const page = program.command('page').description('依頼書と成果のページを、置き場（127.0.0.1 の pagestore）に置く・読む・探す・消す');
+  const page = program.command('page').description('依頼書と成果のページを、置き場（127.0.0.1 の pagetray）に置く・読む・探す・消す');
   page.command('put <file>').description('ページを置き場に置き、控えを写して URL を出す（置き場が応えなければ置けない）')
     .requiredOption('--kind <種類>', PAGE_KINDS.join('・'))
     .option('--key <Key>', '課題の Key（担当は $TPM_KEY。TPM 担当は要る）')

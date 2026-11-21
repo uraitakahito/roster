@@ -36,7 +36,7 @@ export function tpmHello(ctx: Context, options: { model?: string, effort?: strin
 /** 既定で埋めた値には「（既定）」を付ける（設定に書いた値と見分けるため）。 */
 const orDefault = (source: ConfigSource, field: string, value: string): string => source.written.includes(field) ? value : `${value}（既定）`;
 
-/** 設定 1 つに書いてある物（「課題管理: jira・infra: tpm-pagestore」）。file が無ければ、その path と「無い」。 */
+/** 設定 1 つに書いてある物（「課題管理: jira・infra: pagetray」）。file が無ければ、その path と「無い」。 */
 function sourceSummary(ctx: Context, source: ConfigSource): string {
   if (!source.exists) return `${source.file}（無い）`;
   const roles = Object.keys(source.config.roles);
