@@ -4,7 +4,7 @@
 import { appendAudit } from '../audits.ts';
 import type { Context } from '../context.ts';
 import { recordGateStop, recordWait } from '../evidence.ts';
-import { addIncident, incidentLine, incidentType, INCIDENT_TYPES, tagLines } from '../incidents.ts';
+import { addIncident, foldIntoIncident, incidentLine, incidentType, INCIDENT_TYPES, readIncidents, tagLines } from '../incidents.ts';
 import { message, ROLES, TPM_TITLE, WAIT, WAIT_CLOSE, WAIT_NEXT_BRIEF, type HeadingId, type WaitKind } from '../protocol.ts';
 import { readRole, requireRole, requireSelf, requireTpm, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
@@ -320,6 +320,8 @@ export interface WaitRecord {
   kind: WaitKind
   text: string
   at: string
+  /** `tpm wait pm --hand` の回だけ: 頼んだ手を数えた台帳の件の番号（打ち直しを同じ件に寄せるため）。 */
+  hand?: number
 }
 
 /** `waits/` の file の名（宛先の : などを替える）。 */
@@ -331,20 +333,44 @@ export const PM_HAND = 'pm-hand';
 /**
  * 状態 wait を替え、打った時刻を記録する。hand は、Product Manager に手の操作を頼んで待つ回（wait pm だけ）。
  * 頼んだ手を台帳に数える（権限が足りず人の手が要った回数を、後から数で言えるように）。
+ * 前の wait がまだ同じ頼み（--hand で数えた未決の件）のままなら、打ち直しとしてその件に寄せる（同じ頼みを 2 件に数えない）。
  */
 export function wait(ctx: Context, kind: WaitKind, what: string, options: { hand?: boolean } = {}): string[] {
   if (options.hand === true && kind !== 'pm') throw new TpmError('--hand は tpm wait pm だけに付ける（Product Manager に手の操作を頼んだ回）');
   const text = WAIT[kind](what);
   const address = showWait(ctx, text);
-  ctx.state.write(waitFile(address), { kind, text, at: ctx.now().toISOString() } satisfies WaitRecord);
-  if (options.hand !== true) return [`状態: ${text}`];
+  const before = ctx.state.read<WaitRecord>(waitFile(address));
+  const record: WaitRecord = { kind, text, at: ctx.now().toISOString() };
+  if (options.hand !== true) {
+    ctx.state.write(waitFile(address), record);
+    return [`状態: ${text}`];
+  }
+  const asked = before?.kind === 'pm' && before.hand !== undefined
+    ? readIncidents(ctx).find(i => i.n === before.hand && i.source === 'pm-hand' && i.status === 'open')
+    : undefined;
+  if (asked !== undefined) {
+    const folded = foldIntoIncident(ctx, asked, `打ち直し: ${what}`, what);
+    ctx.state.write(waitFile(address), { ...record, hand: folded.n });
+    return [`状態: ${text}`, `台帳の件に寄せた（打ち直し。新しい件にしない）: ${incidentLine(folded)}`];
+  }
   const incident = addIncident(ctx, { key: ctx.env.TPM_KEY || 'tpm', source: 'pm-hand', text: what, tags: [PM_HAND] });
+  ctx.state.write(waitFile(address), { ...record, hand: incident.n });
   return [`状態: ${text}`, `台帳に入れた: ${incidentLine(incident)}`, ...tagLines(ctx, incident)];
 }
 
-/** 「残り」「残っている物」が「なし」でなければ、台帳に入れる（振るか捨てるかを決めるまで、見直しに出続ける）。入れた行を返す。 */
+/**
+ * 「残り」「残っている物」が「なし」でなければ、台帳に入れる（振るか捨てるかを決めるまで、見直しに出続ける）。入れた行を返す。
+ * 【end】の「残っている物」は、同じ Key の未決の【done】の「残り」があれば、そのいちばん新しい件に寄せる（中身が重なることが多いため）。
+ */
 function keepRemaining(ctx: Context, self: RoleRecord, heading: 'done' | 'end', text: string): string[] {
   if (/^(なし|無し)/.test(text.trim())) return [];
+  const done = heading === 'end'
+    ? readIncidents(ctx).filter(i => i.source === 'remaining' && i.status === 'open' && i.key === self.key && i.text.startsWith('【done】')).at(-1)
+    : undefined;
+  if (done !== undefined) {
+    foldIntoIncident(ctx, done, `【end】の残り: ${text}`, text);
+    return [`台帳の #${done.n}（【done】の残り）に寄せた（TPM 担当が、振るか捨てるかを決める）`];
+  }
   const incident = addIncident(ctx, { key: self.key, source: 'remaining', text: `【${heading}】の残り: ${text}` });
   return [`台帳に入れた（TPM 担当が、振るか捨てるかを決める）: #${incident.n}`];
 }

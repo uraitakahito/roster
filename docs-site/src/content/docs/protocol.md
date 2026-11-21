@@ -153,8 +153,8 @@ Auditor（役割 `auditor`。題は `Audit`、課題の Key は `audit`。skill 
 | 入り口 | 命令 | 打つ担当 |
 |---|---|---|
 | 気づいた出来事 | `tpm incident add`・`tpm report incident`（【incident】） | TPM 担当・担当 |
-| 【done】の「残り」・【end】の「残っている物」 | `tpm report done`・`tpm report end`（「なし」で始まらなければ入る） | 担当 |
-| Product Manager に頼んだ手の操作 | `tpm wait pm "<何を>" --hand` | TPM 担当 |
+| 【done】の「残り」・【end】の「残っている物」 | `tpm report done`・`tpm report end`（「なし」で始まらなければ入る。【end】は、同じ Key の未決の【done】の「残り」があれば、そのいちばん新しい件に寄せる） | 担当 |
+| Product Manager に頼んだ手の操作 | `tpm wait pm "<何を>" --hand`（前の wait がその頼みのまま打ち直したら、前の件に寄せる） | TPM 担当 |
 
 - 番号は、今の最大＋1 から、無い番号の file を「在れば失敗」で作って決める（担当が同時に書いても同じ番号にならない）。
 - 種類（`--type`）は `reliability`・`safety`・`efficiency`。tag は任意で、書いた時に同じ tag の前の件数を返す（「権限: これで 4 件目」）。

@@ -69,10 +69,47 @@ describe('台帳に書く', () => {
     expect(readIncidents(w.tpm)).toEqual([]);
     expect(done('本体の checkout が main より古い')).toContain('台帳に入れた（TPM 担当が、振るか捨てるかを決める）: #1');
     dismiss(w.tpm, 't-x7k2', { handover: false });
-    expect(reportEnd(w.se, { prs: [], removed: [], left: '古い image が 1 つ残っている' })).toContain('台帳に入れた（TPM 担当が、振るか捨てるかを決める）: #2');
+    expect(reportEnd(w.se, { prs: [], removed: [], left: '古い image が 1 つ残っている' })).toContain('台帳の #1（【done】の残り）に寄せた（TPM 担当が、振るか捨てるかを決める）');
     expect(readIncidents(w.tpm).map(i => [i.source, i.type, i.text])).toEqual([
-      ['remaining', undefined, '【done】の残り: 本体の checkout が main より古い'],
-      ['remaining', undefined, '【end】の残り: 古い image が 1 つ残っている'],
+      ['remaining', undefined, '【done】の残り: 本体の checkout が main より古い ／ 【end】の残り: 古い image が 1 つ残っている'],
+    ]);
+    // 【done】の「残り」が無ければ、【end】の「残っている物」は新しい件
+    const v = started();
+    reportDone(v.se, { kind: 'result', summary: 's', remaining: 'なし', decisions: 'なし', points: [] });
+    dismiss(v.tpm, 't-x7k2', { handover: false });
+    expect(reportEnd(v.se, { prs: [], removed: [], left: '古い image が 1 つ残っている' })).toContain('台帳に入れた（TPM 担当が、振るか捨てるかを決める）: #1');
+    expect(readIncidents(v.tpm).map(i => i.text)).toEqual(['【end】の残り: 古い image が 1 つ残っている']);
+  });
+
+  test('【end】の「残っている物」は、同じ Key の未決の【done】の「残り」の、いちばん新しい件に寄せる', () => {
+    const w = started();
+    const done = (remaining: string): string[] => reportDone(w.se, { kind: 'result', summary: 's', remaining, decisions: 'なし', points: [] });
+    add(w, 't-x7k2', 'merge の前に main が動いた');
+    done('古い image が 1 つ残っている');
+    done('proposal-3 は古い版');
+    dismiss(w.tpm, 't-x7k2', { handover: false });
+    // 中身が【done】の「残り」と同じなら、足さない
+    expect(reportEnd(w.se, { prs: [], removed: [], left: 'proposal-3 は古い版' })).toContain('台帳の #3（【done】の残り）に寄せた（TPM 担当が、振るか捨てるかを決める）');
+    expect(readIncidents(w.tpm).map(i => i.text)).toEqual([
+      'merge の前に main が動いた',
+      '【done】の残り: 古い image が 1 つ残っている',
+      '【done】の残り: proposal-3 は古い版',
+    ]);
+  });
+
+  test('寄せる先は未決の件だけ。違う中身は後ろに足す。決めた件と、ほかの Key の件には寄せない', () => {
+    const w = started();
+    const done = (remaining: string): string[] => reportDone(w.se, { kind: 'result', summary: 's', remaining, decisions: 'なし', points: [] });
+    done('古い image が 1 つ残っている');
+    incidentDrop(w.tpm, ['1'], { why: '次の release で消える' });
+    done('proposal-3 は古い版');
+    addIncident(w.tpm, { key: 't-other', source: 'remaining', text: '【done】の残り: ほかの課題の残り' });
+    dismiss(w.tpm, 't-x7k2', { handover: false });
+    expect(reportEnd(w.se, { prs: [], removed: [], left: 'proposal-3 は古い版。置いたままのページ: brief-2' })).toContain('台帳の #2（【done】の残り）に寄せた（TPM 担当が、振るか捨てるかを決める）');
+    expect(readIncidents(w.tpm).map(i => [i.n, i.status, i.text])).toEqual([
+      [1, 'dropped', '【done】の残り: 古い image が 1 つ残っている'],
+      [2, 'open', '【done】の残り: proposal-3 は古い版 ／ 【end】の残り: proposal-3 は古い版。置いたままのページ: brief-2'],
+      [3, 'open', '【done】の残り: ほかの課題の残り'],
     ]);
   });
 
@@ -83,10 +120,31 @@ describe('台帳に書く', () => {
       '台帳に入れた: #1 PM の手 tpm 11-20 12:00「Jira の画面でコンポーネントを付ける」 tag: pm-hand',
       'pm-hand: 初めて',
     ]);
-    expect(wait(w.tpm, 'pm', '! の 1 行', { hand: true }).at(-1)).toBe('pm-hand: これで 2 件目（前: #1 tpm）');
     wait(w.tpm, 'pm', '指示');
+    expect(wait(w.tpm, 'pm', '! の 1 行', { hand: true }).at(-1)).toBe('pm-hand: これで 2 件目（前: #1 tpm）');
     expect(() => wait(w.tpm, 'work', '実装', { hand: true })).toThrow(/--hand は tpm wait pm だけ/);
     expect(readIncidents(w.tpm)).toHaveLength(2);
+  });
+
+  test('tpm wait pm --hand の打ち直しは、前の wait がその頼みのままなら、同じ件に寄せる', () => {
+    const w = started();
+    wait(w.tpm, 'pm', '/tpm の呼び直しと最初の監査', { hand: true });
+    // 同じ字の打ち直しは、件の字も変えない
+    expect(wait(w.tpm, 'pm', '/tpm の呼び直しと最初の監査', { hand: true })).toEqual([
+      '状態: 回答待ち(PM): /tpm の呼び直しと最初の監査',
+      '台帳の件に寄せた（打ち直し。新しい件にしない）: #1 PM の手 tpm 11-20 12:00「/tpm の呼び直しと最初の監査」 tag: pm-hand',
+    ]);
+    // 言い替えた打ち直しは、後ろに足す。もう 1 度でも同じ件
+    wait(w.tpm, 'pm', '最初の監査（Audit の席で /audit）', { hand: true });
+    wait(w.tpm, 'pm', '最初の監査（Audit の席で /audit）', { hand: true });
+    expect(readIncidents(w.tpm).map(i => i.text)).toEqual(['/tpm の呼び直しと最初の監査 ／ 打ち直し: 最初の監査（Audit の席で /audit）']);
+    // 間に別の wait を挟んだら、新しい頼み
+    wait(w.tpm, 'work', '答えを担当に送る');
+    wait(w.tpm, 'pm', 'GitHub の画面で設定を替える', { hand: true });
+    // 前の件を決めた後の --hand も、新しい頼み
+    incidentDrop(w.tpm, ['2'], { why: '済んだ' });
+    expect(wait(w.tpm, 'pm', 'GitHub の画面で設定を替える', { hand: true })[1]).toMatch(/^台帳に入れた: #3 /);
+    expect(readIncidents(w.tpm).map(i => [i.n, i.status])).toEqual([[1, 'open'], [2, 'dropped'], [3, 'open']]);
   });
 
   test('同時に書いても、同じ番号にならない（在る番号は飛ばす）', () => {
