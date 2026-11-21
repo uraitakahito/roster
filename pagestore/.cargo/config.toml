@@ -1,0 +1,4 @@
+# 公開から 2 日たっていない crate は、新しく選ばない（cli の pnpm の minimumReleaseAge と同じ）。
+# Cargo 1.100 から効く。lock にある版は、若くてもそのまま使われる。
+[registry]
+global-min-publish-age = "2 days"

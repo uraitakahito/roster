@@ -1,0 +1,3 @@
+# 弱点の見張り（cargo deny check advisories）。CI が PR ごとと週に 1 度流す。
+[advisories]
+yanked = "deny"

@@ -1,6 +1,6 @@
 ---
 title: 開発
-description: 試験の流し方・Dependabot の判定の道具・この docs の見方と公開の流れ
+description: 試験の流し方・Rust の置き場（pagestore）・Dependabot の判定の道具・この docs の見方と公開の流れ
 ---
 
 ## 試験
@@ -45,6 +45,50 @@ build は無い。`cli/bin/tpm` は `cli/src/cli.ts` を node で直に動かす
 - **道具を足す**: `transport/` か `tracker/` に口を満たす adapter を書き、`cli/src/config.ts` の選択肢と `cli/src/context.ts` に足す。上の層は変えない。
 - **試し方**: 決まりの命令は、連携を `file`（メッセージ・居場所・状態をファイルに書くだけ）にした project で cmux 無しに試せる（`cli/test/helpers.ts`）。実機で担当を起こして試すときは、`TPM_STATE` を一時の folder に向けて本物の名簿を汚さない。
 - **道具を直に打つ**: `tpm` が起こした session では、guard が `cmux` のメッセージ・状態・居場所の命令と、`acli`・`gh issue` の記録と状態の命令の直打ちを止める（課題を読む命令は止めない。見るのは単純な命令の頭だけなので、commit の文や here-document に道具の名を書いても止まらない）。adapter の開発で直に打つときは、命令の頭に `TPM_RAW=1` を付ける。
+
+## pagestore（Rust の置き場）
+
+`pagestore/` は、担当が置くページを DB に持つサーバー（Rust）。`cli/` とは別の project で、道具も lockfile も自分で持つ。今はまだ `tpm` はここへ置かない（置き場は [運用](/operations/) の tpm-pages のまま）。
+
+| ファイル | 中身 |
+|---|---|
+| `pagestore/src/main.rs` | 設定を読む・起こす・止める |
+| `pagestore/src/lib.rs` | 道筋と、この Mac の中からの要求だけを受ける守り |
+| `pagestore/src/db.rs` | 接続・移行・SQL |
+| `pagestore/src/api.rs` | 置く・探す・DB の写し |
+| `pagestore/src/pages.rs` | ページの本文を返す |
+| `pagestore/src/text.rs` | HTML から題と検索用の字を取り出す |
+| `pagestore/migrations/` | 表を作る SQL（起きる時に、まだ当てていない物を当てる） |
+| `pagestore/.sqlx/` | SQL の検査用の file（commit する） |
+
+Rust は `rustup` で入れる（Homebrew の `rust` は `pagestore/rust-toolchain.toml` を読まない）。版は `pagestore/rust-toolchain.toml` が決め、`pagestore/` の中で `cargo` を打つと、その版が入って使われる。
+
+```sh
+brew install rustup                              # keg-only。PATH に /opt/homebrew/opt/rustup/bin を足す
+cd pagestore
+cargo fmt --check
+cargo clippy --locked --all-targets -- -D warnings
+SQLX_OFFLINE=true cargo test --locked
+PAGESTORE_DB=/tmp/pages.db PAGESTORE_LISTEN=127.0.0.1:18801 cargo run   # 手元で起こす
+```
+
+GitHub Actions でも同じ順に流す（`.github/workflows/pagestore.yml`）。試験は、試験ごとに一時の DB を作る。
+
+- **口**: `POST /api/pages?project=&key=&kind=&role=&workspace=`（本文は HTML。番号を決めて `201` と JSON を返す。`n`・`created_at` は取り込みの時だけ付け、番号が使われていれば `409`）・`GET /api/pages`（`project`・`key`・`kind`・`role`・`workspace`・`q`・`sort`・`limit`・`before`・`after` で絞る）・`GET /<project>/<key>/<kind>-<n>.html`（本文）・`GET /api/backup`（DB の写し）・`GET /healthz`。
+- **種類と役割の名**: 一覧は `cli/src/` だけが持つ。サーバーは字の形（英小文字で始まり、英小文字・数字・`-` で 32 字まで）だけを見るので、`cli` に種類や役割を足してもサーバーは変えない。
+- **番号**: 書く接続は 1 本で、1 つの SQL が「今の最大 ＋ 1」を取って足す。置いたページを書き換える口・消す口は無い。
+- **SQL を変えた時**: SQL は `query!` が build の時に `pagestore/.sqlx/` と突き合わせる。SQL か `pagestore/migrations/` を変えたら、一時の DB を作って作り直し、commit する（忘れると CI の `cargo sqlx prepare --check` が落ちる）。`sqlx-cli` の版は workflow の `SQLX_CLI_VERSION` と合わせる。
+
+  ```sh
+  cargo install sqlx-cli@0.9.1 --no-default-features --features sqlite
+  export DATABASE_URL=sqlite://$PWD/target/dev.db
+  cargo sqlx database create && cargo sqlx migrate run
+  cargo sqlx prepare
+  ```
+
+- **当てた移行の SQL は変えない**: 動いている DB が、当てた SQL の中身を覚えている。表を変える時は `pagestore/migrations/` に次の番号の file を足す。
+- **crate を上げる**: `pagestore/.cargo/config.toml` の `global-min-publish-age` が、公開から 2 日たっていない版を選ばせない（Cargo 1.100 から。`cli` の `minimumReleaseAge` と同じ日数）。上げる時は `cargo update` → 試験 → PR。Dependabot の版上げの PR は入れていない。`cargo install` はこの決まりを見ないので、道具は版を書いて入れる。
+- **弱点の見張り**: workflow の `advisories` が `cargo deny check advisories`（設定は `pagestore/deny.toml`）を、PR ごとと週に 1 度流す。
 
 ## 判定の道具
 

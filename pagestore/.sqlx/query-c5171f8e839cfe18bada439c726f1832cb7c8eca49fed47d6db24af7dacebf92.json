@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "insert into pages_fts(rowid, title, text) values(?1, ?2, ?3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "c5171f8e839cfe18bada439c726f1832cb7c8eca49fed47d6db24af7dacebf92"
+}

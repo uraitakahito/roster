@@ -1,0 +1,52 @@
+name: pagestore
+on:
+  push:
+    branches: [main]
+    paths: [pagestore/**, .github/workflows/pagestore.yml]
+  pull_request:
+    paths: [pagestore/**, .github/workflows/pagestore.yml]
+  schedule:
+    # 弱点の知らせは commit と関わりなく出るので、週に 1 度も流す（月曜 00:00 UTC）。
+    - cron: "0 0 * * 1"
+permissions:
+  contents: read
+defaults:
+  run:
+    working-directory: pagestore
+env:
+  # sqlx-cli の版。上げる時は docs-site の開発のページも合わせる。
+  SQLX_CLI_VERSION: 0.9.1
+jobs:
+  test:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    env:
+      # SQL の検査は commit した .sqlx/ で行う（DB は要らない）。
+      SQLX_OFFLINE: "true"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          rust-src-dir: pagestore
+          cache-workspaces: pagestore
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo test --locked
+      - name: .sqlx/ が SQL と合っているか
+        env:
+          SQLX_OFFLINE: "false"
+          DATABASE_URL: sqlite://${{ runner.temp }}/prepare.db
+        run: |
+          command -v cargo-sqlx >/dev/null && cargo sqlx --version | grep -qF "$SQLX_CLI_VERSION" \
+            || cargo install "sqlx-cli@$SQLX_CLI_VERSION" --no-default-features --features sqlite
+          cargo sqlx database create
+          cargo sqlx migrate run
+          cargo sqlx prepare --check
+  advisories:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: pagestore/Cargo.toml
+          command: check advisories
