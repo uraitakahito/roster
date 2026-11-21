@@ -116,6 +116,17 @@ describe('tpm page put', () => {
     expect(s.curls()).toEqual([]);
   });
 
+  test('tpm を使う project でない folder（scratchpad など）からは、置き場に頼む前に止める', () => {
+    const s = setup();
+    const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-scratch-')));
+    const stray = { ...s.tpm, project: scratch, state: new State(join(s.tpm.state.dir, '..', basename(scratch))) };
+    expect(() => pagePut(stray, s.html, { kind: 'brief', key: 't-x7k2' })).toThrow('$TPM_PROJECT');
+    expect(s.curls()).toEqual([]);
+    // TPM 担当が起きた印があれば、設定の file が無くても置ける（設定を書く前の project）。
+    stray.state.write('tpm.jsonc', { address: 'file:tpm' });
+    expect(pagePut(stray, s.html, { kind: 'brief', key: 't-x7k2' })[1]).toContain('/brief-1.html');
+  });
+
   test('$TPM_PAGES_URL で置き場の URL を替えられる（末尾の / は落とす）', () => {
     const s = setup();
     const ctx = { ...s.role, env: { ...s.role.env, TPM_PAGES_URL: 'http://127.0.0.1:9900/' } };
