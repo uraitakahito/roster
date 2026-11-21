@@ -1,0 +1,40 @@
+{
+  "db_name": "SQLite",
+  "query": "select project as \"value!: String\", count(*) as \"count!: i64\", '' as \"note!: String\"\n               from pages group by project order by 2 desc, 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "value!: String",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pages",
+            "name": "project"
+          }
+        }
+      },
+      {
+        "name": "count!: i64",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "note!: String",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "a0a89b15f4273ed79cd9cf9d3b9d83a9eb37437b348ce1ad2ecab4dd122982e1"
+}

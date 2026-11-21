@@ -3,8 +3,10 @@
 
 pub mod api;
 pub mod db;
+pub mod events;
 pub mod pages;
 pub mod text;
+pub mod ui;
 
 use axum::extract::{DefaultBodyLimit, Request};
 use axum::http::{Method, StatusCode, header};
@@ -20,6 +22,15 @@ pub const MAX_BODY: usize = 16 * 1024 * 1024;
 #[derive(Clone)]
 pub struct AppState {
     pub db: db::Db,
+    /// 置かれたページの知らせ（JSON）。聞いている一覧の UI に push する。
+    pub events: tokio::sync::broadcast::Sender<String>,
+}
+
+impl AppState {
+    pub fn new(db: db::Db) -> Self {
+        let (events, _) = tokio::sync::broadcast::channel(64);
+        Self { db, events }
+    }
 }
 
 pub fn router(state: AppState) -> Router {
@@ -27,6 +38,10 @@ pub fn router(state: AppState) -> Router {
         .route("/healthz", get(|| async { "ok\n" }))
         .route("/api/pages", get(api::list).post(api::put))
         .route("/api/backup", get(api::backup))
+        .route("/api/events", get(events::stream))
+        .route("/", get(ui::index))
+        .route("/{project}/", get(ui::project))
+        .route("/{project}/{key}/", get(ui::key))
         .route("/{project}/{key}/{file}", get(pages::show))
         .layer(DefaultBodyLimit::max(MAX_BODY))
         .layer(middleware::from_fn(guard))

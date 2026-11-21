@@ -55,6 +55,24 @@ pub struct Filter {
     pub limit: i64,
 }
 
+/// 絞り込みの候補 1 つ（値・件数・添える字）。
+#[derive(Debug)]
+pub struct Count {
+    pub value: String,
+    pub count: i64,
+    pub note: String,
+}
+
+/// 絞り込みの候補。DB にある値から作る。
+#[derive(Debug)]
+pub struct Facets {
+    pub roles: Vec<Count>,
+    pub workspaces: Vec<Count>,
+    pub kinds: Vec<Count>,
+    pub keys: Vec<Count>,
+    pub projects: Vec<Count>,
+}
+
 #[derive(Debug)]
 pub enum PutError {
     /// 指定した番号は、もう使われている。
@@ -192,6 +210,52 @@ impl Db {
         )
         .fetch_all(&self.read)
         .await
+    }
+
+    pub async fn facets(&self) -> Result<Facets, sqlx::Error> {
+        let db = &self.read;
+        let roles = sqlx::query_as!(
+            Count,
+            r#"select role as "value!: String", count(*) as "count!: i64", '' as "note!: String"
+               from pages group by role order by 2 desc, 1"#
+        );
+        // workspace の ID だけでは何の居場所かわからないので、その ID で置かれた鍵を添える。
+        let workspaces = sqlx::query_as!(
+            Count,
+            r#"select workspace as "value!: String", count(*) as "count!: i64",
+                      case when workspace = '' then ''
+                           else replace(group_concat(distinct key), ',', ', ') end as "note!: String"
+               from pages group by workspace order by max(created_at) desc limit 100"#
+        );
+        let kinds = sqlx::query_as!(
+            Count,
+            r#"select kind as "value!: String", count(*) as "count!: i64", '' as "note!: String"
+               from pages group by kind order by 2 desc, 1"#
+        );
+        let keys = sqlx::query_as!(
+            Count,
+            r#"select key as "value!: String", count(*) as "count!: i64", '' as "note!: String"
+               from pages group by key order by max(created_at) desc limit 100"#
+        );
+        let projects = sqlx::query_as!(
+            Count,
+            r#"select project as "value!: String", count(*) as "count!: i64", '' as "note!: String"
+               from pages group by project order by 2 desc, 1"#
+        );
+        let (roles, workspaces, kinds, keys, projects) = tokio::try_join!(
+            roles.fetch_all(db),
+            workspaces.fetch_all(db),
+            kinds.fetch_all(db),
+            keys.fetch_all(db),
+            projects.fetch_all(db),
+        )?;
+        Ok(Facets {
+            roles,
+            workspaces,
+            kinds,
+            keys,
+            projects,
+        })
     }
 
     /// 動かしたまま、DB の写しを 1 つの file に作る。呼んだ側が読み終えたら消す。

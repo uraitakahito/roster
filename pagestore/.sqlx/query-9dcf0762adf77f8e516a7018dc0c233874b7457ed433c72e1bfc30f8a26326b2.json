@@ -1,0 +1,40 @@
+{
+  "db_name": "SQLite",
+  "query": "select kind as \"value!: String\", count(*) as \"count!: i64\", '' as \"note!: String\"\n               from pages group by kind order by 2 desc, 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "value!: String",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pages",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "name": "count!: i64",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "note!: String",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "9dcf0762adf77f8e516a7018dc0c233874b7457ed433c72e1bfc30f8a26326b2"
+}

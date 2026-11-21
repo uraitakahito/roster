@@ -18,7 +18,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut term = signal(SignalKind::terminate())?;
     let mut int = signal(SignalKind::interrupt())?;
     tokio::select! {
-        served = axum::serve(listener, router(AppState { db: db.clone() })) => served?,
+        served = axum::serve(listener, router(AppState::new(db.clone()))) => served?,
         _ = term.recv() => {}
         _ = int.recv() => {}
     }
