@@ -61,6 +61,8 @@ export interface Incident {
   timeline?: string
   /** 扱いを替えた時刻。 */
   decidedAt?: string
+  /** 扱いを替えた担当（課題の Key と役割。TPM 担当は tpm）。この欄ができる前に決めた件には無い。 */
+  decidedBy?: { by: string, role: string }
 }
 
 const fileOf = (n: number): string => `incidents/${n}.jsonc`;

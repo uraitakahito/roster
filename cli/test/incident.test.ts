@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { incidentAdd, incidentAssign, incidentClose, incidentDrop, incidentReview, incidentTag } from '../src/commands/incident.ts';
+import { incidentAdd, incidentAssign, incidentClose, incidentDrop, incidentFollow, incidentReview, incidentTag } from '../src/commands/incident.ts';
 import { dismiss, reportDone, reportEnd, reportIncident, wait } from '../src/commands/messages.ts';
 import { hello } from '../src/commands/role-side.ts';
 import { assign, roles } from '../src/commands/tpm-side.ts';
@@ -14,6 +14,8 @@ function started(config: Record<string, unknown> = {}, issue?: string): World & 
   hello(se);
   return { ...w, se };
 }
+/** Auditor の居場所から打つ周り。 */
+const auditorOf = (w: World): ReturnType<World['role']> => ({ ...w.role('audit', 'file:9'), env: { TPM_KEY: 'audit', TPM_ROLE: 'auditor' } });
 const add = (w: World, key: string, text: string, more: Partial<Parameters<typeof incidentAdd>[2]> = {}): string[] =>
   incidentAdd(w.tpm, key, { text, type: 'efficiency', tags: [], severe: false, ...more });
 
@@ -155,13 +157,34 @@ describe('台帳を見直す・扱いを決める', () => {
   test('担当は、見直す・扱いを決める命令を打てない（書くのは tpm report incident）', () => {
     const w = ledger();
     for (const run of [
-      () => incidentAdd(w.se, 't-x7k2', { text: 'x', type: 'safety', tags: [], severe: false }),
       () => incidentReview(w.se),
       () => incidentTag(w.se, '1', ['x']),
       () => incidentAssign(w.se, ['1'], { to: 't-k4wd' }),
       () => incidentDrop(w.se, ['1'], { why: 'x' }),
       () => incidentClose(w.se, ['1'], { why: 'x' }),
-    ]) expect(run).toThrow(/TPM 担当です。担当は tpm report incident/);
+      () => incidentFollow(w.se),
+    ]) expect(run).toThrow(/TPM 担当と Auditor です。担当は tpm report incident/);
+    expect(() => incidentAdd(w.se, 't-x7k2', { text: 'x', type: 'safety', tags: [], severe: false })).toThrow(/tpm incident add で書くのは TPM 担当です。担当は tpm report incident/);
+    expect(readIncidents(w.tpm).every(i => i.status === 'open')).toBe(true);
+  });
+
+  test('Auditor は、見直す・扱いを決める命令を打てる。誰が決めたかが件に残る', () => {
+    const w = ledger();
+    const auditor = auditorOf(w);
+    expect(incidentReview(auditor)[0]).toBe('台帳: 未決 4');
+    expect(incidentTag(auditor, '2', ['うその知らせ'])[0]).toMatch(/^tag を付けた: #2 /);
+    incidentAssign(auditor, ['3'], { to: 'audit' });
+    incidentDrop(auditor, ['2'], { why: 'Product Manager が受け入れた（audit-1 の R2）' });
+    incidentClose(auditor, ['1'], { pr: 'https://github.com/o/r/pull/9' });
+    incidentDrop(w.tpm, ['4'], { why: '1 度きり' });
+    expect(readIncidents(w.tpm).map(i => [i.status, i.decidedBy])).toEqual([
+      ['closed', { by: 'audit', role: 'auditor' }],
+      ['dropped', { by: 'audit', role: 'auditor' }],
+      ['assigned', { by: 'audit', role: 'auditor' }],
+      ['dropped', { by: 'tpm', role: 'tpm' }],
+    ]);
+    // 書くのは、ほかの担当と同じく tpm report incident。
+    expect(() => incidentAdd(auditor, 'audit', { text: 'x', type: 'safety', tags: [], severe: false })).toThrow(/tpm incident add で書くのは TPM 担当です/);
   });
 
   test('未決の件があれば、名簿の終わりに 1 行出す', () => {
@@ -169,5 +192,60 @@ describe('台帳を見直す・扱いを決める', () => {
     expect(roles(w.tpm).at(-1)).toBe('台帳: 未決 4 件（重い 1）。tpm incident review で見る');
     incidentDrop(w.tpm, ['1', '2', '3', '4'], { why: '試し' });
     expect(roles(w.tpm).at(-1)).toMatch(/^- t-x7k2/);
+  });
+});
+
+describe('追いかけの一覧（tpm incident follow）', () => {
+  const at = (w: World, iso: string): void => {
+    w.tpm.now = () => new Date(iso);
+  };
+
+  test('振ったまま・済みの後の再発・古い残り・TPM 担当の決め、を出す', () => {
+    const w = started();
+    at(w, '2026-11-20T12:00:00.000Z');
+    add(w, 't-8zuk', '権限 1', { tags: ['権限'] });
+    add(w, 'AI-22', '行き違い 1', { type: 'reliability', tags: ['行き違い'] });
+    add(w, 't-3m36', '行き違い 2', { tags: ['行き違い'] });
+    wait(w.tpm, 'pm', 'Jira の画面', { hand: true });
+    w.se.now = w.tpm.now;
+    reportDone(w.se, { kind: 'result', summary: 's', remaining: '本体の checkout が main より古い', decisions: 'なし', points: [] });
+    at(w, '2026-11-21T00:00:00.000Z');
+    // 振り先の 1 つは名簿に居ない担当、もう 1 つは動いていて【done】を返した担当。
+    incidentAssign(w.tpm, ['1'], { to: 't-k4wd' });
+    add(w, 't-x7k2', '振る件', { type: 'safety' });
+    incidentAssign(w.tpm, ['6'], { to: 't-x7k2' });
+    incidentClose(w.tpm, ['2', '3'], { pr: 'https://github.com/o/r/pull/9' });
+    incidentDrop(w.tpm, ['4'], { why: '1 度きり' });
+    at(w, '2026-11-22T06:00:00.000Z');
+    add(w, 'AI-24', '行き違い 3', { tags: ['行き違い'] });
+    at(w, '2026-11-23T12:00:00.000Z');
+    expect(incidentFollow(auditorOf({ ...w, role: (key, address) => ({ ...w.role(key, address), now: w.tpm.now }) }))).toEqual([
+      '振ったまま: 2 件',
+      '- #1 効率性 t-8zuk 11-20 12:00「権限 1」 tag: 権限 振った: t-k4wd（2 日前に振った。振り先: 名簿に居ない・【done】【end】【merged】は無い）',
+      '- #6 安全性 t-x7k2 11-21 00:00「振る件」 振った: t-x7k2（2 日前に振った。振り先: 動いている・最後の【done】 11-20 12:00）',
+      '済みの後の再発（tag）: 1 件',
+      '- 行き違い: 済み 2 件（#2・#3）の後に 1 件（#7）',
+      '古い残り（未決の「残り」と「PM の手」。古い順）: 1 件',
+      '- #5 残り t-x7k2 11-20 12:00「【done】の残り: 本体の checkout が main より古い」（3 日）',
+      'TPM 担当の決め（調べない・済み）: 3 件',
+      '- #2 信頼性 AI-22 11-20 12:00「行き違い 1」 tag: 行き違い 済み: https://github.com/o/r/pull/9（決めた: 11-21 00:00）',
+      '- #3 効率性 t-3m36 11-20 12:00「行き違い 2」 tag: 行き違い 済み: https://github.com/o/r/pull/9（決めた: 11-21 00:00）',
+      '- #4 PM の手 tpm 11-20 12:00「Jira の画面」 tag: pm-hand 調べない: 1 度きり（決めた: 11-21 00:00）',
+    ]);
+    // --since より後に決めた件だけ。Auditor が決めた件は「TPM 担当の決め」に出ない。
+    incidentDrop(auditorOf(w), ['7'], { why: '訂正済み' });
+    expect(incidentFollow(w.tpm, { since: '2026-11-21' }).at(-1)).toBe('TPM 担当の決め（調べない・済み。2026-11-21 より後）: 無い');
+    expect(incidentFollow(w.tpm, { since: '2026-11-20' }).filter(l => l.startsWith('- #')).slice(-3).map(l => l.slice(2, 4))).toEqual(['#2', '#3', '#4']);
+    expect(() => incidentFollow(w.tpm, { since: 'きのう' })).toThrow(/--since は日付/);
+    const json = JSON.parse(incidentFollow(w.tpm, { json: true })[0] ?? '') as { assigned: unknown[], recurred: { tag: string }[], remaining: unknown[], decided: unknown[] };
+    // 後で「調べない」にした件も、済みの後に起きた事には変わりないので、再発に数える。
+    expect([json.assigned.length, json.recurred.length, json.remaining.length, json.decided.length]).toEqual([2, 1, 1, 3]);
+  });
+
+  test('何も無ければ、段ごとに「無い」と出す。扱いは変えない', () => {
+    const w = started();
+    add(w, 't-8zuk', '権限 1', { tags: ['権限'] });
+    expect(incidentFollow(w.tpm)).toEqual(['振ったまま: 無い', '済みの後の再発（tag）: 無い', '古い残り（未決の「残り」と「PM の手」。古い順）: 無い', 'TPM 担当の決め（調べない・済み）: 無い']);
+    expect(readIncidents(w.tpm).map(i => i.status)).toEqual(['open']);
   });
 });
