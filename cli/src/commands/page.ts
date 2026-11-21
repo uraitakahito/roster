@@ -7,14 +7,21 @@ import { appendAudit } from '../audits.ts';
 import type { Context } from '../context.ts';
 import { actor } from '../evidence.ts';
 import { TpmError } from '../skill-sets.ts';
+import { readRole } from '../roster.ts';
 import { copyRefs, fileImport, findFiles, removeFiles } from './file.ts';
 import { roleOf } from './infra.ts';
+import { assertRead } from './messages.ts';
 import { call, compareStored, down, fetchTo, inStore, KEY, localPath, pagesDir, pagesUrl, PROJECT, reason, removeLocal, requireKey, selfAddress, writeCopy } from './store.ts';
 
 /** ページの種類。file の名の頭になる（`<種類>-<番号>.html`）。置き場は名の一覧を持たないので、種類を足すのはここだけ。 */
 export const PAGE_KINDS = ['brief', 'confirm', 'proposal', 'plan', 'result', 'issue', 'timeline', 'audit'] as const;
 /** ページの種類の名前。 */
 export type PageKind = typeof PAGE_KINDS[number];
+/**
+ * tpm page put が、置く前に未読のメッセージで 1 度止まる種類（担当の成果と確認）。
+ * 相手の答えを読む前に、古い前提のページを置かないため（台帳 #45）。依頼書・課題の写し・時系列・監査のページは止めない。
+ */
+const READ_FIRST: readonly PageKind[] = ['confirm', 'proposal', 'plan', 'result'];
 
 /** 控えの folder にあるページの file の名（`<種類>-<番号>.html`。番号は頭に 0 の無い 1 以上）。 */
 const PAGE_FILE = /^([a-z][a-z0-9-]{0,31})-([1-9]\d*)\.html$/;
@@ -47,8 +54,22 @@ export const pageFolder = (ctx: Context, key: string): string => join(pagesDir(c
 export function pagePut(ctx: Context, file: string, options: { kind: string, key?: string }): string[] {
   if (!(PAGE_KINDS as readonly string[]).includes(options.kind)) throw new TpmError(`--kind は ${PAGE_KINDS.join('・')} のどれかにしてください`);
   if (!existsSync(file) || !statSync(file).isFile()) throw new TpmError(`file がありません: ${file}`);
+  if (READ_FIRST.includes(options.kind as PageKind)) assertReadBeforePut(ctx, options.key);
   const { path, url } = putPage(ctx, { file }, options.kind as PageKind, options.key);
   return [`置いた: ${path}`, `URL: ${url}`];
+}
+
+/**
+ * 置く前の検査。送る命令の検査（assertRead）と同じく、まだ見せていない未読があれば出して 1 度止まり、打ち直せば置く。
+ * 担当は TPM 担当からの物を見る。TPM 担当は、--key の担当から来た物だけを見る（名簿に無い Key なら見ない）。
+ */
+function assertReadBeforePut(ctx: Context, keyOption?: string): void {
+  if (ctx.env.TPM_KEY) {
+    assertRead(ctx, 'TPM 担当', undefined, 'put');
+    return;
+  }
+  const role = keyOption === undefined ? undefined : readRole(ctx, keyOption);
+  if (role !== undefined) assertRead(ctx, `${role.key} の担当`, role.title, 'put');
 }
 
 /** file の中身か字をページとして置き、控えの path と URL を返す（pagePut と、tpm assign の課題の写し）。 */

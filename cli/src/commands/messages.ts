@@ -119,12 +119,18 @@ export function markShown(ctx: Context, messages: Incoming[]): void {
   ctx.state.write(shownFile(address), [...shown, ...added].slice(-SHOWN_KEEP));
 }
 
+/** 未読で止まったときの字（送る命令と、ページを置く命令）。 */
+const READ_STOP = {
+  send: { not: '送っていません', retry: '同じ命令を打ち直せば送ります（事情が変わっていたら、中身を変えて打つ）' },
+  put: { not: 'ページを置いていません', retry: '同じ命令を打ち直せば置きます（事情が変わっていたら、ページを書き直して打つ）' },
+} as const;
+
 /**
  * 送る前の検査。自分宛てでまだ届いていないメッセージのうち、まだ見せていない物があれば、それを出して 1 度だけ止まる（行き違いを減らす）。
  * from は相手の題（TPM 担当が担当に送るとき。ほかの担当からのメッセージでは止まらない）。担当は TPM 担当からしか受けないので、付けない。
- * 見せた物は覚えるので、同じ命令を打ち直せば送る。
+ * 見せた物は覚えるので、同じ命令を打ち直せば送る。action は止まった時の字（put は tpm page put が置く前に呼ぶとき）。
  */
-export function assertRead(ctx: Context, who: string, from?: string): void {
+export function assertRead(ctx: Context, who: string, from?: string, action: keyof typeof READ_STOP = 'send'): void {
   const pending = ctx.transport.pending().filter(m => from === undefined || m.from === from);
   if (pending.length === 0) return;
   const shown = new Set(readShown(ctx, ctx.transport.whoami()).map(e => e.id));
@@ -133,10 +139,10 @@ export function assertRead(ctx: Context, who: string, from?: string): void {
   markShown(ctx, unread);
   recordGateStop(ctx, 'unread', unread.map(m => m.id).join(' '));
   throw new TpmError([
-    `${who}から、まだ読んでいないメッセージが ${unread.length} 件あります。送っていません。`,
+    `${who}から、まだ読んでいないメッセージが ${unread.length} 件あります。${READ_STOP[action].not}。`,
     ...unread.flatMap(m => [`--- ${m.from}（id ${m.id}）`, m.text]),
     '--- ここまで',
-    '読んだうえで、同じ命令を打ち直せば送ります（事情が変わっていたら、中身を変えて打つ）。',
+    `読んだうえで、${READ_STOP[action].retry}。`,
   ].join('\n'));
 }
 
