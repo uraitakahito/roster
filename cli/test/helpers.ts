@@ -20,11 +20,13 @@ export interface Call {
 
 /**
  * 偽の置き場: tpm が打つ curl を受け、本物（pagestore）と同じ決まりで答える。
- * 番号は種類ごとに今の最大＋1、名指した番号が使われていれば 409。本物との揃いは、CI のつなぎの段が見る。
+ * 番号は種類ごとに今の最大＋1（消した番号も数える）、名指した番号が使われているか消した番号なら 409。消した URL は 410。本物との揃いは、CI のつなぎの段が見る。
  */
 export class FakeStore {
   /** 置かれたページ（置き場の中の path → 記録と本文）。 */
   pages = new Map<string, { record: PageRecord, body: Buffer }>();
+  /** 消したページの path（番号は 2 度使わず、URL は 410）。 */
+  removed = new Set<string>();
   /** true の間、つながらない（curl の exit 7）。 */
   down = false;
   /** 置く要求の答えを替える（置き場が断る時の試験）。 */
@@ -40,12 +42,23 @@ export class FakeStore {
       return { status: 0, stdout: `${out === undefined ? body.toString() : ''}\n${code}`, stderr: '' };
     };
     const q = url.searchParams;
+    if (args.includes('DELETE')) {
+      const gone = [...this.pages.values()].map(p => p.record)
+        .filter(r => r.project === q.get('project') && (['key', 'kind', 'n'] as const).every(f => !q.has(f) || q.get(f) === String(r[f])))
+        .map(r => r.path);
+      for (const path of gone) {
+        this.pages.delete(path);
+        this.removed.add(path);
+      }
+      return reply(200, JSON.stringify({ removed: gone }));
+    }
     if (args.includes('POST')) {
       if (this.refuse !== undefined) return reply(this.refuse.code, this.refuse.body);
       const data = args[args.indexOf('--data-binary') + 1] ?? '';
       const body = data === '@-' ? Buffer.from(options?.input ?? '') : readFileSync(data.slice(1));
       const [project, key, kind] = [q.get('project') ?? '', q.get('key') ?? '', q.get('kind') ?? ''];
-      const taken = [...this.pages.values()].map(p => p.record).filter(r => r.project === project && r.key === key && r.kind === kind).map(r => r.n);
+      const prefix = `/${project}/${key}/${kind}-`;
+      const taken = [...this.pages.keys(), ...this.removed].filter(p => p.startsWith(prefix) && /^\d+\.html$/.test(p.slice(prefix.length))).map(p => Number.parseInt(p.slice(prefix.length), 10));
       const n = Number(q.get('n') ?? Math.max(0, ...taken) + 1);
       if (taken.includes(n)) return reply(409, '{"error":"その番号は、もう使われている"}');
       const record: PageRecord = {
@@ -72,6 +85,7 @@ export class FakeStore {
       return reply(200, JSON.stringify({ pages: found }));
     }
     const page = this.pages.get(decodeURIComponent(url.pathname));
+    if (this.removed.has(decodeURIComponent(url.pathname))) return reply(410, '{"error":"そのページは消した（2026-11-21T00:00:00.000Z）"}');
     return page === undefined ? reply(404, '{"error":"そのページは無い"}') : reply(200, page.body);
   }
 }

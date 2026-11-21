@@ -363,3 +363,121 @@ async fn pages_survive_a_restart() {
     assert_eq!(response.status(), StatusCode::OK);
     again.close().await;
 }
+
+#[tokio::test]
+async fn a_removed_page_is_gone_and_its_number_is_never_used_again() {
+    let s = Server::start().await;
+    for text in ["一つ目の計画", "二つ目の計画"] {
+        s.place(&format!("{SE}&kind=plan"), &html(text, text)).await;
+    }
+    s.place(&format!("{SE}&kind=result"), &html("結果", "残る"))
+        .await;
+
+    let (status, json) = s.remove("project=p&key=SKILLS-14&kind=plan&n=2").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        json["removed"],
+        serde_json::json!(["/p/SKILLS-14/plan-2.html"])
+    );
+
+    let (status, _, body) = s.get("/p/SKILLS-14/plan-2.html").await;
+    assert_eq!(status, StatusCode::GONE);
+    let message: Value = serde_json::from_slice(&body).unwrap();
+    assert!(
+        message["error"]
+            .as_str()
+            .unwrap()
+            .starts_with("そのページは消した（")
+    );
+    // ほかのページは残る。一覧にも検索にも、消したページは出ない。
+    assert_eq!(
+        s.text("/p/SKILLS-14/plan-1.html").await,
+        html("一つ目の計画", "一つ目の計画")
+    );
+    assert_eq!(
+        s.paths("project=p").await,
+        ["/p/SKILLS-14/result-1.html", "/p/SKILLS-14/plan-1.html"]
+    );
+    assert!(s.paths("q=二つ目の計画").await.is_empty());
+    assert_eq!(
+        s.paths("q=一つ目の計画").await,
+        ["/p/SKILLS-14/plan-1.html"]
+    );
+    // 一番大きい番号を消しても、次は 3（古い URL が別のページを指さない）。
+    assert_eq!(s.place(&format!("{SE}&kind=plan"), "<p>3</p>").await, 3);
+    // 取り込みで消した番号を名指しても入らない。
+    let (status, _) = s
+        .put(&format!("{SE}&kind=plan&n=2"), "<p>生き返らない</p>")
+        .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(s.get("/p/SKILLS-14/plan-2.html").await.0, StatusCode::GONE);
+    // 2 度目は消す物が無い。
+    let (_, json) = s.remove("project=p&key=SKILLS-14&kind=plan&n=2").await;
+    assert_eq!(json["removed"], serde_json::json!([]));
+}
+
+#[tokio::test]
+async fn a_key_or_a_whole_project_is_removed_at_once() {
+    let s = Server::start().await;
+    s.place(&format!("{SE}&kind=plan"), "<p>1</p>").await;
+    s.place(&format!("{SE}&kind=result"), "<p>1</p>").await;
+    s.place("project=p&key=t-x&kind=brief&role=tpm", "<p>1</p>")
+        .await;
+    s.place("project=q&key=t-x&kind=brief&role=tpm", "<p>1</p>")
+        .await;
+
+    let (_, json) = s.remove("project=p&key=SKILLS-14").await;
+    assert_eq!(
+        json["removed"],
+        serde_json::json!(["/p/SKILLS-14/plan-1.html", "/p/SKILLS-14/result-1.html"])
+    );
+    assert_eq!(s.paths("project=p").await, ["/p/t-x/brief-1.html"]);
+
+    let (_, json) = s.remove("project=p").await;
+    assert_eq!(json["removed"], serde_json::json!(["/p/t-x/brief-1.html"]));
+    // ほかの project は残る。
+    assert_eq!(s.paths("").await, ["/q/t-x/brief-1.html"]);
+    assert_eq!(
+        s.place("project=p&key=t-x&kind=brief&role=tpm", "<p>2</p>")
+            .await,
+        2
+    );
+}
+
+#[tokio::test]
+async fn removing_needs_a_project_and_a_full_name_for_one_page() {
+    let s = Server::start().await;
+    s.place(&format!("{SE}&kind=plan"), "<p>1</p>").await;
+    for (query, message) in [
+        ("key=SKILLS-14", None),
+        ("project=..", Some("project は")),
+        (
+            "project=p&kind=plan&n=1",
+            Some("n を書くときは key と kind も書く"),
+        ),
+        (
+            "project=p&key=SKILLS-14&n=1",
+            Some("n を書くときは key と kind も書く"),
+        ),
+        ("project=p&key=SKILLS-14&kind=plan&n=0", Some("n は 1 以上")),
+        ("project=p&kind=Plan", Some("kind は")),
+    ] {
+        let uri = format!("/api/pages?{query}");
+        let (status, _, body) = s.send(request("DELETE", &uri, Body::empty())).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{query}");
+        if let Some(message) = message {
+            let json: Value = serde_json::from_slice(&body).unwrap();
+            assert!(
+                json["error"].as_str().unwrap().starts_with(message),
+                "{query}: {json}"
+            );
+        }
+    }
+    // browser の中のページからは消せない。
+    let mut from_page = request("DELETE", "/api/pages?project=p", Body::empty());
+    from_page
+        .headers_mut()
+        .insert(header::ORIGIN, "null".parse().unwrap());
+    assert_eq!(s.send(from_page).await.0, StatusCode::FORBIDDEN);
+    assert_eq!(s.paths("project=p").await, ["/p/SKILLS-14/plan-1.html"]);
+}

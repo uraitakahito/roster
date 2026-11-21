@@ -44,7 +44,7 @@ build は無い。`cli/bin/tpm` は `cli/src/cli.ts` を node で直に動かす
 - **命令を足す**: `cli/src/program.ts`（か `cli/src/commands/register.ts`）に足し、`cli/src/protocol.ts` の `COMMANDS` にも書く（試験が命令の木との揃いを、`check` が skill と docs の `tpm <命令>` が在るかを見る）。
 - **道具を足す**: `transport/` か `tracker/` に口を満たす adapter を書き、`cli/src/config.ts` の選択肢と `cli/src/context.ts` に足す。上の層は変えない。
 - **試し方**: 決まりの命令は、連携を `file`（メッセージ・居場所・状態をファイルに書くだけ）にした project で cmux 無しに試せる（`cli/test/helpers.ts`）。実機で担当を起こして試すときは、`TPM_STATE` を一時の folder に向けて本物の名簿を汚さない。
-- **道具を直に打つ**: `tpm` が起こした session では、guard が `cmux` のメッセージ・状態・居場所の命令と、`acli`・`gh issue` の記録と状態の命令の直打ちを止める（課題を読む命令は止めない。見るのは単純な命令の頭だけなので、commit の文や here-document に道具の名を書いても止まらない）。adapter の開発で直に打つときは、命令の頭に `TPM_RAW=1` を付ける。
+- **道具を直に打つ**: `tpm` が起こした session では、guard が `cmux` のメッセージ・状態・居場所の命令と、`acli`・`gh issue` の記録と状態の命令の直打ちを止める（課題を読む命令は止めない。見るのは単純な命令の頭だけなので、commit の文や here-document に道具の名を書いても止まらない）。担当が置き場に消す要求（`curl -X DELETE …/api/pages…`）を直に送るのも止める（消してよいのは TPM 担当だけ）。adapter の開発で直に打つときは、命令の頭に `TPM_RAW=1` を付ける。
 
 ## pagestore（Rust の置き場）
 
@@ -75,12 +75,13 @@ SQLX_OFFLINE=true cargo test --locked
 PAGESTORE_DB=/tmp/pages.db PAGESTORE_LISTEN=127.0.0.1:18801 cargo run   # 手元で起こす
 ```
 
-GitHub Actions でも同じ順に流す（`.github/workflows/pagestore.yml`）。試験は、試験ごとに一時の DB を作る。workflow の `image` は、`pagestore/Containerfile` を arm64 の runner で build し、空の image の中で起きて置いて読めること・止める合図で終わること・起こし直しても残ることを見る。workflow の `cli` は、build した pagestore を起こし、`cli/test/pagestore-e2e.test.ts` で `tpm page put`・`path`・`list`・`import` を本物に向けて流す（`cli/src/` のすべての役割とページの種類で 1 枚ずつ置いて読む）。`cli/` のほかの試験は偽の置き場（`cli/test/helpers.ts` の `FakeStore`）で流すので、口の形（URL・引数の名・JSON の欄）を変えたら、両方を合わせて直す。手元では、上の「手元で起こす」の後に `cd cli && TPM_E2E_PAGES_URL=http://127.0.0.1:18801 pnpm exec vitest run test/pagestore-e2e.test.ts`。
+GitHub Actions でも同じ順に流す（`.github/workflows/pagestore.yml`）。試験は、試験ごとに一時の DB を作る。workflow の `image` は、`pagestore/Containerfile` を arm64 の runner で build し、空の image の中で起きて置いて読めること・止める合図で終わること・起こし直しても残ることを見る。workflow の `cli` は、build した pagestore を起こし、`cli/test/pagestore-e2e.test.ts` で `tpm page put`・`path`・`list`・`import`・`delete` を本物に向けて流す（`cli/src/` のすべての役割とページの種類で 1 枚ずつ置いて読む）。`cli/` のほかの試験は偽の置き場（`cli/test/helpers.ts` の `FakeStore`）で流すので、口の形（URL・引数の名・JSON の欄）を変えたら、両方を合わせて直す。手元では、上の「手元で起こす」の後に `cd cli && TPM_E2E_PAGES_URL=http://127.0.0.1:18801 pnpm exec vitest run test/pagestore-e2e.test.ts`。
 
-- **口**: `POST /api/pages?project=&key=&kind=&role=&workspace=`（本文は HTML。番号を決めて `201` と JSON を返す。`n`・`created_at` は取り込みの時だけ付け、番号が使われていれば `409`）・`GET /api/pages`（`project`・`key`・`kind`・`role`・`workspace`・`q`・`sort`・`limit`・`before`・`after` で絞る）・`GET /<project>/<key>/<kind>-<n>.html`（本文）・`GET /`（一覧の UI。`/<project>/`・`/<project>/<key>/` は絞った一覧）・`GET /api/events`（置かれるたびに 1 件を push）・`GET /api/backup`（DB の写し）・`GET /healthz`。
+- **口**: `POST /api/pages?project=&key=&kind=&role=&workspace=`（本文は HTML。番号を決めて `201` と JSON を返す。`n`・`created_at` は取り込みの時だけ付け、番号が使われていれば `409`）・`GET /api/pages`（`project`・`key`・`kind`・`role`・`workspace`・`q`・`sort`・`limit`・`before`・`after` で絞る）・`DELETE /api/pages?project=[&key=][&kind=][&n=]`（合うページを消し、番号を表 `removed` に残して、消した path の一覧を返す。`n` には `key` と `kind` が要る。人は見分けない。TPM 担当だけという決まりは cli と guard が持つ）・`GET /<project>/<key>/<kind>-<n>.html`（本文。消したページは `410`）・`GET /`（一覧の UI。`/<project>/`・`/<project>/<key>/` は絞った一覧）・`GET /api/events`（置かれるたびに 1 件を push）・`GET /api/backup`（DB の写し）・`GET /healthz`。
 - **種類と役割の名**: 一覧は `cli/src/` だけが持つ。サーバーは字の形（英小文字で始まり、英小文字・数字・`-` で 32 字まで）だけを見るので、`cli` に種類や役割を足してもサーバーは変えない。
 - **一覧の UI**: サーバーが HTML を組んで返す。絞り込み・並べ替え・検索は link と form で、条件は URL に出る（script が無くても動く）。script がするのは、新着の印・未読の印（browser が覚える）・時刻をこの Mac の時刻で出すことだけ。選んだページは、右の枠（`sandbox` を付けた iframe）に 1 枚だけ出す。見た目を変えたら、手元で起こして browser で見る。
-- **番号**: 書く接続は 1 本で、1 つの SQL が「今の最大 ＋ 1」を取って足す。置いたページを書き換える口・消す口は無い。
+- **番号**: 書く接続は 1 本で、1 つの SQL が「今の最大 ＋ 1」を取って足す。最大は、置いてあるページ（`pages`）と消したページ（`removed`）の両方から取るので、消した番号は 2 度使わない（古い URL が別のページを指さない）。取り込みで消した番号を名指すと `409`。置いたページを書き換える口は無い。
+- **消す**: 1 つの取引で、`removed` に番号を写し、`pages_fts` と `pages` の行を消す。本文は残さない（戻せない）。
 - **SQL を変えた時**: SQL は `query!` が build の時に `pagestore/.sqlx/` と突き合わせる。SQL か `pagestore/migrations/` を変えたら、一時の DB を作って作り直し、commit する（忘れると CI の `cargo sqlx prepare --check` が落ちる）。`sqlx-cli` の版は workflow の `SQLX_CLI_VERSION` と合わせる。
 
   ```sh

@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "insert into removed(project, key, kind, n, removed_at)\n               select project, key, kind, n, strftime('%Y-%m-%dT%H:%M:%fZ', 'now') from pages\n               where project = ?1 and (?2 is null or key = ?2)\n                 and (?3 is null or kind = ?3) and (?4 is null or n = ?4)\n               order by id\n               returning project as \"project!: String\", key as \"key!: String\",\n                         kind as \"kind!: String\", n as \"n!: i64\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "project!: String",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "removed",
+            "name": "project"
+          }
+        }
+      },
+      {
+        "name": "key!: String",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "removed",
+            "name": "key"
+          }
+        }
+      },
+      {
+        "name": "kind!: String",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "removed",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "name": "n!: i64",
+        "ordinal": 3,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "removed",
+            "name": "n"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "301ad62e9e8cc84431e78746e4fa835d72d529d82d8ca0470b46c90cf725b0b9"
+}

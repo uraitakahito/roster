@@ -5,7 +5,7 @@ import { Command, CommanderError } from 'commander';
 import { buildCommand } from './command.ts';
 import { guard, infraApprove, infraList, infraRevoke, infraRun } from './commands/infra.ts';
 import { issueView } from './commands/issue.ts';
-import { PAGE_KINDS, pageImport, pageList, pagePath, pagePut, type PageListOptions } from './commands/page.ts';
+import { PAGE_KINDS, pageDelete, pageImport, pageList, pagePath, pagePut, type PageDeleteOptions, type PageListOptions } from './commands/page.ts';
 import { registerMessages } from './commands/register.ts';
 import { hello, inbox } from './commands/role-side.ts';
 import { assign, close, newKey, roles, type AssignOptions } from './commands/tpm-side.ts';
@@ -103,7 +103,7 @@ export function buildProgram(): Command {
   issue.command('view <key>').description('課題の題・状態・本文・コメントを出す（課題管理が none の project でも、Key の形で道具を選んで読む）')
     .action((key: string) => print(issueView(createContext(), key)));
 
-  const page = program.command('page').description('依頼書と成果のページを、置き場（127.0.0.1 の pagestore）に置く・読む・探す');
+  const page = program.command('page').description('依頼書と成果のページを、置き場（127.0.0.1 の pagestore）に置く・読む・探す・消す');
   page.command('put <file>').description('ページを置き場に置き、控えを写して URL を出す（置き場が応えなければ置けない）')
     .requiredOption('--kind <種類>', PAGE_KINDS.join('・'))
     .option('--key <Key>', '課題の Key（担当は $TPM_KEY。TPM 担当は要る）')
@@ -121,6 +121,11 @@ export function buildProgram(): Command {
     .option('--all-projects', 'ほかの project のページも出す')
     .option('--json', '記録を JSON で出す')
     .action((options: PageListOptions) => print(pageList(createContext(), options)));
+  page.command('delete [urls...]').description('ページを置き場と控えから消す（TPM 担当だけ。戻せない。一覧を見せ、--yes で消す）')
+    .option('--key <key>', 'この Key のページをみな消す')
+    .option('--project <name>', 'この project（状態の folder の名）のページを消す。--key が無ければ project のページをみな消す（既定は今の project）')
+    .option('--yes', '一覧を見せるだけでなく、本当に消す')
+    .action((urls: string[], options: PageDeleteOptions) => print(pageDelete(createContext(), urls, options)));
   page.command('import').description('控えの folder にあって置き場に無いページを、同じ番号で置き場に入れる（切り替えと、DB を失った後）')
     .action(() => print(pageImport(createContext())));
 

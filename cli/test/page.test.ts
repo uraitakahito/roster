@@ -2,9 +2,10 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpath
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { isPageUrl, pageImport, pageList, pagePath, pagePut, pagesDir, pagesUrl } from '../src/commands/page.ts';
+import { isPageUrl, pageDelete, pageImport, pageList, pagePath, pagePut, pagesDir, pagesUrl } from '../src/commands/page.ts';
 import type { Context } from '../src/context.ts';
 import { writeRole } from '../src/roster.ts';
+import { State } from '../src/state.ts';
 import { world } from './helpers.ts';
 
 const BASE = 'http://127.0.0.1:8801';
@@ -239,7 +240,7 @@ describe('tpm page import', () => {
   test('控えのページを、同じ番号と file の時刻で入れる。役割は依頼書と課題の写しだけ tpm', () => {
     const s = legacy();
     const lines = pageImport(s.tpm);
-    expect(lines[0]).toBe(`入れた: 3 枚・もう入っていた: 0 枚・ぶつかった: 0 枚（控えの folder: ${s.dir}）`);
+    expect(lines[0]).toBe(`入れた: 3 枚・もう入っていた: 0 枚・消したページ: 0 枚・ぶつかった: 0 枚（控えの folder: ${s.dir}）`);
     expect(lines.slice(1).sort()).toEqual([
       `+ ${BASE}/-Users-me-projects-x/SKILLS-14/brief-1.html`,
       `+ ${BASE}/-Users-me-projects-x/SKILLS-14/issue-1.html`,
@@ -256,7 +257,7 @@ describe('tpm page import', () => {
     pageImport(s.tpm);
     writeFileSync(join(s.folder, 'result-1.html'), '<title>結果</title>');
     expect(pageImport(s.tpm)).toEqual([
-      `入れた: 1 枚・もう入っていた: 3 枚・ぶつかった: 0 枚（控えの folder: ${s.dir}）`,
+      `入れた: 1 枚・もう入っていた: 3 枚・消したページ: 0 枚・ぶつかった: 0 枚（控えの folder: ${s.dir}）`,
       `+ ${BASE}/-Users-me-projects-x/SKILLS-14/result-1.html`,
     ]);
     expect(readdirSync(s.folder).filter(f => f.includes('.check-'))).toEqual([]);
@@ -267,15 +268,107 @@ describe('tpm page import', () => {
     pageImport(s.tpm);
     writeFileSync(join(s.folder, 'plan-2.html'), '<title>別の計画</title>');
     const lines = pageImport(s.tpm);
-    expect(lines[0]).toContain('入れた: 0 枚・もう入っていた: 2 枚・ぶつかった: 1 枚');
+    expect(lines[0]).toContain('入れた: 0 枚・もう入っていた: 2 枚・消したページ: 0 枚・ぶつかった: 1 枚');
     expect(lines[1]).toBe(`! 同じ番号に別の中身がある（入れていない。要るなら tpm page put で置き直す）: ${join(s.folder, 'plan-2.html')}`);
     expect(s.store.pages.get('/-Users-me-projects-x/SKILLS-14/plan-2.html')?.body.toString()).toBe('<title>計画</title>');
+  });
+
+  test('消したページは、控えに残っていても入れない（生き返らない）', () => {
+    const s = legacy();
+    pageImport(s.tpm);
+    s.store.pages.delete('/-Users-me-projects-x/SKILLS-14/plan-2.html');
+    s.store.removed.add('/-Users-me-projects-x/SKILLS-14/plan-2.html');
+    expect(pageImport(s.tpm)).toEqual([`入れた: 0 枚・もう入っていた: 2 枚・消したページ: 1 枚・ぶつかった: 0 枚（控えの folder: ${s.dir}）`]);
+    expect(s.store.pages.has('/-Users-me-projects-x/SKILLS-14/plan-2.html')).toBe(false);
   });
 
   test('置き場が応えなければ止まる', () => {
     const s = legacy();
     s.store.down = true;
     expect(() => pageImport(s.tpm)).toThrow('tpm ask devops');
+  });
+});
+
+describe('tpm page delete', () => {
+  /** t-x7k2 に 3 枚、t-y に 1 枚、ほかの project に 1 枚を置いた周り。 */
+  function placed() {
+    const s = setup();
+    for (const kind of ['proposal', 'proposal', 'plan']) pagePut(s.role, s.html, { kind });
+    pagePut(s.tpm, s.html, { kind: 'brief', key: 't-y' });
+    const other = { ...s.tpm, state: new State(join(s.tpm.state.dir, '..', '-other')) };
+    pagePut(other, s.html, { kind: 'brief', key: 't-z' });
+    const url = (key: string, file: string, project = s.project) => `${BASE}/${project}/${key}/${file}`;
+    const cachedFile = (key: string, file: string, project = s.project) => join(s.dir, project, key, file);
+    return { ...s, url, cachedFile };
+  }
+
+  test('担当の居場所からは消せない。TPM 担当に頼むよう言い、置き場に頼まない', () => {
+    const s = placed();
+    const before = s.curls().length;
+    expect(() => pageDelete(s.role, [s.url('t-x7k2', 'plan-1.html')], { yes: true })).toThrow('tpm ask tpm');
+    expect(s.curls()).toHaveLength(before);
+    expect(s.store.pages.size).toBe(5);
+  });
+
+  test('--yes が無ければ、消す物を出すだけで消さない', () => {
+    const s = placed();
+    expect(pageDelete(s.tpm, [s.url('t-x7k2', 'proposal-2.html')], {})).toEqual([
+      '消すページ（1 枚。戻せない）:',
+      `${s.url('t-x7k2', 'proposal-2.html')}  試し`,
+      '消すには、同じ命令に --yes を付けて打ってください',
+    ]);
+    expect(s.store.pages.size).toBe(5);
+    expect(existsSync(s.cachedFile('t-x7k2', 'proposal-2.html'))).toBe(true);
+  });
+
+  test('URL の 1 枚を消すと、置き場と控えから消え、URL は 410、番号は使い回されない', () => {
+    const s = placed();
+    expect(pageDelete(s.tpm, [s.url('t-x7k2', 'proposal-2.html')], { yes: true })).toEqual([
+      '消した: 1 枚（控えも消した）',
+      `- ${s.url('t-x7k2', 'proposal-2.html')}`,
+    ]);
+    expect(s.curls().at(-1)).toEqual(['-sS', '--max-time', '10', '-w', '\n%{http_code}', '-X', 'DELETE', `${BASE}/api/pages?project=${encodeURIComponent(s.project)}&key=t-x7k2&kind=proposal&n=2`]);
+    expect(existsSync(s.cachedFile('t-x7k2', 'proposal-2.html'))).toBe(false);
+    expect(existsSync(s.cachedFile('t-x7k2', 'proposal-1.html'))).toBe(true);
+    expect(s.store.pages.size).toBe(4);
+    expect(() => pagePath(s.tpm, s.url('t-x7k2', 'proposal-2.html'))).toThrow('410');
+    expect(pagePut(s.role, s.html, { kind: 'proposal' })[1]).toBe(`URL: ${s.url('t-x7k2', 'proposal-3.html')}`);
+  });
+
+  test('--key は今の project のその Key のページをみな消し、控えの folder も消す。ほかの Key は残る', () => {
+    const s = placed();
+    const lines = pageDelete(s.tpm, [], { key: 't-x7k2', yes: true });
+    expect(lines[0]).toBe('消した: 3 枚（控えも消した）');
+    expect(existsSync(join(s.dir, s.project, 't-x7k2'))).toBe(false);
+    expect(existsSync(s.cachedFile('t-y', 'brief-1.html'))).toBe(true);
+    expect([...s.store.pages.keys()].sort()).toEqual([`/-other/t-z/brief-1.html`, `/${s.project}/t-y/brief-1.html`]);
+  });
+
+  test('--project だけなら、その project のページをみな消し、控えの project の folder も消す', () => {
+    const s = placed();
+    expect(pageDelete(s.tpm, [], { project: '-other' })[0]).toBe('消すページ（1 枚。戻せない）:');
+    expect(pageDelete(s.tpm, [], { project: '-other', yes: true })[0]).toBe('消した: 1 枚（控えも消した）');
+    expect(existsSync(join(s.dir, '-other'))).toBe(false);
+    expect(existsSync(s.dir)).toBe(true);
+    expect(s.store.pages.size).toBe(4);
+  });
+
+  test('合うページが無ければそう言う。名指しの誤りは置き場に頼む前に止める', () => {
+    const s = placed();
+    expect(pageDelete(s.tpm, [], { key: 't-none', yes: true })).toEqual(['置き場に、消すページは無い']);
+    expect(() => pageDelete(s.tpm, [], {})).toThrow('--key');
+    expect(() => pageDelete(s.tpm, [s.url('t-x7k2', 'plan-1.html')], { key: 't-x7k2' })).toThrow('一緒に書けません');
+    for (const bad of ['https://example.com/p/k/plan-1.html', `${BASE}/p/k/plan-01.html`, `${BASE}/p/k/x/plan-1.html`, `${BASE}/../k/plan-1.html`]) {
+      expect(() => pageDelete(s.tpm, [bad], {}), bad).toThrow('URL ではありません');
+    }
+    expect(() => pageDelete(s.tpm, [], { key: '../x' })).toThrow('使えない字');
+  });
+
+  test('置き場が応えなければ、消さずに DevOps に頼むよう言う', () => {
+    const s = placed();
+    s.store.down = true;
+    expect(() => pageDelete(s.tpm, [], { key: 't-x7k2', yes: true })).toThrow('tpm ask devops');
+    expect(existsSync(join(s.dir, s.project, 't-x7k2'))).toBe(true);
   });
 });
 

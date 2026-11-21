@@ -156,6 +156,25 @@ describe('道具の直打ち', () => {
 const hookCommand = (settings: string): string =>
   (JSON.parse(settings) as { hooks: { PreToolUse: { hooks: { command: string }[] }[] } }).hooks.PreToolUse[0]!.hooks[0]!.command;
 
+describe('置き場のページを消す curl', () => {
+  const url = '\'http://127.0.0.1:8801/api/pages?project=p&key=t-x\'';
+  test('担当が直に送る DELETE は止め、TPM 担当に頼むよう言う', () => {
+    for (const command of [`curl -sS -X DELETE ${url}`, `curl -XDELETE ${url}`, `curl --request=DELETE ${url}`, `cd /w && curl -s --request DELETE ${url} | jq .`]) {
+      const verdict = ask(command, 'software-engineer');
+      expect(verdict.allow, command).toBe(false);
+      expect(verdict.allow ? '' : verdict.reason).toContain('TPM 担当だけ');
+    }
+  });
+
+  test('TPM 担当・置き場の外への DELETE・ほかの要求・TPM_RAW=1 は通す', () => {
+    expect(ask(`curl -X DELETE ${url}`).allow).toBe(true);
+    expect(ask('curl -X DELETE https://example.com/x', 'software-engineer').allow).toBe(true);
+    expect(ask(`curl -sS ${url}`, 'devops-engineer').allow).toBe(true);
+    expect(ask(`echo "curl -X DELETE ${url}"`, 'software-engineer').allow).toBe(true);
+    expect(ask(`TPM_RAW=1 curl -X DELETE ${url}`, 'software-engineer').allow).toBe(true);
+  });
+});
+
 describe('hook の入力と settings', () => {
   test('Bash の命令だけを取り出す', () => {
     expect(commandOf(JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'ls' }, cwd: '/w' }))).toBe('ls');

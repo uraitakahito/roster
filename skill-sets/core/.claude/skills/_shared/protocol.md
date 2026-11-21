@@ -85,6 +85,7 @@ Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【
 - 読む: `tpm page path <URL>` で file の path にして Read tool で読む（この Mac の控えの path。控えに無ければ置き場から取る。前の置き場の `8800` の URL も読める）。
 - 探す: `tpm page list`（今の project の新しい順）。`--key <Key>`・`--role <役割>`・`--workspace <宛先>`・`--kind <種類>`・`--q <語>` で絞り、`--json` で記録を出す。Product Manager は、置き場の一覧の UI（`http://127.0.0.1:8801/`）で同じように絞って見る。
 - 開く: ページは自動では開かない（`tpm ask pm`・`tpm report done` も開かない）。Product Manager は、置き場の一覧の UI（`http://127.0.0.1:8801/`）を 1 つ開いておき、新着の印で気づいて読む。その場で開いて人に見せる時だけ `tpm show <URL>`。
+- 消す: **消してよいのは TPM 担当だけ**（戻せない）。試しに置いた・置き間違えたページは、担当は自分で消さず、`tpm ask tpm` で URL と訳を送って頼む（担当の居場所からの `tpm page delete` と、置き場に消す要求を直に送る `curl` は止まる）。TPM 担当は `tpm page delete <URL>…`（Key ごとなら `--key <Key>`、project ごとなら `--project <名>`）で消す物を見て、`--yes` を付けて消す。控えの file も消える。消したページの URL は 410 を返し、その番号は 2 度使われない。
 - 置き場が応えなければ、ページは置けない（`tpm page put` が止まる。番号を置き場が決めるため）。控えにあるページは読める。`tpm ask devops --what "置き場（tpm-pagestore）を起こす" --why "<何が置けないか>"` で頼む。自分では container を起こさない。
 - 図があった方がわかりやすい所は図を入れる。
 

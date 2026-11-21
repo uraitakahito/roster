@@ -41,6 +41,7 @@ export const COMMANDS = [
   'page path',
   'page list',
   'page import',
+  'page delete',
   'guard',
   'run-role',
 ] as const;

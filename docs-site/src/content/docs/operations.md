@@ -67,7 +67,7 @@ tpm infra run tpm-pagestore -- container run -d --name tpm-pagestore \
 4. `container logs tpm-pagestore` の頭に `pagestore <版> listen=0.0.0.0:8080 db=/data/pages.db` が出ている。
 5. `container stats --no-stream tpm-pagestore` のメモリが数 MiB〜20 MiB ほど（初めて起こした直後と、たくさん置いた直後は、OS が file を覚えている分で 50 MiB を超えることがある。起こし直すと戻る）。
 
-試しのページは置かない（置いたページを消す口は無い）。
+試しのページを置いたら、TPM 担当が `tpm page delete <URL> --yes` で消す（[担当のあいだの決まり](/protocol/#ページの置き場)）。
 
 ### DB の写しを取る
 
@@ -105,6 +105,7 @@ tpm page import
 
 - 控えにあって置き場に無いページを、同じ番号・file の時刻で入れる。何度打っても同じ結果になる。
 - 置いた担当はわからないので、役割は依頼書と課題の写しだけ `tpm`、ほかは `unknown`、居場所は空で入る（DB の写しから戻せば、これらも戻る）。
+- 「消したページ」と出た物は、置き場で消した番号（`tpm page delete`）。控えにだけ残っていた物で、入れない。
 - 「ぶつかった」と出たページは、同じ番号に別の中身が置き場にある。入れていないので、要る物なら `tpm page put` で置き直す。
 
 ### 止める・Mac を起こし直した後

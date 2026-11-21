@@ -57,6 +57,13 @@ impl Server {
         (status, serde_json::from_slice(&body).unwrap())
     }
 
+    /// 消して、消した path の一覧を返す。
+    pub async fn remove(&self, query: &str) -> (StatusCode, Value) {
+        let uri = format!("/api/pages?{query}");
+        let (status, _, body) = self.send(request("DELETE", &uri, Body::empty())).await;
+        (status, serde_json::from_slice(&body).unwrap())
+    }
+
     pub async fn text(&self, uri: &str) -> String {
         let (status, _, body) = self.get(uri).await;
         assert_eq!(status, StatusCode::OK, "{uri}");

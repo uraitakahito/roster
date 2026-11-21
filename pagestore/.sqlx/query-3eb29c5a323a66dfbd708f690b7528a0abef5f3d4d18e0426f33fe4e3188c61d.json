@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "insert into pages(project, key, kind, n, title, role, workspace, created_at, body)\n               values(?1, ?2, ?3,\n                      coalesce(?4, (select coalesce(max(n), 0) + 1 from pages\n                                    where project = ?1 and key = ?2 and kind = ?3)),\n                      ?5, ?6, ?7,\n                      coalesce(?8, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),\n                      ?9)\n               returning id as \"id!: i64\", n as \"n!: i64\", created_at as \"created_at!: String\"",
+  "query": "insert into pages(project, key, kind, n, title, role, workspace, created_at, body)\n               values(?1, ?2, ?3,\n                      coalesce(?4, (select coalesce(max(n), 0) + 1 from\n                                      (select n from pages where project = ?1 and key = ?2 and kind = ?3\n                                       union all\n                                       select n from removed where project = ?1 and key = ?2 and kind = ?3))),\n                      ?5, ?6, ?7,\n                      coalesce(?8, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),\n                      ?9)\n               returning id as \"id!: i64\", n as \"n!: i64\", created_at as \"created_at!: String\"",
   "describe": {
     "columns": [
       {
@@ -46,5 +46,5 @@
       false
     ]
   },
-  "hash": "b668f024d1977544a5cb61a97923d311eb43e7abde4d6ab988cf77d595531c72"
+  "hash": "3eb29c5a323a66dfbd708f690b7528a0abef5f3d4d18e0426f33fe4e3188c61d"
 }

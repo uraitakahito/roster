@@ -1,6 +1,6 @@
-//! JSON の口: 置く・探す・DB の写し。
+//! JSON の口: 置く・探す・消す・DB の写し。
 
-use crate::db::{Filter, NewPage, PageMeta, PutError};
+use crate::db::{Filter, NewPage, PageMeta, PutError, Target};
 use crate::{AppState, error, internal, text};
 use axum::Json;
 use axum::body::{Body, Bytes};
@@ -157,6 +157,57 @@ pub async fn list(State(state): State<AppState>, Query(p): Query<ListParams>) ->
         Ok(rows) => {
             let pages: Vec<Page> = rows.into_iter().map(Page::from).collect();
             Json(serde_json::json!({ "pages": pages })).into_response()
+        }
+        Err(e) => internal(e),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct RemoveParams {
+    project: String,
+    key: Option<String>,
+    kind: Option<String>,
+    n: Option<i64>,
+}
+
+/// 合うページを消す（`DELETE /api/pages?project=…[&key=…][&kind=…[&n=…]]`）。戻せない。
+/// 消した番号は残り、同じ番号は 2 度使わない。消したページの path の一覧を返す（合う物が無ければ空）。
+/// 消してよいのは TPM 担当だけという決まりは、cli（tpm page delete）と guard が持つ。ここでは人を見分けない。
+pub async fn remove(State(state): State<AppState>, Query(p): Query<RemoveParams>) -> Response {
+    let checks = [
+        (
+            is_segment(&p.project),
+            "project は英数字と . _ - で 255 字まで",
+        ),
+        (
+            p.key.as_deref().is_none_or(is_segment),
+            "key は英数字と . _ - で 255 字まで",
+        ),
+        (
+            p.kind.as_deref().is_none_or(is_name),
+            "kind は英小文字で始まり、英小文字・数字・- で 32 字まで",
+        ),
+        (p.n.is_none_or(|n| n >= 1), "n は 1 以上"),
+        (
+            p.n.is_none() || (p.key.is_some() && p.kind.is_some()),
+            "n を書くときは key と kind も書く",
+        ),
+    ];
+    if let Some((_, message)) = checks.iter().find(|(ok, _)| !ok) {
+        return error(StatusCode::BAD_REQUEST, message);
+    }
+    let target = Target {
+        project: p.project,
+        key: p.key,
+        kind: p.kind,
+        n: p.n,
+    };
+    match state.db.remove(&target).await {
+        Ok(removed) => {
+            for path in &removed {
+                println!("remove {path}");
+            }
+            Json(serde_json::json!({ "removed": removed })).into_response()
         }
         Err(e) => internal(e),
     }
