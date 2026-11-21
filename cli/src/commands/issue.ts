@@ -94,5 +94,5 @@ export function copyIssue(ctx: Context, issueKey: string, roleKey: string): stri
     if (!(e instanceof TpmError)) throw e;
     throw new TpmError(`${issueKey} の課題の写しを作れませんでした: ${e.message}\n読めないまま振るなら、訳を添えて --no-issue-copy "<訳>" を付けてください（訳は担当に届きます）`);
   }
-  return putPage(ctx, issuePage(issue, ctx.now()), 'issue', roleKey).url;
+  return putPage(ctx, { text: issuePage(issue, ctx.now()) }, 'issue', roleKey).url;
 }

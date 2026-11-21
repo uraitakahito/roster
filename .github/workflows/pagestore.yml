@@ -2,9 +2,9 @@ name: pagestore
 on:
   push:
     branches: [main]
-    paths: [pagestore/**, .github/workflows/pagestore.yml]
+    paths: [pagestore/**, cli/**, .node-version, .github/workflows/pagestore.yml]
   pull_request:
-    paths: [pagestore/**, .github/workflows/pagestore.yml]
+    paths: [pagestore/**, cli/**, .node-version, .github/workflows/pagestore.yml]
   schedule:
     # 弱点の知らせは commit と関わりなく出るので、週に 1 度も流す（月曜 00:00 UTC）。
     - cron: "0 0 * * 1"
@@ -66,6 +66,36 @@ jobs:
           curl -fsS 'http://127.0.0.1:8801/?q=image' | grep -q 'result-1'
       - if: always()
         run: docker logs pagestore-ci
+  cli:
+    # cli と本物の pagestore のつなぎ（tpm page put・path・list・import）。口の形のずれをここで見つける。
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    env:
+      SQLX_OFFLINE: "true"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          rust-src-dir: pagestore
+          cache-workspaces: pagestore
+      - run: cargo build --locked
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: cli/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: cli/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: cli
+      - name: pagestore を起こし、tpm の命令を本物に向けて流す
+        working-directory: cli
+        run: |
+          PAGESTORE_DB="$RUNNER_TEMP/e2e.db" PAGESTORE_LISTEN=127.0.0.1:8801 ../pagestore/target/debug/pagestore &
+          for _ in $(seq 1 40); do curl -fsS http://127.0.0.1:8801/healthz && break; sleep 0.5; done
+          # $TPM_E2E_PAGES_URL が無いと、この試験は飛ばされる（ふだんの pnpm test）。ここでは必ず渡す。
+          TPM_E2E_PAGES_URL=http://127.0.0.1:8801 pnpm exec vitest run test/pagestore-e2e.test.ts
   advisories:
     runs-on: ubuntu-latest
     steps:

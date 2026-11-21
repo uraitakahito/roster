@@ -5,7 +5,7 @@ import { Command, CommanderError } from 'commander';
 import { buildCommand } from './command.ts';
 import { guard, infraApprove, infraList, infraRevoke, infraRun } from './commands/infra.ts';
 import { issueView } from './commands/issue.ts';
-import { PAGE_KINDS, pagePath, pagePut } from './commands/page.ts';
+import { PAGE_KINDS, pageImport, pageList, pagePath, pagePut, type PageListOptions } from './commands/page.ts';
 import { registerMessages } from './commands/register.ts';
 import { hello, inbox } from './commands/role-side.ts';
 import { assign, close, newKey, roles, type AssignOptions } from './commands/tpm-side.ts';
@@ -103,13 +103,26 @@ export function buildProgram(): Command {
   issue.command('view <key>').description('課題の題・状態・本文・コメントを出す（課題管理が none の project でも、鍵の形で道具を選んで読む）')
     .action((key: string) => print(issueView(createContext(), key)));
 
-  const page = program.command('page').description('依頼書と成果のページを、代わりの置き場（127.0.0.1 の Nginx）に置く・読む');
-  page.command('put <file>').description('ページを置き場に写し、URL を出す（置き場が応えなければ止まる）')
+  const page = program.command('page').description('依頼書と成果のページを、置き場（127.0.0.1 の pagestore）に置く・読む・探す');
+  page.command('put <file>').description('ページを置き場に置き、控えを写して URL を出す（置き場が応えなければ置けない）')
     .requiredOption('--kind <種類>', PAGE_KINDS.join('・'))
     .option('--key <鍵>', '課題の鍵（担当は $TPM_KEY。TPM 担当は要る）')
     .action((file: string, options: { kind: string, key?: string }) => print(pagePut(createContext(), file, options)));
-  page.command('path <url>').description('置き場の URL を file の path にする（Read tool で読むため）')
+  page.command('path <url>').description('置き場の URL を控えの file の path にする（Read tool で読むため。控えに無ければ置き場から取る）')
     .action((url: string) => print(pagePath(createContext(), url)));
+  page.command('list').description('置き場のページを絞って探す（今の project の新しい順）')
+    .option('--key <鍵>', '課題の鍵')
+    .option('--role <役割>', '置いた担当の役割（tpm・software-engineer など。前の置き場から入れた物は unknown）')
+    .option('--workspace <宛先>', '置いた担当の居場所の宛先（workspace:12 など）')
+    .option('--kind <種類>', PAGE_KINDS.join('・'))
+    .option('--q <語>', '題と本文を探す')
+    .option('--limit <件数>', '出す件数（1000 まで）', '50')
+    .option('--oldest', '古い順に出す')
+    .option('--all-projects', 'ほかの project のページも出す')
+    .option('--json', '記録を JSON で出す')
+    .action((options: PageListOptions) => print(pageList(createContext(), options)));
+  page.command('import').description('控えの folder にあって置き場に無いページを、同じ番号で置き場に入れる（切り替えと、DB を失った後）')
+    .action(() => print(pageImport(createContext())));
 
   program.command('guard').description('（hook が呼ぶ）標準入力の命令を通すか止めるかを決める')
     .action(() => {
