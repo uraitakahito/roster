@@ -50,7 +50,7 @@ flowchart TB
 
 依頼書・確認・提案・計画・結果の HTML を置く、この Mac だけの置き場。local の folder を読むだけで mount した Nginx の container が、`127.0.0.1` だけで待ち受ける（起こし方は [運用](/operations/)。起こす・止めるのは DevOps Engineer 担当）。
 
-- `tpm page put <file> --kind <種類>` が、file を `<置き場の folder>/<状態の folder の名>/<鍵>/<種類>-<番号>.html` に写し、置き場が応えるのを確かめてから URL を出す。種類は `brief`・`confirm`・`proposal`・`plan`・`result`。鍵は担当なら今の課題の鍵、TPM 担当は `--key` で書く。番号は同じ鍵・同じ種類の次の番号で、前の版は上書きしない。
+- `tpm page put <file> --kind <種類>` が、file を `<置き場の folder>/<状態の folder の名>/<鍵>/<種類>-<番号>.html` に写し、置き場が応えるのを確かめてから URL を出す。種類は `brief`・`confirm`・`proposal`・`plan`・`result`・`issue`（課題の写し。ふだんは `tpm assign` が置く）。鍵は担当なら今の課題の鍵、TPM 担当は `--key` で書く。番号は同じ鍵・同じ種類の次の番号で、前の版は上書きしない。
 - 置き場が応えなければ、file は置いたまま止まる。`tpm ask devops` で起こすよう頼む。
 - `tpm page path <URL>` が、置き場の URL を file の path にする（Read tool で読むため）。
 - project の名に状態の folder の名を使うので、TPM 担当と、起こされた担当とで URL がずれない。課題の folder の URL（`…/<鍵>/`）は、その課題のページの一覧を出す。

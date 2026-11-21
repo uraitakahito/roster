@@ -74,6 +74,7 @@ disable-model-invocation: true
    - `--issue` は課題管理の課題があるときだけ。付けると、担当のメッセージのたびに課題へ記録が書かれる（protocol.md の「記録」）。
    - `--cwd` は担当を起こす folder（付けなければ、あなたを起こした folder）。信頼済みの folder にする。
    - 担当が動いているときに添える一言は `--note "<一言>"`。
+   - 鍵（`--issue` があればそれ）が Jira・GitHub の Issue の形なら、`tpm assign` は振るたびに課題を読み、写しのページを置いて URL を担当に渡す（続きの【brief】でも作り直す）。読めなければ、担当を起こさずに止まる。認証を直すか、Product Manager に中身を貼ってもらって依頼書に写したうえで、`--no-issue-copy "<訳>"` を付けて振り直す（訳は担当に届く）。
 3. `tpm assign` は、新しい担当が名乗るまで 90 秒待ち、結果を返す:
    - 「名乗った」: そのまま続ける。
    - 「信頼のダイアログで止まっていたので閉じた」: 出た folder で 1 度 Claude Code を対話で起こして信頼するよう Product Manager に頼む。

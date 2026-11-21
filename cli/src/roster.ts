@@ -16,6 +16,10 @@ export interface RoleRecord extends RoleSettings {
   brief?: string
   /** 課題管理の課題の鍵（あれば）。 */
   issue?: string
+  /** いちばん新しい課題の写しのページの URL（tpm assign が置く）。 */
+  issuePage?: string
+  /** 写しを作らずに振った訳（tpm assign --no-issue-copy）。 */
+  issueCopySkipped?: string
   /** 居場所の宛先。起こしたときに書く。 */
   address?: string
   /** 担当が名乗った時刻。 */

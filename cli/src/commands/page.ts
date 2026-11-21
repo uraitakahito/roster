@@ -8,7 +8,7 @@ import type { Context } from '../context.ts';
 import { TpmError } from '../skill-sets.ts';
 
 /** ページの種類。file の名の頭になる（`<種類>-<番号>.html`）。 */
-export const PAGE_KINDS = ['brief', 'confirm', 'proposal', 'plan', 'result'] as const;
+export const PAGE_KINDS = ['brief', 'confirm', 'proposal', 'plan', 'result', 'issue'] as const;
 /** ページの種類の名前。 */
 export type PageKind = typeof PAGE_KINDS[number];
 
@@ -39,20 +39,25 @@ export const pageFolder = (ctx: Context, key: string): string => join(pagesDir(c
  */
 export function pagePut(ctx: Context, file: string, options: { kind: string, key?: string }): string[] {
   if (!(PAGE_KINDS as readonly string[]).includes(options.kind)) throw new TpmError(`--kind は ${PAGE_KINDS.join('・')} のどれかにしてください`);
-  const key = options.key ?? ctx.env.TPM_KEY;
+  if (!existsSync(file) || !statSync(file).isFile()) throw new TpmError(`file がありません: ${file}`);
+  const { path, url } = putPage(ctx, readFileSync(file), options.kind as PageKind, options.key);
+  return [`置いた: ${path}`, `URL: ${url}`];
+}
+
+/** 字や file の中身をページとして置き、置いた path と URL を返す（pagePut と、tpm assign の課題の写し）。 */
+export function putPage(ctx: Context, body: Buffer | string, kind: PageKind, keyOption?: string): { path: string, url: string } {
+  const key = keyOption ?? ctx.env.TPM_KEY;
   if (!key) throw new TpmError('課題の鍵がわかりません。TPM 担当は --key <鍵> を付けてください');
   if (!KEY.test(key)) throw new TpmError(`課題の鍵に使えない字があります: ${key}`);
-  if (!existsSync(file) || !statSync(file).isFile()) throw new TpmError(`file がありません: ${file}`);
-  const body = readFileSync(file);
   const project = basename(ctx.state.dir);
   const folder = pageFolder(ctx, key);
   mkdirSync(folder, { recursive: true });
-  const name = writeNext(folder, options.kind, body);
+  const name = writeNext(folder, kind, body);
   const path = join(folder, name);
   const url = `${pagesUrl(ctx.env)}/${[project, key, name].map(encodeURIComponent).join('/')}`;
   const r = ctx.exec('curl', ['-sI', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', '3', url]);
   const code = r.stdout.trim();
-  if (code === '200') return [`置いた: ${path}`, `URL: ${url}`];
+  if (code === '200') return { path, url };
   if (r.status !== 0 || code === '000' || code === '') {
     throw new TpmError(`置き場（${pagesUrl(ctx.env)}）が応えません。file は ${path} に置きました。置き場を起こすよう tpm ask devops で頼んでください`);
   }
@@ -60,7 +65,7 @@ export function pagePut(ctx: Context, file: string, options: { kind: string, key
 }
 
 /** folder に `<kind>-<次の番号>.html` を作って書き、名を返す。番号は今ある最大＋1。先を越されたら（EEXIST）次の番号で作り直す。 */
-function writeNext(folder: string, kind: string, body: Buffer): string {
+function writeNext(folder: string, kind: string, body: Buffer | string): string {
   const pattern = new RegExp(`^${kind}-(\\d+)\\.html$`);
   let n = Math.max(0, ...readdirSync(folder).map(f => Number(pattern.exec(f)?.[1] ?? 0))) + 1;
   for (;;) {
