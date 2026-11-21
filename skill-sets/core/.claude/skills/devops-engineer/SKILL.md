@@ -42,6 +42,12 @@ tpm infra list
 - 置き場は自動では起きない（Mac を起こし直すと止まったまま）。止まっていると、ほかの担当は依頼書も成果も開けず、`tpm page put` も止まる。
 - 手順（起こす・確かめる・止める・作り直す）は docs-site の運用のページ（`docs-site/src/content/docs/operations.md` の「代わりの置き場」）。命令は `tpm infra run tpm-pages -- <命令>` で打つ。止める・作り直すは「TPM に相談」の手続き。
 
+### 新しい置き場（tpm-pagestore）
+
+- ページを DB に持ち、一覧の UI を出すサーバー（環境 `tpm-pagestore`。`127.0.0.1:8801`）。tpm-pages と並べて動かす。image を作る・起こす・保つのはこの担当。今はまだ `tpm page put` はここへ置かない。
+- DB は名前つきの volume にある。volume は消さない。image を上げる前と volume に触る前に、DB の写しを取る。
+- 手順（image を作る・起こす・確かめる・DB の写し・写しから戻す・image を上げる）は docs-site の運用のページ（`docs-site/src/content/docs/operations.md` の「新しい置き場」）。命令は `tpm infra run tpm-pagestore -- <命令>` で打つ。止める・作り直す・volume を変えるは「TPM に相談」の手続き。
+
 ## 2. 終わり
 
 依頼 1 つが済んだら、`tpm report done` で、したこと・確かめた結果・「残り」・「決めてほしいこと」（無ければ「なし」）を送る（Product Manager に決めてほしいことがあれば、protocol.md の「Product Manager に確かめる」で `tpm ask pm` も）。成果のページが無ければ `--url` は付けない:
