@@ -25,7 +25,11 @@ pub async fn show(
             body,
         )
             .into_response(),
-        Ok(None) => not_found(),
+        Ok(None) => match state.db.removed_at(&project, &key, kind, n).await {
+            Ok(Some(at)) => error(StatusCode::GONE, &format!("そのページは消した（{at}）")),
+            Ok(None) => not_found(),
+            Err(e) => internal(e),
+        },
         Err(e) => internal(e),
     }
 }

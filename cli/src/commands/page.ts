@@ -1,8 +1,8 @@
-// 依頼書と成果のページを、置き場（pagestore。127.0.0.1 で待つ、ページを DB に持つサーバー）に置く・読む・探す。
+// 依頼書と成果のページを、置き場（pagestore。127.0.0.1 で待つ、ページを DB に持つサーバー）に置く・読む・探す・消す。
 // 番号は置き場が決める。置いた・読んだページは、この Mac の控えの folder にも写す（Read tool で読むためと、置き場が止まっても読めるため）。
 // 置き場は Mac に 1 つで、project をまたいで同じなので、控えの folder と URL は設定（config.jsonc）でなく環境変数で替える。
 // 置き場を起こす・止めるのは DevOps Engineer 担当（docs-site の運用のページの「ページの置き場（tpm-pagestore）」）。
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import type { Context } from '../context.ts';
@@ -186,6 +186,7 @@ function fetchPage(ctx: Context, storePath: string, path: string): void {
   }
   rmSync(partial, { force: true });
   if (r.code === '000') throw down(ctx, `控え（${path}）もありません。`);
+  if (r.code === '410') throw new TpmError(`置き場のページは消してあります（410）: ${pagesUrl(ctx.env)}${storePath}`);
   throw new TpmError(`置き場にページがありません（${r.code}）: ${pagesUrl(ctx.env)}${storePath}`);
 }
 
@@ -236,7 +237,7 @@ function cached(dir: string): { project: string, key: string, kind: string, n: s
 
 /**
  * 控えの folder にあって置き場に無いページを、同じ番号・file の時刻で置き場に入れる（前の置き場からの切り替えと、DB を失った後に使う）。
- * 何度打っても同じ結果になる。置いた担当はわからないので、役割は依頼書と課題の写しだけ tpm、ほかは unknown、居場所は空で入る。
+ * 何度打っても同じ結果になる。消したページ（置き場が 410 を返す番号）は入れない。置いた担当はわからないので、役割は依頼書と課題の写しだけ tpm、ほかは unknown、居場所は空で入る。
  * 同じ番号に別の中身があるページは入れず、並べて知らせる。
  */
 export function pageImport(ctx: Context): string[] {
@@ -244,6 +245,7 @@ export function pageImport(ctx: Context): string[] {
   const added: string[] = [];
   const conflicts: string[] = [];
   let same = 0;
+  let removed = 0;
   for (const page of cached(dir)) {
     const storePath = `/${[page.project, page.key, basename(page.file)].map(encodeURIComponent).join('/')}`;
     const query = new URLSearchParams({
@@ -263,6 +265,11 @@ export function pageImport(ctx: Context): string[] {
     const copy = `${page.file}.check-${process.pid}`;
     try {
       const r = call(ctx, ['-o', copy, `${pagesUrl(ctx.env)}${storePath}`]);
+      // 消したページ（410）。番号は残っているので入らない。控えだけが残っていた物。
+      if (r.code === '410') {
+        removed += 1;
+        continue;
+      }
       if (r.code !== '200') throw r.code === '000' ? down(ctx, '') : new TpmError(`置き場が ${storePath} に ${r.code} を返しました`);
       if (readFileSync(copy).equals(readFileSync(page.file))) same += 1;
       else conflicts.push(page.file);
@@ -272,8 +279,92 @@ export function pageImport(ctx: Context): string[] {
     }
   }
   return [
-    `入れた: ${added.length} 枚・もう入っていた: ${same} 枚・ぶつかった: ${conflicts.length} 枚（控えの folder: ${dir}）`,
+    `入れた: ${added.length} 枚・もう入っていた: ${same} 枚・消したページ: ${removed} 枚・ぶつかった: ${conflicts.length} 枚（控えの folder: ${dir}）`,
     ...added.map(path => `+ ${pagesUrl(ctx.env)}${path}`),
     ...conflicts.map(file => `! 同じ番号に別の中身がある（入れていない。要るなら tpm page put で置き直す）: ${file}`),
   ];
+}
+
+/** `tpm page delete` の旗。 */
+export interface PageDeleteOptions {
+  /** この Key のページをみな消す。 */
+  key?: string
+  /** この project のページを消す（既定は今の project）。--key が無ければ project のページをみな消す。 */
+  project?: string
+  /** 一覧を見せるだけでなく、本当に消す。 */
+  yes?: boolean
+}
+
+/** 消す物 1 つ。置き場に頼む引数と、控えの中で消す物（file か folder）。 */
+interface DeleteTarget {
+  query: URLSearchParams
+  /** 置き場の中の path のうち、消す物に当たるか。 */
+  covers: (path: string) => boolean
+  /** 控えの folder の中の、消す file か folder（project・Key ごとなら folder ごと消す）。 */
+  local: string[]
+}
+
+/**
+ * ページを消す（戻せない）。消してよいのは TPM 担当だけ（担当の居場所から打つと止まる）。
+ * URL を名指すか、--key（今の project か --project の、その Key のページみな）か、--project だけ（その project のページみな）。
+ * まず消す物を一覧で出し、--yes を付けたときだけ置き場に頼む。置き場は番号を残すので、消した URL は 410 になり、同じ番号は 2 度使われない。
+ * 消した後に、控えの file（Key・project ごとなら folder）も消す。
+ */
+export function pageDelete(ctx: Context, urls: string[], options: PageDeleteOptions): string[] {
+  if (roleOf(ctx.env) !== undefined) throw new TpmError('ページを消せるのは TPM 担当だけです。消すページの URL と訳を、tpm ask tpm で TPM 担当に送って頼んでください');
+  const targets = deleteTargets(ctx, urls, options);
+  const dir = pagesDir(ctx.env);
+  const listed = targets.flatMap((target) => {
+    const query = new URLSearchParams({ project: target.query.get('project') ?? '', limit: '1000' });
+    const key = target.query.get('key');
+    if (key !== null) query.set('key', key);
+    const r = call(ctx, [`${pagesUrl(ctx.env)}/api/pages?${query.toString()}`]);
+    if (r.code === '000') throw down(ctx, 'ページは消していません。');
+    if (r.code !== '200') throw new TpmError(`置き場が一覧を返しませんでした（${r.code}）: ${reason(r.body)}`);
+    return (JSON.parse(r.body) as { pages: PageRecord[] }).pages.filter(p => target.covers(p.path));
+  });
+  if (listed.length === 0) return ['置き場に、消すページは無い'];
+  const lines = listed.map(p => `${pagesUrl(ctx.env)}${p.path}  ${p.title}`);
+  if (!options.yes) return [`消すページ（${listed.length} 枚。戻せない）:`, ...lines, '消すには、同じ命令に --yes を付けて打ってください'];
+  const removed = targets.flatMap((target) => {
+    const r = call(ctx, ['-X', 'DELETE', `${pagesUrl(ctx.env)}/api/pages?${target.query.toString()}`]);
+    if (r.code === '000') throw down(ctx, 'ページは消していません。');
+    if (r.code !== '200') throw new TpmError(`置き場がページを消しませんでした（${r.code}）: ${reason(r.body)}`);
+    for (const local of target.local) removeLocal(dir, local);
+    return (JSON.parse(r.body) as { removed: string[] }).removed;
+  });
+  return [`消した: ${removed.length} 枚（控えも消した）`, ...removed.map(path => `- ${pagesUrl(ctx.env)}${path}`)];
+}
+
+/** 消す物を、URL か旗から作る。 */
+function deleteTargets(ctx: Context, urls: string[], options: PageDeleteOptions): DeleteTarget[] {
+  const dir = pagesDir(ctx.env);
+  if (urls.length > 0) {
+    if (options.key !== undefined || options.project !== undefined) throw new TpmError('URL と --key・--project は一緒に書けません');
+    return urls.map((url) => {
+      const [project = '', key = '', file = '', ...rest] = (inStore(ctx.env, url)?.replace(/[?#].*$/, '') ?? '').split('/');
+      const m = PAGE_FILE.exec(file);
+      if (m === null || rest.length > 0 || !PROJECT.test(project) || !KEY.test(key)) throw new TpmError(`置き場のページの URL ではありません: ${url}`);
+      const path = `/${project}/${key}/${file}`;
+      return { query: new URLSearchParams({ project, key, kind: m[1] ?? '', n: m[2] ?? '' }), covers: p => p === path, local: [join(dir, project, key, file)] };
+    });
+  }
+  const project = options.project ?? basename(ctx.state.dir);
+  if (!PROJECT.test(project)) throw new TpmError(`project の名に使えない字があります: ${project}`);
+  if (options.key === undefined) {
+    if (options.project === undefined) throw new TpmError('消すページの URL か、--key <Key>・--project <名> を書いてください');
+    return [{ query: new URLSearchParams({ project }), covers: p => p.startsWith(`/${project}/`), local: [join(dir, project)] }];
+  }
+  const key = options.key;
+  if (!KEY.test(key)) throw new TpmError(`課題の Key に使えない字があります: ${key}`);
+  return [{ query: new URLSearchParams({ project, key }), covers: p => p.startsWith(`/${project}/${key}/`), local: [join(dir, project, key)] }];
+}
+
+/** 控えの file か folder を消し、空になった上の folder（控えの folder の中だけ）も消す。 */
+function removeLocal(dir: string, path: string): void {
+  rmSync(path, { recursive: true, force: true });
+  for (let parent = dirname(path); parent.startsWith(`${dir}/`); parent = dirname(parent)) {
+    if (!existsSync(parent) || readdirSync(parent).length > 0) break;
+    rmdirSync(parent);
+  }
 }

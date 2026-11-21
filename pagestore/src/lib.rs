@@ -1,4 +1,4 @@
-//! ページの置き場。担当が置いたページ（HTML）を DB に持ち、絞って探せる形で返す。
+//! ページの置き場。担当が置いたページ（HTML）を DB に持ち、絞って探せる形で返す。消すこともできる（戻せない）。
 //! 種類と役割の名の一覧は持たない（cli が持つ）。ここでは字の形だけを見る。
 
 pub mod api;
@@ -36,7 +36,10 @@ impl AppState {
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/healthz", get(|| async { "ok\n" }))
-        .route("/api/pages", get(api::list).post(api::put))
+        .route(
+            "/api/pages",
+            get(api::list).post(api::put).delete(api::remove),
+        )
         .route("/api/backup", get(api::backup))
         .route("/api/events", get(events::stream))
         .route("/", get(ui::index))

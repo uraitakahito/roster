@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, utimesSync,
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { PAGE_KINDS, pageImport, pageList, pagePath, pagePut, type PageRecord } from '../src/commands/page.ts';
+import { PAGE_KINDS, pageDelete, pageImport, pageList, pagePath, pagePut, type PageRecord } from '../src/commands/page.ts';
 import type { Context } from '../src/context.ts';
 import { exec } from '../src/exec.ts';
 import { ROLE_NAMES } from '../src/protocol.ts';
@@ -71,8 +71,8 @@ describe.skipIf(URL === '')('cli と pagestore のつなぎ', () => {
       writeFileSync(join(folder, name), `<title>${name}</title>`);
       utimesSync(join(folder, name), new Date('2026-11-19T01:02:03.456Z'), new Date('2026-11-19T01:02:03.456Z'));
     }
-    expect(pageImport(s.tpm)[0]).toContain('入れた: 2 枚・もう入っていた: 0 枚・ぶつかった: 0 枚');
-    expect(pageImport(s.tpm)[0]).toContain('入れた: 0 枚・もう入っていた: 2 枚・ぶつかった: 0 枚');
+    expect(pageImport(s.tpm)[0]).toContain('入れた: 2 枚・もう入っていた: 0 枚・消したページ: 0 枚・ぶつかった: 0 枚');
+    expect(pageImport(s.tpm)[0]).toContain('入れた: 0 枚・もう入っていた: 2 枚・消したページ: 0 枚・ぶつかった: 0 枚');
     const pages = s.list(s.tpm, { allProjects: true, key: 'K-3', oldest: true }).filter(p => p.project === project);
     expect(pages.map(p => [p.kind, p.n, p.role, p.workspace, p.created_at])).toEqual([
       ['brief', 1, 'tpm', '', '2026-11-19T01:02:03.456Z'],
@@ -82,6 +82,30 @@ describe.skipIf(URL === '')('cli と pagestore のつなぎ', () => {
     const lines = pageImport(s.tpm);
     expect(lines[0]).toContain('ぶつかった: 1 枚');
     expect(lines[1]).toContain(join(folder, 'result-3.html'));
+  });
+
+  test('TPM 担当が消すと、置き場と控えから消え、URL は 410。番号は使い回さず、import でも生き返らない', () => {
+    const s = setup();
+    const ctx = s.real(s.w.role('K-5', 'file:1'), { TPM_ROLE: 'software-engineer' });
+    const first = s.put(ctx, 'plan', '<title>一つ目</title><p>残る計画</p>');
+    const second = s.put(ctx, 'plan', '<title>二つ目</title><p>消す計画</p>');
+    const [cached = ''] = pagePath(ctx, second);
+    expect(() => pageDelete(ctx, [second], { yes: true })).toThrow('TPM 担当だけ');
+    expect(pageDelete(s.tpm, [second], {})[0]).toBe('消すページ（1 枚。戻せない）:');
+    expect(pageDelete(s.tpm, [second], { yes: true })).toEqual(['消した: 1 枚（控えも消した）', `- ${second}`]);
+    expect(() => pagePath(ctx, second)).toThrow('（410）');
+    expect(s.list(s.tpm, { key: 'K-5' }).map(p => p.url)).toEqual([first]);
+    expect(s.list(s.tpm, { q: '消す計画' })).toEqual([]);
+    expect(s.put(ctx, 'plan', '<title>三つ目</title>')).toBe(`${URL}/${s.project}/K-5/plan-3.html`);
+    // 控えが別の所に残っていても、import は入れない。
+    writeFileSync(cached, '<title>二つ目</title><p>消す計画</p>');
+    expect(pageImport(s.tpm)[0]).toContain('消したページ: 1 枚');
+    expect(() => pagePath(ctx, second)).not.toThrow();
+    rmSync(cached);
+    expect(() => pagePath(ctx, second)).toThrow('（410）');
+    // Key ごと消す。
+    expect(pageDelete(s.tpm, [], { key: 'K-5', yes: true })[0]).toBe('消した: 2 枚（控えも消した）');
+    expect(s.list(s.tpm, { key: 'K-5' })).toEqual([]);
   });
 
   test('置き場が断る物は、訳を添えて止まる', () => {

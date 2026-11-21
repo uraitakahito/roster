@@ -106,7 +106,7 @@ export TPM_EFFORT=medium
 
 ## ページの置き場の環境変数（任意）
 
-`tpm page put`・`tpm page path`・`tpm page list`・`tpm page import` が使う、置き場（[担当のあいだの決まり](/protocol/#ページの置き場)）の URL と、控えの folder。置き場は Mac に 1 つで、project をまたいで同じなので、`.claude/roles/config.jsonc` には書かない。替えるのは、置き場の container の port を替えたときだけ。
+`tpm page put`・`tpm page path`・`tpm page list`・`tpm page import`・`tpm page delete` が使う、置き場（[担当のあいだの決まり](/protocol/#ページの置き場)）の URL と、控えの folder。置き場は Mac に 1 つで、project をまたいで同じなので、`.claude/roles/config.jsonc` には書かない。替えるのは、置き場の container の port を替えたときだけ。
 
 | 環境変数 | 決める物 | 無いとき |
 |---|---|---|

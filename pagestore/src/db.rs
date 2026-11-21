@@ -55,6 +55,14 @@ pub struct Filter {
     pub limit: i64,
 }
 
+/// 消すページ。project は必ず。
+pub struct Target {
+    pub project: String,
+    pub key: Option<String>,
+    pub kind: Option<String>,
+    pub n: Option<i64>,
+}
+
 /// 絞り込みの候補 1 つ（値・件数・添える字）。
 #[derive(Debug)]
 pub struct Count {
@@ -109,11 +117,29 @@ impl Db {
 
     pub async fn put(&self, page: NewPage<'_>) -> Result<PageMeta, PutError> {
         let mut tx = self.write.begin().await.map_err(PutError::Db)?;
+        // 消した番号も、もう使われている番号として扱う。
+        if let Some(n) = page.n {
+            let removed = sqlx::query_scalar!(
+                "select 1 from removed where project = ?1 and key = ?2 and kind = ?3 and n = ?4",
+                page.project,
+                page.key,
+                page.kind,
+                n,
+            )
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(PutError::Db)?;
+            if removed.is_some() {
+                return Err(PutError::Taken);
+            }
+        }
         let row = sqlx::query!(
             r#"insert into pages(project, key, kind, n, title, role, workspace, created_at, body)
                values(?1, ?2, ?3,
-                      coalesce(?4, (select coalesce(max(n), 0) + 1 from pages
-                                    where project = ?1 and key = ?2 and kind = ?3)),
+                      coalesce(?4, (select coalesce(max(n), 0) + 1 from
+                                      (select n from pages where project = ?1 and key = ?2 and kind = ?3
+                                       union all
+                                       select n from removed where project = ?1 and key = ?2 and kind = ?3))),
                       ?5, ?6, ?7,
                       coalesce(?8, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
                       ?9)
@@ -173,6 +199,72 @@ impl Db {
         )
         .fetch_optional(&self.read)
         .await
+    }
+
+    /// 消したページなら、消した時刻。
+    pub async fn removed_at(
+        &self,
+        project: &str,
+        key: &str,
+        kind: &str,
+        n: i64,
+    ) -> Result<Option<String>, sqlx::Error> {
+        sqlx::query_scalar!(
+            "select removed_at from removed where project = ?1 and key = ?2 and kind = ?3 and n = ?4",
+            project,
+            key,
+            kind,
+            n,
+        )
+        .fetch_optional(&self.read)
+        .await
+    }
+
+    /// 合うページを消し（全文の索引の行も）、番号を removed に残す。消したページの path を返す。
+    /// key・kind・n は、無ければ問わない（project の中を、Key ごと・種類ごとにまとめて消せる）。
+    pub async fn remove(&self, t: &Target) -> Result<Vec<String>, sqlx::Error> {
+        let mut tx = self.write.begin().await?;
+        let rows = sqlx::query!(
+            r#"insert into removed(project, key, kind, n, removed_at)
+               select project, key, kind, n, strftime('%Y-%m-%dT%H:%M:%fZ', 'now') from pages
+               where project = ?1 and (?2 is null or key = ?2)
+                 and (?3 is null or kind = ?3) and (?4 is null or n = ?4)
+               order by id
+               returning project as "project!: String", key as "key!: String",
+                         kind as "kind!: String", n as "n!: i64""#,
+            t.project,
+            t.key,
+            t.kind,
+            t.n,
+        )
+        .fetch_all(&mut *tx)
+        .await?;
+        sqlx::query!(
+            r#"delete from pages_fts where rowid in
+                 (select id from pages where project = ?1 and (?2 is null or key = ?2)
+                    and (?3 is null or kind = ?3) and (?4 is null or n = ?4))"#,
+            t.project,
+            t.key,
+            t.kind,
+            t.n,
+        )
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query!(
+            r#"delete from pages where project = ?1 and (?2 is null or key = ?2)
+                 and (?3 is null or kind = ?3) and (?4 is null or n = ?4)"#,
+            t.project,
+            t.key,
+            t.kind,
+            t.n,
+        )
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(rows
+            .into_iter()
+            .map(|r| crate::api::page_path(&r.project, &r.key, &r.kind, r.n))
+            .collect())
     }
 
     pub async fn list(&self, f: &Filter) -> Result<Vec<PageMeta>, sqlx::Error> {
