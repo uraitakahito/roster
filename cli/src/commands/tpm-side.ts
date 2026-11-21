@@ -8,6 +8,7 @@ import { modelStatus, ROLES, TPM_TITLE, WAIT, type RoleName } from '../protocol.
 import { resolveSettings } from '../settings.ts';
 import { allRoles, assertKey, LOCAL_KEY, readRole, removeRole, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
 import { skillSetDir, TpmError } from '../skill-sets.ts';
+import { copyIssue, issueTracker } from './issue.ts';
 import { brief } from './messages.ts';
 import { pageFolder } from './page.ts';
 
@@ -37,7 +38,7 @@ export function roles(ctx: Context): string[] {
     const alive = r.address !== undefined && seats.some(s => s.address === r.address);
     const wait = alive && r.address !== undefined ? ctx.transport.status(r.address)?.wait : undefined;
     const where = alive ? `${r.address}（${wait ?? '状態なし'}）` : '消えた（居場所が無い。tpm assign で起こし直すか、tpm close で名簿から消す）';
-    return `- ${r.key}  ${r.title}  ${where}${r.dismissed ? `  dismiss 済み（${r.dismissed === 'handover' ? '交代' : '終わり'}）` : ''}${r.brief ? `  依頼書: ${r.brief}` : ''}`;
+    return `- ${r.key}  ${r.title}  ${where}${r.dismissed ? `  dismiss 済み（${r.dismissed === 'handover' ? '交代' : '終わり'}）` : ''}${r.brief ? `  依頼書: ${r.brief}` : ''}${r.issuePage ? `  課題の写し: ${r.issuePage}` : ''}`;
   })];
 }
 
@@ -71,6 +72,8 @@ export interface AssignOptions {
   permissionMode?: string
   /** 【brief】に添える一言。 */
   note?: string
+  /** 課題の写しを作らずに振る訳（--no-issue-copy の訳）。 */
+  noIssueCopy?: string
   /** 起こした担当の tpm hello を待つ秒。0 なら待たない。 */
   wait: number
 }
@@ -89,11 +92,15 @@ export function assign(ctx: Context, key: string, options: AssignOptions): strin
   }
   if (existing?.address !== undefined && ctx.transport.seats().some(s => s.address === existing.address)) {
     if (options.brief === undefined) throw new TpmError(`${key} の担当はもう動いています（${existing.address}）。新しい依頼書を --brief で渡してください`);
+    // 続きのときも写しを作り直す（コメントが増えているため）。
+    Object.assign(existing, issueCopy(ctx, existing.issue ?? key, key, options.noIssueCopy));
     return brief(ctx, existing, options.brief, options.note);
   }
   if (options.issue !== undefined && !ctx.tracker.owns(options.issue)) {
     throw new TpmError(`${options.issue} は、この project の課題管理（${ctx.config.tracker}）の鍵ではありません`);
   }
+  // 居場所を作る前に読む（読めなければ、担当を起こさずに止まる）。
+  const copy = issueCopy(ctx, options.issue ?? key, key, options.noIssueCopy);
   const def = ROLES[options.role];
   const settings = resolveSettings(options.role, { flags: options, config: ctx.config.roles[options.role], env: ctx.env });
   const record: RoleRecord = {
@@ -105,6 +112,7 @@ export function assign(ctx: Context, key: string, options: AssignOptions): strin
     ...settings,
     ...(options.brief === undefined ? {} : { brief: options.brief }),
     ...(options.issue === undefined ? {} : { issue: options.issue }),
+    ...copy,
   };
   writeRole(ctx, record);
   const command = [join(ctx.root, 'cli', 'bin', 'tpm'), 'run-role', key, '--project', ctx.project, '--state', ctx.state.dir].map(shellQuote).join(' ');
@@ -118,6 +126,19 @@ export function assign(ctx: Context, key: string, options: AssignOptions): strin
   }
   if (readRole(ctx, key)?.helloAt !== undefined) return [head, '名乗った（tpm hello が来た）'];
   throw new TpmError(notStarted(ctx, record, options.wait));
+}
+
+/**
+ * 課題の写し（名簿に書く欄）。読める形の鍵なら写しを置いて URL を、--no-issue-copy ならその訳を返す。読める形でなければ空。
+ * 前の写しの欄は、どちらかに上書きするため両方を返す（undefined は消す）。
+ */
+function issueCopy(ctx: Context, issueKey: string, roleKey: string, skip: string | undefined): Pick<RoleRecord, 'issuePage' | 'issueCopySkipped'> {
+  if (issueTracker(ctx, issueKey) === undefined) return {};
+  if (skip !== undefined) {
+    if (skip.trim() === '') throw new TpmError('--no-issue-copy には、写しを作らずに振る訳を書いてください');
+    return { issuePage: undefined, issueCopySkipped: skip };
+  }
+  return { issuePage: copyIssue(ctx, issueKey, roleKey), issueCopySkipped: undefined };
 }
 
 /** 名乗らなかった訳を画面から読む。信頼のダイアログと命令の誤りは、居場所を閉じてから知らせる。 */

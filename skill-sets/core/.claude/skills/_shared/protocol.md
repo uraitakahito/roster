@@ -75,12 +75,13 @@ Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【
 - `tpm hello` が `課題の中身:` の行を返したら、依頼書と一緒に読む。依頼書に Jira や GitHub の URL しか無くても、まずこれで読む。
 - 読めなければ、出た誤りのとおりに鍵と道具の認証を確かめる。認証が無ければ `tpm ask tpm` で、Product Manager に login を頼むことを送る。
 - `t-` の鍵には課題管理の課題が無い。中身は依頼書にある。
+- 課題の写し: 鍵が読める形なら、`tpm assign` が振るたびに課題を読み、写しのページ（`issue-<番号>.html`）を置く。`tpm hello` と【brief】が `課題の写し: <URL>` を返したら、依頼書と一緒に読む（振ったときの中身。新しい中身は `tpm issue view`）。読めないまま振られたら `課題の写し: 無し（<訳>）` と出る。
 
 ## ページ
 
 依頼書・確認・提案・計画・結果は、HTML の file に書いて、この Mac の置き場（`127.0.0.1` の Nginx。起こすのは DevOps Engineer 担当）に置く。置いた物を「ページ」と言う。Artifact tool（publish・read・open）は、依頼書と成果には使わない。
 
-- 置く: `tpm page put <file> --kind <brief|confirm|proposal|plan|result>`。担当の鍵は今の課題の鍵。TPM 担当は `--key <鍵>` を付ける。出た `URL:` を、`tpm assign --brief`・`tpm ask pm --url`・`tpm report done --url` に書く。同じ種類を置き直すと次の番号になり、前の版は残る。
+- 置く: `tpm page put <file> --kind <brief|confirm|proposal|plan|result|issue>`。担当の鍵は今の課題の鍵。TPM 担当は `--key <鍵>` を付ける。出た `URL:` を、`tpm assign --brief`・`tpm ask pm --url`・`tpm report done --url` に書く。同じ種類を置き直すと次の番号になり、前の版は残る。
 - 読む: `tpm page path <URL>` で file の path にして Read tool で読む。
 - 開く: 人に見せるのは `tpm show <URL>`（`tpm ask pm`・`tpm report done` は自分で開く）。
 - 置き場が応えなければ（`tpm page put` が止まる）、file は置かれたまま。`tpm ask devops --what "置き場（tpm-pages）を起こす" --why "<何が開けないか>"` で頼む。自分では container を起こさない。

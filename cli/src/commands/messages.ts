@@ -210,11 +210,19 @@ export function reportDependabot(ctx: Context, id: 'merge-request' | 'not-yet' |
 
 /** 動いている担当に、新しい依頼書を送る。 */
 export function brief(ctx: Context, role: RoleRecord, url: string, note?: string): string[] {
-  const sent = toRole(ctx, role, 'brief', note === undefined ? url : `${url} ${note}`);
+  const body = [url, issueCopyLine(role), note].filter(v => v !== undefined).join(' ');
+  const sent = toRole(ctx, role, 'brief', body);
   role.brief = url;
   delete role.dismissed;
   writeRole(ctx, role);
   return [sent];
+}
+
+/** 課題の写しの一言（【brief】と担当の tpm hello）。写しも、作らなかった訳も無ければ undefined。 */
+export function issueCopyLine(role: RoleRecord): string | undefined {
+  if (role.issuePage !== undefined) return `課題の写し: ${role.issuePage}`;
+  if (role.issueCopySkipped !== undefined) return `課題の写し: 無し（${role.issueCopySkipped}）`;
+  return undefined;
 }
 
 /** Product Manager の答えを返す。課題があれば、返す前に「決定」の記録を書く。 */

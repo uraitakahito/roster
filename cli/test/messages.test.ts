@@ -101,7 +101,10 @@ describe('課題への記録（GitHub の Issue）', () => {
       `【結果】Software Engineer: 片付けた（残っている物: なし）\n\n成果: ${OUT}\n\nPR（merge 済み）: ${PR}`,
     ]);
     expect(w.calls.at(-1)?.args).toEqual(['issue', 'close', '12', '--reason', 'completed']);
-    expect(w.calls.every(c => c.cmd === 'gh' && c.options?.cwd === w.project)).toBe(true);
+    // assign が課題の写しを作るとき、gh で読み（view）、curl で置き場を確かめる。ほかは記録の gh。
+    const tools = w.calls.filter(c => c.cmd !== 'curl');
+    expect(tools[0]?.args.slice(0, 2)).toEqual(['issue', 'view']);
+    expect(tools.every(c => c.cmd === 'gh' && c.options?.cwd === w.project)).toBe(true);
     expect(out).toContain('課題を閉じた: gh-12');
     expect(texts(w, 'file:tpm')[0]).toBe('【ask-pm】https://claude.ai/artifact/c1 項目: (1) 案の選択 (2) 切り替えの単位');
     expect(texts(w, 'file:1')[0]).toBe('【answer】(1) 案 A (2) project ごと\n細かい事は依頼書に');

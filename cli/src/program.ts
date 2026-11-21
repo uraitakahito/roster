@@ -69,10 +69,13 @@ export function buildProgram(): Command {
     .option('--effort <effort>', '担当の effort（既定は config.jsonc の担当の欄・$TPM_EFFORT・担当の既定の順）')
     .option('--permission-mode <mode>', '担当の permission mode（既定は config.jsonc の担当の欄・$TPM_PERMISSION_MODE・担当の既定の順）')
     .option('--note <一言>', '【brief】に添える一言（担当が動いているとき）')
+    .option('--no-issue-copy <訳>', '課題（Jira・GitHub の Issue の鍵）の写しのページを作らずに振る。訳は担当に届く')
     .option('--wait <秒>', '起こした担当の tpm hello を待つ秒（0 なら待たない）', '90')
-    .action((key: string, options: Omit<AssignOptions, 'wait' | 'role'> & { wait: string, role: string }) => {
+    .action((key: string, { issueCopy, ...options }: Omit<AssignOptions, 'wait' | 'role' | 'noIssueCopy'> & { wait: string, role: string, issueCopy: true | string }) => {
       if (!(ROLE_NAMES as string[]).includes(options.role)) throw new TpmError(`--role は ${ROLE_NAMES.join('・')} のどれかにしてください`);
-      print(assign(createContext(), key, { ...options, role: options.role as RoleName, wait: Number(options.wait) }));
+      // commander は --no-issue-copy <訳> を issueCopy（既定 true・付けたら訳の字）にする。
+      const skip = issueCopy === true ? {} : { noIssueCopy: issueCopy };
+      print(assign(createContext(), key, { ...options, ...skip, role: options.role as RoleName, wait: Number(options.wait) }));
     });
   program.command('close <key>').description('担当の居場所を閉じ、名簿から消す').action((key: string) => print(close(createContext(), key)));
   program.command('hello').description('名乗る（TPM 担当は宛先を状態に書いて名簿を出す。担当は受け持ちを返す）')

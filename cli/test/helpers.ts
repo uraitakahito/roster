@@ -35,11 +35,13 @@ export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessE
   const calls: Call[] = [];
   const exec: Exec = (cmd, args, options) => {
     calls.push({ cmd, args, ...(options === undefined ? {} : { options }) });
-    return { status: 0, stdout: '{}', stderr: '' };
+    // curl は置き場の HEAD（tpm page put・tpm assign の課題の写し）。置き場は出していることにする。
+    return { status: 0, stdout: cmd === 'curl' ? '200' : '{}', stderr: '' };
   };
   let slept = 0;
   const at = (env: NodeJS.ProcessEnv): Context => ({
-    ...createContext({ XDG_STATE_HOME: join(base, 'state'), ...env }, project, exec),
+    // 置き場も一時の folder にする（本物の置き場に試験のページを置かない）。
+    ...createContext({ XDG_STATE_HOME: join(base, 'state'), TPM_PAGES_DIR: join(base, 'pages'), ...env }, project, exec),
     now: () => new Date('2026-11-20T12:00:00.000Z'),
     sleep: () => {
       slept += 1;
