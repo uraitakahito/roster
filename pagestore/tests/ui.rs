@@ -73,6 +73,9 @@ async fn the_index_lists_every_page_newest_first_with_the_filter_choices() {
         page.contains(r#"<a href="/?kind=plan"><span>plan</span><span class="n">2</span></a>"#)
     );
     assert!(page.contains(r#"<a href="/?key=A-1"><span>A-1</span><span class="n">3</span></a>"#));
+    // サイドメニューの見出しは「Key」（「鍵」とは書かない）。
+    assert!(page.contains("<h2>Key</h2>"));
+    assert!(!page.contains("<h2>鍵</h2>"));
     // workspace の ID には、その ID で置かれた鍵を添える。ID の無い分は「不明」。
     assert!(page.contains(r#"<a href="/?workspace=w%3A3"><span>w:3<small>B-2</small></span><span class="n">1</span></a>"#));
     assert!(

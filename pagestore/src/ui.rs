@@ -241,7 +241,7 @@ async fn render(state: AppState, mut view: View) -> Response {
             facet("担当者（役割）", facets.roles, |v| &mut v.role),
             facet("workspace", facets.workspaces, |v| &mut v.workspace),
             facet("種類", facets.kinds, |v| &mut v.kind),
-            facet("鍵", facets.keys, |v| &mut v.key),
+            facet("Key", facets.keys, |v| &mut v.key),
             facet("project", facets.projects, |v| &mut v.project),
         ],
         rows: pages.into_iter().map(|meta| row(&view, meta)).collect(),
