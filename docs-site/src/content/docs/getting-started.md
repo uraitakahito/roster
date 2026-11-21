@@ -1,6 +1,6 @@
 ---
 title: はじめる
-description: Node と pnpm の入れ方・install と、TPM 担当を起こす 1 行の出し方。信頼のダイアログ
+description: Node と pnpm の入れ方・install と、TPM 担当を起こす 1 行の出し方。Auditor の席の起こし方。信頼のダイアログ
 ---
 
 ## Node と pnpm を入れる
@@ -60,6 +60,28 @@ cd <folder> && PATH=<repo>/cli/bin:"$PATH" TPM_EFFORT=high claude --model claude
 ```
 
 欄ごとに、命令の旗（`tpm assign --model` など）> `.claude/roles/config.jsonc` の担当の欄 > 環境変数 > コードの既定 の順で、先に値がある物が使われる。project の config に `"devops-engineer": { "effort": "low" }` と書いてあれば、`TPM_EFFORT=high` でもその project の DevOps Engineer 担当は low のまま。表は[設定](/configuration/#model-などの既定の環境変数任意)。
+
+## Auditor の席を起こす
+
+監査（担当の仕組みが信頼でき、安全で、むだなく回っているかを見る）は、Auditor の席 `Audit` でする。席は自動では起きない。Product Manager が自分の手で起こし、その席で監査を呼ぶ（目安は週 1）。
+
+```sh
+cd </your/workspace> # TPM 担当を起こした folder
+/foo/bar/roster/cli/bin/tpm audit start   # cmux の中の shell で打つ
+```
+
+- cmux に `Audit` の居場所ができ、Auditor が名乗って待つ。席は project に 1 つ。もうあれば、起こさずに「その席で `/clear` を打ってから、`/audit` を呼んでください」と返す。
+- TPM 担当とほかの担当の居場所からは打てない（命令と guard が止める）。
+- 既定の model は Fable 5.2・effort は high。替えるなら `--model`・`--effort` を付けるか、`.claude/roles/config.jsonc` の `auditor` に書く。
+
+起きた `Audit` の席で打つ。
+
+| 打つ字 | すること |
+|---|---|
+| `/audit` | 定期の監査 |
+| `/audit 7 9` | 臨時の監査。台帳の番号で件を名指す |
+
+2 度目からは、先に `/clear` を打つ。報告の読み方と答え方、席の閉じ方は[運用の「監査」](/operations/#監査auditor-の席)。
 
 ## 信頼のダイアログ
 
