@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { guard, infraApprove, infraList, infraRevoke, infraRun } from '../src/commands/infra.ts';
-import type { InfraEnv } from '../src/config.ts';
+import type { ConfigSource, InfraEnv } from '../src/config.ts';
 import { commandOf, guardSettings, judge, touched, type Approval } from '../src/guard.ts';
 import type { RoleName } from '../src/protocol.ts';
 import { splitCommands } from '../src/shell.ts';
@@ -40,8 +40,10 @@ const infra: Record<string, InfraEnv> = {
 const now = new Date('2026-11-20T12:00:00.000Z');
 const open: Approval = { until: '2026-11-20T12:30:00.000Z' };
 const expired: Approval = { until: '2026-11-20T11:59:59.000Z' };
+/** github を宣言した設定（guard は、1 つでもあるかだけを見る）。 */
+const githubSource: ConfigSource = { name: 'web', dir: '/w/web', file: '/w/web/.claude/roles/config.jsonc', exists: true, written: ['tracker'], config: { tracker: 'github', transport: 'cmux', infra: {}, roles: {} } };
 const ask = (command: string, role?: RoleName, approval?: Approval, tracker: 'none' | 'github' = 'none') =>
-  judge({ command, role, config: { infra, tracker }, approvals: { 'aws-staging': approval }, now });
+  judge({ command, role, config: { infra, trackers: { jira: [], github: tracker === 'github' ? [githubSource] : [] } }, approvals: { 'aws-staging': approval }, now });
 
 describe('touched', () => {
   test('match のどれかを含む環境を返す', () => {
@@ -247,5 +249,23 @@ describe('tpm infra と tpm guard', () => {
     const w = world();
     expect(infraList(w.tpm)).toEqual(['環境の宣言は無い（設定の infra に書く）']);
     expect(guard(w.tpm, JSON.stringify({ tool_name: 'Edit', tool_input: {} })).allow).toBe(true);
+  });
+});
+
+describe('直下の folder の設定の infra', () => {
+  const hook = (command: string): string => JSON.stringify({ tool_name: 'Bash', tool_input: { command } });
+  const store = { store: { guard: 'tpm', match: ['container stop store'] } };
+
+  test('上の folder で起きた担当にも、直下の folder の宣言が効く。止めた文と tpm infra list に、宣言した設定を出す', () => {
+    const w = world({}, {}, { skills: { infra: store }, web: {} });
+    const verdict = guard({ ...w.role('t-x7k2', 'file:1'), env: { TPM_KEY: 't-x7k2', TPM_ROLE: 'software-engineer' } }, hook('cd web && container stop store'));
+    expect(verdict).toEqual({ allow: false, reason: '環境 store（skills の設定） を変えてよいのは DevOps Engineer 担当だけです。tpm ask devops --what … --why … で TPM 担当に頼んでください。' });
+    expect(infraList(w.tpm)).toEqual(['- store  TPM に相談（DevOps Engineer 担当だけ）  match: "container stop store"  宣言: skills']);
+  });
+
+  test('gh issue の直打ちは、github を宣言した設定が直下に 1 つでもあれば止まる', () => {
+    const se = (w: ReturnType<typeof world>) => ({ ...w.role('t-x7k2', 'file:1'), env: { TPM_KEY: 't-x7k2', TPM_ROLE: 'software-engineer' } });
+    expect(guard(se(world({}, {}, { web: { tracker: 'github' } })), hook('gh issue close 12')).allow).toBe(false);
+    expect(guard(se(world({}, {}, { skills: { tracker: 'jira' } })), hook('gh issue close 12')).allow).toBe(true);
   });
 });

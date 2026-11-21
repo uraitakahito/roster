@@ -227,3 +227,31 @@ describe('ほかのメッセージ', () => {
     expect(w.tpm.state.lines('file-transport/shown.jsonl')).toEqual([{ at: 'file:tpm', url: OUT }]);
   });
 });
+
+describe('課題への記録（設定は直下の folder。上の folder から、下の repo を触る課題）', () => {
+  /** project の folder に課題管理の設定は無く、直下の skills が jira、web が github の世界で、issue の担当を起こして名乗らせる。 */
+  function crossing(issue: string): World & { se: ReturnType<World['role']>, greeting: string[] } {
+    const w = world({}, {}, { skills: { tracker: 'jira' }, web: { tracker: 'github' } });
+    hello(w.tpm, TPM);
+    assign(w.tpm, 't-x7k2', { role: 'software-engineer', title: '計画と実装', brief: BRIEF, wait: 0, issue, noIssueCopy: '試験' });
+    const se = w.role('t-x7k2', 'file:1');
+    return { ...w, se, greeting: hello(se) };
+  }
+  const tools = (w: World): (string | undefined)[][] => w.calls.filter(c => c.cmd !== 'curl').map(c => [c.cmd, c.args[1], c.options?.cwd]);
+
+  test('Jira の Key の課題は、直下の folder の jira の設定で Jira に記録し、【end】で済みにする', () => {
+    const w = crossing('SKILLS-20');
+    expect(w.greeting).toContain('課題管理の課題: SKILLS-20（道具: jira）');
+    expect(reportDone(w.se, { url: OUT, kind: 'result', summary: '実装した', remaining: 'なし', decisions: 'なし', points: [] })[0]).toBe('記録を書いた: SKILLS-20【結果】');
+    dismiss(w.tpm, 't-x7k2', { handover: false });
+    expect(reportEnd(w.se, { url: OUT, prs: [PR], removed: [], left: 'なし' })).toContain('課題を閉じた: SKILLS-20');
+    expect(w.calls.filter(c => c.cmd !== 'curl').map(c => c.cmd)).toEqual(['acli', 'acli', 'acli']);
+  });
+
+  test('gh- の Key の課題は、github を宣言した folder で gh を打つ', () => {
+    const w = crossing('gh-12');
+    expect(w.greeting).toContain('課題管理の課題: gh-12（道具: github）');
+    reportDone(w.se, { url: OUT, kind: 'result', summary: '実装した', remaining: 'なし', decisions: 'なし', points: [] });
+    expect(tools(w)).toEqual([['gh', 'comment', `${w.project}/web`]]);
+  });
+});

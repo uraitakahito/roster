@@ -33,7 +33,7 @@ describe('listSkills', () => {
 
 describe('explain', () => {
   test('folder を渡さず config も無ければ、そう書き、core だけを並べる', () => {
-    expect(explain({ given: undefined, dir: '/w', root, configFile: '/w/nope.jsonc', skillSets: [] })).toEqual([
+    expect(explain({ given: undefined, dir: '/w', root, configFiles: ['/w/nope.jsonc'], skillSets: [] })).toEqual([
       'folder      /w（今いる folder）',
       `repo        ${root}`,
       'config      /w/nope.jsonc（なし）',
@@ -42,12 +42,13 @@ describe('explain', () => {
     ]);
   });
 
-  test('渡した値・config のあり・skill セットごとの skill を書く', () => {
+  test('渡した値・読む config（起こす folder と直下の folder）のあり・skill セットごとの skill を書く', () => {
     const configFile = join(root, 'config.jsonc');
     writeFileSync(configFile, '{}');
-    expect(explain({ given: '.', dir: '/w', root, configFile, skillSets: ['empty'] })).toEqual([
+    expect(explain({ given: '.', dir: '/w', root, configFiles: ['/w/nope.jsonc', configFile], skillSets: ['empty'] })).toEqual([
       'folder      /w（渡された値: .）',
       `repo        ${root}`,
+      'config      /w/nope.jsonc（なし）',
       `config      ${configFile}（あり）`,
       'skill-sets  empty（config の skill-sets から。core と重なりは除いた）',
       `core        ${root}/skill-sets/core → /devops-engineer /tpm`,

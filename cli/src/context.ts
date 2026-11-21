@@ -1,13 +1,10 @@
 // 命令が動くときの周り: どの project の設定と状態を使い、どの道具の adapter を使うか。
 import { realpathSync } from 'node:fs';
 import { join } from 'node:path';
-import { readRolesConfig, rolesConfigFile, type RolesConfig } from './config.ts';
+import { composeRolesConfig, composeSkillSets, type RolesConfig } from './config.ts';
 import { exec as realExec, type Exec } from './exec.ts';
-import { readSkillSets } from './skill-sets.ts';
 import { migrateLegacyJson, State, stateDir } from './state.ts';
-import { GithubTracker } from './tracker/github.ts';
-import { JiraTracker } from './tracker/jira.ts';
-import { NoneTracker } from './tracker/none.ts';
+import { RoutedTracker } from './tracker/routed.ts';
 import type { Tracker } from './tracker/types.ts';
 import { CmuxTransport } from './transport/cmux.ts';
 import { FileTransport } from './transport/file.ts';
@@ -15,8 +12,9 @@ import type { Transport } from './transport/types.ts';
 
 /** 命令が動くときの周り。命令はみなこれを受け取り、試験では偽物の道具を入れて組む。 */
 export interface Context {
-  /** TPM 担当を起こした folder。設定（.claude/roles/config.jsonc）と状態はここで決まる。 */
+  /** TPM 担当を起こした folder。設定（ここと直下の folder の .claude/roles/config.jsonc）と状態はここで決まる。 */
   project: string
+  /** project の folder とその直下の folder の設定を合わせた物。 */
   config: RolesConfig
   state: State
   transport: Transport
@@ -25,7 +23,7 @@ export interface Context {
   exec: Exec
   /** この skills の repo（<root>/cli/src/context.ts にある）。 */
   root: string
-  /** core のほかに足す skill セット（設定の skill-sets）。 */
+  /** core のほかに足す skill セット（合わせた設定の skill-sets）。 */
   skillSets: string[]
   /** 待つ（試験で替える）。 */
   sleep: (ms: number) => void
@@ -44,11 +42,10 @@ const sleepSync = (ms: number): void => {
 export function createContext(env: NodeJS.ProcessEnv = process.env, cwd: string = process.cwd(), exec: Exec = realExec): Context {
   const project = realpathSync(env.TPM_PROJECT || cwd);
   const root = join(import.meta.dirname, '..', '..');
-  const configFile = rolesConfigFile(project);
-  const config = readRolesConfig(configFile);
+  const config = composeRolesConfig(project);
   const state = new State(stateDir(project, env));
   migrateLegacyJson(state.dir);
   const transport = config.transport === 'file' ? new FileTransport(state, env.TPM_ADDRESS || 'file:tpm') : new CmuxTransport(exec);
-  const tracker = config.tracker === 'jira' ? new JiraTracker(exec) : config.tracker === 'github' ? new GithubTracker(exec, project) : new NoneTracker();
-  return { project, config, state, transport, tracker, env, exec, root, skillSets: readSkillSets(configFile, root), sleep: sleepSync, now: () => new Date() };
+  const tracker = new RoutedTracker(config.trackers, exec);
+  return { project, config, state, transport, tracker, env, exec, root, skillSets: composeSkillSets(config.sources, root), sleep: sleepSync, now: () => new Date() };
 }

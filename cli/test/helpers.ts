@@ -106,12 +106,19 @@ export interface World {
   slept: () => number
 }
 
-/** config は .claude/roles/config.jsonc に書く中身（transport は file に固定する）。env は TPM 担当の周りの環境変数に足す物。 */
-export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessEnv = {}): World {
+/**
+ * config は .claude/roles/config.jsonc に書く中身（transport は file に固定する）。env は TPM 担当の周りの環境変数に足す物。
+ * folders は、project の直下の folder の名前 → その folder の設定の中身（上の folder から、下のいくつもの repo を触る形）。
+ */
+export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessEnv = {}, folders: Record<string, Record<string, unknown>> = {}): World {
   const base = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-world-')));
   const project = join(base, 'project');
-  mkdirSync(join(project, '.claude', 'roles'), { recursive: true });
-  writeFileSync(join(project, '.claude', 'roles', 'config.jsonc'), JSON.stringify({ ...config, transport: 'file' }));
+  const put = (dir: string, body: Record<string, unknown>): void => {
+    mkdirSync(join(dir, '.claude', 'roles'), { recursive: true });
+    writeFileSync(join(dir, '.claude', 'roles', 'config.jsonc'), JSON.stringify(body));
+  };
+  put(project, { ...config, transport: 'file' });
+  for (const [name, body] of Object.entries(folders)) put(join(project, name), body);
   mkdirSync(join(base, 'pages'));
   writeFileSync(join(base, 'pages', 'brief-1.html'), BRIEF_HTML);
   const calls: Call[] = [];

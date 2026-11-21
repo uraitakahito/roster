@@ -1,11 +1,11 @@
 ---
 title: 設定
-description: 使う側の project に置く .claude/roles/config.jsonc（課題管理・連携・インフラの環境・担当の既定）、model などの既定を人ごとに決める環境変数、ページの置き場の環境変数、Dependabot の skill の設定
+description: 使う側の project に置く .claude/roles/config.jsonc（課題管理・連携・インフラの環境・担当の既定。直下の folder の設定も合わせる）、model などの既定を人ごとに決める環境変数、ページの置き場の環境変数、Dependabot の skill の設定
 ---
 
 ## `.claude/roles/config.jsonc`（任意）
 
-TPM 担当を起こした folder（project）に置くと、道具の選び方・追加の skill セット・起こす担当の既定を替えられる。`tpm` の命令が読む。JSONC（`//`・`/* */` のコメントと、`}`・`]` の前の末尾のカンマを許す JSON）で書く。
+TPM 担当を起こした folder（project）に置くと、道具の選び方・追加の skill セット・起こす担当の既定を替えられる。`tpm` の命令が読む。project の直下の folder にも設定があれば、集めて 1 つに合わせる（下の「[直下の folder の設定](#直下の-folder-の設定)」）。JSONC（`//`・`/* */` のコメントと、`}`・`]` の前の末尾のカンマを許す JSON）で書く。
 
 古い名前の `.claude/roles/config.json` があると、`tpm` の命令はそれを読まずに止まる。`config.jsonc` が無ければ名前を替える `mv` を出す（中身はそのまま JSONC として読めるので、名前を替えるだけで移せる）。両方あれば、`config.json` を消すよう言う（要る中身は先に `config.jsonc` へ移す）。
 
@@ -15,6 +15,7 @@ TPM 担当を起こした folder（project）に置くと、道具の選び方�
 | `transport` | 担当どうしの連携の道具。`cmux`（`file` は試験用） | `cmux` |
 | `infra` | インフラの環境の宣言。環境の名前（英小文字・数字・`-`）ごとに `guard`（手続き）と `match`（その環境に触る命令が含む字の配列） | 宣言なし（guard は環境を見ない） |
 | `skill-sets` | core のほかに加える、追加の skill セットの名前の配列 | core だけ |
+| `folders` | 設定を集める folder（project の folder からの path）の配列。書くと、直下を探さずに書いた folder だけを集める。`[]` なら集めない | 直下の folder のうち、設定がある物を全部集める |
 | `software-engineer`・`devops-engineer` | 起こす担当の `model`・`effort`・`permissionMode` | [環境変数](#model-などの既定の環境変数任意)、それも無ければ既定（Software Engineer 担当は Opus 5.5・medium、DevOps Engineer 担当は Opus 5.5・low、どちらも `bypassPermissions`） |
 
 ```jsonc
@@ -48,6 +49,31 @@ TPM 担当を起こした folder（project）に置くと、道具の選び方�
 }
 ```
 
+### 直下の folder の設定
+
+いくつもの repo を置いた上の folder で TPM 担当を起こし、1 つの課題で下の repo をまたいで触るときのための決まり。`tpm` の命令は、project の folder の設定に加えて、その**直下の folder** の `.claude/roles/config.jsonc` を集め、1 つに合わせて使う。TPM 担当も、起こした担当も、guard も、合わせた設定を使う。repo ごとの設定は、その repo で直に起こしたときと同じ file がそのまま効く。
+
+```text
+ai/                               ← ここで tpm start（設定は任意）
+├── skills/.claude/roles/config.jsonc     { "tracker": "jira", "infra": { "tpm-pagestore": … } }
+├── web/.claude/roles/config.jsonc        { "tracker": "github", "skill-sets": ["dependabot"] }
+└── notes/                                （設定が無い folder は集めない）
+```
+
+集めるのは直下の 1 段だけで、名前の順に読む。`.` で始まる folder と `node_modules` は見ない。project の folder の設定に `folders` を書くと、探さずに書いた folder だけを集める（深い folder も書ける。設定の無い folder を書くと止まる）。直下の folder の設定に書いた `folders` は読まない。直下に設定のある folder が無ければ、project の folder の設定だけが効く。
+
+| 欄 | 合わせ方 |
+|---|---|
+| `tracker` | 道具ごとに、宣言した設定を覚える（`none` は足さない）。記録を書く先は、課題の Key の形で選ぶ（下の「[課題の Key](#課題の-key)」）。`gh-12` の記録は、`github` を宣言した folder の repo の Issue に書く（`gh` をその folder で打つ）。`github` を宣言した設定が 2 つ以上あると、`gh-` の Key がどの repo の Issue かが決まらないので止まる（`folders` で 1 つに絞る） |
+| `infra` | 環境の名前ごとに合わせる。同じ名前がいくつもの設定にあれば、`match` は足し、`guard` は厳しい方（`pm` > `tpm` > `free`）にする。どこで打った命令にも効く。`tpm infra list` と guard が止めた文に、宣言した設定が出る |
+| `skill-sets` | 全部を足す（project の folder が先、次に直下の folder を名前の順。重なりは除く）。TPM 担当（`tpm start`）にも、起こす担当にも効く |
+| `software-engineer`・`devops-engineer` | 合わせない。**担当を起こす folder**（`tpm assign --cwd`）の設定 > project の folder の設定 の順に、欄ごとに先に値がある物を使う |
+| `transport` | project の folder の設定だけ（直下の folder の値は読まない） |
+
+設定のどれか 1 つでも読めない（JSONC の誤り・欄の誤り）と、`tpm` の命令は誤りのある file を名指して止まる。guard も「命令を見られない」として、その project の担当の shell の命令をすべて止める（守りを素通りさせないため）。直下の repo の設定を書き替えたら、`tpm start -v <folder>` で読めることを確かめる（読んだ設定の file が `config` の行に並ぶ）。
+
+上の folder で起こした担当には、下の repo の `.claude/settings.json`（hook・権限）は効かない（Claude Code は、起こした folder の settings だけを読む）。
+
 ### 課題の Key
 
 | `tracker` | Key の形 | 記録 | 課題を閉じる |
@@ -56,7 +82,9 @@ TPM 担当を起こした folder（project）に置くと、道具の選び方�
 | `github` | `gh-12`（`#12`・`12` も受ける） | コメント（Markdown） | `completed` で閉じる |
 | `none` | `t-x7k2`（`tpm key` が作る） | 書かない | 何もしない |
 
-課題の中身（題・状態・本文・コメント）は、どの担当も `tpm issue view <Key>` で読む。読むだけで記録を書かないので、`tracker` によらず Key の形で道具を選ぶ（`none` の project でも、`SKILLS-12` は acli、`gh-12` は gh で読む）。`tpm hello` は、担当の Key が読める形なら `課題の中身: tpm issue view <Key>` の行を返す。
+記録を書く先は Key の形で決まる: `SKILLS-12` の形は、`jira` を宣言した設定が（project の folder か直下の folder に）1 つでもあれば Jira。`gh-12` の形は、`github` を宣言した設定の folder の repo。宣言した設定が無い道具の Key に `tpm assign --issue` を付けると、読んだ設定を並べて止まる。
+
+課題の中身（題・状態・本文・コメント）は、どの担当も `tpm issue view <Key>` で読む。読むだけで記録を書かないので、`tracker` によらず Key の形で道具を選ぶ（どの設定も宣言していない道具の Key でも、`SKILLS-12` は acli、`gh-12` は gh で読む。`github` を宣言した設定が無ければ、`gh` は project の folder で打つ）。`tpm hello` は、担当の Key が読める形なら `課題の中身: tpm issue view <Key>` の行を返す。
 
 `tpm assign` は、Key（`--issue` があればそれ）が読める形なら、振るたびに課題を読んで写しのページ（`<Key>/issue-<番号>.html`）を置き、URL を名簿に書いて、担当の `tpm hello` と【brief】に `課題の写し: <URL>` として渡す。読めなければ担当を起こさずに止まる。`--no-issue-copy "<訳>"` を付けると写しを作らずに振り、訳を担当に渡す。
 

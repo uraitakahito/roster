@@ -16,6 +16,7 @@ describe('hello（TPM 担当）', () => {
   test('$TPM_KEY が無ければ TPM 担当として名乗る: 宛先を状態に書き、状態を出し、名簿を出す', () => {
     const w = world();
     expect(hello(w.tpm)).toEqual(['TPM 担当の宛先: file:tpm', '課題管理: none・連携: file', '名簿: 担当はいない']);
+    expect(hello(world({}, {}, { skills: { tracker: 'jira' }, web: { tracker: 'github' } }).tpm)[1]).toBe('課題管理: jira・github・連携: file');
     expect(w.tpm.state.read('tpm.jsonc')).toEqual({ address: 'file:tpm' });
     expect(w.wire.status('file:tpm')).toEqual({ model: 'Opus 5.5 · medium', wait: '作業中: 起動' });
   });
@@ -70,6 +71,18 @@ describe('assign', () => {
       permissionMode: 'bypassPermissions',
       addDirs: [`${w.tpm.root}/skill-sets/core`, `${w.tpm.root}/skill-sets/dependabot`],
     });
+  });
+
+  test('担当の既定は、担当を起こす folder（--cwd）の設定 > project の folder の設定。直下の folder どうしは合わせない', () => {
+    const w = world({ 'software-engineer': { model: 'claude-fable-5-2', effort: 'low' } }, {}, {
+      skills: { 'software-engineer': { effort: 'high' }, 'skill-sets': ['dependabot'] },
+      web: { 'software-engineer': { effort: 'max', permissionMode: 'acceptEdits' } },
+    });
+    assign(w.tpm, 't-x7k2', { role: 'software-engineer', wait: 0, cwd: join(w.project, 'skills') });
+    // skill-sets は、どの folder で起こしても合わせた物
+    expect(requireRole(w.tpm, 't-x7k2')).toMatchObject({ model: 'claude-fable-5-2', effort: 'high', permissionMode: 'bypassPermissions', cwd: join(w.project, 'skills'), addDirs: [`${w.tpm.root}/skill-sets/core`, `${w.tpm.root}/skill-sets/dependabot`] });
+    assign(w.tpm, 't-y8m3', { role: 'software-engineer', wait: 0 });
+    expect(requireRole(w.tpm, 't-y8m3')).toMatchObject({ model: 'claude-fable-5-2', effort: 'low', permissionMode: 'bypassPermissions', cwd: w.project });
   });
 
   test('環境変数は config.jsonc の担当の欄に負け、役割の既定に勝つ', () => {
@@ -131,8 +144,9 @@ describe('assign', () => {
     expect(assign(w.tpm, 't-x7k2', SE)[0]).toMatch(/^起こし直した: .*file:2/);
   });
 
-  test('この project の課題管理の Key でない課題は断る', () => {
-    expect(() => assign(world().tpm, 't-x7k2', { ...SE, issue: 'SKILLS-12' })).toThrow(/課題管理（none）の Key ではありません/);
+  test('どの設定の課題管理の Key でもない課題は、読んだ設定を並べて断る', () => {
+    expect(() => assign(world().tpm, 't-x7k2', { ...SE, issue: 'SKILLS-12' })).toThrow(/SKILLS-12 に記録を書く課題管理が、どの設定にもありません（読んだ設定: この folder＝none）/);
+    expect(() => assign(world({}, {}, { skills: { tracker: 'jira' } }).tpm, 'gh-12', { ...SE, issue: 'gh-12' })).toThrow(/読んだ設定: この folder＝none・skills＝jira/);
     const w = world({ tracker: 'github' });
     assign(w.tpm, 'gh-12', { ...SE, issue: 'gh-12' });
     expect(requireRole(w.tpm, 'gh-12').issue).toBe('gh-12');

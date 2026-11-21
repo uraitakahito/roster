@@ -10,14 +10,14 @@ import { PAGE_KINDS, pageDelete, pageImport, pageList, pagePath, pagePut, type P
 import { registerMessages } from './commands/register.ts';
 import { hello, inbox } from './commands/role-side.ts';
 import { assign, close, newKey, roles, type AssignOptions } from './commands/tpm-side.ts';
-import { rolesConfigFile } from './config.ts';
+import { composeSkillSets, readConfigSources } from './config.ts';
 import { createContext } from './context.ts';
 import { exec } from './exec.ts';
 import type { Verdict } from './guard.ts';
 import { ROLE_NAMES, type RoleName } from './protocol.ts';
 import { requireRole } from './roster.ts';
 import { runRole } from './run-role.ts';
-import { readSkillSets, TpmError } from './skill-sets.ts';
+import { TpmError } from './skill-sets.ts';
 import { explain } from './verbose.ts';
 
 /** この file は <repo>/cli/src/program.ts にある。 */
@@ -50,10 +50,10 @@ export function buildProgram(): Command {
     .option('-v, --verbose', '読んだ config・追加の skill セット・skill セットごとの skill を stderr に出す')
     .action((folder: string | undefined, options: { verbose?: boolean }) => {
       const dir = resolveFolder(folder ?? process.cwd());
-      const configFile = rolesConfigFile(dir);
-      const skillSets = readSkillSets(configFile, root);
+      const sources = readConfigSources(dir);
+      const skillSets = composeSkillSets(sources, root);
       if (options.verbose) {
-        for (const line of explain({ given: folder, dir, root, configFile, skillSets })) process.stderr.write(`tpm: ${line}\n`);
+        for (const line of explain({ given: folder, dir, root, configFiles: sources.map(s => s.file), skillSets })) process.stderr.write(`tpm: ${line}\n`);
       }
       console.log(buildCommand(dir, root, skillSets, process.env));
     });

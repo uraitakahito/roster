@@ -1,4 +1,5 @@
 // tpm infra …: インフラの環境の宣言と承認を見る・書く。tpm guard: hook から呼ばれる guard。
+import { OWN_LABEL } from '../config.ts';
 import type { Context } from '../context.ts';
 import { commandOf, judge, judgeEnv, readApprovals, removeApproval, writeApproval, type Verdict } from '../guard.ts';
 import { ROLE_NAMES, type RoleName } from '../protocol.ts';
@@ -32,7 +33,9 @@ export function infraList(ctx: Context): string[] {
     const approval = approvals[name];
     const open = approval !== undefined && ctx.now().getTime() < Date.parse(approval.until);
     const state = env.guard !== 'pm' ? '' : open ? `  承認あり（${approval.until} まで${approval.note ? `・${approval.note}` : ''}）` : '  承認なし';
-    return `- ${name}  ${GUARD_LABEL[env.guard]}${state}  match: ${env.match.map(m => JSON.stringify(m)).join(' ')}`;
+    // 直下の folder の設定の宣言なら、どの設定かを添える。
+    const from = (env.from ?? []).some(f => f !== OWN_LABEL) ? `  宣言: ${(env.from ?? []).join('・')}` : '';
+    return `- ${name}  ${GUARD_LABEL[env.guard]}${state}  match: ${env.match.map(m => JSON.stringify(m)).join(' ')}${from}`;
   });
 }
 

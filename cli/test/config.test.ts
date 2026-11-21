@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { readRolesConfig, rolesConfigFile } from '../src/config.ts';
+import { composeRolesConfig, composeSkillSets, describeTrackers, envLabel, readConfigSources, readRolesConfig, rolesConfigFile } from '../src/config.ts';
 import { TpmError } from '../src/skill-sets.ts';
 
 let dir: string;
@@ -101,5 +101,101 @@ describe('rolesConfigFile', () => {
     mkdirSync(join(d, '.claude', 'roles'), { recursive: true });
     writeFileSync(join(d, '.claude', 'roles', 'config.json'), '{}');
     expect(() => rolesConfigFile(d)).toThrow(`mv '${d}/.claude/roles/config.json' '${d}/.claude/roles/config.jsonc'`);
+  });
+});
+
+/** project の folder を作り、folder の名前（'' は project 自身）→ 設定の中身（null なら file を置かない）を書く。 */
+const tree = (configs: Record<string, object | null>): string => {
+  const project = join(dir, `tree-${n++}`);
+  for (const [name, body] of Object.entries(configs)) {
+    mkdirSync(join(project, name, '.claude', 'roles'), { recursive: true });
+    if (body !== null) writeFileSync(join(project, name, '.claude', 'roles', 'config.jsonc'), JSON.stringify(body));
+  }
+  return project;
+};
+
+describe('readConfigSources', () => {
+  test('直下に設定のある folder が無ければ、project の folder の設定だけ', () => {
+    const project = tree({ '': { tracker: 'jira' }, 'src': null });
+    expect(readConfigSources(project).map(s => [s.name, s.exists, s.written])).toEqual([['', true, ['tracker']]]);
+    expect(readConfigSources(tree({ '': null })).map(s => [s.name, s.exists, s.written])).toEqual([['', false, []]]);
+  });
+
+  test('直下の folder を名前の順に集める。設定の無い folder・. で始まる folder・node_modules・1 段より深い folder は見ない', () => {
+    const project = tree({ '': null, 'web': { tracker: 'github' }, 'api': { tracker: 'jira' }, 'docs': null, '.hidden': { tracker: 'jira' }, 'node_modules': { tracker: 'jira' }, 'api/deep': { tracker: 'github' } });
+    writeFileSync(join(project, 'file.txt'), '');
+    expect(readConfigSources(project).map(s => [s.name, s.dir, s.exists])).toEqual([['', project, false], ['api', join(project, 'api'), true], ['web', join(project, 'web'), true]]);
+  });
+
+  test('folders を書けば、探さずに書いた folder だけを集める（深い folder も書ける。重なりと project 自身は除く）', () => {
+    const body = { 'api': { tracker: 'jira' }, 'web': { tracker: 'github' }, 'api/deep': { tracker: 'github' } };
+    expect(readConfigSources(tree({ '': { folders: ['web', 'api/deep', 'web', '.'] }, ...body })).map(s => s.name)).toEqual(['', 'web', 'api/deep']);
+    expect(readConfigSources(tree({ '': { folders: [] }, ...body })).map(s => s.name)).toEqual(['']);
+  });
+
+  test('folders に、設定の無い folder を書いたら誤り', () => {
+    const project = tree({ '': { folders: ['docs'] }, 'docs': null });
+    expect(() => readConfigSources(project)).toThrow(TpmError);
+    expect(() => readConfigSources(project)).toThrow(`folders に書いた docs に、設定がありません: ${project}/docs/.claude/roles/config.jsonc`);
+    expect(() => readConfigSources(tree({ '': { folders: 'web' } }))).toThrow(/folders は、集める folder（この folder からの path）の配列/);
+  });
+
+  test('直下の folder の古い名前の config.json も、読まずに止める', () => {
+    const project = tree({ '': null, 'web': null });
+    writeFileSync(join(project, 'web', '.claude', 'roles', 'config.json'), '{}');
+    expect(() => readConfigSources(project)).toThrow(/web\/\.claude\/roles\/config\.json は読みません/);
+  });
+
+  test('直下の folder の設定の誤りは、その file を名指して止まる', () => {
+    const project = tree({ '': null, 'web': { tracker: 'linear' } });
+    expect(() => readConfigSources(project)).toThrow(`${project}/web/.claude/roles/config.jsonc の tracker は`);
+  });
+});
+
+describe('composeRolesConfig', () => {
+  test('設定がどこにも無ければ既定（課題管理なし・cmux・環境の宣言なし）', () => {
+    const config = composeRolesConfig(tree({ '': null }));
+    expect(config).toMatchObject({ transport: 'cmux', trackers: { jira: [], github: [] }, infra: {}, roles: {} });
+    expect(describeTrackers(config.sources)).toBe('この folder＝無い');
+  });
+
+  test('課題管理は、道具ごとに宣言した設定を覚える（none は足さない）', () => {
+    const config = composeRolesConfig(tree({ '': { tracker: 'none' }, 'api': { tracker: 'jira' }, 'skills': { tracker: 'jira' }, 'web': { tracker: 'github' }, 'x': {} }));
+    expect(config.trackers.jira.map(s => s.name)).toEqual(['api', 'skills']);
+    expect(config.trackers.github.map(s => s.name)).toEqual(['web']);
+    expect(describeTrackers(config.sources)).toBe('この folder＝none・api＝jira・skills＝jira・web＝github・x＝none');
+  });
+
+  test('infra は環境の名前ごとに合わせる。同じ名前は match を足し、厳しい方の手続きにする', () => {
+    const { infra } = composeRolesConfig(tree({
+      '': { infra: { store: { guard: 'free', match: ['container stop store'] }, own: { guard: 'pm', match: ['aws '] } } },
+      'a': { infra: { store: { guard: 'tpm', match: ['container stop store', '--name store'] } } },
+      'b': { infra: { 'store': { guard: 'free', match: ['container rm store'] }, 'b-only': { guard: 'free', match: ['b '] } } },
+    }));
+    expect(infra).toEqual({
+      'store': { guard: 'tpm', match: ['container stop store', '--name store', 'container rm store'], from: ['この folder', 'a', 'b'] },
+      'own': { guard: 'pm', match: ['aws '], from: ['この folder'] },
+      'b-only': { guard: 'free', match: ['b '], from: ['b'] },
+    });
+    expect(Object.entries(infra).map(([name, env]) => envLabel(name, env))).toEqual(['store（この folder・a・b の設定）', 'own', 'b-only（b の設定）']);
+  });
+
+  test('連携と担当の既定は、project の folder の設定だけ（直下の folder の値は読まない）', () => {
+    const config = composeRolesConfig(tree({
+      '': { 'transport': 'file', 'software-engineer': { effort: 'high' } },
+      'a': { 'transport': 'cmux', 'software-engineer': { model: 'claude-fable-5-2' }, 'folders': ['nope'] },
+    }));
+    expect(config.transport).toBe('file');
+    expect(config.roles).toEqual({ 'software-engineer': { effort: 'high' } });
+    expect(composeRolesConfig(tree({ '': null, 'a': { transport: 'file' } })).transport).toBe('cmux');
+  });
+});
+
+describe('composeSkillSets', () => {
+  test('集めた設定の skill-sets を、集めた順に足す（重なりは除く）', () => {
+    const root = join(dir, 'root');
+    for (const name of ['dependabot', 'extra']) mkdirSync(join(root, 'skill-sets', name, '.claude', 'skills'), { recursive: true });
+    const project = tree({ '': { 'skill-sets': ['extra'] }, 'a': { 'skill-sets': ['dependabot', 'extra'] }, 'b': {} });
+    expect(composeSkillSets(readConfigSources(project), root)).toEqual(['extra', 'dependabot']);
   });
 });
