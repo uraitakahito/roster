@@ -32,7 +32,7 @@ description: この repo を別の folder へ移す手順、Node の version の
 | 控えの folder | `~/.local/share/tpm/pages/`（`tpm` が、置いた・読んだページをこの Mac に写す所。container には mount しない） |
 | DB | 名前つきの volume `pagetray-data`（中の `/data/pages.db`）。Mac の folder は mount しない |
 
-**手順は、pagetray の README の「[動かす](https://github.com/uraitakahito/pagetray#動かす)」にある**（起こす・確かめる・DB の写しを取る・写しから戻す・止める・版を上げる）。README の命令のうち、container と volume に触る物は、頭に `tpm infra run pagetray --` を付けて打つ。下は、この repo の側の決まりだけを書く。
+**手順は、pagetray の docs の「[動かす](https://uraitakahito.github.io/pagetray/run.html)」にある**（起こす・確かめる・DB の写しを取る・写しから戻す・止める・版を上げる）。そこの命令のうち、container と volume に触る物は、頭に `tpm infra run pagetray --` を付けて打つ。下は、この repo の側の決まりだけを書く。
 
 ### 起こす
 
@@ -47,10 +47,10 @@ tpm infra run pagetray -- container run -d --name pagetray \
   ghcr.io/uraitakahito/pagetray:<版>
 ```
 
-- `<版>` は `.pagetray-version` の `@` の前（`v0.2.0` など）。pull した image の digest が `@` の後ろと同じかを見る（見方は pagetray の README の「起こす」）。
+- `<版>` は `.pagetray-version` の `@` の前（`v0.2.0` など）。pull した image の digest が `@` の後ろと同じかを見る（見方は pagetray の docs の「[起こす](https://uraitakahito.github.io/pagetray/run.html#起こす)」）。
 - `-p` には必ず `127.0.0.1:` を書く。`-p 8801:8080` と書くと LAN に開く。
 - 8801 が使われていたら別の port にし、担当が使う URL を環境変数 `TPM_PAGES_URL`（[設定](/configuration/)）で合わせる。
-- 起こしたら、pagetray の README の「確かめる」をする。試しのページを置いたら、TPM 担当が `tpm page delete <URL> --yes` で消す（[担当のあいだの決まり](/protocol/#ページの置き場)）。
+- 起こしたら、pagetray の docs の「[確かめる](https://uraitakahito.github.io/pagetray/run.html#確かめる)」をする。試しのページを置いたら、TPM 担当が `tpm page delete <URL> --yes` で消す（[担当のあいだの決まり](/protocol/#ページの置き場)）。
 
 ### 止める・Mac を起こし直した後
 
@@ -78,7 +78,7 @@ pagetray の新しい版が出て、この repo の `.pagetray-version` が上�
 
 1. pagetray の `CHANGELOG.md` で、口の版が変わるか・移行の SQL が足されるかを見る。
 2. 【ask-tpm】で止める時を決める。
-3. pagetray の README の「版を上げる」のとおりに、DB の写しを取り、container を作り直して、確かめる（volume はそのまま付く）。
+3. pagetray の docs の「[版を上げる](https://uraitakahito.github.io/pagetray/run.html#版を上げる)」のとおりに、DB の写しを取り、container を作り直して、確かめる（volume はそのまま付く）。
 4. `tpm page` が「口の版が違う」と言って止まる時は、置き場の版とこの repo の版（`.pagetray-version`）が合っていない。どちらかが古いので、合わせる。
 
 ### ほかの project で使う

@@ -23,7 +23,7 @@ export const DEFAULT_PAGES_URL = 'http://127.0.0.1:8801';
 /** 前の置き場（Nginx）の URL。前に置いたページの URL も、読む時は受ける。 */
 export const LEGACY_PAGES_URLS = ['http://127.0.0.1:8800'];
 
-/** この cli が話せる、置き場の口の版（pagetray の docs/api.md。置き場は、どの答えにも header `Pagetray-Api` で自分の版を付ける）。 */
+/** この cli が話せる、置き場の口の版（pagetray の docs/src/api.md。置き場は、どの答えにも header `Pagetray-Api` で自分の版を付ける）。 */
 export const PAGES_API = '1';
 
 /** 課題の Key として folder の名にしてよい字（path の外へ出ないように）。 */

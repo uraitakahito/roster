@@ -5,7 +5,7 @@
   "infra": {
     // ページの置き場（別の repo の pagetray の image で動かす container と、DB を置く volume）。
     // 止めると担当はページを置けず、volume を消すと置かれたページの記録（役割・workspace の ID）が消える。
-    // 起こし方は docs-site の運用のページの「ページの置き場（pagetray）」と、pagetray の README の「動かす」。
+    // 起こし方は docs-site の運用のページの「ページの置き場（pagetray）」と、pagetray の docs の「動かす」（https://uraitakahito.github.io/pagetray/run.html）。
     "pagetray": {
       "guard": "tpm",
       "match": [

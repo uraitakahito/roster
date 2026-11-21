@@ -48,11 +48,11 @@ build は無い。`cli/bin/tpm` は `cli/src/cli.ts` を node で直に動かす
 
 ## pagetray（ページの置き場のサーバー）とのつなぎ
 
-担当が置くページを DB に持つサーバー（Rust）は、別の repo [pagetray](https://github.com/uraitakahito/pagetray) にある（もとは、この repo の folder だった物を履歴ごと分けた）。作り・口の一覧・Rust の開発の手引きは、pagetray の README。この repo が持つのは、その口を `curl` で呼ぶ側（`tpm page put`・`path`・`list`・`import`・`delete`。`cli/src/commands/page.ts`）と、つなぎの試験。
+担当が置くページを DB に持つサーバー（Rust）は、別の repo [pagetray](https://github.com/uraitakahito/pagetray) にある（もとは、この repo の folder だった物を履歴ごと分けた）。作り・口の一覧・Rust の開発の手引きは、[pagetray の docs](https://uraitakahito.github.io/pagetray/)（[開発](https://uraitakahito.github.io/pagetray/development.html) の章）。この repo が持つのは、その口を `curl` で呼ぶ側（`tpm page put`・`path`・`list`・`import`・`delete`。`cli/src/commands/page.ts`）と、つなぎの試験。
 
 - **合わせる版**: `.pagetray-version` に、合わせる pagetray の版を `v<版>@<image の digest>` の形で書く（digest は pagetray の release にある）。workflow の `pagetray-e2e`（`.github/workflows/pagetray-e2e.yml`）が、その版の image（`ghcr.io/uraitakahito/pagetray`）を digest で pull して起こし、`cli/test/pagetray-e2e.test.ts` で `tpm page put`・`path`・`list`・`import`・`delete` を本物に向けて流す（`cli/src/` のすべての役割とページの種類で 1 枚ずつ置いて読む）。
 - **偽の置き場**: `cli/` のほかの試験は、偽の置き場（`cli/test/helpers.ts` の `FakeStore`）で流す。口の形（URL・引数の名・JSON の欄）が変わったら、`FakeStore` と `page.ts` を合わせて直す。
-- **口の版**: 置き場は、どの答えにも header `Pagetray-Api` で口の版を付ける（決まりは pagetray の `docs/api.md`）。`tpm page` は、話せる版（`cli/src/commands/page.ts` の `PAGES_API`）と違う答えを使わずに止まる。header の無い答え（口の版ができる前の置き場）は通す。
+- **口の版**: 置き場は、どの答えにも header `Pagetray-Api` で口の版を付ける（決まりは pagetray の docs の「[口の約束](https://uraitakahito.github.io/pagetray/api.html)」）。`tpm page` は、話せる版（`cli/src/commands/page.ts` の `PAGES_API`）と違う答えを使わずに止まる。header の無い答え（口の版ができる前の置き場）は通す。
 - **pagetray を上げる時**: pagetray で release を出す → この repo で `.pagetray-version` を新しい版と digest にする PR を出す（つなぎの試験が通る）→ [運用](/operations/#版を上げる)の「版を上げる」で container を作り直す。口を変える変更は、古い cli でも新しい cli でも通る順に分ける。
 - **手元で流す**: pagetray の checkout で `PAGETRAY_DB=/tmp/pages.db PAGETRAY_LISTEN=127.0.0.1:18801 cargo run` と起こした後に、`cd cli && TPM_E2E_PAGES_URL=http://127.0.0.1:18801 pnpm exec vitest run test/pagetray-e2e.test.ts`。
 - **種類と役割の名**: 一覧は `cli/src/` だけが持つ。サーバーは字の形（英小文字で始まり、英小文字・数字・`-` で 32 字まで）だけを見るので、`cli` に種類や役割を足してもサーバーは変えない。

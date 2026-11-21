@@ -42,7 +42,7 @@ tpm infra list
 - 置き場は自動では起きない（Mac を起こし直すと止まったまま）。止まっていると、ほかの担当はページを置けず、Product Manager は一覧の UI を開けない（担当は、控えにあるページなら読める）。
 - DB は名前つきの volume にある。volume は消さない。版を上げる前と volume に触る前に、DB の写しを取る。
 - image は pagetray の release の物を使い、自分では作らない。版は skills の repo の `.pagetray-version`。
-- 手順（起こす・確かめる・DB の写し・写しから戻す・取り込む・版を上げる）は、docs-site の運用のページ（`docs-site/src/content/docs/operations.md` の「ページの置き場」）と、そこが指す pagetray の README（https://github.com/uraitakahito/pagetray の「動かす」）。命令は `tpm infra run pagetray -- <命令>` で打つ。止める・作り直す・volume を変えるは「TPM に相談」の手続き。
+- 手順（起こす・確かめる・DB の写し・写しから戻す・取り込む・版を上げる）は、docs-site の運用のページ（`docs-site/src/content/docs/operations.md` の「ページの置き場」）と、そこが指す pagetray の docs（https://uraitakahito.github.io/pagetray/run.html の「動かす」）。命令は `tpm infra run pagetray -- <命令>` で打つ。止める・作り直す・volume を変えるは「TPM に相談」の手続き。
 
 ## 2. 終わり
 
