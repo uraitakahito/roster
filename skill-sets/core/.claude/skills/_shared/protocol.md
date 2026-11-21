@@ -101,6 +101,20 @@ Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【
 - `t-` の Key には課題管理の課題が無い。中身は依頼書にある。
 - 課題の写し: Key が読める形なら、`tpm assign` が振るたびに課題を読み、写しのページ（`issue-<番号>.html`）を置く。`tpm hello` と【brief】が `課題の写し: <URL>` を返したら、依頼書と一緒に読む（振ったときの中身。新しい中身は `tpm issue view`）。読めないまま振られたら `課題の写し: 無し（<訳>）` と出る。
 
+### Jira の課題の欄を書く
+
+依頼書が課題の欄を変えることを求めたとき、`acli` に命令の無い欄（コンポーネントなど）は、claude.ai の Atlassian の connector（`mcp__claude_ai_Atlassian_Rovo__editJiraIssue`）で書く。Product Manager の画面の手に回す前に、まず connector で書けるかを当たる。
+
+| connector で書いてよい | connector で書かない（`tpm` の命令で書く） |
+|---|---|
+| 依頼書が変えることを求めた課題の欄: コンポーネント・ラベル・題・本文など | コメント（記録は `tpm report …`・`tpm ask pm` が書く） |
+| | 状態を進める（課題を済みにするのは `tpm report end` だけ） |
+
+- guard は Bash の命令だけを見るので、connector のコメントや状態を進める道具は止めない。止められなくても使わない（使うと記録と状態が抜ける）。
+- 書いたら、1 件ずつ `tpm issue view <Key>` か connector で読み戻して確かめる。
+- connector がつながっていなければ（道具が `/mcp` で認証するようにと返したら）、`tpm ask tpm` で Product Manager に認証を頼む。認証は 1 度すれば、ほかの担当の session でも使える。
+- スペースを作る・課題を別のスペースへ移す・コンポーネントを作るなど、`acli` にも connector にも道具の無い操作は、Product Manager の画面の手になる。手順のページでは、移すと変わる Key でなく、題か古い Key の検索で課題を指す。
+
 ## ページ
 
 依頼書・確認・提案・計画・結果・監査は、HTML の file に書いて、この Mac の置き場（`127.0.0.1` の pagetray。ページを DB に持つサーバーで、起こすのは DevOps Engineer 担当）に置く。置いた物を「ページ」と言う。Artifact tool（publish・read・open）は、依頼書と成果には使わない。
