@@ -175,6 +175,17 @@ describe('置き場のページを消す curl', () => {
     expect(ask(`echo "curl -X DELETE ${url}"`, 'software-engineer').allow).toBe(true);
     expect(ask(`TPM_RAW=1 curl -X DELETE ${url}`, 'software-engineer').allow).toBe(true);
   });
+
+  test('file を消す DELETE（/api/files）も止める', () => {
+    const files = '\'http://127.0.0.1:8801/api/files?project=p&key=t-x&name=screen.png&n=1\'';
+    for (const command of [`curl -sS -X DELETE ${files}`, `curl --request DELETE ${files}`]) {
+      const verdict = ask(command, 'software-engineer');
+      expect(verdict.allow, command).toBe(false);
+      expect(verdict.allow ? '' : verdict.reason).toContain('TPM 担当だけ');
+    }
+    expect(ask(`curl -X DELETE ${files}`).allow).toBe(true);
+    expect(ask(`curl -sS ${files}`, 'software-engineer').allow).toBe(true);
+  });
 });
 
 describe('置き場の CLI（pagetray）の消す命令', () => {
@@ -191,6 +202,9 @@ describe('置き場の CLI（pagetray）の消す命令', () => {
       'pagetray api /api/pages -XDELETE -f project=p',
       'pagetray api --method delete /api/pages -f project=p',
       'pagetray api --method=DELETE /api/pages -f project=p',
+      'pagetray file delete http://127.0.0.1:8801/p/t-x/files/screen-1.png --yes',
+      'pagetray file delete --project p --key t-x --yes',
+      'pagetray api -X DELETE /api/files -f project=p',
     ]) {
       const verdict = ask(command, 'software-engineer');
       expect(verdict.allow, command).toBe(false);
@@ -207,6 +221,8 @@ describe('置き場の CLI（pagetray）の消す命令', () => {
       'pagetray api /api/pages -f project=p',
       'pagetray api -X POST /api/pages --input x.html -f project=p',
       'pagetray status',
+      'pagetray file list --key t-x',
+      'pagetray file put screen.png --project p --key t-x --reviewed',
       `echo "pagetray page delete ${url} --yes"`,
       'git commit -m "docs: pagetray page delete の使い方"',
       `TPM_RAW=1 pagetray page delete ${url} --yes`,
