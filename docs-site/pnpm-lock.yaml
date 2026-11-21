@@ -33,6 +33,9 @@ importers:
       satteri:
         specifier: ^0.11.7
         version: 0.11.7
+      yaml:
+        specifier: ^2.9.1
+        version: 2.9.1
 
 packages:
 
