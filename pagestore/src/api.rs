@@ -109,6 +109,8 @@ pub async fn put(
                 .unwrap_or("127.0.0.1");
             let url = format!("http://{host}{}", page.path);
             let mut value = serde_json::to_value(&page).unwrap_or_default();
+            // 聞いている UI が無ければ送り先が無いだけなので、失敗は見ない。
+            let _ = state.events.send(value.to_string());
             value["url"] = url.clone().into();
             (StatusCode::CREATED, [(header::LOCATION, url)], Json(value)).into_response()
         }

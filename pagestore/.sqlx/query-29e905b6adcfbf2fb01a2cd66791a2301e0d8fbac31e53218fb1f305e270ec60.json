@@ -1,0 +1,40 @@
+{
+  "db_name": "SQLite",
+  "query": "select workspace as \"value!: String\", count(*) as \"count!: i64\",\n                      case when workspace = '' then ''\n                           else replace(group_concat(distinct key), ',', ', ') end as \"note!: String\"\n               from pages group by workspace order by max(created_at) desc limit 100",
+  "describe": {
+    "columns": [
+      {
+        "name": "value!: String",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pages",
+            "name": "workspace"
+          }
+        }
+      },
+      {
+        "name": "count!: i64",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "note!: String",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "29e905b6adcfbf2fb01a2cd66791a2301e0d8fbac31e53218fb1f305e270ec60"
+}

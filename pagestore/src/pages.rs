@@ -30,6 +30,16 @@ pub async fn show(
     }
 }
 
+/// 置き場の中のページの path（`/<project>/<key>/<kind>-<n>.html`）の形か。
+pub fn is_page_path(path: &str) -> bool {
+    let mut parts = path.strip_prefix('/').unwrap_or("/").split('/');
+    let (project, key, file) = (parts.next(), parts.next(), parts.next());
+    parts.next().is_none()
+        && project.is_some_and(is_segment)
+        && key.is_some_and(is_segment)
+        && file.and_then(parse_file).is_some()
+}
+
 fn not_found() -> Response {
     error(StatusCode::NOT_FOUND, "そのページは無い")
 }
@@ -43,7 +53,23 @@ fn parse_file(file: &str) -> Option<(&str, i64)> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_file;
+    use super::{is_page_path, parse_file};
+
+    #[test]
+    fn page_paths_stay_inside_the_store() {
+        assert!(is_page_path("/p/SKILLS-14/plan-1.html"));
+        for ng in [
+            "p/k/plan-1.html",
+            "/p/plan-1.html",
+            "/p/k/x/plan-1.html",
+            "//evil.example/k/plan-1.html",
+            "https://evil.example/p/k/plan-1.html",
+            "/p/k/plan-1.html?x",
+            "",
+        ] {
+            assert!(!is_page_path(ng), "{ng}");
+        }
+    }
 
     #[test]
     fn file_names_split_into_kind_and_number() {

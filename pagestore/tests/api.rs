@@ -1,103 +1,15 @@
-//! 道筋ごとの試験。試験ごとに一時の DB を作る。
+//! 道筋ごとの試験（JSON の口と本文）。
 
-use axum::Router;
+mod common;
+
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
+use common::{SE, Server, html, request};
 use http_body_util::BodyExt;
 use pagestore::{AppState, db::Db, router};
 use serde_json::Value;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU32, Ordering};
 use tower::ServiceExt;
-
-struct Server {
-    app: Router,
-    db: Db,
-    path: PathBuf,
-}
-
-impl Server {
-    async fn start() -> Self {
-        static SEQ: AtomicU32 = AtomicU32::new(0);
-        let path = std::env::temp_dir().join(format!(
-            "pagestore-test-{}-{}.db",
-            std::process::id(),
-            SEQ.fetch_add(1, Ordering::Relaxed)
-        ));
-        let db = Db::open(&path).await.unwrap();
-        let app = router(AppState { db: db.clone() });
-        Self { app, db, path }
-    }
-
-    async fn send(&self, request: Request<Body>) -> (StatusCode, axum::http::HeaderMap, Vec<u8>) {
-        let response = self.app.clone().oneshot(request).await.unwrap();
-        let (parts, body) = response.into_parts();
-        let bytes = body.collect().await.unwrap().to_bytes().to_vec();
-        (parts.status, parts.headers, bytes)
-    }
-
-    async fn get(&self, uri: &str) -> (StatusCode, axum::http::HeaderMap, Vec<u8>) {
-        self.send(request("GET", uri, Body::empty())).await
-    }
-
-    async fn json(&self, uri: &str) -> Value {
-        let (status, _, body) = self.get(uri).await;
-        assert_eq!(status, StatusCode::OK, "{uri}");
-        serde_json::from_slice(&body).unwrap()
-    }
-
-    async fn put(&self, query: &str, html: &str) -> (StatusCode, Value) {
-        let uri = format!("/api/pages?{query}");
-        let (status, _, body) = self
-            .send(request("POST", &uri, Body::from(html.to_owned())))
-            .await;
-        (status, serde_json::from_slice(&body).unwrap())
-    }
-
-    /// 置いて、番号を返す。
-    async fn place(&self, query: &str, html: &str) -> i64 {
-        let (status, json) = self.put(query, html).await;
-        assert_eq!(status, StatusCode::CREATED, "{json}");
-        json["n"].as_i64().unwrap()
-    }
-
-    async fn paths(&self, query: &str) -> Vec<String> {
-        let json = self.json(&format!("/api/pages?{query}")).await;
-        json["pages"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|p| p["path"].as_str().unwrap().to_owned())
-            .collect()
-    }
-}
-
-impl Drop for Server {
-    fn drop(&mut self) {
-        for suffix in ["", "-wal", "-shm"] {
-            let mut name = self.path.clone().into_os_string();
-            name.push(suffix);
-            let _ = std::fs::remove_file(name);
-        }
-    }
-}
-
-fn request(method: &str, uri: &str, body: Body) -> Request<Body> {
-    Request::builder()
-        .method(method)
-        .uri(uri)
-        .header(header::HOST, "127.0.0.1:8801")
-        .body(body)
-        .unwrap()
-}
-
-fn html(title: &str, text: &str) -> String {
-    format!(
-        "<!doctype html><html><head><title>{title}</title><style>p{{margin:0}}</style></head><body><p>{text}</p></body></html>"
-    )
-}
-
-const SE: &str = "project=p&key=SKILLS-14&role=software-engineer&workspace=workspace:1";
 
 #[tokio::test]
 async fn numbers_start_at_one_and_follow_per_kind() {
@@ -443,7 +355,7 @@ async fn pages_survive_a_restart() {
         .await;
     s.db.close().await;
     let again = Db::open(&s.path).await.unwrap();
-    let app = router(AppState { db: again.clone() });
+    let app = router(AppState::new(again.clone()));
     let response = app
         .oneshot(request("GET", "/p/SKILLS-14/plan-1.html", Body::empty()))
         .await

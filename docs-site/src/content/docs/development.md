@@ -57,6 +57,8 @@ build は無い。`cli/bin/tpm` は `cli/src/cli.ts` を node で直に動かす
 | `pagestore/src/db.rs` | 接続・移行・SQL |
 | `pagestore/src/api.rs` | 置く・探す・DB の写し |
 | `pagestore/src/pages.rs` | ページの本文を返す |
+| `pagestore/src/ui.rs`・`pagestore/templates/index.html` | 一覧の UI（askama の template。build の時に検査される） |
+| `pagestore/src/events.rs` | 新着の push（SSE） |
 | `pagestore/src/text.rs` | HTML から題と検索用の字を取り出す |
 | `pagestore/migrations/` | 表を作る SQL（起きる時に、まだ当てていない物を当てる） |
 | `pagestore/.sqlx/` | SQL の検査用の file（commit する） |
@@ -74,8 +76,9 @@ PAGESTORE_DB=/tmp/pages.db PAGESTORE_LISTEN=127.0.0.1:18801 cargo run   # 手元
 
 GitHub Actions でも同じ順に流す（`.github/workflows/pagestore.yml`）。試験は、試験ごとに一時の DB を作る。
 
-- **口**: `POST /api/pages?project=&key=&kind=&role=&workspace=`（本文は HTML。番号を決めて `201` と JSON を返す。`n`・`created_at` は取り込みの時だけ付け、番号が使われていれば `409`）・`GET /api/pages`（`project`・`key`・`kind`・`role`・`workspace`・`q`・`sort`・`limit`・`before`・`after` で絞る）・`GET /<project>/<key>/<kind>-<n>.html`（本文）・`GET /api/backup`（DB の写し）・`GET /healthz`。
+- **口**: `POST /api/pages?project=&key=&kind=&role=&workspace=`（本文は HTML。番号を決めて `201` と JSON を返す。`n`・`created_at` は取り込みの時だけ付け、番号が使われていれば `409`）・`GET /api/pages`（`project`・`key`・`kind`・`role`・`workspace`・`q`・`sort`・`limit`・`before`・`after` で絞る）・`GET /<project>/<key>/<kind>-<n>.html`（本文）・`GET /`（一覧の UI。`/<project>/`・`/<project>/<key>/` は絞った一覧）・`GET /api/events`（置かれるたびに 1 件を push）・`GET /api/backup`（DB の写し）・`GET /healthz`。
 - **種類と役割の名**: 一覧は `cli/src/` だけが持つ。サーバーは字の形（英小文字で始まり、英小文字・数字・`-` で 32 字まで）だけを見るので、`cli` に種類や役割を足してもサーバーは変えない。
+- **一覧の UI**: サーバーが HTML を組んで返す。絞り込み・並べ替え・検索は link と form で、条件は URL に出る（script が無くても動く）。script がするのは、新着の印・未読の印（browser が覚える）・時刻をこの Mac の時刻で出すことだけ。選んだページは、右の枠（`sandbox` を付けた iframe）に 1 枚だけ出す。見た目を変えたら、手元で起こして browser で見る。
 - **番号**: 書く接続は 1 本で、1 つの SQL が「今の最大 ＋ 1」を取って足す。置いたページを書き換える口・消す口は無い。
 - **SQL を変えた時**: SQL は `query!` が build の時に `pagestore/.sqlx/` と突き合わせる。SQL か `pagestore/migrations/` を変えたら、一時の DB を作って作り直し、commit する（忘れると CI の `cargo sqlx prepare --check` が落ちる）。`sqlx-cli` の版は workflow の `SQLX_CLI_VERSION` と合わせる。
 
