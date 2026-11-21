@@ -120,6 +120,17 @@ export function addIncident(ctx: Context, fields: NewIncident): Incident {
   }
 }
 
+/**
+ * 未決の件に、同じ中身の続き（【end】の「残っている物」・`tpm wait pm --hand` の打ち直し）を寄せ、新しい件を作らない。
+ * 続きの字（body）が件の事実にもう入っていれば、足さない。寄せた後の件を返す。
+ */
+export function foldIntoIncident(ctx: Context, incident: Incident, more: string, body: string): Incident {
+  if (incident.text.includes(body.trim())) return incident;
+  const folded: Incident = { ...incident, text: `${incident.text} ／ ${more}` };
+  writeIncident(ctx, folded);
+  return folded;
+}
+
 /** 件の 1 行（`#7 [重い] 効率性 t-8zuk 11-21 09:53「…」tag: 権限`）。 */
 export function incidentLine(i: Incident): string {
   const kind = i.type !== undefined ? INCIDENT_TYPES[i.type] : i.source === 'pm-hand' ? 'PM の手' : '残り';

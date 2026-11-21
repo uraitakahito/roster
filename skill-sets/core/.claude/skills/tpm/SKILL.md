@@ -108,6 +108,7 @@ disable-model-invocation: true
 - 送った命令が「まだ届いていない」と返したら、相手が手を動かしている。空いたら届くので、送り直さない。
 - 担当に送る命令（`tpm answer`・`tpm notify`・`tpm dismiss`・続きの `tpm assign`）が「まだ読んでいないメッセージがあります」と止まったら、その担当から来たメッセージを読む前に送ろうとしている（行き違いの元）。出たメッセージを読み、同じ命令を打ち直す。事情が変わっていたら、中身を変えて打つ。
 - `tpm dismiss` と続きの `tpm assign` が「まだ済んでいない物があります」と止まったら、自分が送った物（まだ届いていないメッセージ・【done】が返っていない依頼書）と合わない手を打とうとしている。Product Manager が決めたことでなければ、その依頼書をどうするかを Product Manager に確かめる。取り消すなら `--supersede`、続きの依頼書を前の依頼書の後にさせるなら `--after`（assign だけ）を付けて打ち直す（担当への本文に「取り消す: brief-N」「brief-N を済ませてから、これをする」と載る）。`tpm answer`・`tpm notify` は止まらない。
+- **Product Manager の決定を書き写す時**（【answer】・`tpm incident drop --why` などの訳・依頼書）は、Product Manager の言葉を原文のまま「」で写し、あなたの言い替えはその後ろに書く（言い替えだけだと、Auditor が伝え方を確かめられない）。
 - Product Manager の答えを待つ間は `tpm wait pm "<何を>"`、答えが来たら `tpm wait work "<段>"` などに更新する。Product Manager に返して手を止める回は、毎回その回の最後に打つ（上の 1 の 3）。
 - ページを消してよいのは TPM 担当だけ（protocol.md の「ページ」）。担当が【ask-tpm】で「試しに置いた・置き間違えた」ページを送ってきたら、`tpm page delete <URL>…` で消す物を見て、`--yes` を付けて消す（戻せない）。置き間違えた project ごとなら `--project <名>`、Key ごとなら `--key <Key>`。Product Manager が消したいと言ったときも同じ。消したら `tpm notify <Key> "消した" --reply-to <id>` で返す。file（画像など）も同じで、`tpm file delete <URL>…` で消す物と参照しているページを見て、`--yes` を付けて消す。依頼書に画像や PDF を付ける時は、上げる前に Read で見て、秘密が写っていないか確かめる（`tpm file put <file> --reviewed --key <Key>`）。
 - Product Manager が共有の環境を変えることを承認したら、`tpm infra approve <環境> --minutes <分> --note "<何の承認か>"` で承認を書いてから【answer】を返す。済んだら `tpm infra revoke <環境>` で承認を消す。
@@ -117,7 +118,7 @@ disable-model-invocation: true
 【done】を受けたら、Product Manager の判断が要るときだけ聞く。次のどれかに当たれば聞く:
 
 1. 【done】の「決めてほしいこと」が「なし」でない（【ask-pm】が来ている。提案・計画の【done】はここに入る）。
-2. 【done】の「残り」が「なし」でない（依頼の外の仕事を足すかは Product Manager が決める）。
+2. 【done】の「残り」が「なし」でなく、台帳の件を「仕事として振る」と決めた（依頼の外の仕事を足すかは Product Manager が決める。決め方は下の「6. 監査」の「『残り』と『PM の手』を扱う」。もう済んでいる・要らないと決めた残りでは聞かない）。
 3. 依頼書の段が最後でない（提案まで・計画までの依頼書）。
 4. Product Manager が、この課題では終える前に見せるよう言った。
 
@@ -142,12 +143,14 @@ tpm incident add <Key> "<起きた事実>" --type <reliability|safety|efficiency
 
 - 自分で気づいたら、その場で書く。事実だけを書き、原因は推さない。引き金のメッセージがあれば `--msg <id>` を付ける（時系列のページが、そのメッセージの前後を拾う）。tag は後で付ければよい（`tpm incident tag <番号> <tag>`）。
 - **自分の誤りも書く。**担当や Product Manager に直されたら（依頼書の書き誤り・確かめずに伝えた知らせ・返答の言葉づかい など）、`--tag tpm-self` を付けて書く。
-- 担当の【incident】・【done】の「残り」・【end】の「残っている物」・`tpm wait pm --hand` は、命令が台帳に入れる。書き直さない。
+- 担当の【incident】・【done】の「残り」・【end】の「残っている物」・`tpm wait pm --hand` は、命令が台帳に入れる。書き直さない。【end】の「残っている物」は同じ Key の未決の【done】の「残り」の件に、`--hand` の打ち直し（前の wait がその頼みのまま）は前の「PM の手」の件に、命令が寄せる。
 - 「[重い]」の件（自分で書いた物も、担当の【incident】も）は、すぐ Product Manager に伝える。監査を呼ぶかは Product Manager が決める。
 
 ### 「残り」と「PM の手」を扱う（【done】【end】を受けた時）
 
 台帳の件のうち、種類の無い件（【done】の「残り」・【end】の「残っている物」・`tpm wait pm --hand`）は、あなたが扱う。`tpm incident review` で見て、件ごとに決める。`tpm hello` と `tpm roles` は、未決の件があれば終わりに件数を出す。
+
+**「残り」が「なし」でなければ、まず台帳の件を決める。Product Manager に聞くのは、仕事として振る時だけ**（もう済んでいる・要らないは、聞かずに決めて訳を事実で書く。Product Manager が見送った訳なら、その言葉を原文で写す）。
 
 | 決め | 命令 |
 |---|---|
