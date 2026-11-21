@@ -132,7 +132,7 @@ disable-model-invocation: true
 tpm incident add <Key> "<起きた事実>" --type <reliability|safety|efficiency> [--msg <引き金のメッセージの id>] [--tag <tag>] [--severe]
 ```
 
-- 自分で気づいたら、その場で書く。事実だけを書き、原因は推さない。tag は後で付ければよい（`tpm incident tag <番号> <tag>`）。
+- 自分で気づいたら、その場で書く。事実だけを書き、原因は推さない。引き金のメッセージがあれば `--msg <id>` を付ける（時系列のページが、そのメッセージの前後を拾う）。tag は後で付ければよい（`tpm incident tag <番号> <tag>`）。
 - **自分の誤りも書く。**担当や Product Manager に直されたら（依頼書の書き誤り・確かめずに伝えた知らせ・返答の言葉づかい など）、`--tag tpm-self` を付けて書く。
 - 担当の【incident】・【done】の「残り」・【end】の「残っている物」・`tpm wait pm --hand` は、命令が台帳に入れる。書き直さない。
 
@@ -142,7 +142,7 @@ tpm incident add <Key> "<起きた事実>" --type <reliability|safety|efficiency
 
 | 決め | 命令 |
 |---|---|
-| 調べる | 担当に振り（Product Manager に聞いてから）、`tpm incident assign <番号>… --to <振り先の Key>` |
+| 調べる | `tpm incident timeline <番号>` で時系列のページを作り（**読まなくてよい。**URL を依頼書の「材料」に貼る）、担当に振り（Product Manager に聞いてから）、`tpm incident assign <番号>… --to <振り先の Key>` |
 | 調べない（1 度きりで害が無い） | `tpm incident drop <番号>… --why "<訳>"` |
 | もう直っている | `tpm incident close <番号>… --pr <直した PR の URL>`（教訓に入れただけなら `--lesson "<file と一言>"`） |
 

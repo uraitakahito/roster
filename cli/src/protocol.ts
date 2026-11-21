@@ -39,6 +39,7 @@ export const COMMANDS = [
   'incident assign',
   'incident drop',
   'incident close',
+  'incident timeline',
   'infra list',
   'infra approve',
   'infra revoke',
