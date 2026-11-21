@@ -1,8 +1,10 @@
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { hello, inbox } from '../src/commands/role-side.ts';
-import { assign, close, newKey, roles } from '../src/commands/tpm-side.ts';
+import { assign, close, configLines, newKey, recordingTo, roles } from '../src/commands/tpm-side.ts';
+import { createContext } from '../src/context.ts';
 import { buildCommand } from '../src/command.ts';
 import { modelLabel, modelStatus } from '../src/protocol.ts';
 import { readRole, requireRole, writeRole } from '../src/roster.ts';
@@ -15,8 +17,7 @@ const SE = { role: 'software-engineer', title: '計画と実装', brief: BRIEF, 
 describe('hello（TPM 担当）', () => {
   test('$TPM_KEY が無ければ TPM 担当として名乗る: 宛先を状態に書き、状態を出し、名簿を出す', () => {
     const w = world();
-    expect(hello(w.tpm)).toEqual(['TPM 担当の宛先: file:tpm', '課題管理: none・連携: file', '名簿: 担当はいない']);
-    expect(hello(world({}, {}, { skills: { tracker: 'jira' }, web: { tracker: 'github' } }).tpm)[1]).toBe('課題管理: jira・github・連携: file');
+    expect(hello(w.tpm)).toEqual(['TPM 担当の宛先: file:tpm', `設定: ${w.project}/.claude/roles/config.jsonc`, '課題管理: none（既定）・連携: file', '名簿: 担当はいない']);
     expect(w.tpm.state.read('tpm.jsonc')).toEqual({ address: 'file:tpm' });
     expect(w.wire.status('file:tpm')).toEqual({ model: 'Opus 5.5 · medium', wait: '作業中: 起動' });
   });
@@ -58,7 +59,7 @@ describe('assign', () => {
     });
     expect(w.wire.command('file:1')).toBe(`${w.tpm.root}/cli/bin/tpm run-role t-x7k2 --project ${w.project} --state ${w.tpm.state.dir}`);
     expect(w.wire.seats()).toEqual([{ address: 'file:1', title: 'SWE t-x7k2: 計画と実装' }]);
-    expect(out).toEqual(['起こした: SWE t-x7k2: 計画と実装（file:1・Opus 5.5 · medium）', '名乗り（tpm hello）は待っていない']);
+    expect(out).toEqual(['起こした: SWE t-x7k2: 計画と実装（file:1・Opus 5.5 · medium）', `folder: ${w.project}`, '名乗り（tpm hello）は待っていない']);
   });
 
   test('model などは 旗 > config.jsonc > 役割の既定 の順で決まる', () => {
@@ -105,7 +106,7 @@ describe('assign', () => {
         if (n === 2) hello(w.role('t-x7k2', 'file:1'));
       },
     };
-    expect(assign(tpm, 't-x7k2', { ...SE, wait: 90 })[1]).toBe('名乗った（tpm hello が来た）');
+    expect(assign(tpm, 't-x7k2', { ...SE, wait: 90 }).at(-1)).toBe('名乗った（tpm hello が来た）');
     expect(n).toBe(2);
   });
 
@@ -206,6 +207,58 @@ describe('newKey', () => {
   });
 });
 
+describe('設定の出どころ（tpm hello・tpm assign）', () => {
+  const config = (w: ReturnType<typeof world>): string[] => configLines(w.tpm);
+
+  test('設定の file がどこにも無ければ、無いので既定と出す', () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-bare-')));
+    const ctx = createContext({ XDG_STATE_HOME: join(dir, 'state') }, dir);
+    expect(configLines(ctx)).toEqual([`設定: ${dir}/.claude/roles/config.jsonc（無いので既定）`, '課題管理: none（既定）・連携: cmux（既定）']);
+  });
+
+  test('直下の folder の設定を合わせていなければ、設定の file と値。書いた値に「既定」は付けない', () => {
+    const w = world({ tracker: 'jira' });
+    expect(config(w)).toEqual([`設定: ${w.project}/.claude/roles/config.jsonc`, '課題管理: jira・連携: file']);
+  });
+
+  test('合わせていれば、設定ごとの中身と、Key の形ごとの記録の先を出す', () => {
+    const w = world({}, {}, {
+      skills: { tracker: 'jira', infra: { store: { guard: 'tpm', match: ['container stop store'] } } },
+      web: { 'tracker': 'github', 'skill-sets': ['dependabot'], 'software-engineer': { effort: 'high' }, 'transport': 'cmux' },
+      x: {},
+    });
+    expect(config(w)).toEqual([
+      '設定（この folder と直下の folder を合わせた物）:',
+      '- この folder  道具の欄は無い',
+      '- skills  課題管理: jira・infra: store',
+      '- web  課題管理: github・skill-sets: dependabot・担当の既定: software-engineer・連携: cmux（読まない。連携はこの folder の設定で決まる）',
+      '- x  道具の欄は無い',
+      '課題管理: Jira の Key（SKILLS-12 の形）→ jira（skills）／gh- の Key → github（web）／t- の Key → 記録しない',
+      '連携: file',
+      'infra: store（skills）（手続きは tpm infra list）',
+    ]);
+  });
+
+  test('宣言した設定が無い道具と、github の設定が 2 つ以上のときは、そう出す（止まらない）', () => {
+    const lines = config(world({}, {}, { api: { tracker: 'github' }, web: { tracker: 'github' } }));
+    expect(lines[4]).toBe('課題管理: Jira の Key（SKILLS-12 の形）→ 宣言した設定が無い（記録しない）／gh- の Key → 決まらない（github の設定が 2 つ以上: api・web。この folder の設定の folders で 1 つに絞る。Product Manager に伝える）／t- の Key → 記録しない');
+  });
+
+  test('tpm assign は、担当を起こした folder と課題の記録の先を出す', () => {
+    const w = world({}, {}, { skills: { tracker: 'jira' } });
+    expect(assign(w.tpm, 'SKILLS-20', { ...SE, issue: 'SKILLS-20', noIssueCopy: '試験' })).toEqual([
+      '起こした: SWE SKILLS-20: 計画と実装（file:1・Opus 5.5 · medium）',
+      `folder: ${w.project}`,
+      '課題の記録: jira（skills の設定）',
+      '名乗り（tpm hello）は待っていない',
+    ]);
+    // project の folder 自身の設定なら、道具の名だけ
+    const own = world({ tracker: 'jira' });
+    expect(assign(own.tpm, 'SKILLS-20', { ...SE, issue: 'SKILLS-20', noIssueCopy: '試験', cwd: join(own.project, 'sub') })[1]).toBe(`folder: ${join(own.project, 'sub')}`);
+    expect(recordingTo(own.tpm, 'SKILLS-20')).toBe('jira');
+  });
+});
+
 describe('hello', () => {
   test('状態を出し、名簿に宛先と時刻を書き、受け持ちを返す', () => {
     const w = world();
@@ -215,7 +268,7 @@ describe('hello', () => {
       '役割: Software Engineer',
       '課題の Key: t-x7k2',
       `依頼書: ${BRIEF}`,
-      '課題管理の課題: 無し（道具: none）',
+      '課題管理の課題: 無し（記録しない）',
       'TPM 担当の宛先: file:tpm',
       '自分の宛先: file:1',
     ]);

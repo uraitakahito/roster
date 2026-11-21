@@ -70,6 +70,22 @@ ai/                               ← ここで tpm start（設定は任意）
 | `software-engineer`・`devops-engineer` | 合わせない。**担当を起こす folder**（`tpm assign --cwd`）の設定 > project の folder の設定 の順に、欄ごとに先に値がある物を使う |
 | `transport` | project の folder の設定だけ（直下の folder の値は読まない） |
 
+どの値がどの設定から来たかは、TPM 担当の `tpm hello` が出す。上の図の folder で起こすと、次のように出る（直下に設定のある folder が無ければ、`設定: <file>` と `課題管理: …・連携: …` の 2 行。設定の file が無いための値には「（既定）」が付く）。
+
+```text
+TPM 担当の宛先: workspace:1
+設定（この folder と直下の folder を合わせた物）:
+- この folder  /path/to/ai/.claude/roles/config.jsonc（無い）
+- skills  課題管理: jira・infra: tpm-pagestore
+- web  課題管理: github・skill-sets: dependabot
+課題管理: Jira の Key（SKILLS-12 の形）→ jira（skills）／gh- の Key → github（web）／t- の Key → 記録しない
+連携: cmux（既定）
+infra: tpm-pagestore（skills）（手続きは tpm infra list）
+名簿: 担当はいない
+```
+
+`tpm assign` は、担当を起こした folder（`folder:`）と、`--issue` を付けたときの記録の先（`課題の記録: jira（skills の設定）`）を出す。下の repo をいくつも触る課題の担当は、`--cwd` を付けずに project の folder で起こす（どの repo も、その worktree の置き場も下に入る）。
+
 設定のどれか 1 つでも読めない（JSONC の誤り・欄の誤り）と、`tpm` の命令は誤りのある file を名指して止まる。guard も「命令を見られない」として、その project の担当の shell の命令をすべて止める（守りを素通りさせないため）。直下の repo の設定を書き替えたら、`tpm start -v <folder>` で読めることを確かめる（読んだ設定の file が `config` の行に並ぶ）。
 
 上の folder で起こした担当には、下の repo の `.claude/settings.json`（hook・権限）は効かない（Claude Code は、起こした folder の settings だけを読む）。

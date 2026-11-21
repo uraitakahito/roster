@@ -3,10 +3,9 @@ import type { Context } from '../context.ts';
 import { modelStatus, ROLES, WAIT } from '../protocol.ts';
 import { requireSelf, requireTpm, writeRole } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
-import { route } from '../tracker/routed.ts';
 import { issueTracker } from './issue.ts';
 import { issueCopyLine } from './messages.ts';
-import { tpmHello } from './tpm-side.ts';
+import { recordingTo, tpmHello } from './tpm-side.ts';
 
 /**
  * 名乗る。$TPM_KEY が無ければ TPM 担当の名乗り（tpmHello）。
@@ -30,7 +29,7 @@ export function hello(ctx: Context, options: { model?: string, effort?: string }
     `役割: ${ROLES[record.role].label}`,
     `課題の Key: ${record.key}`,
     `依頼書: ${record.brief ?? '無し（【brief】を待つ）'}`,
-    `課題管理の課題: ${record.issue ?? '無し'}（道具: ${route(ctx.config.trackers, ctx.exec, issueKey)?.tool ?? 'none'}）`,
+    `課題管理の課題: ${record.issue === undefined ? '無し（記録しない）' : `${record.issue}（道具: ${recordingTo(ctx, record.issue)}）`}`,
     ...[issueCopyLine(record)].filter(v => v !== undefined),
     ...(issueTracker(ctx, issueKey) === undefined ? [] : [`課題の中身: tpm issue view ${issueKey}`]),
     `TPM 担当の宛先: ${tpm.address}`,

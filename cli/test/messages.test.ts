@@ -241,7 +241,7 @@ describe('課題への記録（設定は直下の folder。上の folder から�
 
   test('Jira の Key の課題は、直下の folder の jira の設定で Jira に記録し、【end】で済みにする', () => {
     const w = crossing('SKILLS-20');
-    expect(w.greeting).toContain('課題管理の課題: SKILLS-20（道具: jira）');
+    expect(w.greeting).toContain('課題管理の課題: SKILLS-20（道具: jira（skills の設定））');
     expect(reportDone(w.se, { url: OUT, kind: 'result', summary: '実装した', remaining: 'なし', decisions: 'なし', points: [] })[0]).toBe('記録を書いた: SKILLS-20【結果】');
     dismiss(w.tpm, 't-x7k2', { handover: false });
     expect(reportEnd(w.se, { url: OUT, prs: [PR], removed: [], left: 'なし' })).toContain('課題を閉じた: SKILLS-20');
@@ -250,7 +250,7 @@ describe('課題への記録（設定は直下の folder。上の folder から�
 
   test('gh- の Key の課題は、github を宣言した folder で gh を打つ', () => {
     const w = crossing('gh-12');
-    expect(w.greeting).toContain('課題管理の課題: gh-12（道具: github）');
+    expect(w.greeting).toContain('課題管理の課題: gh-12（道具: github（web の設定））');
     reportDone(w.se, { url: OUT, kind: 'result', summary: '実装した', remaining: 'なし', decisions: 'なし', points: [] });
     expect(tools(w)).toEqual([['gh', 'comment', `${w.project}/web`]]);
   });

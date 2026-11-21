@@ -4,12 +4,13 @@ import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { assertSummary } from '../brief.ts';
 import { shellQuote } from '../shell.ts';
-import { describeTrackers, readRolesConfig, rolesConfigFile, TRACKERS } from '../config.ts';
+import { describeTrackers, OWN_LABEL, readRolesConfig, rolesConfigFile, sourceLabel, type ConfigSource } from '../config.ts';
 import type { Context } from '../context.ts';
 import { modelStatus, ROLES, TPM_TITLE, WAIT, type RoleName } from '../protocol.ts';
 import { resolveSettings } from '../settings.ts';
 import { allRoles, assertKey, LOCAL_KEY, readRole, removeRole, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
-import { skillSetDir, TpmError } from '../skill-sets.ts';
+import { readSkillSets, skillSetDir, TpmError } from '../skill-sets.ts';
+import { route } from '../tracker/routed.ts';
 import { findHook } from './banner.ts';
 import { copyIssue, issueTracker } from './issue.ts';
 import { brief } from './messages.ts';
@@ -29,12 +30,59 @@ export function tpmHello(ctx: Context, options: { model?: string, effort?: strin
   ctx.transport.setStatus('model', modelStatus(settings.model, settings.effort));
   ctx.transport.setStatus('wait', WAIT.work('起動'));
   ctx.state.write('tpm.jsonc', { address } satisfies TpmRecord);
-  return [`TPM 担当の宛先: ${address}`, `課題管理: ${declaredTrackers(ctx)}・連携: ${ctx.config.transport}`, ...bannerHint(ctx), ...roles(ctx)];
+  return [`TPM 担当の宛先: ${address}`, ...configLines(ctx), ...bannerHint(ctx), ...roles(ctx)];
 }
 
-/** 合わせた設定が宣言している課題管理の道具（「jira」「jira・github」）。どれも宣言していなければ none。 */
-function declaredTrackers(ctx: Context): string {
-  return TRACKERS.filter(t => t !== 'none' && ctx.config.trackers[t].length > 0).join('・') || 'none';
+/** 既定で埋めた値には「（既定）」を付ける（設定に書いた値と見分けるため）。 */
+const orDefault = (source: ConfigSource, field: string, value: string): string => source.written.includes(field) ? value : `${value}（既定）`;
+
+/** 設定 1 つに書いてある物（「課題管理: jira・infra: tpm-pagestore」）。file が無ければ、その path と「無い」。 */
+function sourceSummary(ctx: Context, source: ConfigSource): string {
+  if (!source.exists) return `${source.file}（無い）`;
+  const roles = Object.keys(source.config.roles);
+  const skillSets = readSkillSets(source.file, ctx.root);
+  const parts = [
+    ...(source.written.includes('tracker') ? [`課題管理: ${source.config.tracker}`] : []),
+    ...(Object.keys(source.config.infra).length === 0 ? [] : [`infra: ${Object.keys(source.config.infra).join('・')}`]),
+    ...(skillSets.length === 0 ? [] : [`skill-sets: ${skillSets.join('・')}`]),
+    ...(roles.length === 0 ? [] : [`担当の既定: ${roles.join('・')}`]),
+    // 連携は project の folder の設定で 1 つ。直下の folder に違う値があっても読まない。
+    ...(source.name !== '' && source.written.includes('transport') && source.config.transport !== ctx.config.transport ? [`連携: ${source.config.transport}（読まない。連携はこの folder の設定で決まる）`] : []),
+  ];
+  return parts.join('・') || '道具の欄は無い';
+}
+
+/**
+ * TPM 担当の名乗りに出す設定の行。どの値がどの設定から来たかを出す（値だけを出すと、設定が無いための既定を「設定の値」と読み違える）。
+ * 直下の folder の設定を合わせていなければ、設定の file と値の 2 行。合わせていれば、設定ごとの中身と、Key の形ごとの記録の先。
+ */
+export function configLines(ctx: Context): string[] {
+  const { sources, trackers, transport, infra } = ctx.config;
+  const [own, ...folders] = sources;
+  if (own === undefined) return [];
+  const transportLine = `連携: ${orDefault(own, 'transport', transport)}`;
+  if (folders.length === 0) {
+    return [`設定: ${own.file}${own.exists ? '' : '（無いので既定）'}`, `課題管理: ${orDefault(own, 'tracker', own.config.tracker)}・${transportLine}`];
+  }
+  const declared = (found: ConfigSource[], tool: string): string => found.length === 0 ? '宣言した設定が無い（記録しない）' : `${tool}（${found.map(sourceLabel).join('・')}）`;
+  const github = trackers.github.length > 1
+    ? `決まらない（github の設定が 2 つ以上: ${trackers.github.map(sourceLabel).join('・')}。この folder の設定の folders で 1 つに絞る。Product Manager に伝える）`
+    : declared(trackers.github, 'github');
+  const envs = Object.entries(infra).map(([name, env]) => `${name}（${(env.from ?? []).join('・')}）`);
+  return [
+    '設定（この folder と直下の folder を合わせた物）:',
+    ...sources.map(s => `- ${sourceLabel(s)}  ${sourceSummary(ctx, s)}`),
+    `課題管理: Jira の Key（SKILLS-12 の形）→ ${declared(trackers.jira, 'jira')}／gh- の Key → ${github}／t- の Key → 記録しない`,
+    transportLine,
+    ...(envs.length === 0 ? [] : [`infra: ${envs.join('・')}（手続きは tpm infra list）`]),
+  ];
+}
+
+/** 課題の記録の先（「jira（skills の設定）」）。project の folder 自身の設定なら道具の名だけ。 */
+export function recordingTo(ctx: Context, issue: string): string {
+  const to = route(ctx.config.trackers, ctx.exec, issue);
+  if (to === undefined) return 'none';
+  return sourceLabel(to.source) === OWN_LABEL ? to.tool : `${to.tool}（${sourceLabel(to.source)} の設定）`;
 }
 
 /** cmux の連携で、cmux.json に Mac のバナーの hook が無ければ 1 行出す（TPM 担当が Product Manager に伝える）。 */
@@ -141,13 +189,18 @@ export function assign(ctx: Context, key: string, options: AssignOptions): strin
   const command = [join(ctx.root, 'cli', 'bin', 'tpm'), 'run-role', key, '--project', ctx.project, '--state', ctx.state.dir].map(shellQuote).join(' ');
   record.address = ctx.transport.spawn({ title: record.title, cwd: record.cwd, command });
   writeRole(ctx, record);
-  const head = `${existing ? '起こし直した' : '起こした'}: ${record.title}（${record.address}・${modelStatus(record.model, record.effort)}）`;
-  if (options.wait === 0) return [head, '名乗り（tpm hello）は待っていない'];
+  // 担当を起こした folder と、記録の先を出す（上の folder から振ると、どちらも 1 つに決まっていないため）。
+  const head = [
+    `${existing ? '起こし直した' : '起こした'}: ${record.title}（${record.address}・${modelStatus(record.model, record.effort)}）`,
+    `folder: ${record.cwd}`,
+    ...(options.issue === undefined ? [] : [`課題の記録: ${recordingTo(ctx, options.issue)}`]),
+  ];
+  if (options.wait === 0) return [...head, '名乗り（tpm hello）は待っていない'];
   for (let waited = 0; waited < options.wait * 1000; waited += HELLO_INTERVAL_MS) {
-    if (readRole(ctx, key)?.helloAt !== undefined) return [head, '名乗った（tpm hello が来た）'];
+    if (readRole(ctx, key)?.helloAt !== undefined) return [...head, '名乗った（tpm hello が来た）'];
     ctx.sleep(HELLO_INTERVAL_MS);
   }
-  if (readRole(ctx, key)?.helloAt !== undefined) return [head, '名乗った（tpm hello が来た）'];
+  if (readRole(ctx, key)?.helloAt !== undefined) return [...head, '名乗った（tpm hello が来た）'];
   throw new TpmError(notStarted(ctx, record, options.wait));
 }
 
