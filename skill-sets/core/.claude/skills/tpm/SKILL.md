@@ -21,6 +21,7 @@ disable-model-invocation: true
    - `tpm start` の 1 行と違う model で起こされていたら（Product Manager が 1 行の `--model` を書き替えた、など）、`tpm hello --model <model の id>` で打ち直す。
 2. 名簿を読む。動いている担当がいれば、課題の Key と担当の対応を覚える（Key は下の 2）。「消えた」と出た担当は、居場所がもう無い。Product Manager に伝え、続けるなら `tpm assign` で起こし直し、終えるなら `tpm close <Key>` で名簿から消す。
 3. `tpm wait pm 指示` を打ち、Product Manager の指示を待つ。
+   - Product Manager に手の操作（Jira や GitHub の画面の操作・`!` の 1 行）を頼んで手を止める回は、`tpm wait pm "<頼んだ手>" --hand` と打つ（頼んだ手が台帳に数えられる。下の「6. 監査」）。
    - **Product Manager に返して手を止める回は、毎回その回の最後に `tpm wait pm "<何を>"` を打つ**（答え・報告・質問を返した時。前の回の `回答待ち(PM)` が残っていても打ち直す）。Product Manager の Mac のバナーは、その回に `tpm wait pm` を打った時だけ出る。担当のメッセージ（【merged】【ask-tpm】など）をひとりで片付けて Product Manager に何も返さない回は打たない（打つと要らないバナーが出る）。
 
 名簿は `tpm roles` でいつでも見られる（動いているか・`wait` の字・依頼書）。
@@ -92,6 +93,7 @@ disable-model-invocation: true
 | 【ask-tpm】 | 課題の概要をもとに答える（`tpm notify <Key> "<答え>" --reply-to <id>`）。Product Manager の判断が要るなら、Product Manager に聞いてから答える |
 | 【ask-pm】 | Product Manager に、確認のページの URL と項目を伝える（ページは置き場の一覧の UI の新着に出ている。その場で開いて見せる時だけ `tpm show <URL>`）。答えを `tpm answer <Key> "<答え>"` で返す（課題があれば「決定」の記録も書かれる） |
 | 【ask-devops】 | DevOps Engineer 担当に依頼書を書いて回す（`tpm assign devops …`） |
+| 【incident】 | 受け取ったと返す（台帳にはもう入っている）。「[重い]」と付いていたら、見直しを待たずに調べを振る（下の「6. 監査」） |
 | 【doc-fix】【merged】 | 受け取ったと返す（`tpm notify <Key> "受け取った" --reply-to <id>`）。PR が merge 済みかは、担当の命令が送る前に見ている。「merge は確かめていない: <訳>」と付いていたら、Product Manager に伝える前に自分で確かめる |
 | 【done】 | 成果のページを読み（`tpm page path <URL>`）、下の「【dismiss】を送るか」で決める。聞かなくてよければ `tpm dismiss <Key>`。聞くなら Product Manager に URL を伝え（その場で開いて見せる時だけ `tpm show <URL>`）、「続きをこの担当に頼むか、この課題を終えるか」を聞き、続けるなら新しい依頼書（3 の 1 のとおり書く）を `tpm assign <Key> … --brief <URL>` で同じ担当に、終えるなら `tpm dismiss <Key>` |
 | 【end】 | （【dismiss】の返事として来る）報告を Product Manager に伝え（聞かずに片付けたなら、そう添える）、`tpm close <Key>` で閉じる |
@@ -119,3 +121,32 @@ disable-model-invocation: true
 ## 5. 起こし直し
 
 この skill を直した後の新しい文は、次に `/tpm` を呼ぶか、`tpm start` の 1 行で起こし直すまで届かない（skill の本文は呼んだときに読まれる）。`tpm` の命令は、main を pull すれば次から新しいコードで動く。
+
+## 6. 監査
+
+担当の仕組みで思わぬことが起きたら（protocol.md の「思わぬ出来事」）、台帳に書き、後で見直して、調べるか・調べないかを決める。**あなたは原因を調べない**（repo を読まない決まりのまま。調べは担当に振る）。
+
+### 書く（その場で・命令 1 つ）
+
+```sh
+tpm incident add <Key> "<起きた事実>" --type <reliability|safety|efficiency> [--msg <引き金のメッセージの id>] [--tag <tag>] [--severe]
+```
+
+- 自分で気づいたら、その場で書く。事実だけを書き、原因は推さない。tag は後で付ければよい（`tpm incident tag <番号> <tag>`）。
+- **自分の誤りも書く。**担当や Product Manager に直されたら（依頼書の書き誤り・確かめずに伝えた知らせ・返答の言葉づかい など）、`--tag tpm-self` を付けて書く。
+- 担当の【incident】・【done】の「残り」・【end】の「残っている物」・`tpm wait pm --hand` は、命令が台帳に入れる。書き直さない。
+
+### 見直す（【end】を受けた時と、Product Manager がその日の仕事を終える時）
+
+`tpm incident review` で未決の件を見て、件ごとに決める。`tpm hello` と `tpm roles` は、未決の件があれば終わりに件数を出す。
+
+| 決め | 命令 |
+|---|---|
+| 調べる | 担当に振り（Product Manager に聞いてから）、`tpm incident assign <番号>… --to <振り先の Key>` |
+| 調べない（1 度きりで害が無い） | `tpm incident drop <番号>… --why "<訳>"` |
+| もう直っている | `tpm incident close <番号>… --pr <直した PR の URL>`（教訓に入れただけなら `--lesson "<file と一言>"`） |
+
+- 同じ tag が 3 件たまったら、1 件ずつは軽くても調べに回す（`review` が tag ごとの件数を出す）。
+- 「[重い]」の件は、見直しを待たずにその場で振る。
+- 改善の PR が merge されたら、`tpm incident close <番号> --pr <URL>` で済みにする。
+

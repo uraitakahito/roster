@@ -8,6 +8,7 @@ import { describeTrackers, OWN_LABEL, readRolesConfig, rolesConfigFile, sourceLa
 import type { Context } from '../context.ts';
 import { syncDeliveries } from '../evidence.ts';
 import { modelStatus, ROLES, TPM_TITLE, WAIT, type RoleName } from '../protocol.ts';
+import { openLine } from '../incidents.ts';
 import { resolveSettings } from '../settings.ts';
 import { allRoles, assertKey, LOCAL_KEY, readRole, removeRole, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
 import { readSkillSets, skillSetDir, TpmError } from '../skill-sets.ts';
@@ -104,13 +105,14 @@ export function bannerHint(ctx: Context, cmuxFile?: string): string[] {
 export function roles(ctx: Context): string[] {
   const seats = ctx.transport.seats();
   const records = allRoles(ctx);
-  if (records.length === 0) return ['名簿: 担当はいない'];
+  // 台帳に未決の件があれば、名簿の終わりに 1 行出す（見直しを忘れないため）。
+  if (records.length === 0) return ['名簿: 担当はいない', ...openLine(ctx)];
   return ['名簿:', ...records.map((r) => {
     const alive = r.address !== undefined && seats.some(s => s.address === r.address);
     const wait = alive && r.address !== undefined ? ctx.transport.status(r.address)?.wait : undefined;
     const where = alive ? `${r.address}（${wait ?? '状態なし'}）` : '消えた（居場所が無い。tpm assign で起こし直すか、tpm close で名簿から消す）';
     return `- ${r.key}  ${r.title}  ${where}${r.dismissed ? `  dismiss 済み（${r.dismissed === 'handover' ? '交代' : '終わり'}）` : ''}${r.brief ? `  依頼書: ${r.brief}` : ''}${r.issuePage ? `  課題の写し: ${r.issuePage}` : ''}`;
-  })];
+  }), ...openLine(ctx)];
 }
 
 /** Key に使う字: 英小文字と数字から、読み違えやすい 0・o・1・l・i を除いた 31 字。 */

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { Command, CommanderError } from 'commander';
 import { buildCommand } from './command.ts';
 import { bannerCheck, bannerHook, bannerLog, bannerSetup } from './commands/banner.ts';
+import { registerIncident } from './commands/incident.ts';
 import { guard, infraApprove, infraList, infraRevoke, infraRun } from './commands/infra.ts';
 import { issueView } from './commands/issue.ts';
 import { fileDelete, fileList, filePath, filePut, type FileListOptions, type FilePutOptions } from './commands/file.ts';
@@ -87,6 +88,7 @@ export function buildProgram(): Command {
     .action((options: { model?: string, effort?: string }) => print(hello(createContext(), options)));
   program.command('inbox').description('自分宛てで、まだ届いていないメッセージを出す（段の区切りに見る）').action(() => print(inbox(createContext())));
   registerMessages(program, print);
+  registerIncident(program, print);
 
   const infra = program.command('infra').description('インフラの環境の宣言と承認');
   infra.command('list').description('環境・手続き・承認を出す').action(() => print(infraList(createContext())));

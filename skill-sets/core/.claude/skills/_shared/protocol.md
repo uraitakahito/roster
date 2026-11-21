@@ -25,6 +25,7 @@ TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・De
 | 【ask-pm】 | Product Manager に決めてほしいこと・頼むことを確認のページに書いて置いた（下の「Product Manager に確かめる」） | `tpm ask pm --url <URL> --item "<項目の題>" … --waiting-for "<何を>"` |
 | 【ask-devops】 | 共有の環境で DevOps Engineer 担当の手が要る（下の「共有の環境」） | `tpm ask devops --what "<何を>" --why "<なぜ>" [--urgent]` |
 | 【doc-fix】 | 文書やコメントの食い違いを直した PR を merge した | `tpm report doc-fix --pr <URL> --note "<一言>" [--unchecked "<訳>"]` |
+| 【incident】 | 思わぬ出来事（信頼性・安全性・効率性が落ちた）に気づいた（下の「思わぬ出来事」） | `tpm report incident "<起きた事実>" --type <reliability\|safety\|efficiency> [--tag <tag>] [--severe]` |
 | 【merged】 | 自分の PR を 1 本 merge した | `tpm report merged --pr <URL> --note "<一言>" [--unchecked "<訳>"]` |
 | 【done】 | 依頼書の成果（提案・計画・結果のページ）を置いた | `tpm report done --url <URL> --kind <proposal\|plan\|result> --summary "<要点>" --remaining "<残り>" --decisions "<決めてほしいこと>"` |
 | 【end】 | 【dismiss】を受けて片付けた（Sustaining Engineer 担当は PR を merge した後） | `tpm report end --url <URL> --pr <URL> … --removed <worktree> … --left "<残っている物>"` |
@@ -49,7 +50,7 @@ Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【
 - 出すのは **`model` と `wait` の 2 つだけ**。`model` は名乗ったとき（`tpm hello`）に出る。
 - `wait`: 「今、誰が何を待っているか」を 1 つだけ。状況が変わるたびに上書きする。
   - 自分が動いている: `tpm wait work "<段>"`（`作業中: <段>`）
-  - Product Manager の答えを待つ: `tpm wait pm "<何を>"`（`回答待ち(PM): <何を>`）
+  - Product Manager の答えを待つ: `tpm wait pm "<何を>"`（`回答待ち(PM): <何を>`）。TPM 担当が Product Manager に手の操作を頼んで待つ回は `--hand` を付ける（下の「思わぬ出来事」）
   - TPM 担当の答えを待つ: `tpm wait tpm "<何を>"`（`回答待ち(TPM): <何を>`）
   - 待つ時間に限りがあれば添える: `tpm wait tpm "merge（14:30 まで）"`
 - `tpm wait` は打った時刻も覚える。Product Manager の Mac のバナーは、TPM 担当が**その回に** `tpm wait pm` を打って手を止めた時に出る（設定は docs の「設定」の「Mac のバナー」）。
@@ -70,6 +71,23 @@ Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【
 
 - 中身はページに書き、記録には写さない。
 - GitHub の Issue を使う project では、PR の題か本文に課題の Key を書くとき `Refs #12` と書く。`Closes #12` と書くと merge で勝手に閉じ、【dismiss】で閉じる決まりとずれる。
+
+## 思わぬ出来事
+
+担当の仕組み（`tpm`・skill・この決まり・ページの置き場）で思わぬことが起きたら、気づいた担当が、その場で台帳に 1 行書く。書くのは事実だけ（何が起きたか）。原因はその場で調べず、仕事を続ける。後で TPM 担当が見直し、調べを担当に振る。
+
+| 種類（`--type`） | 例 |
+|---|---|
+| `reliability`（信頼性） | うその知らせを送った・行き違い（答えが届く前に先へ進んだ）・誰のしたことか分からない変化・計画や依頼書の誤り |
+| `safety`（安全性） | 公開や削除が計画と違った・守り（guard・手続き）をすり抜けた・戻せない手を確かめずに打った |
+| `efficiency`（効率性） | 権限が足りず人の手が要った・同じことを 2 度した・長く待たされた |
+
+- 担当は `tpm report incident "<起きた事実>" --type <種類>`（TPM 担当に【incident】が行く）。**自分の誤りも書く。**
+- session の権限で断られた命令は、`--tag 権限` を付けて書く。別の書き方で通そうとしない。
+- すぐ止めないと害が広がる物は `--severe` を付ける。TPM 担当が、見直しを待たずに調べを振る。
+- 【done】の「残り」と【end】の「残っている物」は、「なし」でなければ命令が台帳に入れる（書き直さなくてよい）。TPM 担当が Product Manager に手の操作を頼んだ回（`tpm wait pm "<何を>" --hand`）も入る。
+- TPM 担当は `tpm incident add <Key> "<起きた事実>" --type <種類>` で書き、`tpm incident review` で見直す（`/tpm` の「監査」）。見直す・扱いを決める命令は、担当からは打てない。
+- **台帳・送ったメッセージの記録（state の `*.jsonl`）は、メッセージや命令の字を持つ。この Mac の外（課題管理のコメント・PR の本文・公開の site）に写さない。**【incident】は課題管理に記録を書かない。
 
 ## 課題を読む
 
