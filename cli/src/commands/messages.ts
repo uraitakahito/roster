@@ -205,11 +205,13 @@ const earliest = (times: (string | undefined)[]): string | undefined => times.fi
  * - 【done】は、その時刻までに担当が見ていた依頼書のうち、いちばん古い物を 1 つ済ませる（担当は積まれた順にこなす）。まだ見ていない依頼書の分には数えない（行き違いで出た、前の依頼書の分）。【end】は全部を済ませる。
  * 見た時刻は、画面に届いた時刻（送った時に届いていれば送った時刻。読めなければ送った時刻）と、tpm inbox・tpm hello・送る前の検査が見せた時刻（shown/）の早い方。
  * 担当は画面に届く前に tpm inbox で読んで済ませることがあるので、届いた時刻だけでは【done】が依頼書より前に見える（台帳 #36）。
+ * 前の版が時刻を書かずに覚えた物（shown/ の id だけの項目）は、送った時刻に見せた物とする。見せたのは確かで、担当の送る命令は未読をすべて見せてからでないと送れないので、
+ * その後の【done】は見た後に出た物（時刻を使わないと、画面に届くのが【done】より後なら済まないまま残る。台帳 #58）。
  */
 function openBriefs(ctx: Context, role: RoleRecord, address: string, log: Sent[], queued: Set<string>): OpenBrief[] {
   const delivered = new Map(ctx.transport.history().map(h => [h.id, h.deliveredAt]));
   const shown = new Map(readShown(ctx, address).map(e => [e.id, e.at]));
-  const seen = (l: Sent): string | undefined => earliest([queued.has(l.id) ? undefined : l.delivered ? l.at : delivered.get(l.id) ?? l.at, shown.get(l.id)]);
+  const seen = (l: Sent): string | undefined => earliest([queued.has(l.id) ? undefined : l.delivered ? l.at : delivered.get(l.id) ?? l.at, shown.has(l.id) ? shown.get(l.id) ?? l.at : undefined]);
   // 前の版で起こした担当（名簿に firstBrief の欄が無い）の最初の依頼書は数えない（止めすぎるより、見逃す側に倒す）。
   const first = role.firstBrief;
   let open: OpenBrief[] = first === undefined ? [] : [{ url: first, ...(role.helloAt === undefined ? {} : { seen: role.helloAt }) }];
