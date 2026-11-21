@@ -106,6 +106,8 @@ export interface World {
   store: FakeStore
   /** sleep で待った回数。 */
   slept: () => number
+  /** PR の URL → `gh pr view` が返す state（無い URL は MERGED）。値が undefined の URL は、gh が読めない（exit 1）。 */
+  prs: Map<string, string | undefined>
 }
 
 /**
@@ -125,7 +127,14 @@ export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessE
   writeFileSync(join(base, 'pages', 'brief-1.html'), BRIEF_HTML);
   const calls: Call[] = [];
   const store = new FakeStore();
+  const prs = new Map<string, string | undefined>();
   const exec: Exec = (cmd, args, options) => {
+    // gh pr view は、送る前に PR が merge 済みかを見る命令（calls には数えない。記録の gh と分けるため）。
+    if (cmd === 'gh' && args[0] === 'pr' && args[1] === 'view') {
+      const pr = args[2] ?? '';
+      const state = prs.has(pr) ? prs.get(pr) : 'MERGED';
+      return state === undefined ? { status: 1, stdout: '', stderr: 'gh: not logged in' } : { status: 0, stdout: JSON.stringify({ state }), stderr: '' };
+    }
     calls.push({ cmd, args, ...(options === undefined ? {} : { options }) });
     // curl は置き場への要求（tpm page …・tpm assign の課題の写し）。偽の置き場が答える。
     return cmd === 'curl' ? store.curl(args, options) : { status: 0, stdout: '{}', stderr: '' };
@@ -148,5 +157,6 @@ export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessE
     role: (key, address) => at({ TPM_PROJECT: project, TPM_KEY: key, TPM_ADDRESS: address }),
     wire: new FileTransport(tpm.state, 'file:tpm'),
     slept: () => slept,
+    prs,
   };
 }

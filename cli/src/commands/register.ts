@@ -31,12 +31,14 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
     .action((options: { what: string, why: string, urgent: boolean }) => print(askDevops(createContext(), options)));
 
   const report = program.command('report').description('担当が TPM 担当に知らせる');
-  report.command('merged').description('【merged】自分の PR を 1 本 merge した')
+  report.command('merged').description('【merged】自分の PR を 1 本 merge した（PR が merge 済みでなければ送らない）')
     .requiredOption('--pr <URL>').requiredOption('--note <一言>')
-    .action((options: { pr: string, note: string }) => print(reportMerged(createContext(), options)));
+    .option('--unchecked <訳>', 'PR が merge 済みかを gh で確かめずに送る（gh で読めない PR。確かめた方法を書く）')
+    .action((options: { pr: string, note: string, unchecked?: string }) => print(reportMerged(createContext(), options)));
   report.command('doc-fix').description('【doc-fix】文書の食い違いを直した PR を merge した')
     .requiredOption('--pr <URL>').requiredOption('--note <一言>')
-    .action((options: { pr: string, note: string }) => print(reportDocFix(createContext(), options)));
+    .option('--unchecked <訳>', 'PR が merge 済みかを gh で確かめずに送る（gh で読めない PR。確かめた方法を書く）')
+    .action((options: { pr: string, note: string, unchecked?: string }) => print(reportDocFix(createContext(), options)));
   report.command('done').description('【done】依頼書 1 つの成果を出した')
     .option('--url <URL>', '成果のページ（tpm page put で置いた URL）')
     .option('--kind <種類>', `成果の種類（${Object.keys(DONE_KINDS).join('・')}。課題には ${Object.values(DONE_KINDS).join('・')} の記録を書く）`, 'result')
@@ -53,7 +55,8 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
     .option('--pr <URL>', 'merge した PR（繰り返せる）', collect, [] as string[])
     .option('--removed <worktree>', '消した worktree（繰り返せる）', collect, [] as string[])
     .option('--left <残っている物>', '残っている物（無ければ「なし」）')
-    .action((options: { url?: string, pr: string[], removed: string[], left?: string }) => print(reportEnd(createContext(), { ...options, prs: options.pr })));
+    .option('--unchecked <訳>', 'PR が merge 済みかを gh で確かめずに送る（gh で読めない PR。確かめた方法を書く）')
+    .action((options: { url?: string, pr: string[], removed: string[], left?: string, unchecked?: string }) => print(reportEnd(createContext(), { ...options, prs: options.pr })));
   for (const [id, description] of [
     ['merge-request', '【merge-request】（Dependabot）PR の merge を頼む'],
     ['not-yet', '【not-yet】（Dependabot）まだ対象でない・rebase に応じない'],

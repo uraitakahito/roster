@@ -42,6 +42,7 @@ flowchart TB
 | `roles/<Key>.jsonc` | 名簿。課題の Key → 役割・居場所の宛先・依頼書・課題管理の課題 |
 | `approvals/<環境>.jsonc` | Product Manager の承認と期限 |
 | `log.jsonl`・`infra.jsonl` | 送ったメッセージと、`tpm infra run` で打った命令の記録 |
+| `shown/<宛先>.jsonc` | 居場所に見せたメッセージの id（`tpm inbox` と、送る前の検査が見せた物。新しい 200 件）。送る前の検査は、ここに無いメッセージがあれば 1 度止まる |
 | `waits/<宛先>.jsonc` | 居場所が最後に打った `tpm wait` の種類と時刻。バナーの hook が「この回に `tpm wait pm` を打ったか」を見る |
 | `banner/last-turn/<宛先>.jsonc`・`banner.jsonl` | バナーの hook が覚える、居場所の前の「答え終わった」の時刻と、決めたことの記録 |
 
@@ -103,6 +104,13 @@ sequenceDiagram
   TPM->>PM: 報告する（聞かずに片付けたなら、そう添える）
   TPM->>TPM: tpm close（担当の居場所を閉じる）
 ```
+
+## 入口の検査
+
+メッセージを送る命令は、送る前に 2 つを見る（`cli/src/commands/messages.ts` の `assertRead`・`assertMerged`）。どちらも、課題への記録や課題の写しを書く前に見るので、止まった回は何も残さない。
+
+- **読んでいないメッセージ**: 自分宛てでまだ届いていないメッセージ（相手が送った時、こちらが手を動かしていた物）のうち、まだ見せていない物があれば、それを出して 1 度止まる。同じ命令を打ち直すと送る。相手のメッセージを読む前に次を送る行き違い（同じ問いを 2 度送る・答えを待たずに【done】を送る）を減らすため。TPM 担当は、送る相手の担当から来た物だけを見る（ほかの担当のメッセージでは止まらない）。`tpm inbox` で見た物では止まらない。送った後で相手が動いた行き違いは防げない。
+- **PR が merge 済みか**: `tpm report merged`・`tpm report doc-fix`・`tpm report end --pr` は、`gh pr view <URL> --json state` が `MERGED` を返さなければ送らない（merge が断られたのに【merged】を送らないため）。`gh` で読めない PR は、`--unchecked "<訳>"` で確かめずに送れる（訳はメッセージに載る）。
 
 ## guard
 

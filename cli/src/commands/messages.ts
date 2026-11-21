@@ -5,6 +5,7 @@ import { message, ROLES, TPM_TITLE, WAIT, WAIT_CLOSE, WAIT_NEXT_BRIEF, type Head
 import { requireRole, requireSelf, requireTpm, writeRole, type RoleRecord } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
 import { MAX_POINTS, type Note, type NoteKind, type NoteLink } from '../tracker/types.ts';
+import type { Incoming } from '../transport/types.ts';
 
 /** 記録の 1 行目の一言に使う長さの上限（メッセージの本文から作るとき）。 */
 const SUMMARY_LIMIT = 80;
@@ -49,6 +50,83 @@ function record(ctx: Context, role: RoleRecord, note: Note): string[] {
   return [`記録を書いた: ${role.issue}【${note.kind}】`];
 }
 
+// ---- 入口の検査（送る前に見る。どちらも、課題への記録などを書く前に通す） ----
+
+/** 見せたメッセージの id を覚える数（居場所ごと）。 */
+const SHOWN_KEEP = 200;
+
+/** 見せたメッセージの id を覚える file（`shown/<宛先>.jsonc`）。 */
+const shownFile = (address: string): string => `shown/${address.replaceAll(/[^A-Za-z0-9._-]/g, '-')}.jsonc`;
+
+/** メッセージを「見せた」と覚える（`tpm inbox` と、送る前の検査が呼ぶ）。覚えた物では、送る前の検査は止まらない。 */
+export function markShown(ctx: Context, messages: Incoming[]): void {
+  if (messages.length === 0) return;
+  const file = shownFile(ctx.transport.whoami());
+  const ids = [...(ctx.state.read<string[]>(file) ?? []), ...messages.map(m => m.id)];
+  ctx.state.write(file, [...new Set(ids)].slice(-SHOWN_KEEP));
+}
+
+/**
+ * 送る前の検査。自分宛てでまだ届いていないメッセージのうち、まだ見せていない物があれば、それを出して 1 度だけ止まる（行き違いを減らす）。
+ * from は相手の題（TPM 担当が担当に送るとき。ほかの担当からのメッセージでは止まらない）。担当は TPM 担当からしか受けないので、付けない。
+ * 見せた物は覚えるので、同じ命令を打ち直せば送る。
+ */
+export function assertRead(ctx: Context, who: string, from?: string): void {
+  const pending = ctx.transport.pending().filter(m => from === undefined || m.from === from);
+  if (pending.length === 0) return;
+  const shown = new Set(ctx.state.read<string[]>(shownFile(ctx.transport.whoami())) ?? []);
+  const unread = pending.filter(m => !shown.has(m.id));
+  if (unread.length === 0) return;
+  markShown(ctx, unread);
+  throw new TpmError([
+    `${who}から、まだ読んでいないメッセージが ${unread.length} 件あります。送っていません。`,
+    ...unread.flatMap(m => [`--- ${m.from}（id ${m.id}）`, m.text]),
+    '--- ここまで',
+    '読んだうえで、同じ命令を打ち直せば送ります（事情が変わっていたら、中身を変えて打つ）。',
+  ].join('\n'));
+}
+
+/** メッセージを送る担当の、自分の名簿の行。送る前の検査（assertRead）を通す。 */
+function sender(ctx: Context): RoleRecord {
+  const self = requireSelf(ctx);
+  assertRead(ctx, 'TPM 担当');
+  return self;
+}
+
+/** TPM 担当がメッセージを送る先の、名簿の行。送る前の検査（assertRead）を通す。 */
+function receiver(ctx: Context, key: string): RoleRecord {
+  const role = requireRole(ctx, key);
+  assertRead(ctx, `${role.key} の担当`, role.title);
+  return role;
+}
+
+/** `gh pr view` の JSON（読む欄だけ）。 */
+interface PrView {
+  state?: string
+}
+
+/**
+ * PR が merge 済みかを見る（`gh pr view <URL> --json state`）。MERGED でなければ止まる（merge が断られたのに【merged】を送らない）。
+ * unchecked（確かめない訳）があれば見ずに通し、メッセージに添える字を返す。確かめたときは空の字。
+ */
+export function assertMerged(ctx: Context, prs: string[], unchecked?: string): string {
+  if (unchecked !== undefined) {
+    if (unchecked.trim() === '') throw new TpmError('--unchecked には、merge を確かめない訳を書いてください');
+    return `（merge は確かめていない: ${unchecked}）`;
+  }
+  for (const pr of prs) {
+    const r = ctx.exec('gh', ['pr', 'view', pr, '--json', 'state']);
+    if (r.status !== 0) {
+      throw new TpmError(`PR の状態を読めません（gh pr view が失敗）: ${pr}\n${(r.stderr || r.stdout).trim()}\n送っていません。gh で読めない PR なら、merge を自分で確かめてから --unchecked "<確かめた方法>" を付けて打ち直してください。`);
+    }
+    const state = (JSON.parse(r.stdout) as PrView).state;
+    if (state !== 'MERGED') {
+      throw new TpmError(`PR はまだ merge されていません（state: ${state ?? '不明'}）: ${pr}\n送っていません。merge を確かめてから打ち直してください。`);
+    }
+  }
+  return '';
+}
+
 const required = (value: string | undefined, name: string): string => {
   if (value === undefined || value.trim() === '') throw new TpmError(`${name} を書いてください（無ければ「なし」）`);
   return value;
@@ -81,13 +159,13 @@ export function wait(ctx: Context, kind: WaitKind, what: string): string[] {
 
 /** TPM 担当に決めてほしいことを送り（【ask-tpm】）、状態を回答待ちにする。 */
 export function askTpm(ctx: Context, options: { text: string, waitingFor: string, replyTo?: string }): string[] {
-  const self = requireSelf(ctx);
+  const self = sender(ctx);
   return [toTpm(ctx, self, 'ask-tpm', options.text, options.replyTo), ...wait(ctx, 'tpm', options.waitingFor)];
 }
 
 /** Product Manager に決めてほしいことを書いた確認のページを、TPM 担当に送る。ページは開かない（Product Manager は置き場の一覧の UI で見る）。 */
 export function askPm(ctx: Context, options: { url: string, items: string[], waitingFor: string }): string[] {
-  const self = requireSelf(ctx);
+  const self = sender(ctx);
   if (options.items.length === 0) throw new TpmError('--item で、決めてほしい項目の題を 1 つ以上書いてください');
   const recorded = record(ctx, self, {
     kind: '確認',
@@ -102,20 +180,23 @@ export function askPm(ctx: Context, options: { url: string, items: string[], wai
 
 /** 共有の環境で DevOps Engineer 担当の手が要ることを、TPM 担当に送る（【ask-devops】）。 */
 export function askDevops(ctx: Context, options: { what: string, why: string, urgent: boolean }): string[] {
-  const self = requireSelf(ctx);
+  const self = sender(ctx);
   return [toTpm(ctx, self, 'ask-devops', `何を: ${options.what}／なぜ: ${options.why}／急ぎ: ${options.urgent ? 'はい' : 'いいえ'}`)];
 }
 
 /** 自分の PR を 1 本 merge したと知らせる（【merged】）。 */
-export function reportMerged(ctx: Context, options: { pr: string, note: string }): string[] {
-  return [toTpm(ctx, requireSelf(ctx), 'merged', `${options.pr} ${options.note}`)];
+export function reportMerged(ctx: Context, options: { pr: string, note: string, unchecked?: string }): string[] {
+  const self = sender(ctx);
+  const checked = assertMerged(ctx, [options.pr], options.unchecked);
+  return [toTpm(ctx, self, 'merged', `${options.pr} ${options.note}${checked}`)];
 }
 
 /** 文書やコメントの食い違いを直した PR を merge したと知らせ、課題があれば記録を書く（【doc-fix】）。 */
-export function reportDocFix(ctx: Context, options: { pr: string, note: string }): string[] {
-  const self = requireSelf(ctx);
+export function reportDocFix(ctx: Context, options: { pr: string, note: string, unchecked?: string }): string[] {
+  const self = sender(ctx);
+  const checked = assertMerged(ctx, [options.pr], options.unchecked);
   const recorded = record(ctx, self, { kind: '文書の修正', role: ROLES[self.role].label, summary: options.note, links: [{ label: 'PR（merge 済み）', url: options.pr }], points: [] });
-  return [...recorded, toTpm(ctx, self, 'doc-fix', `${options.pr}（merge 済み）${options.note}`)];
+  return [...recorded, toTpm(ctx, self, 'doc-fix', `${options.pr}（merge 済み）${options.note}${checked}`)];
 }
 
 /** `tpm report done --kind` の値（`tpm page put --kind` と同じ語）と、課題に書く記録の種類。 */
@@ -146,7 +227,7 @@ export interface DoneOptions {
 
 /** 依頼書 1 つの成果を出した。TPM 担当は「残り」と「決めてほしいこと」で【dismiss】を送るかを決めるので、どちらも必ず書く。 */
 export function reportDone(ctx: Context, options: DoneOptions): string[] {
-  const self = requireSelf(ctx);
+  const self = sender(ctx);
   const remaining = required(options.remaining, '--remaining（残り）');
   const decisions = required(options.decisions, '--decisions（決めてほしいこと）');
   const kind = DONE_KINDS[options.kind];
@@ -170,15 +251,18 @@ export interface EndOptions {
   removed: string[]
   /** 残っている物。無ければ「なし」。 */
   left?: string
+  /** --pr の merge を確かめない訳（gh で読めない PR）。 */
+  unchecked?: string
 }
 
 /** 【dismiss】を受けて片付けた。課題に結果を書き、課題を閉じる（担当の交代なら閉じない）。 */
 export function reportEnd(ctx: Context, options: EndOptions): string[] {
-  const self = requireSelf(ctx);
+  const self = sender(ctx);
   if (self.dismissed === undefined && !ROLES[self.role].endsWithoutDismiss) {
     throw new TpmError('【dismiss】がまだ来ていません。【done】の後は次の【brief】か【dismiss】を待ち、自分から【end】を送らない');
   }
   const left = required(options.left, '--left（残っている物）');
+  const checked = assertMerged(ctx, options.prs, options.prs.length === 0 ? undefined : options.unchecked);
   const links: NoteLink[] = [
     ...(options.url === undefined ? [] : [{ label: '成果', url: options.url }]),
     ...options.prs.map(pr => ({ label: 'PR（merge 済み）', url: pr })),
@@ -193,7 +277,7 @@ export function reportEnd(ctx: Context, options: EndOptions): string[] {
       out.push(`課題を閉じた: ${self.issue}`);
     }
   }
-  const body = `成果: ${options.url ?? 'なし'}／merge した PR: ${options.prs.join(' ') || 'なし'}／消した worktree: ${options.removed.join(' ') || 'なし'}／残っている物: ${left}`;
+  const body = `成果: ${options.url ?? 'なし'}／merge した PR: ${options.prs.join(' ') || 'なし'}／消した worktree: ${options.removed.join(' ') || 'なし'}／残っている物: ${left}${checked}`;
   out.push(toTpm(ctx, self, 'end', body));
   ctx.transport.setStatus('wait', WAIT_CLOSE);
   out.push(`状態: ${WAIT_CLOSE}（居場所は自分で閉じない）`);
@@ -202,7 +286,7 @@ export function reportEnd(ctx: Context, options: EndOptions): string[] {
 
 /** Dependabot の PR だけで使う見出し。recreated は、新しい番号の題に替える。 */
 export function reportDependabot(ctx: Context, id: 'merge-request' | 'not-yet' | 'recreated', options: { text: string, title?: string }): string[] {
-  const self = requireSelf(ctx);
+  const self = sender(ctx);
   const out: string[] = [];
   if (id === 'recreated' && options.title !== undefined) {
     ctx.transport.setTitle(options.title);
@@ -219,6 +303,7 @@ export function reportDependabot(ctx: Context, id: 'merge-request' | 'not-yet' |
 
 /** 動いている担当に、新しい依頼書を送る。 */
 export function brief(ctx: Context, role: RoleRecord, url: string, note?: string): string[] {
+  assertRead(ctx, `${role.key} の担当`, role.title);
   const body = [url, issueCopyLine(role), note].filter(v => v !== undefined).join(' ');
   const sent = toRole(ctx, role, 'brief', body);
   role.brief = url;
@@ -236,19 +321,19 @@ export function issueCopyLine(role: RoleRecord): string | undefined {
 
 /** Product Manager の答えを返す。課題があれば、返す前に「決定」の記録を書く。 */
 export function answer(ctx: Context, key: string, options: { text: string, replyTo?: string }): string[] {
-  const role = requireRole(ctx, key);
+  const role = receiver(ctx, key);
   const recorded = record(ctx, role, { kind: '決定', role: 'TPM', summary: oneLine(options.text), links: [], points: [] });
   return [...recorded, toRole(ctx, role, 'answer', options.text, options.replyTo)];
 }
 
 /** 担当に、返事の要らないメッセージを送る（【notify】）。 */
 export function notify(ctx: Context, key: string, options: { text: string, replyTo?: string }): string[] {
-  return [toRole(ctx, requireRole(ctx, key), 'notify', options.text, options.replyTo)];
+  return [toRole(ctx, receiver(ctx, key), 'notify', options.text, options.replyTo)];
 }
 
 /** この課題に続きは無い、と知らせる。handover は担当の交代（課題は続くので、担当は課題を閉じない）。 */
 export function dismiss(ctx: Context, key: string, options: { handover: boolean }): string[] {
-  const role = requireRole(ctx, key);
+  const role = receiver(ctx, key);
   const body = options.handover
     ? '担当の交代のため（課題は続くので、課題は閉じない）。worktree を片付けて【end】を返す。'
     : 'この課題に続きは無い。worktree と課題を片付けて【end】を返す。';

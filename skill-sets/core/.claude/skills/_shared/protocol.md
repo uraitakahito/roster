@@ -7,7 +7,8 @@ TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・De
 ## 連絡の仕方
 
 - メッセージは、下の「見出し」の表の命令で送る。命令は「届いた」か「まだ届いていない」を返す。相手が手を動かしている間は届かず、空いたら届くので、送り直さない。
-- メッセージは、手が空いた時に画面に届く。段の区切り（PR を出す前・merge を頼む前）には `tpm inbox` で、まだ届いていない自分宛てのメッセージを見る。
+- メッセージは、手が空いた時に画面に届く。段の区切り（PR を出す前・merge を頼む前）と、戻せない手（tag を打つ・release を出す・消す）の前には `tpm inbox` で、まだ届いていない自分宛てのメッセージを見る。
+- メッセージを送る命令は、送る前に受信箱を見る。送る相手から来て、まだ読んでいないメッセージがあれば、それを出して 1 度止まる（送っていない。課題の記録も書いていない）。読んで、同じ命令を打ち直す。届いたメッセージで事情が変わっていたら、中身を変えて打つ。
 - 届いたメッセージには id が付いている。そのメッセージへの返事は `--reply-to <id>` を付けて送る。
 - 宛先は書かない。担当のメッセージは TPM 担当へ行き、TPM 担当は課題の Key で担当を名指す。
 - **Product Manager に直接聞かない。** Product Manager とのやりとりは、すべて TPM 担当を通す。
@@ -22,13 +23,14 @@ TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・De
 | 【ask-tpm】 | TPM 担当に決めてほしいことがある | `tpm ask tpm "<困っていること・試したこと・案とお勧め>" --waiting-for "<何を>"` |
 | 【ask-pm】 | Product Manager に決めてほしいこと・頼むことを確認のページに書いて置いた（下の「Product Manager に確かめる」） | `tpm ask pm --url <URL> --item "<項目の題>" … --waiting-for "<何を>"` |
 | 【ask-devops】 | 共有の環境で DevOps Engineer 担当の手が要る（下の「共有の環境」） | `tpm ask devops --what "<何を>" --why "<なぜ>" [--urgent]` |
-| 【doc-fix】 | 文書やコメントの食い違いを直した PR を merge した | `tpm report doc-fix --pr <URL> --note "<一言>"` |
-| 【merged】 | 自分の PR を 1 本 merge した | `tpm report merged --pr <URL> --note "<一言>"` |
+| 【doc-fix】 | 文書やコメントの食い違いを直した PR を merge した | `tpm report doc-fix --pr <URL> --note "<一言>" [--unchecked "<訳>"]` |
+| 【merged】 | 自分の PR を 1 本 merge した | `tpm report merged --pr <URL> --note "<一言>" [--unchecked "<訳>"]` |
 | 【done】 | 依頼書の成果（提案・計画・結果のページ）を置いた | `tpm report done --url <URL> --kind <proposal\|plan\|result> --summary "<要点>" --remaining "<残り>" --decisions "<決めてほしいこと>"` |
 | 【end】 | 【dismiss】を受けて片付けた（Sustaining Engineer 担当は PR を merge した後） | `tpm report end --url <URL> --pr <URL> … --removed <worktree> … --left "<残っている物>"` |
 
 - 【done】の「残り」は、依頼の外で直すとよい物・やらなかった物・merge していない PR。「決めてほしいこと」は、【ask-pm】で送った項目の題。どちらも無ければ「なし」と書く（書かないと送れない）。TPM 担当はこの 2 つで【dismiss】を送るかを決める。
 - 【end】の「残っている物」は、計画から外れた物・残した物で直した方がよい物。無ければ「なし」。
+- 【merged】【doc-fix】と【end】の `--pr` は、命令が送る前に PR が merge 済みか（`gh pr view` の state が `MERGED`）を見る。merge していなければ送らずに止まるので、merge を確かめてから打ち直す。`gh` で読めない PR だけ、自分で確かめた方法を `--unchecked "<訳>"` に書いて送る（訳はメッセージに載る）。
 
 Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【recreated】）は `/sustaining-engineer` と `/dependabot-triage` に書いてある。
 

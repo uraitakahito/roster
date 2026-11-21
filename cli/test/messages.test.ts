@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { answer, askDevops, askPm, askTpm, dismiss, doneKind, notify, reportDependabot, reportDocFix, reportDone, reportEnd, reportMerged, show, wait } from '../src/commands/messages.ts';
-import { hello } from '../src/commands/role-side.ts';
+import { hello, inbox } from '../src/commands/role-side.ts';
 import { assign, close, roles } from '../src/commands/tpm-side.ts';
 import { requireRole } from '../src/roster.ts';
 import { BRIEF, world, type World } from './helpers.ts';
@@ -253,5 +253,90 @@ describe('課題への記録（設定は直下の folder。上の folder から�
     expect(w.greeting).toContain('課題管理の課題: gh-12（道具: github（web の設定））');
     reportDone(w.se, { url: OUT, kind: 'result', summary: '実装した', remaining: 'なし', decisions: 'なし', points: [] });
     expect(tools(w)).toEqual([['gh', 'comment', `${w.project}/web`]]);
+  });
+});
+
+describe('入口の検査: PR が merge 済みか', () => {
+  test.each([
+    ['【merged】', (w: ReturnType<typeof started>, unchecked?: string) => reportMerged(w.se, { pr: PR, note: '入れた', ...(unchecked === undefined ? {} : { unchecked }) })],
+    ['【doc-fix】', (w: ReturnType<typeof started>, unchecked?: string) => reportDocFix(w.se, { pr: PR, note: '直した', ...(unchecked === undefined ? {} : { unchecked }) })],
+  ])('%s は、merge していない PR では送らない', (_, send) => {
+    const w = started({ tracker: 'github' }, 'gh-12');
+    w.prs.set(PR, 'OPEN');
+    expect(() => send(w)).toThrow(/PR はまだ merge されていません（state: OPEN）.*\n送っていません/);
+    w.prs.set(PR, undefined);
+    expect(() => send(w)).toThrow(/PR の状態を読めません.*\ngh: not logged in\n.*--unchecked/);
+    // 止まった回は、メッセージも課題の記録も書かない
+    expect(texts(w, 'file:tpm')).toEqual([]);
+    expect(w.calls.filter(c => c.args[1] === 'comment')).toEqual([]);
+    expect(() => send(w, ' ')).toThrow(/--unchecked には/);
+    send(w, 'GitLab の画面で見た');
+    expect(texts(w, 'file:tpm')[0]).toMatch(/（merge は確かめていない: GitLab の画面で見た）$/);
+    w.prs.set(PR, 'MERGED');
+    send(w);
+    expect(texts(w, 'file:tpm')).toHaveLength(2);
+  });
+
+  test('【end】の --pr も見る。PR が無ければ gh を打たない', () => {
+    const w = started();
+    dismiss(w.tpm, 't-x7k2', { handover: false });
+    w.prs.set(PR, 'CLOSED');
+    expect(() => reportEnd(w.se, { prs: [PR], removed: [], left: 'なし' })).toThrow(/state: CLOSED/);
+    expect(texts(w, 'file:tpm')).toEqual([]);
+    reportEnd(w.se, { prs: [], removed: [], left: 'なし', unchecked: '使わない' });
+    expect(texts(w, 'file:tpm')).toEqual(['【end】成果: なし／merge した PR: なし／消した worktree: なし／残っている物: なし']);
+  });
+});
+
+describe('入口の検査: 送る前に、読んでいないメッセージを見せる', () => {
+  test('担当: TPM 担当からのメッセージが届いていなければ、出して 1 度止まり、打ち直すと送る', () => {
+    const w = started({ tracker: 'github' }, 'gh-12');
+    w.wire.hold('file:1');
+    expect(notify(w.tpm, 't-x7k2', { text: 'tag はまだ打たないで待つこと' })[0]).toMatch(/まだ届いていない/);
+    const done = (): string[] => reportDone(w.se, { url: OUT, kind: 'result', summary: '実装した', remaining: 'なし', decisions: 'なし', points: [] });
+    expect(done).toThrow('TPM 担当から、まだ読んでいないメッセージが 1 件あります。送っていません。\n--- Technical Program Manager（id m1-file-1）\n【notify】tag はまだ打たないで待つこと\n--- ここまで\n読んだうえで、同じ命令を打ち直せば送ります（事情が変わっていたら、中身を変えて打つ）。');
+    // 止まった回は、メッセージも課題の記録も書かない
+    expect(texts(w, 'file:tpm')).toEqual([]);
+    expect(w.calls.filter(c => c.args[1] === 'comment')).toEqual([]);
+    expect(done()[1]).toBe('送った: 【done】→ file:tpm（届いた）');
+    // 新しいメッセージが来たら、また 1 度止まる（前に見せた物は出さない）
+    notify(w.tpm, 't-x7k2', { text: '2 通目' });
+    expect(() => askTpm(w.se, { text: 'q', waitingFor: 'a' })).toThrow(/1 件あります[\s\S]*【notify】2 通目/);
+    askTpm(w.se, { text: 'q', waitingFor: 'a' });
+  });
+
+  test('担当: tpm inbox で見た後は止まらない', () => {
+    const w = started();
+    w.wire.hold('file:1');
+    notify(w.tpm, 't-x7k2', { text: '知らせ' });
+    expect(inbox(w.se)).toEqual(['--- Technical Program Manager（id m1-file-1）', '【notify】知らせ']);
+    reportMerged(w.se, { pr: PR, note: '入れた' });
+    expect(texts(w, 'file:tpm')).toHaveLength(1);
+  });
+
+  test('TPM 担当: 送る相手からのメッセージだけで止まる。answer・notify・dismiss・続きの assign', () => {
+    const w = started({ tracker: 'github' }, 'gh-12');
+    assign(w.tpm, 't-b2c3', { role: 'software-engineer', title: '別の課題', brief: BRIEF, wait: 0 });
+    const other = w.role('t-b2c3', 'file:2');
+    hello(other);
+    const comments = (): number => w.calls.filter(c => c.args[1] === 'comment').length;
+    w.wire.hold('file:tpm');
+    askTpm(other, { text: '別の課題の問い', waitingFor: 'a' });
+    // ほかの担当のメッセージでは止まらない
+    notify(w.tpm, 't-x7k2', { text: '知らせ' });
+    for (const send of [
+      () => answer(w.tpm, 't-x7k2', { text: '案 A' }),
+      () => notify(w.tpm, 't-x7k2', { text: '待つこと' }),
+      () => dismiss(w.tpm, 't-x7k2', { handover: false }),
+      () => assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: BRIEF, wait: 0 }),
+    ]) {
+      const before = { sent: texts(w, 'file:1').length, comments: comments(), dismissed: requireRole(w.tpm, 't-x7k2').dismissed, pages: w.store.pages.size };
+      reportMerged(w.se, { pr: PR, note: '入れた' });
+      expect(send).toThrow(/^t-x7k2 の担当から、まだ読んでいないメッセージが 1 件あります。[\s\S]*【merged】/);
+      // 止まった回は、メッセージ・課題の記録・課題の写しを書かない
+      expect({ sent: texts(w, 'file:1').length, comments: comments(), dismissed: requireRole(w.tpm, 't-x7k2').dismissed, pages: w.store.pages.size }).toEqual(before);
+      send();
+      expect(texts(w, 'file:1')).toHaveLength(before.sent + 1);
+    }
   });
 });
