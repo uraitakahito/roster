@@ -53,9 +53,9 @@ pub async fn put(
     let checks = [
         (
             is_segment(&p.project) && p.project != "api",
-            "project は英数字と . _ - で 128 字まで",
+            "project は英数字と . _ - で 255 字まで",
         ),
-        (is_segment(&p.key), "key は英数字と . _ - で 128 字まで"),
+        (is_segment(&p.key), "key は英数字と . _ - で 255 字まで"),
         (
             is_name(&p.kind),
             "kind は英小文字で始まり、英小文字・数字・- で 32 字まで",
@@ -187,9 +187,10 @@ pub async fn backup(State(state): State<AppState>) -> Response {
     }
 }
 
-/// URL の 1 段になる字（project・key）。
+/// URL の 1 段になる字（project・key）。project は tpm の状態の folder の名（project の path から作る）なので、
+/// folder の名の長さの上限（255 字）まで受ける。
 pub fn is_segment(s: &str) -> bool {
-    (1..=128).contains(&s.len())
+    (1..=255).contains(&s.len())
         && s != "."
         && s != ".."
         && s.bytes()
@@ -242,10 +243,16 @@ mod tests {
 
     #[test]
     fn segments_cannot_escape_the_path() {
-        for ok in ["-Users-me-projects-skills", "SKILLS-14", "t-d7hb", "a.b_c"] {
+        for ok in [
+            "-Users-me-projects-skills",
+            "SKILLS-14",
+            "t-d7hb",
+            "a.b_c",
+            &"a".repeat(255),
+        ] {
             assert!(is_segment(ok), "{ok}");
         }
-        for ng in ["", ".", "..", "a/b", "a b", "鍵", &"a".repeat(129)] {
+        for ng in ["", ".", "..", "a/b", "a b", "鍵", &"a".repeat(256)] {
             assert!(!is_segment(ng), "{ng}");
         }
     }
