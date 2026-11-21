@@ -23,7 +23,7 @@ export interface Context {
   tracker: Tracker
   env: NodeJS.ProcessEnv
   exec: Exec
-  /** この skills の repo（<root>/cli/src/context.ts にある）。 */
+  /** この roster の repo（<root>/cli/src/context.ts にある）。 */
   root: string
   /** core のほかに足す skill セット（合わせた設定の skill-sets）。 */
   skillSets: string[]

@@ -4,7 +4,7 @@
     "https://stackoverflow.com/questions/14221579/how-do-i-add-comments-to-package-json-for-npm-install",
     "`//<項目>` のキー（`//scripts` など）に、すぐ下の <項目> の説明を、同じ名前をキーにして書く。pnpm はこれらのキーを使わない。"
   ],
-  "name": "skills",
+  "name": "roster",
   "version": "1.0.0",
   "private": true,
   "packageManager": "pnpm@11.26.0",

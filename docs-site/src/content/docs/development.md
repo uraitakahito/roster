@@ -68,7 +68,7 @@ Dependabot の PR の判定の道具は `cli/src/release-age.ts`（`node cli/src
 
 ```sh
 pnpm --dir docs-site install --frozen-lockfile
-pnpm --dir docs-site run dev            # 手元で見る（http://localhost:4321/skills/）
+pnpm --dir docs-site run dev            # 手元で見る（http://localhost:4321/roster/）
 pnpm --dir docs-site run check          # build と、原稿と repo の食い違いの検査
 pnpm --dir docs-site run format         # code（astro.config.ts・src/ の .ts・scripts/）を Prettier で整える
 pnpm --dir docs-site run format:check   # 整っているかと、md の中の JSON の塊と *.jsonc を見る（site.yml が流す）
@@ -84,7 +84,7 @@ skill は Pages ではなく原稿の Markdown を読む（`/dependabot-triage` 
 
 ### 公開の流れ
 
-main への push のたびに https://uraitakahito.github.io/skills/ に出す（この repo にタグは無い）。
+main への push のたびに https://uraitakahito.github.io/roster/ に出す（この repo にタグは無い）。
 
 ```mermaid
 flowchart LR
@@ -93,7 +93,7 @@ flowchart LR
   PR -->|"CI が緑 → merge"| M["main"]
   M --> T2["test.yml"]
   M --> D["docs.yml<br/>check → upload-pages-artifact"]
-  D --> P["deploy-pages<br/>uraitakahito.github.io/skills/"]
+  D --> P["deploy-pages<br/>uraitakahito.github.io/roster/"]
 ```
 
 `deploy-pages` は、上げた直後の artifact を「0 個」と見て落ちることがある（上げた物が一覧に出るまでの遅れ）。`docs.yml` は落ちても job を止めず、30 秒おいて同じ回の中で 1 度だけやり直す。それでも落ちたら job は赤になる。そのときは `gh workflow run docs.yml --ref main` で新しい回を流す。落ちた回の `gh run rerun` は、前の試みの artifact が残って同じ名の物が 2 つになり、また落ちる。merge した担当は main の回が通ったかを見て、落ちていれば【merged】に書く（`/software-engineer` の 2）。

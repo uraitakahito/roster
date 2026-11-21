@@ -65,7 +65,7 @@ export function call(ctx: Context, args: string[], input?: string): Reply {
   const cut = result.stdout.lastIndexOf('\n');
   const [code = '', api = ''] = result.stdout.slice(cut + 1).trim().split(' ');
   if (result.status === 0 && api !== '' && api !== PAGES_API) {
-    throw new TpmError(`置き場（${pagesUrl(ctx.env)}）の API の版は ${api} で、この tpm が話せるのは ${PAGES_API} です。置き場の版（pagetray）と skills の版が合っていません。skills を pull するか、置き場の版を skills の .pagetray-version に合わせるよう tpm ask devops で頼んでください`);
+    throw new TpmError(`置き場（${pagesUrl(ctx.env)}）の API の版は ${api} で、この tpm が話せるのは ${PAGES_API} です。置き場の版（pagetray）と roster の版が合っていません。roster を pull するか、置き場の版を roster の .pagetray-version に合わせるよう tpm ask devops で頼んでください`);
   }
   return { body: result.stdout.slice(0, Math.max(cut, 0)), code: result.status !== 0 || code === '' ? '000' : code, result };
 }

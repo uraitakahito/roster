@@ -30,7 +30,7 @@ cmux の中の shell で、TPM 担当を起こした folder に移って打つ�
 
 ```sh
 cd <TPM 担当を起こした folder>
-<skills の置き場所>/cli/bin/tpm audit start
+<roster の置き場所>/cli/bin/tpm audit start
 ```
 
 - cmux に `Audit` の居場所ができ、Auditor が名乗って待つ。席は project に 1 つで、もうあれば「その席で `/clear` を打ってから、`/audit` を呼んでください」と断る。

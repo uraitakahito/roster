@@ -235,7 +235,7 @@ export function composeRolesConfig(project: string): RolesConfig {
   return { transport: own.config.transport, trackers: { jira: declared('jira'), github: declared('github') }, infra, roles: own.config.roles, sources };
 }
 
-/** 読んだ設定と、それぞれの課題管理を 1 行に並べる（「この folder＝無い・skills＝jira」）。止まるときの文に添える。 */
+/** 読んだ設定と、それぞれの課題管理を 1 行に並べる（「この folder＝無い・roster＝jira」）。止まるときの文に添える。 */
 export function describeTrackers(sources: ConfigSource[]): string {
   return sources.map(s => `${sourceLabel(s)}＝${s.exists ? s.config.tracker : '無い'}`).join('・');
 }
@@ -245,7 +245,7 @@ export function composeSkillSets(sources: ConfigSource[], root: string): string[
   return [...new Set(sources.flatMap(s => readSkillSets(s.file, root)))];
 }
 
-/** 環境の呼び名: project の folder 自身の宣言だけなら名前、直下の folder の宣言があれば「名前（skills の設定）」。 */
+/** 環境の呼び名: project の folder 自身の宣言だけなら名前、直下の folder の宣言があれば「名前（roster の設定）」。 */
 export function envLabel(name: string, env: InfraEnv): string {
   const from = env.from ?? [];
   return from.some(f => f !== OWN_LABEL) ? `${name}（${from.join('・')} の設定）` : name;

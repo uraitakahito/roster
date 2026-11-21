@@ -41,7 +41,7 @@ export function auditStart(ctx: Context, options: StartOptions): string[] {
   if (!Number.isFinite(options.wait) || options.wait < 0) throw new TpmError('--wait は 0 以上の数にしてください（0 なら待たない）');
   // skill が無いまま起こすと、最初の入力が Unknown command になる。
   const skill = coreSkill(ctx, 'audit', 'SKILL.md');
-  if (!existsSync(skill)) throw new TpmError(`skill /audit がまだありません（${skill}）。skills の repo を新しくしてから打ってください`);
+  if (!existsSync(skill)) throw new TpmError(`skill /audit がまだありません（${skill}）。roster の repo を新しくしてから打ってください`);
   const existing = readRole(ctx, AUDIT_KEY);
   if (existing?.address !== undefined && ctx.transport.seats().some(s => s.address === existing.address)) {
     throw new TpmError(`Audit の席はもうあります（${existing.address}）。その席で /clear を打ってから、/audit を呼んでください`);
