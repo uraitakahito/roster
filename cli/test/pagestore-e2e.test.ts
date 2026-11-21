@@ -1,5 +1,5 @@
 // cli と本物の置き場（pagestore）のつなぎの試験。$TPM_E2E_PAGES_URL に動いている pagestore の URL がある時だけ流す
-// （CI の pagestore.yml の cli の段。手元では docs-site の開発のページの「pagestore」）。
+// （CI の pagetray-e2e.yml。手元では docs-site の開発のページの「pagetray（ページの置き場のサーバー）とのつなぎ」）。
 // ほかの試験は偽の置き場（helpers.ts の FakeStore）で流すので、API の形（URL・引数の名・JSON の欄）のずれはここで見つける。
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';

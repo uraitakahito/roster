@@ -1,0 +1,51 @@
+name: pagetray-e2e
+# cli と本物の置き場のサーバー（別の repo の pagetray）のつなぎ。口の形のずれをここで見つける。
+# サーバーの試験・image・弱点の見張りは、pagetray の repo の CI が流す。
+on:
+  push:
+    branches: [main]
+    paths: [cli/**, .node-version, .pagetray-version, .github/workflows/pagetray-e2e.yml]
+  pull_request:
+    paths: [cli/**, .node-version, .pagetray-version, .github/workflows/pagetray-e2e.yml]
+permissions:
+  contents: read
+jobs:
+  cli:
+    # tpm page put・path・list・import・delete を、.pagetray-version の版の pagetray に向けて流す。
+    runs-on: ubuntu-latest
+    env:
+      # SQL の検査は pagetray が commit した .sqlx/ で行う（DB は要らない）。
+      SQLX_OFFLINE: "true"
+    steps:
+      - uses: actions/checkout@v7
+      - name: 合わせる pagetray の版を読む
+        id: pagetray
+        run: echo "ref=$(cat .pagetray-version)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v7
+        with:
+          repository: uraitakahito/pagetray
+          ref: ${{ steps.pagetray.outputs.ref }}
+          path: pagetray
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          rust-src-dir: pagetray
+          cache-workspaces: pagetray
+      - run: cargo build --locked
+        working-directory: pagetray
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: cli/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: cli/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: cli
+      - name: pagetray を起こし、tpm の命令を本物に向けて流す
+        working-directory: cli
+        run: |
+          PAGESTORE_DB="$RUNNER_TEMP/e2e.db" PAGESTORE_LISTEN=127.0.0.1:8801 ../pagetray/target/debug/pagestore &
+          for _ in $(seq 1 40); do curl -fsS http://127.0.0.1:8801/healthz && break; sleep 0.5; done
+          # $TPM_E2E_PAGES_URL が無いと、この試験は飛ばされる（ふだんの pnpm test）。ここでは必ず渡す。
+          TPM_E2E_PAGES_URL=http://127.0.0.1:8801 pnpm exec vitest run test/pagestore-e2e.test.ts
