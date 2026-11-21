@@ -5,3 +5,218 @@ export function shellQuote(word: string): string {
   if (/^[A-Za-z0-9_./:=,+@%-]+$/.test(word)) return word;
   return `'${word.replaceAll('\'', '\'\\\'\'')}'`;
 }
+
+/** 命令の頭に付いても、打つ命令そのものではない語（予約語・前に付けて命令を動かす命令）。 */
+const PREFIX_WORDS = new Set(['!', '{', 'if', 'then', 'else', 'elif', 'do', 'while', 'until', 'time', 'exec', 'command', 'builtin', 'nohup', 'sudo', 'env', 'xargs', 'nice']);
+/** -c で字の命令を動かす shell。 */
+const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh']);
+/** 変数への代入（FOO=1）。 */
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+
+/** 字の命令を読む途中の位置と、出てきた単純な命令（語の並び）。 */
+class Lexer {
+  private i = 0;
+  private words: string[] = [];
+  private word: string | undefined;
+  /** 次の語は redirect の先（命令の語ではない）。 */
+  private redirect = false;
+  /** 行の終わりで読み飛ばす here-document の終わりの印（`<<-` なら字下げを許す）。 */
+  private heredocs: { end: string, strip: boolean }[] = [];
+  readonly commands: string[][] = [];
+
+  private readonly src: string;
+
+  constructor(src: string) {
+    this.src = src;
+  }
+
+  run(): string[][] {
+    const s = this.src;
+    while (this.i < s.length) {
+      const c = s[this.i] ?? '';
+      if (c === '\\') {
+        // 行の続き（\ と改行）は何も足さない。
+        if (s[this.i + 1] !== '\n') this.add(s[this.i + 1] ?? '');
+        this.i += 2;
+      }
+      else if (c === '\'') {
+        const end = s.indexOf('\'', this.i + 1);
+        this.add(s.slice(this.i + 1, end === -1 ? s.length : end));
+        this.i = end === -1 ? s.length : end + 1;
+      }
+      else if (c === '"') this.doubleQuoted();
+      else if (c === '$' && s[this.i + 1] === '(') this.add(this.substitution(this.i + 2));
+      else if (c === '`') this.add(this.backtick());
+      else if (c === '#' && this.word === undefined) {
+        // 語の頭の # から行の終わりまでは注釈。
+        const end = s.indexOf('\n', this.i);
+        this.i = end === -1 ? s.length : end;
+      }
+      else if (c === ' ' || c === '\t') {
+        this.endWord();
+        this.i += 1;
+      }
+      else if (c === '<' || c === '>') this.redirection();
+      else if (c === '\n' || c === ';' || c === '&' || c === '|' || c === '(' || c === ')') {
+        this.endCommand();
+        this.i += 1;
+        if (c === '\n') this.skipHeredocs();
+      }
+      else {
+        this.add(c);
+        this.i += 1;
+      }
+    }
+    this.endCommand();
+    return this.commands;
+  }
+
+  private add(text: string): void {
+    this.word = (this.word ?? '') + text;
+  }
+
+  private endWord(): void {
+    if (this.word === undefined) return;
+    if (this.redirect) this.redirect = false;
+    else this.words.push(this.word);
+    this.word = undefined;
+  }
+
+  private endCommand(): void {
+    this.endWord();
+    this.redirect = false;
+    if (this.words.length > 0) this.commands.push(this.words);
+    this.words = [];
+  }
+
+  /** "…" の中。$(…) と `…` は中の命令も読む。 */
+  private doubleQuoted(): void {
+    const s = this.src;
+    this.i += 1;
+    let text = '';
+    while (this.i < s.length && s[this.i] !== '"') {
+      if (s[this.i] === '\\') {
+        text += s[this.i + 1] ?? '';
+        this.i += 2;
+      }
+      else if (s[this.i] === '$' && s[this.i + 1] === '(') text += this.substitution(this.i + 2);
+      else if (s[this.i] === '`') text += this.backtick();
+      else {
+        text += s[this.i];
+        this.i += 1;
+      }
+    }
+    this.i += 1;
+    this.add(text);
+  }
+
+  /** $( の後ろ（start）から、対の ) までを命令として読む。返すのは語に足す字（中身は語にしない）。 */
+  private substitution(start: number): string {
+    const s = this.src;
+    let depth = 1;
+    let j = start;
+    let quote: string | undefined;
+    for (; j < s.length && depth > 0; j += 1) {
+      const c = s[j];
+      if (quote !== undefined) {
+        if (c === '\\' && quote === '"') j += 1;
+        else if (c === quote) quote = undefined;
+      }
+      else if (c === '\'' || c === '"') quote = c;
+      else if (c === '\\') j += 1;
+      else if (c === '(') depth += 1;
+      else if (c === ')') depth -= 1;
+    }
+    const inner = s.slice(start, depth === 0 ? j - 1 : j);
+    this.commands.push(...splitCommands(inner));
+    this.i = j;
+    return '';
+  }
+
+  /** `…` を命令として読む。 */
+  private backtick(): string {
+    const s = this.src;
+    const end = s.indexOf('`', this.i + 1);
+    this.commands.push(...splitCommands(s.slice(this.i + 1, end === -1 ? s.length : end)));
+    this.i = end === -1 ? s.length : end + 1;
+    return '';
+  }
+
+  /** `<`・`>`・`>>`・`>&`・`<<`（here-document）・`<<<`（here-string）。次の語は redirect の先なので命令の語にしない。 */
+  private redirection(): void {
+    const s = this.src;
+    // 2>&1 の 2 のような、redirect の前に付いた fd の番号は語にしない。
+    if (this.word !== undefined && /^\d+$/.test(this.word)) this.word = undefined;
+    this.endWord();
+    if (s.startsWith('<<<', this.i)) {
+      this.i += 3;
+      this.redirect = true;
+      return;
+    }
+    if (s.startsWith('<<', this.i)) {
+      this.i += 2;
+      const strip = s[this.i] === '-';
+      if (strip) this.i += 1;
+      while (s[this.i] === ' ' || s[this.i] === '\t') this.i += 1;
+      const m = /^(?:'([^']*)'|"([^"]*)"|([^\s;&|<>()]+))/.exec(s.slice(this.i));
+      if (m !== null) {
+        this.heredocs.push({ end: m[1] ?? m[2] ?? (m[3] ?? '').replaceAll('\\', ''), strip });
+        this.i += m[0].length;
+      }
+      return;
+    }
+    this.i += 1;
+    while (s[this.i] === '>' || s[this.i] === '&' || s[this.i] === '|') this.i += 1;
+    // 2>&1 の 1、>&- の - は redirect の先。
+    this.redirect = true;
+  }
+
+  /** 改行の後、here-document の中身（命令ではない字）を、終わりの印の行まで読み飛ばす。 */
+  private skipHeredocs(): void {
+    const s = this.src;
+    for (const doc of this.heredocs) {
+      while (this.i < s.length) {
+        const end = s.indexOf('\n', this.i);
+        const line = s.slice(this.i, end === -1 ? s.length : end);
+        this.i = end === -1 ? s.length : end + 1;
+        if ((doc.strip ? line.replace(/^\t+/, '') : line) === doc.end) break;
+      }
+    }
+    this.heredocs = [];
+  }
+}
+
+/**
+ * 字の命令を、単純な命令（語の並び）に分ける。; && || | & 改行で分け、$(…)・`…`・sh -c '…' の中の命令も拾う。
+ * 引用の中の字・注釈・here-document の中身・redirect の先は、命令の語にしない。
+ * 頭の代入（FOO=1）と、前に付けて命令を動かす語（sudo・env・if など）は外し、命令の名は path を外した名にする。
+ * shell を真似るのは「うっかり」を見分けるのに要るところまで（別名・関数・script の中は見ない）。
+ */
+export function splitCommands(src: string): string[][] {
+  return new Lexer(src).run().flatMap(head);
+}
+
+/** 単純な命令 1 つの頭を整える。sh -c と eval は、中の字を命令として読む。 */
+function head(words: string[]): string[][] {
+  let k = 0;
+  for (;;) {
+    while (k < words.length && ASSIGNMENT.test(words[k] ?? '')) k += 1;
+    if (k < words.length && PREFIX_WORDS.has(words[k] ?? '')) {
+      k += 1;
+      // sudo -u x・env -i などの旗は飛ばす（旗の値までは見ない）。
+      while (k < words.length && (words[k] ?? '').startsWith('-')) k += 1;
+      continue;
+    }
+    break;
+  }
+  const rest = words.slice(k);
+  const name = rest[0]?.split('/').at(-1);
+  if (name === undefined || name === '') return [];
+  if (name === 'eval') return splitCommands(rest.slice(1).join(' '));
+  if (SHELLS.has(name)) {
+    const c = rest.findIndex(w => /^-[a-z]*c[a-z]*$/.test(w));
+    const script = c === -1 ? undefined : rest[c + 1];
+    if (script !== undefined) return splitCommands(script);
+  }
+  return [[name, ...rest.slice(1)]];
+}
