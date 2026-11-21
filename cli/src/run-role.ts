@@ -28,7 +28,10 @@ export function claudeArgs(record: RoleRecord, root: string): string[] {
   ];
 }
 
-/** 担当に渡す環境変数。担当の tpm は、これで project（設定）・状態の folder・自分の Key を知る。PATH の頭に tpm の folder を足す。 */
+/**
+ * 担当に渡す環境変数。担当の tpm は、これで project（設定）・状態の folder・自分の Key を知る。PATH の頭に tpm の folder を足す。
+ * PAGETRAY_NO_DELETE は、置き場の CLI（pagetray）に「消す命令は何もせずに止まれ」と伝える（消してよいのは TPM 担当だけ。guard と二重に守る）。
+ */
 export function roleEnv(record: RoleRecord, project: string, state: string, root: string, env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return {
     ...env,
@@ -36,6 +39,7 @@ export function roleEnv(record: RoleRecord, project: string, state: string, root
     TPM_STATE: state,
     TPM_KEY: record.key,
     TPM_ROLE: record.role,
+    PAGETRAY_NO_DELETE: '1',
     PATH: `${join(root, 'cli', 'bin')}:${env.PATH ?? ''}`,
   };
 }

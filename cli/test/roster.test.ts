@@ -357,7 +357,7 @@ describe('run-role', () => {
     ]);
   });
 
-  test('担当に project・状態の folder・Key・役割と、tpm の在り処を渡す', () => {
+  test('担当に project・状態の folder・Key・役割と、tpm の在り処を渡し、置き場の CLI に消させない', () => {
     const w = world();
     assign(w.tpm, 't-x7k2', SE);
     expect(roleEnv(requireRole(w.tpm, 't-x7k2'), '/p', '/s', '/r', { PATH: '/usr/bin', HOME: '/h' })).toEqual({
@@ -366,6 +366,7 @@ describe('run-role', () => {
       TPM_STATE: '/s',
       TPM_KEY: 't-x7k2',
       TPM_ROLE: 'software-engineer',
+      PAGETRAY_NO_DELETE: '1',
       PATH: '/r/cli/bin:/usr/bin',
     });
   });

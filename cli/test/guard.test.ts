@@ -177,6 +177,43 @@ describe('置き場のページを消す curl', () => {
   });
 });
 
+describe('置き場の CLI（pagetray）の消す命令', () => {
+  const url = 'http://127.0.0.1:8801/p/t-x/plan-1.html';
+  test('担当の page delete と api の DELETE は止め、TPM 担当に頼むよう言う', () => {
+    for (const command of [
+      `pagetray page delete ${url} --yes`,
+      `pagetray page delete ${url}`,
+      'pagetray page delete --project p --key t-x --yes',
+      `pagetray --url http://127.0.0.1:8801 page delete ${url} --yes`,
+      `~/.local/bin/pagetray page delete ${url} --yes`,
+      `cd /w && pagetray page delete ${url} --yes | cat`,
+      'pagetray api -X DELETE /api/pages -f project=p',
+      'pagetray api /api/pages -XDELETE -f project=p',
+      'pagetray api --method delete /api/pages -f project=p',
+      'pagetray api --method=DELETE /api/pages -f project=p',
+    ]) {
+      const verdict = ask(command, 'software-engineer');
+      expect(verdict.allow, command).toBe(false);
+      expect(verdict.allow ? '' : verdict.reason).toContain('TPM 担当だけ');
+    }
+  });
+
+  test('TPM 担当・読む命令と置く命令・命令でない字・TPM_RAW=1 は通す', () => {
+    expect(ask(`pagetray page delete ${url} --yes`).allow).toBe(true);
+    for (const command of [
+      'pagetray page list --key t-x',
+      `pagetray page view ${url}`,
+      'pagetray page put x.html --project p --key t-x --kind plan',
+      'pagetray api /api/pages -f project=p',
+      'pagetray api -X POST /api/pages --input x.html -f project=p',
+      'pagetray status',
+      `echo "pagetray page delete ${url} --yes"`,
+      'git commit -m "docs: pagetray page delete の使い方"',
+      `TPM_RAW=1 pagetray page delete ${url} --yes`,
+    ]) expect(ask(command, 'software-engineer').allow, command).toBe(true);
+  });
+});
+
 describe('hook の入力と settings', () => {
   test('Bash の命令だけを取り出す', () => {
     expect(commandOf(JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'ls' }, cwd: '/w' }))).toBe('ls');

@@ -1,7 +1,8 @@
 // guard: 担当が打つ shell の命令を、実行の前に見て、通すか止めるかを決める（Claude Code の PreToolUse hook から呼ばれる）。
 // 止めるのは 3 つ。(1) project の設定（infra。直下の folder の設定の宣言も合わせる）に書いた環境に触る命令で、手続きを踏んでいない物。
 // (2) 連携と課題管理の道具の直打ち（tpm を通さないと、記録と状態が抜ける）。
-// (3) 担当が置き場のページを消す要求を直に送る curl（消してよいのは TPM 担当だけ。tpm page delete も担当からは止まる）。
+// (3) 担当が置き場のページを消す命令: 消す要求を直に送る curl と、置き場の CLI（pagetray）の消す命令
+//     （消してよいのは TPM 担当だけ。tpm page delete も担当からは止まる）。
 // (1) は命令の字全体に match の字が含まれるかで見る（共有の環境は、疑わしければ止める）。
 // (2)・(3) は命令を単純な命令に分け、その頭（実際に打つ道具の命令）だけを見る。commit の文・grep の型・here-document に道具の名が入っても止めない。
 // どちらも字で見るので、防げるのは「うっかり」まで。script に包んだ命令などはすり抜ける。確実な守りは、担当に渡す権限の方で行う。
@@ -34,6 +35,19 @@ const DIRECT: [pattern: RegExp, instead: string][] = [
 
 /** 置き場のページを消す要求（curl の DELETE）。 */
 const REMOVE_PAGES = /^curl\b.*(?:-X ?|--request[ =])DELETE\b/;
+
+/**
+ * 置き場の CLI（pagetray。path で名指した物も）の、ページを消す命令: `pagetray page delete` と、口を直に呼ぶ `pagetray api` の DELETE
+ * （method は大文字でも小文字でも通るので、どちらも見る）。
+ */
+const PAGETRAY_REMOVE = [
+  /^(?:\S*\/)?pagetray\b.*\bpage delete\b/,
+  /^(?:\S*\/)?pagetray\b.*\bapi\b.*(?:-X ?|--method[ =])delete\b/i,
+];
+
+/** 単純な命令の頭が、担当の打ってはいけない「置き場のページを消す命令」か。 */
+const removesPages = (head: string): boolean =>
+  (REMOVE_PAGES.test(head) && head.includes('/api/pages')) || PAGETRAY_REMOVE.some(pattern => pattern.test(head));
 
 /** 命令の頭にこれを書くと、道具の直打ちを通す（tpm 自身の開発と試しのため。環境の手続きには効かない）。 */
 export const RAW = 'TPM_RAW=1';
@@ -79,7 +93,7 @@ export function judge(asked: Asked): Verdict {
   }
   if (!asked.command.includes(RAW)) {
     const heads = splitCommands(asked.command).map(words => words.join(' '));
-    if (asked.role !== undefined && heads.some(h => REMOVE_PAGES.test(h) && h.includes('/api/pages'))) {
+    if (asked.role !== undefined && heads.some(removesPages)) {
       return { allow: false, reason: `ページを消せるのは TPM 担当だけです。消すページの URL と訳を、tpm ask tpm で TPM 担当に送って頼んでください。tpm 自身の開発や試しで直に打つなら、命令の頭に ${RAW} を付けてください。` };
     }
     for (const [pattern, instead] of DIRECT) {
