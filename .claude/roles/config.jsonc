@@ -1,23 +1,9 @@
 // この repo で TPM 担当を起こしたときの設定（書き方は docs-site の設定のページ）。書いていない欄は既定のまま。
 {
   "infra": {
-    // 前の置き場（Nginx の container）。前に置いたページの 8800 の link を出している。止めると、その link が開けなくなる。
-    // 手順は docs-site の運用のページの「前の置き場（tpm-pages）」。
-    "tpm-pages": {
-      "guard": "tpm",
-      "match": [
-        "--name tpm-pages",
-        "container start tpm-pages",
-        "container stop tpm-pages",
-        "container kill tpm-pages",
-        "container delete tpm-pages",
-        "container rm tpm-pages",
-      ],
-    },
     // ページの置き場（pagestore の container と、DB を置く volume）。止めると担当はページを置けず、
     // volume を消すと置かれたページの記録（役割・workspace の ID）が消える。
     // 起こし方は docs-site の運用のページの「ページの置き場（tpm-pagestore）」。
-    // 名が tpm-pages で始まるので、この環境に触る命令は tpm-pages の match にも当たる（手続きは同じ）。
     "tpm-pagestore": {
       "guard": "tpm",
       "match": [
