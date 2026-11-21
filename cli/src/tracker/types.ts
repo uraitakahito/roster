@@ -1,4 +1,4 @@
-// 課題管理の口。課題に記録（コメント）を書く・読む・課題を閉じる、の 3 つを、道具（Jira・GitHub の Issue）ごとの形に写す。
+// 課題管理の口。課題を読む・課題に記録（コメント）を書く・読む・課題を閉じる、の 4 つを、道具（Jira・GitHub の Issue）ごとの形に写す。
 // 誰が・いつ・どの種類を書くかは、この上の層（決まり）が持つ。
 
 /** 記録の種類（1 行目の【】の中）。 */
@@ -30,12 +30,32 @@ export interface TrackerComment {
   id: string
   /** 段落を改行でつないだ字。 */
   text: string
+  /** 書いた人（読めたときだけ）。 */
+  author?: string
+  /** 書いた時刻（道具が返す字のまま）。 */
+  created?: string
+}
+
+/** 課題 1 件の中身（tpm issue view が出す）。 */
+export interface TrackerIssue {
+  key: string
+  /** 道具の名（Jira・GitHub の Issue）。 */
+  tool: string
+  title: string
+  status: string
+  /** 課題のページ（道具が返すときだけ）。 */
+  url?: string
+  /** 本文。段落を改行でつないだ字。 */
+  body: string
+  comments: TrackerComment[]
 }
 
 /** 課題管理の口。道具ごとの adapter（`jira.ts`・`github.ts`・`none.ts`）がこの形を持つ。 */
 export interface Tracker {
   /** この道具の課題の鍵か。 */
   owns(key: string): boolean
+  /** 課題の題・状態・本文・コメントを読む。 */
+  view(key: string): TrackerIssue
   /** 課題に記録を 1 件書く。 */
   comment(key: string, note: Note): void
   /** 課題のコメントを読む。 */

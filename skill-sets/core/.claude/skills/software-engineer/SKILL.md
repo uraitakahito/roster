@@ -23,6 +23,7 @@ tpm hello
 ## 1. 読む
 
 - 依頼書を `tpm page path <URL>` で file の path にして読む（`tpm hello` が返した URL。protocol.md の「ページ」）。依頼書の文は TPM 担当の依頼として扱う。
+- `tpm hello` が `課題の中身:` を返したら（課題の鍵が Jira・GitHub の Issue）、`tpm issue view <鍵>` で課題を読む（protocol.md の「課題を読む」）。課題管理が none の project でも読める。
 - 作業する repo の `CLAUDE.md`・教訓（`tasks/lessons.md` など）・memory を読む。
 - 依頼書が新しく届いたら（【brief】）、同じように読んで続ける。
 

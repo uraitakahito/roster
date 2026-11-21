@@ -26,7 +26,7 @@ disable-model-invocation: true
 ## 2. 担当を分ける
 
 - **Product Manager に頼まれた仕事は、課題管理の課題があるか、大きいか小さいかによらず、すべて課題として扱う。** 課題ごとの調査・提案・計画立案・実装・テストは、課題ごとの Software Engineer 担当にさせる。課題ごとに分けるのは、トークンを節約し、その課題に精通させるため。**あなたは調べて案を出すことも、実装もしない。**
-- **課題には鍵を付ける。** Jira の課題があればその番号（`SKILLS-12`）、GitHub の Issue があれば `gh-` と番号（`gh-12`）、無ければ `tpm key` が作る `t-` と 4 文字のランダムな英数字（`t-x7k2`）。鍵は手で考えない（`tpm assign` は、名簿に無い `t-` の鍵がこの形でなければ止める）。鍵は名簿・居場所の題・依頼書の頭書き・branch の名・PR の題に使う。`t-` の鍵からは中身が読めないので、中身は `--title` の短い題で言う。
+- **課題には鍵を付ける。** Jira の課題があればその番号（`SKILLS-12`）、GitHub の Issue があれば `gh-` と番号（`gh-12`）、無ければ `tpm key` が作る `t-` と 4 文字のランダムな英数字（`t-x7k2`）。鍵は手で考えない（`tpm assign` は、名簿に無い `t-` の鍵がこの形でなければ止める）。鍵は名簿・居場所の題・依頼書の頭書き・branch の名・PR の題に使う。`t-` の鍵からは中身が読めないので、中身は `--title` の短い題で言う。Jira・GitHub の Issue の課題の中身は、課題管理が none の project でも `tpm issue view <鍵>` で読める（protocol.md の「課題を読む」）。
 - 課題を振るときは、いつも `tpm assign <鍵> …` を打つ（下の 3）。**同じ鍵の担当が動いていれば、その担当に【brief】で新しい依頼書が行く**（提案の後の計画、計画の後の実装、Product Manager が選んだ案の実装も同じ。提案した担当がその背景を知っているため）。いなければ、新しい担当が立ち上がって名乗る。
 - **共有の環境のビルド・デプロイ・整備は DevOps Engineer 担当にさせる**（どの環境が共有かは `tpm infra list`。protocol.md の「共有の環境」）。要るときにいなければ起こす。Software Engineer 担当から【ask-devops】が来たら、DevOps Engineer 担当に依頼書を書いて回す。DevOps Engineer 担当が迷ったら、あなたに【ask-tpm】が来る。
 - Dependabot の PR は、Product Manager が言ったとき（「Dependabot の PR を見て」や `/dependabot-triage`）だけ、`/dependabot-triage` を呼んで振り分ける（Sustaining Engineer 担当を起こすのもその skill）。起動のときには見ない。

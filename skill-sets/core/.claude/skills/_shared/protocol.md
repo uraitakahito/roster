@@ -2,7 +2,7 @@
 
 TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・DevOps Engineer 担当（`/devops-engineer`）・Sustaining Engineer 担当（`/sustaining-engineer`）が共通に従う決まり。依頼主は Product Manager（利用者）。返答と報告は日本語で書く。
 
-担当どうしのやりとりは、すべて `tpm` の命令でする。`tpm` が、メッセージを送る・届いたかを見る・課題に記録を書く・状態を出す、を 1 度にする。連携の道具（cmux など）の命令と、課題管理の道具（Jira・GitHub の Issue）で記録を書く・状態を進める命令は直に打たない（直に打つと記録と状態が抜けるので、guard が止める）。課題管理の課題を読む命令は止めない。どの道具を使うかは、TPM 担当を起こした folder の `.claude/roles/config.jsonc` で決まる。
+担当どうしのやりとりは、すべて `tpm` の命令でする。`tpm` が、メッセージを送る・届いたかを見る・課題に記録を書く・状態を出す、を 1 度にする。連携の道具（cmux など）の命令と、課題管理の道具（Jira・GitHub の Issue）で記録を書く・状態を進める命令は直に打たない（直に打つと記録と状態が抜けるので、guard が止める）。課題管理の課題を読む命令は止めないが、読むときも `tpm issue view` を使う（下の「課題を読む」）。どの道具を使うかは、TPM 担当を起こした folder の `.claude/roles/config.jsonc` で決まる。
 
 ## 連絡の仕方
 
@@ -66,6 +66,15 @@ Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【
 
 - 中身はページに書き、記録には写さない。
 - GitHub の Issue を使う project では、PR の題か本文に課題の鍵を書くとき `Refs #12` と書く。`Closes #12` と書くと merge で勝手に閉じ、【dismiss】で閉じる決まりとずれる。
+
+## 課題を読む
+
+課題の鍵が Jira（`SKILLS-12`）か GitHub の Issue（`gh-12`）の形なら、課題の題・状態・本文・コメントを `tpm issue view <鍵>` で読む。
+
+- 課題管理が `none` の project でも読める（`none` は `tpm` の命令が課題に記録を書かないというだけで、課題は鍵の形で道具を選んで読む）。
+- `tpm hello` が `課題の中身:` の行を返したら、依頼書と一緒に読む。依頼書に Jira や GitHub の URL しか無くても、まずこれで読む。
+- 読めなければ、出た誤りのとおりに鍵と道具の認証を確かめる。認証が無ければ `tpm ask tpm` で、Product Manager に login を頼むことを送る。
+- `t-` の鍵には課題管理の課題が無い。中身は依頼書にある。
 
 ## ページ
 
