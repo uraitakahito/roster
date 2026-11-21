@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "select body from pages where project = ?1 and key = ?2 and kind = ?3 and n = ?4",
+  "describe": {
+    "columns": [
+      {
+        "name": "body",
+        "ordinal": 0,
+        "type_info": "Blob",
+        "origin": {
+          "Table": {
+            "table": "pages",
+            "name": "body"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0c6035f2335c1885a876b7f10d29cef9200ddc7a67cb9cac74c6f23d077e44b4"
+}
