@@ -102,7 +102,10 @@ function changesRepo(words: string[]): boolean {
   return (named !== undefined && named.toUpperCase() !== 'GET') || (named === undefined && args.some(a => GH_API_WRITES.test(a)));
 }
 
-/** 命令の頭にこれを書くと、道具の直打ちを通す（tpm 自身の開発と試しのため。環境の手続きと、Auditor の守りには効かない）。 */
+/** Audit の席を起こす命令。Product Manager が自分の手で打つ物なので、TPM 担当と担当が道具として打つのは止める。 */
+const AUDIT_START = /^tpm audit start\b/;
+
+/** 命令の頭にこれを書くと、道具の直打ちを通す（tpm 自身の開発と試しのため。環境の手続きと、Auditor の守りと、Audit の席を起こす命令には効かない）。 */
 export const RAW = 'TPM_RAW=1';
 
 /** guard に聞く 1 件。打った命令と、決めるのに要る設定・承認・時刻。 */
@@ -145,6 +148,9 @@ export function judge(asked: Asked): Verdict {
     if (!verdict.allow) return verdict;
   }
   const commands = splitCommands(asked.command);
+  if (commands.some(words => AUDIT_START.test(words.join(' ')))) {
+    return { allow: false, reason: 'Audit の席を起こすのは Product Manager です。tpm audit start は、Product Manager が自分の手で打ちます（Auditor は TPM 担当の回し方も見るので、TPM 担当と担当は起こさない）。' };
+  }
   if (asked.role === READ_ONLY_ROLE) {
     const change = commands.find(changesRepo);
     if (change !== undefined) {
@@ -239,8 +245,16 @@ export function judgeWrite(call: WriteCall, role: RoleName | undefined, roots: P
 /**
  * 担当の claude に渡す settings（--settings）。道具の前に tpm guard を呼ぶ hook。hook の命令は shell が読むので、path を引用する。
  * 見る道具は Bash。Auditor の席だけ、file を書き替える道具（WRITE_TOOLS）も見る（ほかの担当では、書くたびに hook を動かさない）。
+ * Auditor の席には、session の始まりに tpm audit fresh を呼ぶ hook も付ける。
  */
 export function guardSettings(tpmBin: string, role?: RoleName): string {
+  const hook = (command: string) => ({ type: 'command', command: `${shellQuote(tpmBin)} ${command}` });
   const matcher = role === READ_ONLY_ROLE ? ['Bash', ...WRITE_TOOLS].join('|') : 'Bash';
-  return JSON.stringify({ hooks: { PreToolUse: [{ matcher, hooks: [{ type: 'command', command: `${shellQuote(tpmBin)} guard` }] }] } });
+  return JSON.stringify({
+    hooks: {
+      PreToolUse: [{ matcher, hooks: [hook('guard')] }],
+      // Auditor の席は、席を起こした時と /clear の時に印を書く（前の監査の文脈が残ったまま、次の監査を始めないため）。
+      ...(role === READ_ONLY_ROLE ? { SessionStart: [{ hooks: [hook('audit fresh')] }] } : {}),
+    },
+  });
 }

@@ -23,7 +23,7 @@ function requireLedgerSide(ctx: Context): void {
 }
 
 /** `7` か `#7` を番号にする。 */
-function numberOf(value: string): number {
+export function numberOf(value: string): number {
   const m = /^#?([1-9]\d*)$/.exec(value);
   if (m?.[1] === undefined) throw new TpmError(`件の番号を書いてください（7 か #7）: ${value}`);
   return Number(m[1]);

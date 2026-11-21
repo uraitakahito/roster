@@ -36,6 +36,8 @@ TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・De
 
 Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【recreated】）は `/sustaining-engineer` と `/dependabot-triage` に書いてある。
 
+Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけが使う見出しは 2 つ。【audit】は、Product Manager へじかに出した監査の報告の写し（`tpm report audit`）。【decided】は、Product Manager の決定（`tpm report decided`）。
+
 ### TPM 担当から
 
 | 見出し | 中身 | 命令（TPM 担当が打つ） |

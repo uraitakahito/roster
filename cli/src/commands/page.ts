@@ -3,7 +3,9 @@
 // ページが参照する file（画像など。file.ts）も、読む時に控えに写し、取り込む・消す時に一緒に扱う。
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
+import { appendAudit } from '../audits.ts';
 import type { Context } from '../context.ts';
+import { actor } from '../evidence.ts';
 import { TpmError } from '../skill-sets.ts';
 import { copyRefs, fileImport, findFiles, removeFiles } from './file.ts';
 import { roleOf } from './infra.ts';
@@ -211,6 +213,8 @@ export interface PageDeleteOptions {
   project?: string
   /** 一覧を見せるだけでなく、本当に消す。 */
   yes?: boolean
+  /** Auditor が置いたページを消す訳（Product Manager の言葉）。無ければ、Auditor のページは消せない。 */
+  pm?: string
 }
 
 /** 消す物 1 つ。置き場に頼む引数と、控えの中で消す物（file か folder）。 */
@@ -228,6 +232,7 @@ interface DeleteTarget {
  * ページを消す（戻せない）。消してよいのは TPM 担当だけ（担当の居場所から打つと止まる）。
  * URL を名指すか、--key（今の project か --project の、その Key のページみな）か、--project だけ（その project のページみな）。
  * --key・--project の時は、合う file も一緒に消す（file を扱えない前の置き場なら、file は無い物とする）。
+ * Auditor が置いたページは、Product Manager の言葉（--pm）が無ければ消さない（消した事は audits.jsonl に残る）。
  * まず消す物を一覧で出し、--yes を付けたときだけ置き場に頼む。置き場は番号を残すので、消した URL は 410 になり、同じ番号は 2 度使われない。
  * 消した後に、控えの file（Key・project ごとなら folder）も消す。
  */
@@ -248,6 +253,15 @@ export function pageDelete(ctx: Context, urls: string[], options: PageDeleteOpti
   const pages = found.flatMap(f => f.pages);
   const files = found.flatMap(f => f.files);
   if (pages.length === 0 && files.length === 0) return ['置き場に、消すページは無い'];
+  // Auditor のページは、TPM 担当の回し方も見る監査の報告。TPM 担当の手だけでは消さない。
+  const audits = pages.filter(p => p.role === 'auditor');
+  if (audits.length > 0 && (options.pm === undefined || options.pm.trim() === '')) {
+    throw new TpmError([
+      `Auditor が置いたページが ${audits.length} 枚あります。消していません。`,
+      ...audits.map(p => `${pagesUrl(ctx.env)}${p.path}  ${p.title}`),
+      '消す訳があれば、Product Manager に確かめ、その言葉を --pm "<Product Manager の言葉>" に添えて打ち直してください（消した事は記録に残り、次の監査が見る）',
+    ].join('\n'));
+  }
   if (!options.yes) {
     return [
       ...pages.length > 0 ? [`消すページ（${pages.length} 枚。戻せない）:`, ...pages.map(p => `${pagesUrl(ctx.env)}${p.path}  ${p.title}`)] : [],
@@ -263,6 +277,7 @@ export function pageDelete(ctx: Context, urls: string[], options: PageDeleteOpti
     for (const local of target.local) removeLocal(dir, local);
     return gone;
   });
+  for (const p of audits) appendAudit(ctx, { kind: 'page-deleted', url: `${pagesUrl(ctx.env)}${p.path}`, by: actor(ctx.env).by, pm: options.pm ?? '' });
   const [gonePages, goneFiles] = [removed.flatMap(g => g.pages), removed.flatMap(g => g.files)];
   return [
     `消した: ${gonePages.length} 枚（控えも消した）`,

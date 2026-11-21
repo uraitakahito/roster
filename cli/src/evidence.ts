@@ -25,8 +25,11 @@ export function recordGuardStop(ctx: Context, command: string, reason: string): 
   ctx.state.append('guard.jsonl', { at: ctx.now().toISOString(), ...actor(ctx.env), command: command.slice(0, COMMAND_LIMIT), reason } satisfies GuardStop);
 }
 
-/** 入口の検査の種類: 読んでいないメッセージ・merge していない PR・状態を読めない PR・同じメッセージの 2 度送り・TPM 担当が送って済んでいない物。 */
-export type GateKind = 'unread' | 'not-merged' | 'pr-unreadable' | 'repeat' | 'unsettled';
+/**
+ * 入口の検査の種類: 読んでいないメッセージ・merge していない PR・状態を読めない PR・同じメッセージの 2 度送り・TPM 担当が送って済んでいない物・
+ * 前の監査の文脈が残ったまま始めようとした監査。
+ */
+export type GateKind = 'unread' | 'not-merged' | 'pr-unreadable' | 'repeat' | 'unsettled' | 'stale-context';
 
 /** 入口の検査が送るのを止めた 1 件（gate.jsonl）。 */
 export interface GateStop {
@@ -34,7 +37,7 @@ export interface GateStop {
   by: string
   role: string
   gate: GateKind
-  /** 読んでいなかったメッセージの id、PR の URL と state、先に送った同じメッセージの id。 */
+  /** 読んでいなかったメッセージの id、PR の URL と state、先に送った同じメッセージの id、前の監査の報告の URL。 */
   detail: string
 }
 
