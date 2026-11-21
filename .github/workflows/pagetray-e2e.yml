@@ -1,5 +1,5 @@
 name: pagetray-e2e
-# cli と本物の置き場のサーバー（別の repo の pagetray）のつなぎ。口の形のずれをここで見つける。
+# cli と本物の置き場のサーバー（別の repo の pagetray）のつなぎ。API の形のずれをここで見つける。
 # サーバーの試験・image の確かめ・弱点の見張りは、pagetray の repo の CI が流す。
 on:
   push:

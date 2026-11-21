@@ -23,7 +23,7 @@ export const DEFAULT_PAGES_URL = 'http://127.0.0.1:8801';
 /** 前の置き場（Nginx）の URL。前に置いたページの URL も、読む時は受ける。 */
 export const LEGACY_PAGES_URLS = ['http://127.0.0.1:8800'];
 
-/** この cli が話せる、置き場の口の版（pagetray の docs/src/api.md。置き場は、どの答えにも header `Pagetray-Api` で自分の版を付ける）。 */
+/** この cli が話せる、置き場の API の版（pagetray の docs/src/api.md。置き場は、どの答えにも header `Pagetray-Api` で自分の版を付ける）。 */
 export const PAGES_API = '1';
 
 /** 課題の Key として folder の名にしてよい字（path の外へ出ないように）。 */
@@ -80,14 +80,14 @@ export const pageFolder = (ctx: Context, key: string): string => join(pagesDir(c
 
 /**
  * 置き場に curl で頼む。答えの本文と HTTP の code を返す（つながらなければ code は 000）。
- * 答えの口の版がこの cli の話せる版と違えば、答えを使わずに止まる。header の無い答えは、口の版ができる前の置き場の物で、形は版 1 と同じなので通す。
+ * 答えの API の版がこの cli の話せる版と違えば、答えを使わずに止まる。header の無い答えは、API の版ができる前の置き場の物で、形は版 1 と同じなので通す。
  */
 function call(ctx: Context, args: string[], input?: string): { body: string, code: string, result: ExecResult } {
   const result = ctx.exec('curl', ['-sS', '--max-time', TIMEOUT, '-w', '\n%{http_code} %header{pagetray-api}', ...args], input === undefined ? undefined : { input });
   const cut = result.stdout.lastIndexOf('\n');
   const [code = '', api = ''] = result.stdout.slice(cut + 1).trim().split(' ');
   if (result.status === 0 && api !== '' && api !== PAGES_API) {
-    throw new TpmError(`置き場（${pagesUrl(ctx.env)}）の口の版は ${api} で、この tpm が話せるのは ${PAGES_API} です。置き場の版（pagetray）と skills の版が合っていません。skills を pull するか、置き場の版を skills の .pagetray-version に合わせるよう tpm ask devops で頼んでください`);
+    throw new TpmError(`置き場（${pagesUrl(ctx.env)}）の API の版は ${api} で、この tpm が話せるのは ${PAGES_API} です。置き場の版（pagetray）と skills の版が合っていません。skills を pull するか、置き場の版を skills の .pagetray-version に合わせるよう tpm ask devops で頼んでください`);
   }
   return { body: result.stdout.slice(0, Math.max(cut, 0)), code: result.status !== 0 || code === '' ? '000' : code, result };
 }
