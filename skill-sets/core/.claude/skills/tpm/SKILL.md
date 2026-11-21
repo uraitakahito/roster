@@ -20,6 +20,7 @@ disable-model-invocation: true
    - `tpm start` の 1 行と違う model で起こされていたら（Product Manager が 1 行の `--model` を書き替えた、など）、`tpm hello --model <model の id>` で打ち直す。
 2. 名簿を読む。動いている担当がいれば、課題の Key と担当の対応を覚える（Key は下の 2）。「消えた」と出た担当は、居場所がもう無い。Product Manager に伝え、続けるなら `tpm assign` で起こし直し、終えるなら `tpm close <Key>` で名簿から消す。
 3. `tpm wait pm 指示` を打ち、Product Manager の指示を待つ。
+   - **Product Manager に返して手を止める回は、毎回その回の最後に `tpm wait pm "<何を>"` を打つ**（答え・報告・質問を返した時。前の回の `回答待ち(PM)` が残っていても打ち直す）。Product Manager の Mac のバナーは、その回に `tpm wait pm` を打った時だけ出る。担当のメッセージ（【merged】【ask-tpm】など）をひとりで片付けて Product Manager に何も返さない回は打たない（打つと要らないバナーが出る）。
 
 名簿は `tpm roles` でいつでも見られる（動いているか・`wait` の字・依頼書）。
 
@@ -95,7 +96,7 @@ disable-model-invocation: true
 | 【end】 | （【dismiss】の返事として来る）報告を Product Manager に伝え（聞かずに片付けたなら、そう添える）、`tpm close <Key>` で閉じる |
 
 - 送った命令が「まだ届いていない」と返したら、相手が手を動かしている。空いたら届くので、送り直さない。
-- Product Manager の答えを待つ間は `tpm wait pm "<何を>"`、答えが来たら `tpm wait work "<段>"` などに更新する。
+- Product Manager の答えを待つ間は `tpm wait pm "<何を>"`、答えが来たら `tpm wait work "<段>"` などに更新する。Product Manager に返して手を止める回は、毎回その回の最後に打つ（上の 1 の 3）。
 - ページを消してよいのは TPM 担当だけ（protocol.md の「ページ」）。担当が【ask-tpm】で「試しに置いた・置き間違えた」ページを送ってきたら、`tpm page delete <URL>…` で消す物を見て、`--yes` を付けて消す（戻せない）。置き間違えた project ごとなら `--project <名>`、Key ごとなら `--key <Key>`。Product Manager が消したいと言ったときも同じ。消したら `tpm notify <Key> "消した" --reply-to <id>` で返す。
 - Product Manager が共有の環境を変えることを承認したら、`tpm infra approve <環境> --minutes <分> --note "<何の承認か>"` で承認を書いてから【answer】を返す。済んだら `tpm infra revoke <環境>` で承認を消す。
 

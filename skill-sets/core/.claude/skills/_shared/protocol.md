@@ -49,6 +49,7 @@ Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【
   - Product Manager の答えを待つ: `tpm wait pm "<何を>"`（`回答待ち(PM): <何を>`）
   - TPM 担当の答えを待つ: `tpm wait tpm "<何を>"`（`回答待ち(TPM): <何を>`）
   - 待つ時間に限りがあれば添える: `tpm wait tpm "merge（14:30 まで）"`
+- `tpm wait` は打った時刻も覚える。Product Manager の Mac のバナーは、TPM 担当が**その回に** `tpm wait pm` を打って手を止めた時に出る（設定は docs の「設定」の「Mac のバナー」）。
 - やりとりの命令は、メッセージを送った後の待ちも出す（`tpm ask …` は回答待ち、`tpm report done` は `回答待ち(TPM): 次の依頼`、`tpm report end` は `回答待ち(TPM): workspace を閉じる`）。答えが来たら `tpm wait work "<段>"` に戻す。
 - **`/model`・`/effort` は打たない**（新しい session の既定まで書き換わる）。model と effort は起動の旗で決まる。
 

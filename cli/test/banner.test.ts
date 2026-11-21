@@ -8,7 +8,7 @@ import { decide, DEFAULT_BANNER, toBannerConfig } from '../src/banner.ts';
 import { bannerCheck, bannerHook, bannerLog, bannerSetup, currentPaths, hookCommand, hookEntry } from '../src/commands/banner.ts';
 import { wait, waitFile } from '../src/commands/messages.ts';
 import { hello } from '../src/commands/role-side.ts';
-import { assign } from '../src/commands/tpm-side.ts';
+import { assign, bannerHint } from '../src/commands/tpm-side.ts';
 import type { Exec } from '../src/exec.ts';
 import { TPM_TITLE } from '../src/protocol.ts';
 import { BRIEF, world } from './helpers.ts';
@@ -228,4 +228,19 @@ test('banner.jsonl は 7 日より古い行を消す', () => {
   const lines = readFileSync(file, 'utf8').trim().split('\n');
   expect(lines).toHaveLength(1);
   expect(lines[0]).not.toContain('古い');
+});
+
+describe('TPM 担当の tpm hello の一言', () => {
+  test('cmux の連携で cmux.json に hook が無ければ 1 行出し、あれば出さない。file の連携では見ない', () => {
+    const w = world();
+    const cmux = { ...w.tpm, config: { ...w.tpm.config, transport: 'cmux' as const } };
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-banner-hint-')));
+    const file = join(dir, 'cmux.json');
+    expect(bannerHint(w.tpm, file)).toEqual([]);
+    expect(bannerHint(cmux, file)).toEqual([expect.stringMatching(/hook がありません。tpm banner setup/)]);
+    writeFileSync(file, '{ "notifications": { "hooks": [{ "id": "tpm-banner", "command": "x/tpm banner hook" }] } }');
+    expect(bannerHint(cmux, file)).toEqual([]);
+    writeFileSync(file, '{ broken');
+    expect(bannerHint(cmux, file)).toEqual([expect.stringMatching(/cmux.json を読めません/)]);
+  });
 });
