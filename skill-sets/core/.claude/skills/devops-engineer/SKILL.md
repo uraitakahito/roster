@@ -38,15 +38,10 @@ tpm infra list
 
 ### ページの置き場（tpm-pagestore）
 
-- 依頼書・確認・提案・計画・結果のページは、Artifact でなく、この Mac の置き場（環境 `tpm-pagestore`。`127.0.0.1:8801` の pagestore）で渡す。image を作る・起こす・止める・直す・保つのはこの担当。
+- 依頼書・確認・提案・計画・結果のページは、Artifact でなく、この Mac の置き場（環境 `tpm-pagestore`。`127.0.0.1:8801` の pagestore。前の置き場の `8800` でも待ち受ける）で渡す。image を作る・起こす・止める・直す・保つのはこの担当。
 - 置き場は自動では起きない（Mac を起こし直すと止まったまま）。止まっていると、ほかの担当はページを置けず、Product Manager は一覧の UI を開けない（担当は、控えにあるページなら読める）。
 - DB は名前つきの volume にある。volume は消さない。image を上げる前と volume に触る前に、DB の写しを取る。
 - 手順（image を作る・起こす・確かめる・DB の写し・写しから戻す・取り込む・image を上げる）は docs-site の運用のページ（`docs-site/src/content/docs/operations.md` の「ページの置き場」）。命令は `tpm infra run tpm-pagestore -- <命令>` で打つ。止める・作り直す・volume を変えるは「TPM に相談」の手続き。
-
-### 前の置き場（tpm-pages）
-
-- 前の置き場（環境 `tpm-pages`。`127.0.0.1:8800` の Nginx）は、前に置いたページの `8800` の link を開けるように動かしてある。新しいページはここには置かれない。
-- 止める時は TPM 担当が決める。手順は運用のページの「前の置き場」。命令は `tpm infra run tpm-pages -- <命令>` で打つ。
 
 ## 2. 終わり
 
