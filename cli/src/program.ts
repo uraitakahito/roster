@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { Command, CommanderError } from 'commander';
 import { buildCommand } from './command.ts';
 import { guard, infraApprove, infraList, infraRevoke, infraRun } from './commands/infra.ts';
+import { issueView } from './commands/issue.ts';
 import { PAGE_KINDS, pagePath, pagePut } from './commands/page.ts';
 import { registerMessages } from './commands/register.ts';
 import { hello, inbox } from './commands/role-side.ts';
@@ -94,6 +95,10 @@ export function buildProgram(): Command {
       print(r.lines);
       process.exit(r.status);
     });
+
+  const issue = program.command('issue').description('課題管理の課題（Jira・GitHub の Issue）を読む');
+  issue.command('view <key>').description('課題の題・状態・本文・コメントを出す（課題管理が none の project でも、鍵の形で道具を選んで読む）')
+    .action((key: string) => print(issueView(createContext(), key)));
 
   const page = program.command('page').description('依頼書と成果のページを、代わりの置き場（127.0.0.1 の Nginx）に置く・読む');
   page.command('put <file>').description('ページを置き場に写し、URL を出す（置き場が応えなければ止まる）')

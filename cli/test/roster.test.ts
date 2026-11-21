@@ -211,6 +211,13 @@ describe('hello', () => {
     expect(w.wire.status('file:1')).toEqual({ model: 'Fable 5.2 · medium', wait: '作業中: 依頼書を読む' });
   });
 
+  test('課題の鍵が Jira の形なら、課題管理が none でも中身の読み方を返す', () => {
+    const w = world();
+    hello(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
+    assign(w.tpm, 'SKILLS-14', SE);
+    expect(hello(w.role('SKILLS-14', 'file:1'))).toContain('課題の中身: tpm issue view SKILLS-14');
+  });
+
   test('名簿にいない鍵なら止まる', () => {
     expect(() => hello(world().role('t-nope', 'file:9'))).toThrow(/名簿に担当がいません: t-nope/);
   });

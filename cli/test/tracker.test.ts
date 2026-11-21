@@ -53,6 +53,29 @@ describe('ADF', () => {
     expect(adfToText(noteToAdf(note))).toBe(`【計画】Software Engineer: 案 B の計画（PR 2 本）\n計画: ${URL}\n<要点>`);
     expect(adfToText(null)).toBe('');
   });
+
+  test('リストは「- 」「1. 」の行にし、入れ子は字下げし、字が URL でないリンクは URL を添える', () => {
+    const p = (...content: unknown[]) => ({ type: 'paragraph', content });
+    const t = (text: string) => ({ type: 'text', text });
+    const item = (...content: unknown[]) => ({ type: 'listItem', content });
+    const doc = {
+      type: 'doc',
+      content: [
+        { type: 'heading', attrs: { level: 2 }, content: [t('条件')] },
+        p(t('次のもの。'), { type: 'hardBreak' }, t('二行目')),
+        {
+          type: 'orderedList',
+          attrs: { order: 1 },
+          content: [
+            item(p(t('軽い'))),
+            item(p(t('並べる')), { type: 'bulletList', content: [item(p(t('時系列')))] }),
+          ],
+        },
+        p({ type: 'text', text: '依頼書', marks: [{ type: 'link', attrs: { href: 'http://x/b.html' } }] }, t(' と '), { type: 'mention', attrs: { text: '@PM' } }),
+      ],
+    };
+    expect(adfToText(doc)).toBe('## 条件\n次のもの。\n二行目\n1. 軽い\n2. 並べる\n   - 時系列\n依頼書（http://x/b.html） と @PM');
+  });
 });
 
 describe('JiraTracker', () => {
@@ -69,6 +92,30 @@ describe('JiraTracker', () => {
     expect(calls[0]?.args.slice(0, 7)).toEqual(['jira', 'workitem', 'comment', 'create', '--key', 'SKILLS-12', '--body-file']);
     expect(JSON.parse(seen[0] ?? '')).toEqual(noteToAdf(note));
     expect(existsSync(calls[0]?.args.at(-1) ?? '')).toBe(false);
+  });
+
+  test('view は題・状態・本文・コメントを、ADF を字にして返す', () => {
+    const body = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: '本文' }] }] };
+    const { exec, calls } = fake({
+      stdout: JSON.stringify({
+        key: 'SKILLS-14',
+        fields: {
+          summary: 'Artifact を見る UI',
+          status: { name: '未着手' },
+          description: body,
+          comment: { comments: [{ id: '1', body, author: { displayName: 'PM' }, created: '2026-11-20T10:00:00.000+0900' }] },
+        },
+      }),
+    });
+    expect(new JiraTracker(exec).view('SKILLS-14')).toEqual({
+      key: 'SKILLS-14',
+      tool: 'Jira',
+      title: 'Artifact を見る UI',
+      status: '未着手',
+      body: '本文',
+      comments: [{ id: '1', text: '本文', author: 'PM', created: '2026-11-20T10:00:00.000+0900' }],
+    });
+    expect(calls[0]?.args).toEqual(['jira', 'workitem', 'view', 'SKILLS-14', '--fields', 'summary,status,description,comment', '--json']);
   });
 
   test('comments は view の ADF を字にして返す', () => {
@@ -111,6 +158,22 @@ describe('GithubTracker', () => {
     expect(calls[0]?.args).toEqual(['issue', 'view', '12', '--json', 'comments']);
   });
 
+  test('view は題・状態・URL・本文・コメントを返す', () => {
+    const { exec, calls } = fake({
+      stdout: JSON.stringify({ title: 'T', state: 'OPEN', url: 'https://github.com/o/r/issues/12', body: 'B', comments: [{ id: 'IC_1', body: 'c', author: { login: 'pm' }, createdAt: '2026-11-20T01:00:00Z' }] }),
+    });
+    expect(new GithubTracker(exec, '/w').view('#12')).toEqual({
+      key: 'gh-12',
+      tool: 'GitHub の Issue',
+      title: 'T',
+      status: 'OPEN',
+      url: 'https://github.com/o/r/issues/12',
+      body: 'B',
+      comments: [{ id: 'IC_1', text: 'c', author: 'pm', created: '2026-11-20T01:00:00Z' }],
+    });
+    expect(calls[0]).toEqual({ cmd: 'gh', args: ['issue', 'view', '12', '--json', 'title,state,url,body,comments'], options: { cwd: '/w' } });
+  });
+
   test('close は completed で閉じる', () => {
     const { exec, calls } = fake();
     new GithubTracker(exec, '/w').close('12');
@@ -131,5 +194,6 @@ describe('NoneTracker', () => {
     none.comment();
     none.close();
     expect(none.comments()).toEqual([]);
+    expect(() => none.view('SKILLS-1')).toThrow(TpmError);
   });
 });

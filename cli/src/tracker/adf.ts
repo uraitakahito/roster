@@ -12,6 +12,8 @@ interface AdfNode {
   type: string
   text?: string
   content?: AdfNode[]
+  attrs?: Record<string, unknown>
+  marks?: { type: string, attrs?: { href?: unknown } }[]
 }
 
 const text = (value: string): AdfText => ({ type: 'text', text: value });
@@ -32,8 +34,41 @@ export function noteToAdf(note: Note) {
   };
 }
 
-/** ADF を、段落を改行でつないだ字にする。 */
+/** 中に字（inline）を持つ block。 */
+const INLINE_BLOCKS = new Set(['paragraph', 'heading', 'codeBlock']);
+
+/** inline の node を字にする。リンクは、字が URL でなければ URL を（）で添える。 */
+function inline(node: AdfNode): string {
+  if (node.type === 'text') {
+    const value = node.text ?? '';
+    const href = node.marks?.find(m => m.type === 'link')?.attrs?.href;
+    return typeof href === 'string' && href !== value ? `${value}（${href}）` : value;
+  }
+  if (node.type === 'hardBreak') return '\n';
+  if (node.type === 'inlineCard' && typeof node.attrs?.url === 'string') return node.attrs.url;
+  // mention・emoji・status などは attrs.text に字を持つ。
+  if (typeof node.attrs?.text === 'string') return node.attrs.text;
+  return (node.content ?? []).map(inline).join('');
+}
+
+/** block の node を行にする。リストは「- 」「1. 」を頭に付け、入れ子は字下げする。 */
+function blockLines(node: AdfNode): string[] {
+  if (node.type === 'bulletList' || node.type === 'orderedList') {
+    const start = typeof node.attrs?.order === 'number' ? node.attrs.order : 1;
+    return (node.content ?? []).flatMap((item, i) => {
+      const head = node.type === 'bulletList' ? '- ' : `${start + i}. `;
+      return (item.content ?? []).flatMap(blockLines).map((line, j) => (j === 0 ? head : ' '.repeat(head.length)) + line);
+    });
+  }
+  if (INLINE_BLOCKS.has(node.type)) {
+    const level = node.type === 'heading' && typeof node.attrs?.level === 'number' ? node.attrs.level : 0;
+    return `${'#'.repeat(level)}${level > 0 ? ' ' : ''}${(node.content ?? []).map(inline).join('')}`.split('\n');
+  }
+  if (node.content === undefined) return node.text === undefined ? [] : [node.text];
+  return node.content.flatMap(blockLines);
+}
+
+/** ADF を字にする。段落は改行でつなぎ、リストは「- 」「1. 」の行にし、リンクの URL は残す。 */
 export function adfToText(doc: unknown): string {
-  const flat = (node: AdfNode): string => node.text ?? (node.content ?? []).map(flat).join('');
-  return ((doc as AdfNode | null)?.content ?? []).map(flat).join('\n');
+  return ((doc as AdfNode | null)?.content ?? []).flatMap(blockLines).join('\n');
 }

@@ -36,6 +36,7 @@ export const COMMANDS = [
   'infra approve',
   'infra revoke',
   'infra run',
+  'issue view',
   'page put',
   'page path',
   'guard',

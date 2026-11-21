@@ -1,7 +1,7 @@
 // GitHub の Issue の adapter（命令は gh）。repo は project の folder の repo。
 import type { Exec } from '../exec.ts';
 import { TpmError } from '../skill-sets.ts';
-import { noteHead, type Note, type Tracker, type TrackerComment } from './types.ts';
+import { noteHead, type Note, type Tracker, type TrackerComment, type TrackerIssue } from './types.ts';
 
 /** 鍵は gh-12（workspace の題や branch に使う形）。#12 と 12 も受ける。 */
 const KEY = /^(?:gh-|#)?(\d+)$/i;
@@ -11,7 +11,22 @@ export function noteToMarkdown(note: Note): string {
   return [noteHead(note), ...note.links.map(l => `${l.label}: ${l.url}`), ...note.points].join('\n\n');
 }
 
-/** GitHub の Issue に記録を書く adapter。 */
+/** gh issue view --json が返すコメント 1 件。 */
+interface GithubComment {
+  id: string
+  body: string
+  author?: { login?: string }
+  createdAt?: string
+}
+
+const toComment = (c: GithubComment): TrackerComment => ({
+  id: c.id,
+  text: c.body,
+  ...(c.author?.login === undefined ? {} : { author: c.author.login }),
+  ...(c.createdAt === undefined ? {} : { created: c.createdAt }),
+});
+
+/** GitHub の Issue を読み、記録を書く adapter。 */
 export class GithubTracker implements Tracker {
   private readonly exec: Exec;
   private readonly project: string;
@@ -26,13 +41,33 @@ export class GithubTracker implements Tracker {
     return KEY.test(key);
   }
 
+  view(key: string): TrackerIssue {
+    const n = this.number(key);
+    const view = JSON.parse(this.run(['view', n, '--json', 'title,state,url,body,comments'])) as {
+      title?: string
+      state?: string
+      url?: string
+      body?: string
+      comments?: GithubComment[]
+    };
+    return {
+      key: `gh-${n}`,
+      tool: 'GitHub の Issue',
+      title: view.title ?? '',
+      status: view.state ?? '',
+      ...(view.url === undefined ? {} : { url: view.url }),
+      body: view.body ?? '',
+      comments: (view.comments ?? []).map(toComment),
+    };
+  }
+
   comment(key: string, note: Note): void {
     this.run(['comment', this.number(key), '--body-file', '-'], noteToMarkdown(note));
   }
 
   comments(key: string): TrackerComment[] {
-    const view = JSON.parse(this.run(['view', this.number(key), '--json', 'comments'])) as { comments?: { id: string, body: string }[] };
-    return (view.comments ?? []).map(c => ({ id: c.id, text: c.body }));
+    const view = JSON.parse(this.run(['view', this.number(key), '--json', 'comments'])) as { comments?: GithubComment[] };
+    return (view.comments ?? []).map(toComment);
   }
 
   close(key: string): void {
