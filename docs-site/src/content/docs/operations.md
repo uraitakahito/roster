@@ -19,62 +19,15 @@ description: この repo を別の folder へ移す手順、Node の version の
 2. 手元で `nodenv install` と、corepack の入れ直し（[Node と pnpm を入れる](/getting-started/#node-と-pnpm-を入れる)）。
 3. 新しい version で試験と docs の検査を流してから PR にする（[開発](/development/)）。major を上げるときは `cli/package.json` と `docs-site/package.json` の `engines.node` と、`@types/node` も合わせる。
 
-## 代わりの置き場（tpm-pages）
+## ページの置き場（tpm-pagestore）
 
-依頼書と成果の HTML を置く、この Mac だけの置き場。local の folder を読むだけで mount した Nginx を、Apple Container（`container` CLI）で動かす。`127.0.0.1` だけで待ち受け、LAN にもインターネットにも開かない。起こす・止める・直すのは DevOps Engineer 担当で、命令は `tpm infra run tpm-pages -- <命令>` で打つ（この repo の `.claude/roles/config.jsonc` が、環境 `tpm-pages` を「TPM に相談」の手続きで宣言している）。
-
-| 物 | 値 |
-|---|---|
-| 置き場の folder | `~/.local/share/tpm/pages/`（`<状態の folder の名>/<鍵>/<種類>-<番号>.html` と並ぶ） |
-| URL | `http://127.0.0.1:8800/`（folder の並びがそのまま path になる。folder の URL は一覧を出す） |
-| Nginx の設定 | `skill-sets/core/infra/tpm-pages/default.conf`（utf-8・一覧・`Cache-Control: no-cache`） |
-| image | 公式の `nginx` の stable の alpine。tag と digest で固定する（下の起こし方の 1 行） |
-
-### 起こす
-
-```sh
-mkdir -p ~/.local/share/tpm/pages
-tpm infra run tpm-pages -- container run -d --name tpm-pages \
-  -p 127.0.0.1:8800:80 \
-  -v "$HOME/.local/share/tpm/pages:/usr/share/nginx/html:ro" \
-  -v "<この repo>/skill-sets/core/infra/tpm-pages:/etc/nginx/conf.d:ro" \
-  -e TZ=Asia/Tokyo \
-  docker.io/library/nginx:1.30.5-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94
-```
-
-- `-p` には必ず `127.0.0.1:` を書く。`-p 8800:80` と書くと LAN に開く。
-- 8800 が使われていたら別の port にし、この節の URL と 1 行を合わせて直す。担当が `tpm page put` で使う URL も、環境変数 `TPM_PAGES_URL`（[設定](/configuration/)）で合わせる。
-
-### 確かめる
-
-1. `container list` で `tpm-pages` が `running`。
-2. `lsof -nP -iTCP:8800 -sTCP:LISTEN` が `127.0.0.1:8800` だけを出す（`*:8800` なら LAN に開いている）。
-3. `~/.local/share/tpm/pages/_check/index.html` に日本語の HTML を置き、`curl -si http://127.0.0.1:8800/_check/` が `200` と `Content-Type: text/html; charset=utf-8` を返す。`curl -s http://127.0.0.1:8800/` が folder の一覧を返す。
-4. 確かめた `_check` の folder を消す。
-
-### 止める・Mac を起こし直した後
-
-- 止めると、並べて動いている担当がみな依頼書と成果を開けなくなる。先に【ask-tpm】を送り、答えを待つ。止めるのは `tpm infra run tpm-pages -- container stop tpm-pages`。
-- `container run` に restart の決まりは無いので、Mac を起こし直すと止まったままになる。開けないと頼まれたら、`container system start` の後に `tpm infra run tpm-pages -- container start tpm-pages` を打ち、上の「確かめる」をする。
-
-### image を上げる
-
-1. 公式の `nginx` の stable の alpine から、公開から 2 週間以上たった版を選ぶ（tag は rebuild で中身が替わるので、digest まで書く）。
-2. この節の 1 行の tag と digest を直す PR を出し、merge する。
-3. 【ask-tpm】で止める時を決めてから、`container stop tpm-pages`・`container delete tpm-pages` を `tpm infra run tpm-pages --` で打ち、新しい 1 行で起こし直して「確かめる」をする。古い image は `container image delete` で消す。
-
-### ほかの project で使う
-
-置き場は Mac に 1 つで、どの project の担当も同じ置き場を使う。ほかの project で TPM 担当を起こすときも、その project の `.claude/roles/config.jsonc` に、この repo と同じ `infra.tpm-pages` の宣言を写す（写さないと、その project の担当は止める命令を断りなく打てる。[設定](/configuration/#環境の手続き)）。
-
-## 新しい置き場（tpm-pagestore）
-
-担当が置いたページを DB に持ち、絞って探せる一覧の UI を出すサーバー（`pagestore/`。作りは [開発](/development/#pagestorerust-の置き場)）。Apple Container で、tpm-pages と並べて動かす。**今はまだ `tpm page put` はここへ置かない**（置く先を替える時は、別に知らせる）。起こす・止める・直すのは DevOps Engineer 担当で、命令は `tpm infra run tpm-pagestore -- <命令>` で打つ（`.claude/roles/config.jsonc` が、環境 `tpm-pagestore` を「TPM に相談」の手続きで宣言している）。
+依頼書と成果のページを置く、この Mac だけの置き場。担当が `tpm page put` で置いたページを DB に持ち、絞って探せる一覧の UI を出すサーバー（`pagestore/`。作りは [開発](/development/#pagestorerust-の置き場)）を、Apple Container（`container` CLI）で動かす。`127.0.0.1` だけで待ち受け、LAN にもインターネットにも開かない。起こす・止める・直すのは DevOps Engineer 担当で、命令は `tpm infra run tpm-pagestore -- <命令>` で打つ（この repo の `.claude/roles/config.jsonc` が、環境 `tpm-pagestore` を「TPM に相談」の手続きで宣言している）。
 
 | 物 | 値 |
 |---|---|
 | container | `tpm-pagestore`（`127.0.0.1:8801` → 中の 8080。メモリは Apple Container の下限の 200 MiB、CPU は 1） |
 | URL | `http://127.0.0.1:8801/`（一覧の UI。ページは `/<状態の folder の名>/<鍵>/<種類>-<番号>.html`） |
+| 控えの folder | `~/.local/share/tpm/pages/`（`tpm` が、置いた・読んだページをこの Mac に写す所。container には mount しない） |
 | DB | 名前つきの volume `tpm-pagestore-data`（中の `/data/pages.db`）。Mac の folder は mount しない |
 | image | この Mac で `pagestore/Containerfile` から作る `tpm-pagestore:<commit の短い名>`。registry には上げない |
 
@@ -100,7 +53,8 @@ tpm infra run tpm-pagestore -- container run -d --name tpm-pagestore \
   tpm-pagestore:<commit の短い名>
 ```
 
-- `-p` には必ず `127.0.0.1:` を書く（tpm-pages と同じ）。
+- `-p` には必ず `127.0.0.1:` を書く。`-p 8801:8080` と書くと LAN に開く。
+- 8801 が使われていたら別の port にし、この節の URL と 1 行を合わせて直す。担当が使う URL も、環境変数 `TPM_PAGES_URL`（[設定](/configuration/)）で合わせる。
 - 起きる時に、まだ当てていない移行の SQL（`pagestore/migrations/`）を DB に当てる。
 
 ### 確かめる
@@ -137,11 +91,23 @@ tpm infra run tpm-pagestore -- container start tpm-pagestore
 
 - 動かす image は空で `cp` も無いので、file を volume に入れる時だけ、build の段の image（もうこの Mac にある）を借りる。
 - 起こしたら「確かめる」をし、`curl -s 'http://127.0.0.1:8801/api/pages?limit=1'` で一番新しいページを見る。
-- 写しが無ければ、空の volume で起こす。本文と番号は、担当の側の控えの folder から入れ直せる（役割と workspace の ID は戻らない）。
+- 写しが無ければ、空の volume で起こし、下の「控えから取り込む」をする（役割と workspace の ID は戻らない）。
+
+### 控えから取り込む
+
+前の置き場から切り替えた時と、DB を失って空の volume で起こした時は、控えの folder のページを置き場に入れる。
+
+```sh
+tpm page import
+```
+
+- 控えにあって置き場に無いページを、同じ番号・file の時刻で入れる。何度打っても同じ結果になる。
+- 置いた担当はわからないので、役割は依頼書と課題の写しだけ `tpm`、ほかは `unknown`、居場所は空で入る（DB の写しから戻せば、これらも戻る）。
+- 「ぶつかった」と出たページは、同じ番号に別の中身が置き場にある。入れていないので、要る物なら `tpm page put` で置き直す。
 
 ### 止める・Mac を起こし直した後
 
-- 止めている間、担当はページを置けない（番号をサーバーが決めるため）。先に【ask-tpm】を送り、答えを待つ。止めるのは `tpm infra run tpm-pagestore -- container stop tpm-pagestore`。DB は volume に残る。
+- 止めている間、担当はページを置けず、Product Manager は一覧の UI を開けない（番号をサーバーが決めるため。担当は、控えにあるページなら読める）。先に【ask-tpm】を送り、答えを待つ。止めるのは `tpm infra run tpm-pagestore -- container stop tpm-pagestore`。DB は volume に残る。
 - Mac を起こし直すと止まったままになる。`container system start` の後に `tpm infra run tpm-pagestore -- container start tpm-pagestore` を打ち、「確かめる」をする。
 - volume（`tpm-pagestore-data`）は消さない。消す命令も「TPM に相談」の手続きに入れてある。
 
@@ -155,3 +121,50 @@ tpm infra run tpm-pagestore -- container start tpm-pagestore
 4. 古い image は `container image delete` で消す。
 
 build の段の `rust` の image を上げる時は、`pagestore/rust-toolchain.toml` と同じ版の alpine を選び、`pagestore/Containerfile` の tag と digest を合わせて直す PR を出す（tag は rebuild で中身が替わるので、digest まで書く）。
+
+### ほかの project で使う
+
+置き場は Mac に 1 つで、どの project の担当も同じ置き場を使う（一覧の UI では project で絞れる）。ほかの project で TPM 担当を起こすときも、その project の `.claude/roles/config.jsonc` に、この repo と同じ `infra.tpm-pagestore` の宣言を写す（写さないと、その project の担当は止める命令を断りなく打てる。[設定](/configuration/#環境の手続き)）。
+
+## 前の置き場（tpm-pages）
+
+pagestore に切り替える前の置き場。控えの folder を読むだけで mount した Nginx を、Apple Container で動かしている。**新しいページはここには置かれない。** 前に置いたページの `http://127.0.0.1:8800/…` の link を開けるように、まだ動かしてある（控えの folder をそのまま出すので、新しいページも同じ path で見えるが、URL は 8801 の物を使う）。止める時は TPM 担当が決める。命令は `tpm infra run tpm-pages -- <命令>` で打つ（環境 `tpm-pages` も「TPM に相談」の手続き）。
+
+| 物 | 値 |
+|---|---|
+| 出す folder | `~/.local/share/tpm/pages/`（今は `tpm` の控えの folder。`<状態の folder の名>/<鍵>/<種類>-<番号>.html` と並ぶ） |
+| URL | `http://127.0.0.1:8800/`（folder の並びがそのまま path になる。folder の URL は一覧を出す） |
+| Nginx の設定 | `skill-sets/core/infra/tpm-pages/default.conf`（utf-8・一覧・`Cache-Control: no-cache`） |
+| image | 公式の `nginx` の stable の alpine。tag と digest で固定する（下の起こし方の 1 行） |
+
+### 起こす
+
+```sh
+mkdir -p ~/.local/share/tpm/pages
+tpm infra run tpm-pages -- container run -d --name tpm-pages \
+  -p 127.0.0.1:8800:80 \
+  -v "$HOME/.local/share/tpm/pages:/usr/share/nginx/html:ro" \
+  -v "<この repo>/skill-sets/core/infra/tpm-pages:/etc/nginx/conf.d:ro" \
+  -e TZ=Asia/Tokyo \
+  docker.io/library/nginx:1.30.5-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94
+```
+
+- `-p` には必ず `127.0.0.1:` を書く。`-p 8800:80` と書くと LAN に開く。
+
+### 確かめる
+
+1. `container list` で `tpm-pages` が `running`。
+2. `lsof -nP -iTCP:8800 -sTCP:LISTEN` が `127.0.0.1:8800` だけを出す（`*:8800` なら LAN に開いている）。
+3. `~/.local/share/tpm/pages/_check/index.html` に日本語の HTML を置き、`curl -si http://127.0.0.1:8800/_check/` が `200` と `Content-Type: text/html; charset=utf-8` を返す。`curl -s http://127.0.0.1:8800/` が folder の一覧を返す。
+4. 確かめた `_check` の folder を消す。
+
+### 止める・Mac を起こし直した後
+
+- 止めると、前に置いたページの `8800` の link が開けなくなる（担当は `tpm page path` で控えから読める）。先に【ask-tpm】を送り、答えを待つ。止めるのは `tpm infra run tpm-pages -- container stop tpm-pages`。
+- `container run` に restart の決まりは無いので、Mac を起こし直すと止まったままになる。開けないと頼まれたら、`container system start` の後に `tpm infra run tpm-pages -- container start tpm-pages` を打ち、上の「確かめる」をする。
+
+### image を上げる
+
+1. 公式の `nginx` の stable の alpine から、公開から 2 週間以上たった版を選ぶ（tag は rebuild で中身が替わるので、digest まで書く）。
+2. この節の 1 行の tag と digest を直す PR を出し、merge する。
+3. 【ask-tpm】で止める時を決めてから、`container stop tpm-pages`・`container delete tpm-pages` を `tpm infra run tpm-pages --` で打ち、新しい 1 行で起こし直して「確かめる」をする。古い image は `container image delete` で消す。

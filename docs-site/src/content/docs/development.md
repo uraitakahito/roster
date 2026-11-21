@@ -48,7 +48,7 @@ build は無い。`cli/bin/tpm` は `cli/src/cli.ts` を node で直に動かす
 
 ## pagestore（Rust の置き場）
 
-`pagestore/` は、担当が置くページを DB に持つサーバー（Rust）。`cli/` とは別の project で、道具も lockfile も自分で持つ。今はまだ `tpm` はここへ置かない（置き場は [運用](/operations/) の tpm-pages のまま）。
+`pagestore/` は、担当が置くページを DB に持つサーバー（Rust）。`cli/` とは別の project で、道具も lockfile も自分で持つ。`tpm page put`・`path`・`list`・`import`（`cli/src/commands/page.ts`）が、`curl` でここの口を呼ぶ。
 
 | ファイル | 中身 |
 |---|---|
@@ -62,7 +62,7 @@ build は無い。`cli/bin/tpm` は `cli/src/cli.ts` を node で直に動かす
 | `pagestore/src/text.rs` | HTML から題と検索用の字を取り出す |
 | `pagestore/migrations/` | 表を作る SQL（起きる時に、まだ当てていない物を当てる） |
 | `pagestore/.sqlx/` | SQL の検査用の file（commit する） |
-| `pagestore/Containerfile` | image の作り方（静的な binary を、空の image に 1 つだけ置く）。作る・起こす手順は [運用](/operations/#新しい置き場tpm-pagestore) |
+| `pagestore/Containerfile` | image の作り方（静的な binary を、空の image に 1 つだけ置く）。作る・起こす手順は [運用](/operations/#ページの置き場tpm-pagestore) |
 
 Rust は `rustup` で入れる（Homebrew の `rust` は `pagestore/rust-toolchain.toml` を読まない）。版は `pagestore/rust-toolchain.toml` が決め、`pagestore/` の中で `cargo` を打つと、その版が入って使われる。
 
@@ -75,7 +75,7 @@ SQLX_OFFLINE=true cargo test --locked
 PAGESTORE_DB=/tmp/pages.db PAGESTORE_LISTEN=127.0.0.1:18801 cargo run   # 手元で起こす
 ```
 
-GitHub Actions でも同じ順に流す（`.github/workflows/pagestore.yml`）。試験は、試験ごとに一時の DB を作る。workflow の `image` は、`pagestore/Containerfile` を arm64 の runner で build し、空の image の中で起きて置いて読めること・止める合図で終わること・起こし直しても残ることを見る。
+GitHub Actions でも同じ順に流す（`.github/workflows/pagestore.yml`）。試験は、試験ごとに一時の DB を作る。workflow の `image` は、`pagestore/Containerfile` を arm64 の runner で build し、空の image の中で起きて置いて読めること・止める合図で終わること・起こし直しても残ることを見る。workflow の `cli` は、build した pagestore を起こし、`cli/test/pagestore-e2e.test.ts` で `tpm page put`・`path`・`list`・`import` を本物に向けて流す（`cli/src/` のすべての役割とページの種類で 1 枚ずつ置いて読む）。`cli/` のほかの試験は偽の置き場（`cli/test/helpers.ts` の `FakeStore`）で流すので、口の形（URL・引数の名・JSON の欄）を変えたら、両方を合わせて直す。手元では、上の「手元で起こす」の後に `cd cli && TPM_E2E_PAGES_URL=http://127.0.0.1:18801 pnpm exec vitest run test/pagestore-e2e.test.ts`。
 
 - **口**: `POST /api/pages?project=&key=&kind=&role=&workspace=`（本文は HTML。番号を決めて `201` と JSON を返す。`n`・`created_at` は取り込みの時だけ付け、番号が使われていれば `409`）・`GET /api/pages`（`project`・`key`・`kind`・`role`・`workspace`・`q`・`sort`・`limit`・`before`・`after` で絞る）・`GET /<project>/<key>/<kind>-<n>.html`（本文）・`GET /`（一覧の UI。`/<project>/`・`/<project>/<key>/` は絞った一覧）・`GET /api/events`（置かれるたびに 1 件を push）・`GET /api/backup`（DB の写し）・`GET /healthz`。
 - **種類と役割の名**: 一覧は `cli/src/` だけが持つ。サーバーは字の形（英小文字で始まり、英小文字・数字・`-` で 32 字まで）だけを見るので、`cli` に種類や役割を足してもサーバーは変えない。

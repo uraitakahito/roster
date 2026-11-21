@@ -106,12 +106,12 @@ export TPM_EFFORT=medium
 
 ## ページの置き場の環境変数（任意）
 
-`tpm page put`・`tpm page path` が使う、代わりの置き場（[担当のあいだの決まり](/protocol/#ページの置き場)）の folder と URL。置き場は Mac に 1 つで、project をまたいで同じなので、`.claude/roles/config.jsonc` には書かない。替えるのは、置き場の container の mount や port を替えたときだけ。
+`tpm page put`・`tpm page path`・`tpm page list`・`tpm page import` が使う、置き場（[担当のあいだの決まり](/protocol/#ページの置き場)）の URL と、控えの folder。置き場は Mac に 1 つで、project をまたいで同じなので、`.claude/roles/config.jsonc` には書かない。替えるのは、置き場の container の port を替えたときだけ。
 
 | 環境変数 | 決める物 | 無いとき |
 |---|---|---|
-| `TPM_PAGES_DIR` | 置き場の folder（container に mount する folder と同じにする） | `$XDG_DATA_HOME/tpm/pages`（`$XDG_DATA_HOME` も無ければ `~/.local/share/tpm/pages`） |
-| `TPM_PAGES_URL` | 置き場の URL（container の port の publish と同じにする） | `http://127.0.0.1:8800` |
+| `TPM_PAGES_DIR` | 控えの folder（置いた・読んだページをこの Mac に写す所。前の置き場の folder と同じ） | `$XDG_DATA_HOME/tpm/pages`（`$XDG_DATA_HOME` も無ければ `~/.local/share/tpm/pages`） |
+| `TPM_PAGES_URL` | 置き場の URL（container の port の publish と同じにする） | `http://127.0.0.1:8801` |
 
 ## Dependabot の設定
 

@@ -39,6 +39,8 @@ export const COMMANDS = [
   'issue view',
   'page put',
   'page path',
+  'page list',
+  'page import',
   'guard',
   'run-role',
 ] as const;

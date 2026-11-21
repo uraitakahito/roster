@@ -48,13 +48,15 @@ flowchart TB
 
 ## ページの置き場
 
-依頼書・確認・提案・計画・結果の HTML を置く、この Mac だけの置き場。local の folder を読むだけで mount した Nginx の container が、`127.0.0.1` だけで待ち受ける（起こし方は [運用](/operations/)。起こす・止めるのは DevOps Engineer 担当）。
+依頼書・確認・提案・計画・結果の HTML を置く、この Mac だけの置き場。ページを DB に持つサーバー（pagestore）の container が、`127.0.0.1` だけで待ち受ける（起こし方は [運用](/operations/#ページの置き場tpm-pagestore)。起こす・止めるのは DevOps Engineer 担当）。`http://127.0.0.1:8801/` が一覧の UI で、Product Manager は、置いた担当の役割・居場所（workspace の ID）・鍵・種類で絞り、時刻で並べ、題と本文を探して、選んだ 1 枚を同じ画面で読む。
 
-- `tpm page put <file> --kind <種類>` が、file を `<置き場の folder>/<状態の folder の名>/<鍵>/<種類>-<番号>.html` に写し、置き場が応えるのを確かめてから URL を出す。種類は `brief`・`confirm`・`proposal`・`plan`・`result`・`issue`（課題の写し。ふだんは `tpm assign` が置く）。鍵は担当なら今の課題の鍵、TPM 担当は `--key` で書く。番号は同じ鍵・同じ種類の次の番号で、前の版は上書きしない。
-- 置き場が応えなければ、file は置いたまま止まる。`tpm ask devops` で起こすよう頼む。
-- `tpm page path <URL>` が、置き場の URL を file の path にする（Read tool で読むため）。
-- project の名に状態の folder の名を使うので、TPM 担当と、起こされた担当とで URL がずれない。課題の folder の URL（`…/<鍵>/`）は、その課題のページの一覧を出す。
-- 置き場の folder と URL は、環境変数 `TPM_PAGES_DIR`・`TPM_PAGES_URL` で替えられる（[設定](/configuration/)）。
+- `tpm page put <file> --kind <種類>` が、file を置き場に送り、URL（`<置き場の URL>/<状態の folder の名>/<鍵>/<種類>-<番号>.html`）を出す。置いた担当の役割（`$TPM_ROLE`。TPM 担当は `tpm`）と居場所の宛先も、一緒に置き場に入る。同じ中身を、この Mac の控えの folder（`<控えの folder>/<状態の folder の名>/<鍵>/<種類>-<番号>.html`）にも写す。種類は `brief`・`confirm`・`proposal`・`plan`・`result`・`issue`（課題の写し。ふだんは `tpm assign` が置く）。鍵は担当なら今の課題の鍵、TPM 担当は `--key` で書く。番号は置き場が決める（同じ鍵・同じ種類の次の番号。多くの担当が同時に置いても重ならない）。置いたページを書き換える・消す口は無い。
+- 置き場が応えなければ、ページは置けない。控えにあるページは読める。`tpm ask devops` で起こすよう頼む。
+- `tpm page path <URL>` が、置き場の URL を控えの file の path にする（Read tool で読むため）。控えに無ければ、置き場から取って控えに写す。前の置き場（Nginx）の `http://127.0.0.1:8800` の URL も、同じ控えの path になる。
+- `tpm page list` が、置き場のページを絞って探す（`--key`・`--role`・`--workspace`・`--kind`・`--q`。`--json` は記録の配列）。既定は今の project の新しい順 50 件で、`--all-projects` でほかの project も出す。
+- `tpm page import` が、控えの folder にあって置き場に無いページを、同じ番号・file の時刻で置き場に入れる（前の置き場からの切り替えと、DB を失った後。何度打っても同じ結果）。置いた担当はわからないので、役割は依頼書と課題の写しだけ `tpm`、ほかは `unknown` で入る。
+- project の名に状態の folder の名を使うので、TPM 担当と、起こされた担当とで URL がずれない。課題の folder の URL（`…/<鍵>/`）は、その課題で絞った一覧を出す。
+- 控えの folder と置き場の URL は、環境変数 `TPM_PAGES_DIR`・`TPM_PAGES_URL` で替えられる（[設定](/configuration/)）。
 
 ## 状態
 

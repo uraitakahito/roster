@@ -2,7 +2,7 @@
 // 節は `<section id="summary">`（tpm/brief-template.md）。字の一致で見て、HTML の parser は使わない。中身の良し悪しは見ない。
 import { readFileSync } from 'node:fs';
 import type { Context } from './context.ts';
-import { pagePath, pagesUrl } from './commands/page.ts';
+import { isPageUrl, pagePath } from './commands/page.ts';
 import { TpmError } from './skill-sets.ts';
 
 /** 概要の節に要る字の数（見出しを除く）。見出しだけの空の節を止めるため。 */
@@ -23,7 +23,7 @@ export function summaryText(html: string): string | undefined {
 
 /** 依頼書（置き場のページ）に概要の節があり、SUMMARY_MIN 字以上あるかを確かめる。無ければ、直し方を添えて止まる。 */
 export function assertSummary(ctx: Context, key: string, url: string): void {
-  if (!url.startsWith(`${pagesUrl(ctx.env)}/`)) {
+  if (!isPageUrl(ctx.env, url)) {
     throw new TpmError(`依頼書は置き場のページにしてください（tpm page put <file> --kind brief --key ${key} で置き、出た URL を --brief に書く）: ${url}`);
   }
   const [path = ''] = pagePath(ctx, url);
