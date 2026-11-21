@@ -74,12 +74,6 @@ export class JiraTracker implements Tracker {
     }
   }
 
-  comments(key: string): TrackerComment[] {
-    // comment list は ADF を平らな字にしてリンクを落とすので使わない。view が ADF をそのまま返す。
-    const out = this.run(['view', key, '--fields', 'comment', '--json']);
-    return ((JSON.parse(out) as JiraView).fields?.comment?.comments ?? []).map(toComment);
-  }
-
   close(key: string): void {
     this.run(['transition', '--key', key, '--status', DONE_STATUS, '--yes']);
   }

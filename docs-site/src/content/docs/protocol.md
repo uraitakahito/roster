@@ -19,7 +19,7 @@ TPM 担当が書く依頼書には、その課題だけのことを書く（ひ�
 | 役割 | 誰が何を受け持つか | `skill-sets/` の `SKILL.md` |
 | 決まり | 見出し・順番・記録・名簿 | `protocol.md` の文と、`cli/src/protocol.ts`・`cli/src/roster.ts`・`cli/src/commands/` |
 | 連携の道具 | メッセージを送る・担当を起こす・状態を出す | `cli/src/transport/`（`cmux`・試験用の `file`） |
-| 課題管理の道具 | 課題を読む・課題に記録を書く・読む・課題を閉じる | `cli/src/tracker/`（`jira`・`github`・`none`） |
+| 課題管理の道具 | 課題を読む・課題に記録を書く・課題を閉じる | `cli/src/tracker/`（`jira`・`github`・`none`） |
 | guard | 共有の環境と、道具の直打ちを止める | `cli/src/guard.ts`（Claude Code の hook から呼ばれる） |
 
 ```mermaid

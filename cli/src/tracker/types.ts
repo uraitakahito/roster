@@ -1,4 +1,4 @@
-// 課題管理の口。課題を読む・課題に記録（コメント）を書く・読む・課題を閉じる、の 4 つを、道具（Jira・GitHub の Issue）ごとの形に写す。
+// 課題管理の口。課題を読む（題・状態・本文・コメント）・課題に記録（コメント）を書く・課題を閉じる、の 3 つを、道具（Jira・GitHub の Issue）ごとの形に写す。
 // 誰が・いつ・どの種類を書くかは、この上の層（決まり）が持つ。
 
 /** 記録の種類（1 行目の【】の中）。 */
@@ -25,7 +25,7 @@ export interface Note {
   points: string[]
 }
 
-/** 課題から読み返したコメント 1 件。 */
+/** 課題から読んだコメント 1 件（view が返す）。 */
 export interface TrackerComment {
   id: string
   /** 段落を改行でつないだ字。 */
@@ -58,8 +58,6 @@ export interface Tracker {
   view(key: string): TrackerIssue
   /** 課題に記録を 1 件書く。 */
   comment(key: string, note: Note): void
-  /** 課題のコメントを読む。 */
-  comments(key: string): TrackerComment[]
   /** 課題を済みにする。 */
   close(key: string): void
 }
