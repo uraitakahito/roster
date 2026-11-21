@@ -1,5 +1,7 @@
 // この repo で TPM 担当を起こしたときの設定（書き方は docs-site の設定のページ）。書いていない欄は既定のまま。
 {
+  // 課題の記録は Jira（acli が login している site。今は future-gadget-laboratory.atlassian.net の SKILLS）に書く。
+  "tracker": "jira",
   "infra": {
     // ページの置き場（pagestore の container と、DB を置く volume）。止めると担当はページを置けず、
     // volume を消すと置かれたページの記録（役割・workspace の ID）が消える。
