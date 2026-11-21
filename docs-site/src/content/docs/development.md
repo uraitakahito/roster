@@ -48,14 +48,14 @@ build は無い。`cli/bin/tpm` は `cli/src/cli.ts` を node で直に動かす
 
 ## pagestore（Rust の置き場）
 
-`pagestore/` は、担当が置くページを DB に持つサーバー（Rust）。`cli/` とは別の project で、道具も lockfile も自分で持つ。`tpm page put`・`path`・`list`・`import`（`cli/src/commands/page.ts`）が、`curl` でここの口を呼ぶ。
+`pagestore/` は、担当が置くページを DB に持つサーバー（Rust）。`cli/` とは別の project で、道具も lockfile も自分で持つ。`tpm page put`・`path`・`list`・`import`・`delete`（`cli/src/commands/page.ts`）が、`curl` でここの口を呼ぶ。
 
 | ファイル | 中身 |
 |---|---|
 | `pagestore/src/main.rs` | 設定を読む・起こす・止める |
 | `pagestore/src/lib.rs` | 道筋と、この Mac の中からの要求だけを受ける守り |
 | `pagestore/src/db.rs` | 接続・移行・SQL |
-| `pagestore/src/api.rs` | 置く・探す・DB の写し |
+| `pagestore/src/api.rs` | 置く・探す・消す・DB の写し |
 | `pagestore/src/pages.rs` | ページの本文を返す |
 | `pagestore/src/ui.rs`・`pagestore/templates/index.html` | 一覧の UI（askama の template。build の時に検査される） |
 | `pagestore/src/events.rs` | 新着の push（SSE） |

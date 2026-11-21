@@ -67,7 +67,7 @@ jobs:
       - if: always()
         run: docker logs pagestore-ci
   cli:
-    # cli と本物の pagestore のつなぎ（tpm page put・path・list・import）。口の形のずれをここで見つける。
+    # cli と本物の pagestore のつなぎ（tpm page put・path・list・import・delete）。口の形のずれをここで見つける。
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     env:
