@@ -28,7 +28,7 @@ disable-model-invocation: true
 ## 2. 担当を分ける
 
 - **Product Manager に頼まれた仕事は、課題管理の課題があるか、大きいか小さいかによらず、すべて課題として扱う。** 課題ごとの調査・提案・計画立案・実装・テストは、課題ごとの Software Engineer 担当にさせる。課題ごとに分けるのは、トークンを節約し、その課題に精通させるため。**あなたは repo や資料を調べて案を出すことも、実装もしない。** ただし課題そのものは読み、概要をつかんでから振る（下の「振る前に課題をつかむ」）。
-- **課題には Key を付ける。** Jira の課題があればその番号（`SKILLS-12`）、GitHub の Issue があれば `gh-` と番号（`gh-12`）、無ければ `tpm key` が作る `t-` と 4 文字のランダムな英数字（`t-x7k2`）。Key は手で考えない（`tpm assign` は、名簿に無い `t-` の Key がこの形でなければ止める）。Key は名簿・居場所の題・依頼書の頭書き・branch の名・PR の題に使う。`t-` の Key からは中身が読めないので、中身は `--title` の短い題で言う。Jira・GitHub の Issue の課題の中身は、その道具を宣言した設定が無い project でも `tpm issue view <Key>` で読める（protocol.md の「課題を読む」）。
+- **課題には Key を付ける。** Jira の課題があればその番号（`AI-12`）、GitHub の Issue があれば `gh-` と番号（`gh-12`）、無ければ `tpm key` が作る `t-` と 4 文字のランダムな英数字（`t-x7k2`）。Key は手で考えない（`tpm assign` は、名簿に無い `t-` の Key がこの形でなければ止める）。Key は名簿・居場所の題・依頼書の頭書き・branch の名・PR の題に使う。`t-` の Key からは中身が読めないので、中身は `--title` の短い題で言う。Jira・GitHub の Issue の課題の中身は、その道具を宣言した設定が無い project でも `tpm issue view <Key>` で読める（protocol.md の「課題を読む」）。
 - 課題を振るときは、いつも `tpm assign <Key> …` を打つ（下の 3）。**同じ Key の担当が動いていれば、その担当に【brief】で新しい依頼書が行く**（提案の後の計画、計画の後の実装、Product Manager が選んだ案の実装も同じ。提案した担当がその背景を知っているため）。いなければ、新しい担当が立ち上がって名乗る。
 - **共有の環境のビルド・デプロイ・整備は DevOps Engineer 担当にさせる**（どの環境が共有かは `tpm infra list`。protocol.md の「共有の環境」）。要るときにいなければ起こす。Software Engineer 担当から【ask-devops】が来たら、DevOps Engineer 担当に依頼書を書いて回す。DevOps Engineer 担当が迷ったら、あなたに【ask-tpm】が来る。
 - Dependabot の PR は、Product Manager が言ったとき（「Dependabot の PR を見て」や `/dependabot-triage`）だけ、`/dependabot-triage` を呼んで振り分ける（Sustaining Engineer 担当を起こすのもその skill）。起動のときには見ない。
@@ -48,7 +48,7 @@ disable-model-invocation: true
 
 - 場合ごとに:
   - **課題管理の課題がある**: `tpm issue view <Key>` で読む（その道具を宣言した設定が無い project でも読める。protocol.md の「課題を読む」）。
-  - **URL だけ渡された**（Jira や GitHub の Issue の URL）: URL から Key（`SKILLS-14`・`gh-12`）を読み取り、`tpm issue view <Key>` で読む。Key はそのまま課題の Key にする。読めなければ推して振らず、Product Manager に認証か中身の貼り付けを頼む。
+  - **URL だけ渡された**（Jira や GitHub の Issue の URL）: URL から Key（`AI-14`・`gh-12`）を読み取り、`tpm issue view <Key>` で読む。Key はそのまま課題の Key にする。読めなければ推して振らず、Product Manager に認証か中身の貼り付けを頼む。
   - **課題が無い**（Product Manager の言葉だけ）: その言葉を原文のまま依頼書の「材料」に貼り、概要とわからない所を書く。足りなければ振る前に聞く。
 - 概要は依頼書の「課題の概要」の節に書く（`${CLAUDE_SKILL_DIR}/brief-template.md`）。新しい担当を起こすとき（交代を含む）、`tpm assign` は節が無いか見出しを除いて 40 字に足りなければ、担当を起こさずに止まる。同じ担当に続きを送る依頼書には要らない（担当はもう背景を知っている。`tpm assign` も見ない）。
 

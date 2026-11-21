@@ -1,5 +1,5 @@
 // 課題の Key の形で道具を選ぶ adapter。設定は project の folder とその直下の folder の物を合わせるので、道具は 1 つに決まらない。
-// Jira の形（SKILLS-12）は、jira を宣言した設定が 1 つでもあれば Jira。gh- の形は、github を宣言した設定の folder の repo。
+// Jira の形（AI-12）は、jira を宣言した設定が 1 つでもあれば Jira。gh- の形は、github を宣言した設定の folder の repo。
 // どの設定も宣言していない道具の Key と t- の Key は持たない（記録を書かない）。
 import type { ConfigSource, RecordingTracker, RolesConfig } from '../config.ts';
 import type { Exec } from '../exec.ts';

@@ -70,7 +70,7 @@ Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【
 
 ## 課題を読む
 
-課題の Key が Jira（`SKILLS-12`）か GitHub の Issue（`gh-12`）の形なら、課題の題・状態・本文・コメントを `tpm issue view <Key>` で読む。
+課題の Key が Jira（`AI-12`）か GitHub の Issue（`gh-12`）の形なら、課題の題・状態・本文・コメントを `tpm issue view <Key>` で読む。
 
 - その Key の道具を宣言した設定が無い project でも読める（設定の `tracker` は `tpm` の命令が課題に記録を書くかを決めるだけで、課題は Key の形で道具を選んで読む）。
 - `tpm hello` が `課題の中身:` の行を返したら、依頼書と一緒に読む。依頼書に Jira や GitHub の URL しか無くても、まずこれで読む。

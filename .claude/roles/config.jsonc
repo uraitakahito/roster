@@ -1,6 +1,6 @@
 // この repo で TPM 担当を起こしたときの設定（書き方は docs-site の設定のページ）。書いていない欄は既定のまま。
 {
-  // 課題の記録は Jira（acli が login している site。今は future-gadget-laboratory.atlassian.net の SKILLS）に書く。
+  // 課題の記録は Jira（acli が login している site。今は future-gadget-laboratory.atlassian.net の AI）に書く。
   "tracker": "jira",
   "infra": {
     // ページの置き場（別の repo の pagetray の image で動かす container と、DB を置く volume）。

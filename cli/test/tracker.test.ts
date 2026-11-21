@@ -82,15 +82,15 @@ describe('ADF', () => {
 describe('JiraTracker', () => {
   test('Jira の Key だけを自分の物とする', () => {
     const jira = new JiraTracker(fake().exec);
-    expect(['SKILLS-12', 'AB2-1'].map(k => jira.owns(k))).toEqual([true, true]);
-    expect(['t-same-se', 'gh-12', 'skills-12', '12'].map(k => jira.owns(k))).toEqual([false, false, false, false]);
+    expect(['AI-12', 'AB2-1'].map(k => jira.owns(k))).toEqual([true, true]);
+    expect(['t-same-se', 'gh-12', 'ai-12', '12'].map(k => jira.owns(k))).toEqual([false, false, false, false]);
   });
 
   test('comment は ADF をファイルで渡し、後でファイルを消す', () => {
     const { exec, calls, seen } = fake();
-    new JiraTracker(exec).comment('SKILLS-12', note);
+    new JiraTracker(exec).comment('AI-12', note);
     expect(calls[0]?.cmd).toBe('acli');
-    expect(calls[0]?.args.slice(0, 7)).toEqual(['jira', 'workitem', 'comment', 'create', '--key', 'SKILLS-12', '--body-file']);
+    expect(calls[0]?.args.slice(0, 7)).toEqual(['jira', 'workitem', 'comment', 'create', '--key', 'AI-12', '--body-file']);
     expect(JSON.parse(seen[0] ?? '')).toEqual(noteToAdf(note));
     expect(existsSync(calls[0]?.args.at(-1) ?? '')).toBe(false);
   });
@@ -99,7 +99,7 @@ describe('JiraTracker', () => {
     const body = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: '本文' }] }] };
     const { exec, calls } = fake({
       stdout: JSON.stringify({
-        key: 'SKILLS-14',
+        key: 'AI-14',
         fields: {
           summary: 'Artifact を見る UI',
           status: { name: '未着手' },
@@ -108,25 +108,25 @@ describe('JiraTracker', () => {
         },
       }),
     });
-    expect(new JiraTracker(exec).view('SKILLS-14')).toEqual({
-      key: 'SKILLS-14',
+    expect(new JiraTracker(exec).view('AI-14')).toEqual({
+      key: 'AI-14',
       tool: 'Jira',
       title: 'Artifact を見る UI',
       status: '未着手',
       body: '本文',
       comments: [{ id: '1', text: '本文', author: 'PM', created: '2026-11-20T10:00:00.000+0900' }],
     });
-    expect(calls[0]?.args).toEqual(['jira', 'workitem', 'view', 'SKILLS-14', '--fields', 'summary,status,description,comment', '--json']);
+    expect(calls[0]?.args).toEqual(['jira', 'workitem', 'view', 'AI-14', '--fields', 'summary,status,description,comment', '--json']);
   });
 
   test('close は状態を 完了 に進める', () => {
     const { exec, calls } = fake();
-    new JiraTracker(exec).close('SKILLS-12');
-    expect(calls[0]?.args).toEqual(['jira', 'workitem', 'transition', '--key', 'SKILLS-12', '--status', '完了', '--yes']);
+    new JiraTracker(exec).close('AI-12');
+    expect(calls[0]?.args).toEqual(['jira', 'workitem', 'transition', '--key', 'AI-12', '--status', '完了', '--yes']);
   });
 
   test('acli が失敗したら TpmError', () => {
-    expect(() => new JiraTracker(fake({ status: 1, stderr: 'not found\n' }).exec).close('SKILLS-999')).toThrow(TpmError);
+    expect(() => new JiraTracker(fake({ status: 1, stderr: 'not found\n' }).exec).close('AI-999')).toThrow(TpmError);
   });
 });
 
@@ -138,7 +138,7 @@ describe('GithubTracker', () => {
   test('gh-12・#12・12 を自分の Key とする', () => {
     const github = new GithubTracker(fake().exec, '/w');
     expect(['gh-12', 'GH-12', '#12', '12'].map(k => github.owns(k))).toEqual([true, true, true, true]);
-    expect(['SKILLS-12', 't-x7k2', 'gh-'].map(k => github.owns(k))).toEqual([false, false, false]);
+    expect(['AI-12', 't-x7k2', 'gh-'].map(k => github.owns(k))).toEqual([false, false, false]);
   });
 
   test('comment は project の folder で、本文を標準入力で渡す', () => {
@@ -171,7 +171,7 @@ describe('GithubTracker', () => {
 
   test('Key の形が違えば gh を打たずに TpmError', () => {
     const { exec, calls } = fake();
-    expect(() => new GithubTracker(exec, '/w').close('SKILLS-12')).toThrow(/gh-12 の形/);
+    expect(() => new GithubTracker(exec, '/w').close('AI-12')).toThrow(/gh-12 の形/);
     expect(calls).toHaveLength(0);
   });
 });
@@ -187,23 +187,23 @@ describe('route・RoutedTracker', () => {
   test('Key の形で道具を選ぶ。gh は、github を宣言した設定の folder で打つ', () => {
     const { exec, calls } = fake();
     const trackers = { jira: [jira], github: [web] };
-    expect(route(trackers, exec, 'SKILLS-12')).toEqual({ tool: 'jira', source: jira });
+    expect(route(trackers, exec, 'AI-12')).toEqual({ tool: 'jira', source: jira });
     expect(route(trackers, exec, 'gh-12')).toEqual({ tool: 'github', source: web });
     expect(route(trackers, exec, 't-x7k2')).toBeUndefined();
     const tracker = new RoutedTracker(trackers, exec);
     tracker.comment('gh-12', note);
-    tracker.close('SKILLS-12');
+    tracker.close('AI-12');
     expect(calls.map(c => [c.cmd, c.options?.cwd])).toEqual([['gh', '/w/web'], ['acli', undefined]]);
   });
 
   test('宣言した設定が無い道具の Key は持たず、何も打たない', () => {
     const { exec, calls } = fake();
     const onlyJira = new RoutedTracker({ jira: [jira], github: [] }, exec);
-    expect(onlyJira.owns('SKILLS-12')).toBe(true);
+    expect(onlyJira.owns('AI-12')).toBe(true);
     expect(onlyJira.owns('gh-12')).toBe(false);
     const none = new RoutedTracker({ jira: [], github: [] }, exec);
-    expect(none.owns('SKILLS-12')).toBe(false);
-    expect(() => none.view('SKILLS-12')).toThrow(TpmError);
+    expect(none.owns('AI-12')).toBe(false);
+    expect(() => none.view('AI-12')).toThrow(TpmError);
     expect(() => none.comment('gh-12', note)).toThrow(/課題管理の課題ではありません: gh-12/);
     expect(calls).toHaveLength(0);
   });
@@ -212,7 +212,7 @@ describe('route・RoutedTracker', () => {
     const { exec, calls } = fake();
     const tracker = new RoutedTracker({ jira: [jira], github: [web, source('api', 'github')] }, exec);
     expect(() => tracker.owns('gh-12')).toThrow(/どの repo の Issue かが決まりません.*\/w\/web\/\.claude\/roles\/config\.jsonc・\/w\/api\/\.claude\/roles\/config\.jsonc.*folders で/);
-    expect(tracker.owns('SKILLS-12')).toBe(true);
+    expect(tracker.owns('AI-12')).toBe(true);
     expect(tracker.owns('t-x7k2')).toBe(false);
     expect(calls).toHaveLength(0);
   });
