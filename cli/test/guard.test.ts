@@ -7,7 +7,30 @@ import { guard, infraApprove, infraList, infraRevoke, infraRun } from '../src/co
 import type { InfraEnv } from '../src/config.ts';
 import { commandOf, guardSettings, judge, touched, type Approval } from '../src/guard.ts';
 import type { RoleName } from '../src/protocol.ts';
+import { splitCommands } from '../src/shell.ts';
 import { world } from './helpers.ts';
+
+describe('splitCommands', () => {
+  test('単純な命令に分け、引用を外し、頭の代入・前に付く語・path・redirect の先を外す', () => {
+    expect(splitCommands('cd "/a b" && FOO=1 sudo -E /usr/bin/git commit -m \'x; y\' 2>&1 | tee log')).toEqual([
+      ['cd', '/a b'],
+      ['git', 'commit', '-m', 'x; y'],
+      ['tee', 'log'],
+    ]);
+  });
+
+  test('$(…)・`…`・sh -c の中の命令を（外の命令より先に）拾い、here-document の中身と注釈は拾わない', () => {
+    expect(splitCommands('a=$(b c) d "`e`"\nbash -c \'f; g\'\ncat <<\'E\'\nh i\nE\nj # k')).toEqual([
+      ['b', 'c'],
+      ['e'],
+      ['d', ''],
+      ['f'],
+      ['g'],
+      ['cat'],
+      ['j'],
+    ]);
+  });
+});
 
 const infra: Record<string, InfraEnv> = {
   'apple-container': { guard: 'free', match: ['container '] },
@@ -60,6 +83,27 @@ describe('道具の直打ち', () => {
     'cd /w && cmux workspace close workspace:3 --force',
     'acli jira workitem comment create --key SKILLS-1 --body-file f.json',
     'acli jira workitem transition --key SKILLS-1 --status "完了" --yes',
+    // 命令の頭が道具なら、前に何が付いても、どこに並んでも止める。
+    'true; acli jira workitem transition --key A',
+    'ls | cmux set-status wait x',
+    'false || cmux set-status wait x',
+    'echo a\ncmux set-status wait x',
+    'FOO=1 BAR=2 acli jira workitem transition --key A',
+    'env -i PATH=/bin acli jira workitem transition --key A',
+    'sudo -E cmux set-status wait x',
+    '/opt/homebrew/bin/acli jira workitem comment create --key A',
+    '"acli" jira workitem transition --key A',
+    'cmux set-status wait x 2>&1 >/dev/null',
+    'if true; then cmux set-status wait x; fi',
+    '{ cmux set-status wait x; }',
+    '(cd /w && cmux set-status wait x)',
+    'x=$(acli jira workitem transition --key A)',
+    'echo "$(cmux set-status wait x)"',
+    'echo `cmux set-status wait x`',
+    'bash -c \'acli jira workitem transition --key A\'',
+    'sh -lc "cmux set-status wait x"',
+    'eval cmux set-status wait x',
+    'cat <<EOF\nhi\nEOF\ncmux set-status wait x',
   ])('止める: %s', (command) => {
     expect(ask(command, 'software-engineer')).toEqual({ allow: false, reason: expect.stringContaining('代わりに: tpm ') as string });
   });
@@ -72,6 +116,19 @@ describe('道具の直打ち', () => {
     'acli jira workitem view SKILLS-1 --fields comment --json',
     'gh pr create --title x',
     'tpm report done --summary "cmux の adapter を直した"',
+    // 道具の名が、命令でない字（文・型・中身）に入るだけなら止めない。
+    'git commit -m "acli jira workitem comment create と cmux set-status を止める"',
+    'git commit -F msg.txt && git push',
+    'echo \'cmux agent message を使わない\'',
+    'grep -rn "acli jira workitem transition" cli/src',
+    'grep -n cmux\\ set-status f',
+    'printf \'%s\\n\' "gh issue close 12"',
+    'cat > f.md <<\'EOF\'\nacli jira workitem transition --key A\ncmux set-status wait x\nEOF',
+    'python3 - <<EOF\nprint("cmux set-status")\nEOF\nls',
+    'cat <<-EOF\n\tcmux set-status wait x\n\tEOF',
+    'ls # cmux set-status wait x',
+    'tpm ask tpm "acli jira workitem transition を打ってよいか"',
+    'echo hi > cmux',
   ])('通す: %s', (command) => {
     expect(ask(command, 'software-engineer').allow).toBe(true);
   });
@@ -80,6 +137,13 @@ describe('道具の直打ち', () => {
     expect(ask('gh issue close 12', 'software-engineer', undefined, 'none').allow).toBe(true);
     expect(ask('gh issue close 12', 'software-engineer', undefined, 'github').allow).toBe(false);
     expect(ask('gh issue view 12 --json comments', 'software-engineer', undefined, 'github').allow).toBe(true);
+    expect(ask('git commit -m "gh issue close 12 で閉じる"', 'software-engineer', undefined, 'github').allow).toBe(true);
+    expect(ask('cd /w && gh issue comment 12 --body x', 'software-engineer', undefined, 'github').allow).toBe(false);
+  });
+
+  test('共有の環境は、今までどおり字全体で見る（文に書いただけでも止める）', () => {
+    expect(ask('git commit -m "aws s3 rm を足す"', 'software-engineer').allow).toBe(false);
+    expect(ask('echo "$(wmill sync push)"', 'software-engineer').allow).toBe(false);
   });
 
   test('TPM_RAW=1 を付けた直打ちは通すが、環境の手続きには効かない', () => {

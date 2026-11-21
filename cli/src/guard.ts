@@ -1,10 +1,12 @@
 // guard: 担当が打つ shell の命令を、実行の前に見て、通すか止めるかを決める（Claude Code の PreToolUse hook から呼ばれる）。
 // 止めるのは 2 つ。(1) project の設定（infra）に書いた環境に触る命令で、手続きを踏んでいない物。
 // (2) 連携と課題管理の道具の直打ち（tpm を通さないと、記録と状態が抜ける）。
-// 字の一致で見るので、防げるのは「うっかり」まで。script に包んだ命令などはすり抜ける。確実な守りは、担当に渡す権限の方で行う。
+// (1) は命令の字全体に match の字が含まれるかで見る（共有の環境は、疑わしければ止める）。
+// (2) は命令を単純な命令に分け、その頭（実際に打つ道具の命令）だけを見る。commit の文・grep の型・here-document に道具の名が入っても止めない。
+// どちらも字で見るので、防げるのは「うっかり」まで。script に包んだ命令などはすり抜ける。確実な守りは、担当に渡す権限の方で行う。
 import type { InfraEnv, RolesConfig } from './config.ts';
 import type { RoleName } from './protocol.ts';
-import { shellQuote } from './shell.ts';
+import { shellQuote, splitCommands } from './shell.ts';
 import type { State } from './state.ts';
 
 /** 環境を変えてよい担当。 */
@@ -19,14 +21,14 @@ export interface Approval {
 /** guard の答え。止めるときは、代わりにどうするかを reason に書く。 */
 export type Verdict = { allow: true } | { allow: false, reason: string };
 
-/** 直に打たせない道具の命令と、代わりに使う tpm の命令。 */
+/** 直に打たせない道具の命令（単純な命令の語を空白でつないだ字の頭に当てる）と、代わりに使う tpm の命令。 */
 const DIRECT: [pattern: RegExp, instead: string][] = [
-  [/\bcmux\s+agent\s+message\b/, 'tpm ask …・tpm report …（担当）、tpm notify・tpm answer・tpm dismiss（TPM 担当）'],
-  [/\bcmux\s+set-status\b/, 'tpm wait <work|pm|tpm> "<何を>"'],
-  [/\bcmux\s+(workspace\s+create|new-workspace)\b/, 'tpm assign <鍵> --role …'],
-  [/\bcmux\s+(workspace\s+close|close-workspace)\b/, 'tpm close <鍵>'],
-  [/\bacli\s+jira\s+workitem\s+(comment\s+create|transition)\b/, 'tpm report …・tpm ask pm・tpm answer（記録は命令が書く）'],
-  [/\bgh\s+issue\s+(comment|close)\b/, 'tpm report …・tpm ask pm・tpm answer（記録は命令が書く）'],
+  [/^cmux agent message\b/, 'tpm ask …・tpm report …（担当）、tpm notify・tpm answer・tpm dismiss（TPM 担当）'],
+  [/^cmux set-status\b/, 'tpm wait <work|pm|tpm> "<何を>"'],
+  [/^cmux (workspace create|new-workspace)\b/, 'tpm assign <鍵> --role …'],
+  [/^cmux (workspace close|close-workspace)\b/, 'tpm close <鍵>'],
+  [/^acli jira workitem (comment create|transition)\b/, 'tpm report …・tpm ask pm・tpm answer（記録は命令が書く）'],
+  [/^gh issue (comment|close)\b/, 'tpm report …・tpm ask pm・tpm answer（記録は命令が書く）'],
 ];
 
 /** 命令の頭にこれを書くと、道具の直打ちを通す（tpm 自身の開発と試しのため。環境の手続きには効かない）。 */
@@ -72,10 +74,11 @@ export function judge(asked: Asked): Verdict {
     if (!verdict.allow) return verdict;
   }
   if (!asked.command.includes(RAW)) {
+    const heads = splitCommands(asked.command).map(words => words.join(' '));
     for (const [pattern, instead] of DIRECT) {
       // 課題管理に GitHub の Issue を使わない project では、gh issue は課題管理の道具ではない。
-      if (pattern.source.includes('gh\\s+issue') && asked.config.tracker !== 'github') continue;
-      if (pattern.test(asked.command)) {
+      if (pattern.source.startsWith('^gh issue') && asked.config.tracker !== 'github') continue;
+      if (heads.some(h => pattern.test(h))) {
         return { allow: false, reason: `道具を直に打つと、記録と状態が抜けます。代わりに: ${instead}。tpm 自身の開発や試しで直に打つなら、命令の頭に ${RAW} を付けてください。` };
       }
     }
