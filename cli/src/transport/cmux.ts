@@ -78,6 +78,12 @@ export class CmuxTransport implements Transport {
     return (list.workspaces ?? []).map(w => ({ address: w.ref, title: w.title }));
   }
 
+  /** 居場所の UUID（cmux の通知の workspaceId）→ 宛先と題。通知の hook が、名簿の宛先と突き合わせるのに使う。 */
+  seatsById(): Map<string, Seat> {
+    const list = this.json(['workspace', 'list', '--id-format', 'both']) as { workspaces?: { id: string, ref: string, title: string }[] };
+    return new Map((list.workspaces ?? []).map(w => [w.id, { address: w.ref, title: w.title }]));
+  }
+
   status(address: string): Record<string, string> | undefined {
     const r = this.exec('cmux', ['sidebar-state', '--workspace', address]);
     if (r.status !== 0) return undefined;

@@ -18,6 +18,7 @@ description: この repo を別の folder へ移す手順、Node の version の
 1. repo の一番上の `.node-version` を新しい version（`26.14.0` のように patch まで）に書き替える。nodenv は `26` のような頭だけの version を受けない。GitHub Actions の 3 つの workflow も `node-version-file` でこのファイルを読むので、ほかは書き替えない。
 2. 手元で `nodenv install` と、corepack の入れ直し（[Node と pnpm を入れる](/getting-started/#node-と-pnpm-を入れる)）。
 3. 新しい version で試験と docs の検査を流してから PR にする（[開発](/development/)）。major を上げるときは `cli/package.json` と `docs-site/package.json` の `engines.node` と、`@types/node` も合わせる。
+4. merge して新しい Node に替えた後、`tpm banner setup` を打ち直し、出た命令で `~/.config/cmux/cmux.json` の hook を替える（hook の命令は Node の folder を path で書いている）。`tpm banner check` で確かめる。
 
 ## ページの置き場（tpm-pagestore）
 
