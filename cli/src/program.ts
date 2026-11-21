@@ -3,6 +3,7 @@ import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { Command, CommanderError } from 'commander';
 import { buildCommand } from './command.ts';
+import { bannerCheck, bannerHook, bannerLog, bannerSetup } from './commands/banner.ts';
 import { guard, infraApprove, infraList, infraRevoke, infraRun } from './commands/infra.ts';
 import { issueView } from './commands/issue.ts';
 import { PAGE_KINDS, pageDelete, pageImport, pageList, pagePath, pagePut, type PageDeleteOptions, type PageListOptions } from './commands/page.ts';
@@ -11,6 +12,7 @@ import { hello, inbox } from './commands/role-side.ts';
 import { assign, close, newKey, roles, type AssignOptions } from './commands/tpm-side.ts';
 import { rolesConfigFile } from './config.ts';
 import { createContext } from './context.ts';
+import { exec } from './exec.ts';
 import type { Verdict } from './guard.ts';
 import { ROLE_NAMES, type RoleName } from './protocol.ts';
 import { requireRole } from './roster.ts';
@@ -150,6 +152,31 @@ export function buildProgram(): Command {
       const ctx = createContext({ ...process.env, TPM_PROJECT: options.project, TPM_STATE: options.state });
       process.exit(runRole(requireRole(ctx, key), ctx.project, ctx.state.dir, ctx.root));
     });
+
+  const banner = program.command('banner').description('Mac のバナー（cmux の通知）を、居場所の役割 × きっかけで出すか消すか');
+  banner.command('hook').description('（cmux の通知の hook が呼ぶ）標準入力の通知を読み、バナーを消すなら effects を返す')
+    .action(() => {
+      // どんな誤りでも {} を返して 0 で終わる（失敗すると cmux が「Notification Hook Failed」を出すため）。
+      let out = '{}';
+      try {
+        out = bannerHook(readFileSync(0, 'utf8'), { env: process.env, exec, now: new Date() });
+      }
+      catch (e) {
+        process.stderr.write(`tpm banner hook: ${(e as Error).message}\n`);
+      }
+      process.stdout.write(`${out}\n`);
+    });
+  banner.command('setup').description('cmux.json に足す hook の 1 行と手順を出す（cmux.json は書き替えない）')
+    .action(() => print(bannerSetup(root, process.env)));
+  banner.command('check').description('バナーの設定と、cmux.json の hook を確かめる')
+    .action(() => {
+      const r = bannerCheck(root, process.env);
+      print(r.lines);
+      if (!r.ok) process.exit(1);
+    });
+  banner.command('log').description('この project の居場所の通知を、hook がどう決めたかを新しい順に出す')
+    .option('--limit <件数>', '出す件数', '30')
+    .action((options: { limit: string }) => print(bannerLog(createContext(), Number(options.limit))));
   return program;
 }
 

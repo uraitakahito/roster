@@ -13,8 +13,23 @@ import { TpmError } from './skill-sets.ts';
  */
 export function stateDir(project: string, env: NodeJS.ProcessEnv = process.env): string {
   if (env.TPM_STATE) return env.TPM_STATE;
-  const base = env.XDG_STATE_HOME || join(homedir(), '.local', 'state');
-  return join(base, 'tpm', project.replaceAll(/[^A-Za-z0-9._-]/g, '-'));
+  return join(stateBase(env), project.replaceAll(/[^A-Za-z0-9._-]/g, '-'));
+}
+
+/** project ごとの状態の folder を並べる folder。$XDG_STATE_HOME（無ければ ~/.local/state）の `tpm`。 */
+export function stateBase(env: NodeJS.ProcessEnv = process.env): string {
+  return join(env.XDG_STATE_HOME || join(homedir(), '.local', 'state'), 'tpm');
+}
+
+/** 状態の base の下にある project の状態の folder（tpm.jsonc か roles/ がある物）。無ければ空。 */
+export function projectStateDirs(env: NodeJS.ProcessEnv = process.env): string[] {
+  const base = stateBase(env);
+  if (!existsSync(base)) return [];
+  return readdirSync(base, { withFileTypes: true })
+    .filter(e => e.isDirectory())
+    .map(e => join(base, e.name))
+    .filter(d => existsSync(join(d, 'tpm.jsonc')) || existsSync(join(d, 'roles')))
+    .sort();
 }
 
 /** 状態の folder の中のファイルを、folder からの相対の名前で読み書きする。 */

@@ -113,6 +113,43 @@ export TPM_EFFORT=medium
 | `TPM_PAGES_DIR` | 控えの folder（置いた・読んだページをこの Mac に写す所。前の置き場の folder と同じ） | `$XDG_DATA_HOME/tpm/pages`（`$XDG_DATA_HOME` も無ければ `~/.local/share/tpm/pages`） |
 | `TPM_PAGES_URL` | 置き場の URL（container の port の publish と同じにする） | `http://127.0.0.1:8801` |
 
+## Mac のバナー（任意）
+
+Mac の右上に出るバナーは、cmux が居場所の Claude Code の通知（答え終わった・入力待ちの催促・許可/質問）のたびに出す。担当の居場所のバナーまで出ると、Product Manager が見る物が多すぎるので、`tpm banner hook` を cmux の通知の hook に置き、居場所の役割 × きっかけで出すか消すかを選ぶ。消した通知も、cmux の通知の一覧と未読の印には残る。tpm の名簿に無い居場所（tpm の外の Claude Code）は cmux のまま。
+
+### cmux.json に hook を足す
+
+```sh
+tpm banner setup   # ~/.config/cmux/cmux.json に足す 1 行と手順を出す
+tpm banner check   # 設定と hook を確かめる
+```
+
+`tpm banner setup` が出す欄を、`~/.config/cmux/cmux.json` の `notifications.hooks` に Product Manager が足す（tpm は cmux.json を書き替えない）。hook は cmux の app から動き、shell の PATH を受け継がないので、命令の頭に今の Node と cmux の folder を書いてある。Node を上げたら打ち直す（[運用](/operations/#node-の-version-を上げる)）。hook が動けないと、cmux はいつものバナーに加えて「Notification Hook Failed」を出す（黙ってバナーが消えはしない）。
+
+### `~/.config/tpm/banner.jsonc`（任意）
+
+何を出すかの設定。`$XDG_CONFIG_HOME` があれば `$XDG_CONFIG_HOME/tpm/banner.jsonc`。バナーを見るのは project でなく人なので、`.claude/roles/config.jsonc` には書かない。無ければ次の既定と同じ。
+
+```jsonc
+{
+  // 役割: tpm・software-engineer・devops-engineer・sustaining-engineer・dependabot-triage と、ほかをまとめる "*"
+  // きっかけ: turn（答え終わった）・idle（入力待ちの催促）・ask（許可/質問）
+  // 値: "show"（出す）・"hide"（消す）・"pm-wait"（その回に tpm wait pm を打った時だけ出す）
+  "banner": {
+    "tpm": { "turn": "pm-wait", "idle": "hide", "ask": "show" },
+    "*": { "turn": "hide", "idle": "hide", "ask": "show" },
+  },
+  // バナーを消す時に一緒に消す物: sound・paneFlash・reorderWorkspace
+  "withBanner": ["sound"],
+}
+```
+
+- 役割の欄は、書いたきっかけだけを上書きする（`"devops-engineer": { "turn": "show" }` なら、DevOps Engineer 担当の答え終わったも出す）。
+- `pm-wait` は「前に答え終わった時より後に `tpm wait pm` を打った」回だけ出す。TPM 担当は手が空くと `回答待ち(PM): 指示` のまま待つので、状態の字だけでは、担当のメッセージをひとりで片付けた回まで鳴ってしまうため。TPM 担当は Product Manager に返して手を止める前に `tpm wait pm` を打つ。
+- 設定を読めない間、hook はバナーを消さず、記録に訳を書く。`tpm banner check` が誤りを出す。
+- hook が決めたことは、project の状態の folder の `banner.jsonl` に 1 行ずつ書く（7 日で消す）。`tpm banner log` が新しい順に出す。
+- すべての居場所でまとめて止めたいだけなら、cmux の設定（`notifications.agentTurnComplete`・`agentIdleReminder`・`agentPermissionPrompt`）でもできる。cmux を前にしている間のバナーをすべて消す `notifications.suppressWhenAppFocused` は、残したバナー（Product Manager を待つ・許可/質問）まで消すので勧めない。
+
 ## Dependabot の設定
 
 Dependabot の skill を使う project では、`.claude/roles/config.jsonc` の `skill-sets` に `"dependabot"` を書き、次の 2 つを置く。`/tpm` の起動では Dependabot の PR を見ない。Product Manager が言ったときに TPM 担当が `/dependabot-triage` を呼ぶ。skill セットを書かなければ `/dependabot-triage` は使えない。skill セットを書いても 2 つが無いと `/dependabot-triage` と `/sustaining-engineer` は止まる。

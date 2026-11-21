@@ -21,6 +21,7 @@ TPM 担当が書く依頼書には、その課題だけのことを書く（ひ�
 | 連携の道具 | メッセージを送る・担当を起こす・状態を出す | `cli/src/transport/`（`cmux`・試験用の `file`） |
 | 課題管理の道具 | 課題を読む・課題に記録を書く・課題を閉じる | `cli/src/tracker/`（`jira`・`github`・`none`） |
 | guard | 共有の環境と、道具の直打ちと、担当が置き場のページを消す要求を止める | `cli/src/guard.ts`（Claude Code の hook から呼ばれる） |
+| バナー | Mac のバナーを、居場所の役割 × きっかけで出すか消すか（[設定](/configuration/#mac-のバナー任意)） | `cli/src/banner.ts`・`cli/src/commands/banner.ts`（cmux の通知の hook から呼ばれる） |
 
 ```mermaid
 flowchart TB
@@ -41,6 +42,8 @@ flowchart TB
 | `roles/<Key>.jsonc` | 名簿。課題の Key → 役割・居場所の宛先・依頼書・課題管理の課題 |
 | `approvals/<環境>.jsonc` | Product Manager の承認と期限 |
 | `log.jsonl`・`infra.jsonl` | 送ったメッセージと、`tpm infra run` で打った命令の記録 |
+| `waits/<宛先>.jsonc` | 居場所が最後に打った `tpm wait` の種類と時刻。バナーの hook が「この回に `tpm wait pm` を打ったか」を見る |
+| `banner/last-turn/<宛先>.jsonc`・`banner.jsonl` | バナーの hook が覚える、居場所の前の「答え終わった」の時刻と、決めたことの記録 |
 
 1 件 1 ファイルの物は、`config.jsonc` と同じく JSONC（コメントと末尾のカンマを許す JSON）として読む。`tpm` は読んだ値を書き直すので、手で足したコメントは書き直しで消える。足していく記録は 1 行 1 件の JSON（JSON Lines）のまま。古い名の `*.json` が残っていれば、`tpm` が最初に動いたときに `*.jsonc` に名前を替えて移す。
 

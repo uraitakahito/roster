@@ -44,6 +44,10 @@ export const COMMANDS = [
   'page delete',
   'guard',
   'run-role',
+  'banner hook',
+  'banner setup',
+  'banner check',
+  'banner log',
 ] as const;
 
 /** 担当を起こすときの claude の旗（--model・--effort・--permission-mode）。 */

@@ -61,10 +61,21 @@ const oneLine = (text: string): string => {
 
 // ---- 担当が打つ ----
 
-/** 状態 wait を替える。 */
+/** `tpm wait` が状態の folder の `waits/<宛先>.jsonc` に書く記録。Mac のバナーの hook が「この回に wait pm を打ったか」を見る。 */
+export interface WaitRecord {
+  kind: WaitKind
+  text: string
+  at: string
+}
+
+/** `waits/` の file の名（宛先の : などを替える）。 */
+export const waitFile = (address: string): string => `waits/${address.replaceAll(/[^A-Za-z0-9._-]/g, '-')}.jsonc`;
+
+/** 状態 wait を替え、打った時刻を記録する。 */
 export function wait(ctx: Context, kind: WaitKind, what: string): string[] {
   const text = WAIT[kind](what);
   ctx.transport.setStatus('wait', text);
+  ctx.state.write(waitFile(ctx.transport.whoami()), { kind, text, at: ctx.now().toISOString() } satisfies WaitRecord);
   return [`状態: ${text}`];
 }
 
