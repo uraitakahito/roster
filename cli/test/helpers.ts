@@ -2,9 +2,15 @@
 import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DEFAULT_PAGES_URL } from '../src/commands/page.ts';
 import { createContext, type Context } from '../src/context.ts';
 import type { Exec, ExecOptions } from '../src/exec.ts';
 import { FileTransport } from '../src/transport/file.ts';
+
+/** 課題の概要の節（40 字以上）のある依頼書。world が置き場に置く。 */
+export const BRIEF_HTML = '<h1>依頼書</h1><section id="summary"><h2>課題の概要</h2><p>試しの課題。担当が課題の中身を読めるようにし、TPM 担当が相談に乗れるようにすることが求められている。</p></section>';
+/** world が置き場に置く、概要の節のある依頼書の URL（どの world でも同じ）。 */
+export const BRIEF = `${DEFAULT_PAGES_URL}/brief-1.html`;
 
 export interface Call {
   cmd: string
@@ -32,6 +38,8 @@ export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessE
   const project = join(base, 'project');
   mkdirSync(join(project, '.claude', 'roles'), { recursive: true });
   writeFileSync(join(project, '.claude', 'roles', 'config.jsonc'), JSON.stringify({ ...config, transport: 'file' }));
+  mkdirSync(join(base, 'pages'));
+  writeFileSync(join(base, 'pages', 'brief-1.html'), BRIEF_HTML);
   const calls: Call[] = [];
   const exec: Exec = (cmd, args, options) => {
     calls.push({ cmd, args, ...(options === undefined ? {} : { options }) });

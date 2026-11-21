@@ -1,5 +1,4 @@
-import { mkdirSync, mkdtempSync, realpathSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { hello, inbox } from '../src/commands/role-side.ts';
@@ -9,9 +8,9 @@ import { modelLabel, modelStatus } from '../src/protocol.ts';
 import { readRole, requireRole, writeRole } from '../src/roster.ts';
 import { claudeArgs, roleEnv } from '../src/run-role.ts';
 import { TpmError } from '../src/skill-sets.ts';
-import { world } from './helpers.ts';
+import { BRIEF, world } from './helpers.ts';
 
-const SE = { role: 'software-engineer', title: '計画と実装', brief: 'https://claude.ai/artifact/b1', wait: 0 } as const;
+const SE = { role: 'software-engineer', title: '計画と実装', brief: BRIEF, wait: 0 } as const;
 
 describe('hello（TPM 担当）', () => {
   test('$TPM_KEY が無ければ TPM 担当として名乗る: 宛先を状態に書き、状態を出し、名簿を出す', () => {
@@ -53,7 +52,7 @@ describe('assign', () => {
       model: 'claude-opus-5-5',
       effort: 'medium',
       permissionMode: 'bypassPermissions',
-      brief: 'https://claude.ai/artifact/b1',
+      brief: BRIEF,
       address: 'file:1',
     });
     expect(w.wire.command('file:1')).toBe(`${w.tpm.root}/cli/bin/tpm run-role t-x7k2 --project ${w.project} --state ${w.tpm.state.dir}`);
@@ -162,11 +161,10 @@ describe('assign', () => {
 });
 
 describe('newKey', () => {
-  /** 置き場を一時の folder にした TPM 担当の周り。 */
+  /** TPM 担当の周りと、置き場の folder（world が一時の folder にしている）。 */
   function setup() {
-    const pages = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-pages-')));
     const w = world();
-    return { w, tpm: { ...w.tpm, env: { ...w.tpm.env, TPM_PAGES_DIR: pages } }, pages };
+    return { w, tpm: w.tpm, pages: w.tpm.env.TPM_PAGES_DIR ?? '' };
   }
   /** 決めた並びの数を順に返す pick。 */
   const sequence = (...ns: number[]) => {
@@ -202,7 +200,7 @@ describe('hello', () => {
     expect(hello(w.role('t-x7k2', 'file:1'))).toEqual([
       '役割: Software Engineer',
       '課題の鍵: t-x7k2',
-      '依頼書: https://claude.ai/artifact/b1',
+      `依頼書: ${BRIEF}`,
       '課題管理の課題: 無し（道具: none）',
       'TPM 担当の宛先: file:tpm',
       '自分の宛先: file:1',
@@ -254,7 +252,7 @@ describe('roles と close', () => {
     expect(roles(w.tpm)).toEqual([
       '名簿:',
       '- app#12  Sustaining app#12  消えた（居場所が無い。tpm assign で起こし直すか、tpm close で名簿から消す）',
-      '- t-a3b4  SWE t-a3b4: 計画と実装  file:1（作業中: 依頼書を読む）  依頼書: https://claude.ai/artifact/b1',
+      `- t-a3b4  SWE t-a3b4: 計画と実装  file:1（作業中: 依頼書を読む）  依頼書: ${BRIEF}`,
     ]);
   });
 
