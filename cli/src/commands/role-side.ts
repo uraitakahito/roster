@@ -2,6 +2,7 @@
 import type { Context } from '../context.ts';
 import { modelStatus, ROLES, WAIT } from '../protocol.ts';
 import { requireSelf, requireTpm, writeRole } from '../roster.ts';
+import { auditorHello } from './audit.ts';
 import { TpmError } from '../skill-sets.ts';
 import { issueTracker } from './issue.ts';
 import { issueCopyLine, markShown } from './messages.ts';
@@ -17,6 +18,7 @@ export function hello(ctx: Context, options: { model?: string, effort?: string }
     throw new TpmError('--model・--effort は TPM 担当が名乗るときだけ使う（担当の model と effort は tpm assign が決める）');
   }
   const record = requireSelf(ctx);
+  if (record.role === 'auditor') return auditorHello(ctx, record);
   const tpm = requireTpm(ctx);
   record.address = ctx.transport.whoami();
   record.helloAt = ctx.now().toISOString();

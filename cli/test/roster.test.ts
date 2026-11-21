@@ -43,8 +43,8 @@ describe('hello（TPM 担当）', () => {
 describe('assign', () => {
   test('Auditor の席は、TPM 担当の tpm assign では起こせない（役割でも Key でも）', () => {
     const w = world();
-    expect(() => assign(w.tpm, 't-x7k2', { role: 'auditor', wait: 0 })).toThrow(/Auditor の席（Key audit）は、Product Manager が起こします/);
-    expect(() => assign(w.tpm, 'audit', { ...SE })).toThrow(/Auditor の席（Key audit）は、Product Manager が起こします/);
+    expect(() => assign(w.tpm, 't-x7k2', { role: 'auditor', wait: 0 })).toThrow(/Auditor の席（Key audit）は、Product Manager が tpm audit start で起こします/);
+    expect(() => assign(w.tpm, 'audit', { ...SE })).toThrow(/Auditor の席（Key audit）は、Product Manager が tpm audit start で起こします/);
     expect(roles(w.tpm)).toEqual(['名簿: 担当はいない']);
     expect(w.wire.seats()).toEqual([]);
   });
@@ -366,9 +366,14 @@ describe('run-role', () => {
     ]);
   });
 
-  test('Auditor の席の hook は、file を書き替える道具も見る。最初の入力は名乗るだけ', () => {
+  test('Auditor の席の hook は、file を書き替える道具も見て、session の始まりに印を書く。最初の入力は名乗るだけ', () => {
     const args = claudeArgs({ key: 'audit', role: 'auditor', title: 'Audit', cwd: '/p', addDirs: ['/r/skill-sets/core'], ...ROLES.auditor.defaults }, '/r');
-    expect(args[1]).toBe('{"hooks":{"PreToolUse":[{"matcher":"Bash|Edit|Write|NotebookEdit","hooks":[{"type":"command","command":"/r/cli/bin/tpm guard"}]}]}}');
+    expect(JSON.parse(args[1] ?? '')).toEqual({
+      hooks: {
+        PreToolUse: [{ matcher: 'Bash|Edit|Write|NotebookEdit', hooks: [{ type: 'command', command: '/r/cli/bin/tpm guard' }] }],
+        SessionStart: [{ hooks: [{ type: 'command', command: '/r/cli/bin/tpm audit fresh' }] }],
+      },
+    });
     expect(args.slice(2, 8)).toEqual(['--model', 'claude-fable-5-2', '--effort', 'high', '--permission-mode', 'bypassPermissions']);
     expect(args.slice(-2)).toEqual(['--', '/audit hello']);
   });

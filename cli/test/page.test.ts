@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpath
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
+import { readAudits } from '../src/audits.ts';
 import { filePut } from '../src/commands/file.ts';
 import { pageDelete, pageImport, pageList, pagePath, pagePut } from '../src/commands/page.ts';
 import { isPageUrl, pagesDir, pagesUrl } from '../src/commands/store.ts';
@@ -438,6 +439,30 @@ describe('tpm page delete', () => {
     expect(() => pageDelete(s.role, [s.url('t-x7k2', 'plan-1.html')], { yes: true })).toThrow('tpm ask tpm');
     expect(s.curls()).toHaveLength(before);
     expect(s.store.pages.size).toBe(5);
+  });
+
+  test('Auditor が置いたページは、Product Manager の言葉（--pm）が無ければ消せない。消した事は記録に残る', () => {
+    const s = placed();
+    const auditor = { ...s.role, env: { ...s.role.env, TPM_KEY: 'audit', TPM_ROLE: 'auditor' } };
+    pagePut(auditor, s.html, { kind: 'audit' });
+    pagePut(auditor, s.html, { kind: 'audit' });
+    const audit = (n: number): string => s.url('audit', `audit-${n}.html`);
+    const before = s.curls().filter(c => c.includes('DELETE')).length;
+    // URL を名指しても、Key ごとでも、project ごとでも、--yes が無くても止まる。
+    for (const run of [
+      () => pageDelete(s.tpm, [audit(1)], { yes: true }),
+      () => pageDelete(s.tpm, [audit(1)], {}),
+      () => pageDelete(s.tpm, [], { key: 'audit', yes: true }),
+      () => pageDelete(s.tpm, [], { project: s.project, yes: true }),
+      () => pageDelete(s.tpm, [audit(1)], { yes: true, pm: ' ' }),
+    ]) expect(run).toThrow(/Auditor が置いたページが \d 枚あります。消していません。/);
+    expect(s.curls().filter(c => c.includes('DELETE'))).toHaveLength(before);
+    expect(s.store.pages.size).toBe(7);
+    // Auditor のページが入っていなければ、今までどおり消せる。
+    expect(pageDelete(s.tpm, [s.url('t-x7k2', 'plan-1.html')], { yes: true })[0]).toBe('消した: 1 枚（控えも消した）');
+    expect(pageDelete(s.tpm, [audit(1)], { yes: true, pm: '秘密が写っていたので消して' })).toEqual(['消した: 1 枚（控えも消した）', `- ${audit(1)}`]);
+    expect(readAudits(s.tpm)).toEqual([{ at: '2026-11-20T12:00:00.000Z', kind: 'page-deleted', url: audit(1), by: 'tpm', pm: '秘密が写っていたので消して' }]);
+    expect(() => pagePath(s.tpm, audit(2))).not.toThrow();
   });
 
   test('--yes が無ければ、消す物を出すだけで消さない', () => {

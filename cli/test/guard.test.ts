@@ -278,6 +278,16 @@ describe('hook の入力と settings', () => {
   });
 });
 
+describe('Audit の席を起こす命令', () => {
+  test('TPM 担当と担当が道具として打つ tpm audit start は止める（TPM_RAW=1 も効かない）。ほかの tpm audit は通す', () => {
+    for (const role of [undefined, 'software-engineer', 'devops-engineer', 'auditor'] as const) {
+      expect(ask('tpm audit start', role), String(role)).toEqual({ allow: false, reason: expect.stringContaining('Audit の席を起こすのは Product Manager です') as string });
+    }
+    for (const command of ['cd /w && /r/cli/bin/tpm audit start --model claude-opus-5-5', 'TPM_RAW=1 tpm audit start', 'sh -c "tpm audit start"']) expect(ask(command).allow, command).toBe(false);
+    for (const command of ['tpm audit begin', 'tpm audit begin 7 9', 'echo "tpm audit start"', 'grep -rn "tpm audit start" docs-site', 'tpm roles']) expect(ask(command).allow, command).toBe(true);
+  });
+});
+
 describe('Auditor は repo を変えない', () => {
   test.each<[string, boolean]>([
     ['git status', true],

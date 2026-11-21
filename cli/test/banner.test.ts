@@ -11,6 +11,7 @@ import { hello } from '../src/commands/role-side.ts';
 import { assign, bannerHint } from '../src/commands/tpm-side.ts';
 import type { Exec } from '../src/exec.ts';
 import { TPM_TITLE } from '../src/protocol.ts';
+import { writeRole } from '../src/roster.ts';
 import { BRIEF, world } from './helpers.ts';
 
 const cli = realpathSync(join(import.meta.dirname, '..'));
@@ -122,6 +123,26 @@ describe('bannerHook', () => {
     tpmWait('work', '振る');
     expect(hook('U-TPM', 'turn-complete')).toBe(HIDE);
     expect(hook('U-TPM', 'idle-reminder')).toBe(HIDE);
+  });
+
+  // Auditor の席は Product Manager が起こすが、名簿の行（宛先と題 Audit）があれば、hook は役割 auditor と見分ける。
+  test('Auditor の席の答え終わったは、その回に Product Manager を待った時（報告した回）だけ出す', () => {
+    const { w, hook } = hooked([{ id: 'U-AUDIT', ref: 'file:7', title: 'Audit' }]);
+    writeRole(w.tpm, { key: 'audit', role: 'auditor', title: 'Audit', cwd: w.project, addDirs: [], model: 'claude-fable-5-2', effort: 'high', permissionMode: 'bypassPermissions', address: 'file:7' });
+    // 名乗っただけの回（tpm hello は wait の記録を書かない）と、入力待ちの催促は消す。
+    expect(hook('U-AUDIT', 'turn-complete')).toBe(HIDE);
+    expect(hook('U-AUDIT', 'idle-reminder')).toBe(HIDE);
+    wait({ ...w.role('audit', 'file:7'), now: () => new Date('2026-11-21T10:00:02.500Z') }, 'pm', '監査の報告');
+    expect(hook('U-AUDIT', 'turn-complete')).toBe('{}');
+    expect(hook('U-AUDIT', 'turn-complete')).toBe(HIDE);
+    expect(hook('U-AUDIT', 'needs-permission')).toBe('{}');
+    expect(bannerLog(w.tpm, 5).map(l => l.split('  ').slice(1, 5).join(' '))).toEqual([
+      'file:7 auditor needs-permission 出す',
+      'file:7 auditor turn-complete 消す',
+      'file:7 auditor turn-complete 出す',
+      'file:7 auditor idle-reminder 消す',
+      'file:7 auditor turn-complete 消す',
+    ]);
   });
 
   test('名簿に無い居場所・題が違う居場所・知らない category・workspaceId が無い通知は替えない', () => {

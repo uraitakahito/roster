@@ -3,6 +3,7 @@ import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { Command, CommanderError } from 'commander';
 import { buildCommand } from './command.ts';
+import { registerAudit } from './commands/audit.ts';
 import { bannerCheck, bannerHook, bannerLog, bannerSetup } from './commands/banner.ts';
 import { registerIncident } from './commands/incident.ts';
 import { guard, infraApprove, infraList, infraRevoke, infraRun } from './commands/infra.ts';
@@ -91,6 +92,7 @@ export function buildProgram(): Command {
   program.command('inbox').description('自分宛てで、まだ届いていないメッセージを出す（段の区切りに見る）').action(() => print(inbox(createContext())));
   registerMessages(program, print);
   registerIncident(program, print);
+  registerAudit(program, print, () => readFileSync(0, 'utf8'));
 
   const infra = program.command('infra').description('インフラの環境の宣言と承認');
   infra.command('list').description('環境・手続き・承認を出す').action(() => print(infraList(createContext())));
@@ -132,6 +134,7 @@ export function buildProgram(): Command {
     .option('--key <key>', 'この Key のページをみな消す')
     .option('--project <name>', 'この project（状態の folder の名）のページを消す。--key が無ければ project のページをみな消す（既定は今の project）')
     .option('--yes', '一覧を見せるだけでなく、本当に消す')
+    .option('--pm <言葉>', 'Auditor が置いたページを消す訳（Product Manager の言葉。記録に残る）')
     .action((urls: string[], options: PageDeleteOptions) => print(pageDelete(createContext(), urls, options)));
   page.command('import').description('控えの folder にあって置き場に無いページと file を、同じ番号で置き場に入れる（切り替えと、DB を失った後）')
     .action(() => print(pageImport(createContext())));

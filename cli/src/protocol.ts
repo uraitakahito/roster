@@ -27,6 +27,8 @@ export const COMMANDS = [
   'report done',
   'report end',
   'report incident',
+  'report audit',
+  'report decided',
   'report merge-request',
   'report not-yet',
   'report recreated',
@@ -41,6 +43,9 @@ export const COMMANDS = [
   'incident close',
   'incident follow',
   'incident timeline',
+  'audit start',
+  'audit begin',
+  'audit fresh',
   'infra list',
   'infra approve',
   'infra revoke',
@@ -148,6 +153,9 @@ export const HEADINGS = {
   'end': { from: 'role', record: '結果' },
   // 課題管理には書かない（台帳の中身は、この Mac の外に出さない）。
   'incident': { from: 'role' },
+  // Auditor だけが送る。audit は Product Manager へじかに出した報告の写し、decided は Product Manager の決定。
+  'audit': { from: 'role' },
+  'decided': { from: 'role' },
   'merge-request': { from: 'role' },
   'not-yet': { from: 'role' },
   'recreated': { from: 'role' },

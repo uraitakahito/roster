@@ -4,7 +4,7 @@ import { createContext } from '../context.ts';
 import { WAIT, type WaitKind } from '../protocol.ts';
 import { TpmError } from '../skill-sets.ts';
 import { INCIDENT_TYPES } from '../incidents.ts';
-import { answer, askDevops, askPm, askTpm, dismiss, DONE_KINDS, doneKind, notify, reportDependabot, reportDocFix, reportDone, reportEnd, reportIncident, reportMerged, show, wait } from './messages.ts';
+import { answer, askDevops, askPm, askTpm, dismiss, DONE_KINDS, doneKind, notify, reportAudit, reportDecided, reportDependabot, reportDocFix, reportDone, reportEnd, reportIncident, reportMerged, show, wait } from './messages.ts';
 
 const collect = (value: string, all: string[]): string[] => [...all, value];
 
@@ -64,6 +64,17 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
     .option('--tag <tag>', '同じ種の出来事を数える印（繰り返せる。権限で断られた命令は 権限）', collect, [] as string[])
     .option('--severe', 'すぐ止めないと害が広がる', false)
     .action((text: string, options: { type: string, tag: string[], severe: boolean }) => print(reportIncident(createContext(), { ...options, text, tags: options.tag })));
+  report.command('audit').description('【audit】（Auditor）監査のページを Product Manager へじかに報告した。記録を残し、TPM 担当に写しを送る')
+    .requiredOption('--url <URL>', '監査のページ（tpm page put --kind audit で置いた URL）')
+    .requiredOption('--summary <要点>')
+    .option('--item <題>', 'Product Manager に決めてほしい項目の題（繰り返せる）', collect, [] as string[])
+    .action((options: { url: string, summary: string, item: string[] }) => print(reportAudit(createContext(), { url: options.url, summary: options.summary, items: options.item })));
+  report.command('decided').description('【decided】（Auditor）Product Manager の決定を TPM 担当に渡す')
+    .requiredOption('--url <URL>', '監査のページ')
+    .option('--do <勧告の題>', 'する（TPM 担当が課題にして振る。繰り返せる）', collect, [] as string[])
+    .option('--accept <勧告の題>', '受け入れる（直さない。繰り返せる）', collect, [] as string[])
+    .option('--later <勧告の題>', '見送る（今は決めない。繰り返せる）', collect, [] as string[])
+    .action((options: { url: string, do: string[], accept: string[], later: string[] }) => print(reportDecided(createContext(), { url: options.url, adopted: options.do, accepted: options.accept, later: options.later })));
   for (const [id, description] of [
     ['merge-request', '【merge-request】（Dependabot）PR の merge を頼む'],
     ['not-yet', '【not-yet】（Dependabot）まだ対象でない・rebase に応じない'],

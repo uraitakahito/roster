@@ -8,6 +8,7 @@ import { describeTrackers, OWN_LABEL, readRolesConfig, rolesConfigFile, sourceLa
 import type { Context } from '../context.ts';
 import { syncDeliveries } from '../evidence.ts';
 import { AUDIT_KEY, modelStatus, ROLES, TPM_TITLE, WAIT, type RoleName } from '../protocol.ts';
+import { lastAuditLine } from '../audits.ts';
 import { openLine } from '../incidents.ts';
 import { resolveSettings } from '../settings.ts';
 import { allRoles, assertKey, LOCAL_KEY, readRole, removeRole, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
@@ -106,13 +107,14 @@ export function roles(ctx: Context): string[] {
   const seats = ctx.transport.seats();
   const records = allRoles(ctx);
   // 台帳に未決の件があれば、名簿の終わりに 1 行出す（見直しを忘れないため）。
-  if (records.length === 0) return ['名簿: 担当はいない', ...openLine(ctx)];
+  if (records.length === 0) return ['名簿: 担当はいない', ...lastAuditLine(ctx), ...openLine(ctx)];
   return ['名簿:', ...records.map((r) => {
     const alive = r.address !== undefined && seats.some(s => s.address === r.address);
     const wait = alive && r.address !== undefined ? ctx.transport.status(r.address)?.wait : undefined;
-    const where = alive ? `${r.address}（${wait ?? '状態なし'}）` : '消えた（居場所が無い。tpm assign で起こし直すか、tpm close で名簿から消す）';
+    const gone = r.role === 'auditor' ? '消えた（居場所が無い。起こし直すのは Product Manager: tpm audit start）' : '消えた（居場所が無い。tpm assign で起こし直すか、tpm close で名簿から消す）';
+    const where = alive ? `${r.address}（${wait ?? '状態なし'}）` : gone;
     return `- ${r.key}  ${r.title}  ${where}${r.dismissed ? `  dismiss 済み（${r.dismissed === 'handover' ? '交代' : '終わり'}）` : ''}${r.brief ? `  依頼書: ${r.brief}` : ''}${r.issuePage ? `  課題の写し: ${r.issuePage}` : ''}`;
-  }), ...openLine(ctx)];
+  }), ...lastAuditLine(ctx), ...openLine(ctx)];
 }
 
 /** Key に使う字: 英小文字と数字から、読み違えやすい 0・o・1・l・i を除いた 31 字。 */
@@ -163,7 +165,7 @@ export function assign(ctx: Context, key: string, options: AssignOptions): strin
   assertKey(key);
   if (!Number.isFinite(options.wait) || options.wait < 0) throw new TpmError('--wait は 0 以上の数にしてください（0 なら待たない）');
   // Auditor は TPM 担当の回し方も見るので、TPM 担当の手では起こさない・依頼書も送らない。
-  if (options.role === 'auditor' || key === AUDIT_KEY) throw new TpmError('Auditor の席（Key audit）は、Product Manager が起こします。tpm assign では起こせません・依頼書も送れません');
+  if (options.role === 'auditor' || key === AUDIT_KEY) throw new TpmError('Auditor の席（Key audit）は、Product Manager が tpm audit start で起こします。tpm assign では起こせません・依頼書も送れません');
   const existing = readRole(ctx, key);
   // 名簿にある担当（前の決まりの長い Key を含む）は、そのまま動き続けられるよう形を問わない。
   if (existing === undefined && key.startsWith('t-') && !LOCAL_KEY.test(key)) {
@@ -200,23 +202,27 @@ export function assign(ctx: Context, key: string, options: AssignOptions): strin
     ...(options.issue === undefined ? {} : { issue: options.issue }),
     ...copy,
   };
+  // 担当を起こした folder と、記録の先を出す（上の folder から振ると、どちらも 1 つに決まっていないため）。
+  return launch(ctx, record, existing !== undefined, options.wait, options.issue === undefined ? [] : [`課題の記録: ${recordingTo(ctx, options.issue)}`]);
+}
+
+/**
+ * 名簿の行の担当を起こす: 名簿に書き、居場所を作って tpm run-role を動かし、名乗るまで wait 秒待つ（0 なら待たない）。
+ * again は起こし直しか（出す字が変わる）。more は、起こした行と folder の行の後に出す行。tpm assign と tpm audit start が使う。
+ */
+export function launch(ctx: Context, record: RoleRecord, again: boolean, wait: number, more: string[] = []): string[] {
   writeRole(ctx, record);
-  const command = [join(ctx.root, 'cli', 'bin', 'tpm'), 'run-role', key, '--project', ctx.project, '--state', ctx.state.dir].map(shellQuote).join(' ');
+  const command = [join(ctx.root, 'cli', 'bin', 'tpm'), 'run-role', record.key, '--project', ctx.project, '--state', ctx.state.dir].map(shellQuote).join(' ');
   record.address = ctx.transport.spawn({ title: record.title, cwd: record.cwd, command });
   writeRole(ctx, record);
-  // 担当を起こした folder と、記録の先を出す（上の folder から振ると、どちらも 1 つに決まっていないため）。
-  const head = [
-    `${existing ? '起こし直した' : '起こした'}: ${record.title}（${record.address}・${modelStatus(record.model, record.effort)}）`,
-    `folder: ${record.cwd}`,
-    ...(options.issue === undefined ? [] : [`課題の記録: ${recordingTo(ctx, options.issue)}`]),
-  ];
-  if (options.wait === 0) return [...head, '名乗り（tpm hello）は待っていない'];
-  for (let waited = 0; waited < options.wait * 1000; waited += HELLO_INTERVAL_MS) {
-    if (readRole(ctx, key)?.helloAt !== undefined) return [...head, '名乗った（tpm hello が来た）'];
+  const head = [`${again ? '起こし直した' : '起こした'}: ${record.title}（${record.address}・${modelStatus(record.model, record.effort)}）`, `folder: ${record.cwd}`, ...more];
+  if (wait === 0) return [...head, '名乗り（tpm hello）は待っていない'];
+  for (let waited = 0; waited < wait * 1000; waited += HELLO_INTERVAL_MS) {
+    if (readRole(ctx, record.key)?.helloAt !== undefined) return [...head, '名乗った（tpm hello が来た）'];
     ctx.sleep(HELLO_INTERVAL_MS);
   }
-  if (readRole(ctx, key)?.helloAt !== undefined) return [...head, '名乗った（tpm hello が来た）'];
-  throw new TpmError(notStarted(ctx, record, options.wait));
+  if (readRole(ctx, record.key)?.helloAt !== undefined) return [...head, '名乗った（tpm hello が来た）'];
+  throw new TpmError(notStarted(ctx, record, wait));
 }
 
 /**
@@ -267,6 +273,7 @@ function notStarted(ctx: Context, record: RoleRecord, waited: number): string {
 export function close(ctx: Context, key: string): string[] {
   const record = readRole(ctx, key);
   if (record === undefined) throw new TpmError(`名簿に担当がいません: ${key}`);
+  if (record.role === 'auditor') throw new TpmError('Auditor の席は、Product Manager が起こし、閉じます。tpm close では閉じられません（居場所が消えていたら、Product Manager が tpm audit start で起こし直す）');
   const alive = record.address !== undefined && ctx.transport.seats().some(s => s.address === record.address);
   // 閉じる前に、この担当とのメッセージの届いた時刻を写す。
   syncDeliveries(ctx);

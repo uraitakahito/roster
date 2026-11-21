@@ -1,13 +1,16 @@
 // 見出しの付いたメッセージを送る命令。送る・届いたかを見る・課題に記録を書く・状態を替える、を 1 度にする。
 // 担当が打つ物（ask・report・wait）と、TPM 担当が打つ物（answer・notify・dismiss・show）。brief は命令でなく、assign の中で使う。
+// Auditor は、成果を tpm report audit（Product Manager へじかに出した報告の写し）と tpm report decided（Product Manager の決定）で出す。
+import { appendAudit } from '../audits.ts';
 import type { Context } from '../context.ts';
 import { recordGateStop, recordWait } from '../evidence.ts';
 import { addIncident, incidentLine, incidentType, INCIDENT_TYPES, tagLines } from '../incidents.ts';
 import { message, ROLES, TPM_TITLE, WAIT, WAIT_CLOSE, WAIT_NEXT_BRIEF, type HeadingId, type WaitKind } from '../protocol.ts';
-import { requireRole, requireSelf, requireTpm, writeRole, type RoleRecord } from '../roster.ts';
+import { readRole, requireRole, requireSelf, requireTpm, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
 import { MAX_POINTS, type Note, type NoteKind, type NoteLink } from '../tracker/types.ts';
 import type { Incoming } from '../transport/types.ts';
+import { isPageUrl } from './store.ts';
 
 /** 記録の 1 行目の一言に使う長さの上限（メッセージの本文から作るとき）。 */
 const SUMMARY_LIMIT = 80;
@@ -123,6 +126,28 @@ function sender(ctx: Context): RoleRecord {
   const self = requireSelf(ctx);
   assertRead(ctx, 'TPM 担当');
   return self;
+}
+
+/** Auditor が打たない命令を止める（成果は PR や【done】でなく、Product Manager へじかに報告する）。 */
+function notAuditor(self: RoleRecord, command: string): void {
+  if (self.role !== 'auditor') return;
+  throw new TpmError(`Auditor は ${command} を打ちません。監査の報告は tpm report audit、Product Manager の決定は tpm report decided で出してください（PR は出さず、Product Manager とは Audit の席でじかに話す）`);
+}
+
+/** Auditor だけが打つ命令の、自分の名簿の行。送る前の検査（assertRead）を通す。 */
+function auditor(ctx: Context, command: string): RoleRecord {
+  const self = sender(ctx);
+  if (self.role !== 'auditor') throw new TpmError(`${command} は Auditor（Audit の席）が打ちます`);
+  return self;
+}
+
+/**
+ * TPM 担当の居場所が今あれば、その宛先。TPM 担当が名乗っていない・居場所が無ければ undefined。
+ * 居場所が状態を出しているかで見る（TPM 担当は tpm が起こした居場所ではないので、居場所の一覧に載らない連携がある）。
+ */
+function tpmSeat(ctx: Context): string | undefined {
+  const address = ctx.state.read<TpmRecord>('tpm.jsonc')?.address;
+  return address !== undefined && ctx.transport.status(address) !== undefined ? address : undefined;
 }
 
 /** TPM 担当がメッセージを送る先の、名簿の行。送る前の検査（assertRead）を通す。 */
@@ -298,6 +323,7 @@ export function askTpm(ctx: Context, options: { text: string, waitingFor: string
 /** Product Manager に決めてほしいことを書いた確認のページを、TPM 担当に送る。ページは開かない（Product Manager は置き場の一覧の UI で見る）。 */
 export function askPm(ctx: Context, options: { url: string, items: string[], waitingFor: string }): string[] {
   const self = sender(ctx);
+  notAuditor(self, 'tpm ask pm');
   if (options.items.length === 0) throw new TpmError('--item で、決めてほしい項目の題を 1 つ以上書いてください');
   const body = `${options.url} 項目: ${options.items.map((item, i) => `(${i + 1}) ${item}`).join(' ')}`;
   notRepeatToTpm(ctx, self, 'ask-pm', body);
@@ -320,6 +346,7 @@ export function askDevops(ctx: Context, options: { what: string, why: string, ur
 /** 自分の PR を 1 本 merge したと知らせる（【merged】）。 */
 export function reportMerged(ctx: Context, options: { pr: string, note: string, unchecked?: string }): string[] {
   const self = sender(ctx);
+  notAuditor(self, 'tpm report merged');
   const checked = assertMerged(ctx, [options.pr], options.unchecked);
   return [toTpm(ctx, self, 'merged', `${options.pr} ${options.note}${checked}`)];
 }
@@ -327,6 +354,7 @@ export function reportMerged(ctx: Context, options: { pr: string, note: string, 
 /** 文書やコメントの食い違いを直した PR を merge したと知らせ、課題があれば記録を書く（【doc-fix】）。 */
 export function reportDocFix(ctx: Context, options: { pr: string, note: string, unchecked?: string }): string[] {
   const self = sender(ctx);
+  notAuditor(self, 'tpm report doc-fix');
   const checked = assertMerged(ctx, [options.pr], options.unchecked);
   const body = `${options.pr}（merge 済み）${options.note}${checked}`;
   notRepeatToTpm(ctx, self, 'doc-fix', body);
@@ -363,6 +391,7 @@ export interface DoneOptions {
 /** 依頼書 1 つの成果を出した。TPM 担当は「残り」と「決めてほしいこと」で【dismiss】を送るかを決めるので、どちらも必ず書く。 */
 export function reportDone(ctx: Context, options: DoneOptions): string[] {
   const self = sender(ctx);
+  notAuditor(self, 'tpm report done');
   const remaining = required(options.remaining, '--remaining（残り）');
   const decisions = required(options.decisions, '--decisions（決めてほしいこと）');
   const kind = DONE_KINDS[options.kind];
@@ -394,6 +423,7 @@ export interface EndOptions {
 /** 【dismiss】を受けて片付けた。課題に結果を書き、課題を閉じる（担当の交代なら閉じない）。 */
 export function reportEnd(ctx: Context, options: EndOptions): string[] {
   const self = sender(ctx);
+  notAuditor(self, 'tpm report end');
   if (self.dismissed === undefined && !ROLES[self.role].endsWithoutDismiss) {
     throw new TpmError('【dismiss】がまだ来ていません。【done】の後は次の【brief】か【dismiss】を待ち、自分から【end】を送らない');
   }
@@ -436,6 +466,62 @@ export function reportDependabot(ctx: Context, id: 'merge-request' | 'not-yet' |
   return out;
 }
 
+// ---- Auditor が打つ ----
+
+/** `tpm report audit` の旗。 */
+export interface AuditOptions {
+  /** 監査のページ（tpm page put --kind audit で置いた URL）。 */
+  url: string
+  summary: string
+  /** Product Manager に決めてほしい項目の題（無ければ空）。 */
+  items: string[]
+}
+
+/**
+ * Auditor が、監査のページを Product Manager へじかに報告した（報告は Audit の席とページに出ている）。
+ * 記録を残し、TPM 担当に写しを送り（【audit】。TPM 担当は伝え直さない）、状態を回答待ち(PM) にする（その回の終わりに Mac のバナーが出る）。
+ * TPM 担当が起きていなくても報告はできる（写しは送らず、その事を出す）。
+ */
+export function reportAudit(ctx: Context, options: AuditOptions): string[] {
+  const self = auditor(ctx, 'tpm report audit');
+  if (!isPageUrl(ctx.env, options.url)) throw new TpmError(`--url は、tpm page put --kind audit で置いた監査のページの URL にしてください: ${options.url}`);
+  const decisions = options.items.length === 0 ? 'なし' : options.items.map((item, i) => `(${i + 1}) ${item}`).join(' ');
+  const body = `${options.url} 要点: ${options.summary}／決めてほしいこと: ${decisions}（写し。Product Manager には Audit の席でじかに報告した。伝え直さなくてよい）`;
+  const copied = tpmSeat(ctx) !== undefined;
+  const sent = copied ? toTpm(ctx, self, 'audit', body) : 'TPM 担当が起きていないので、写しは送っていない（報告は、この席とページで Product Manager に出す）';
+  appendAudit(ctx, { kind: 'report', url: options.url, summary: options.summary, items: options.items, copied });
+  return [sent, ...wait(ctx, 'pm', '監査の報告'), 'この席に、要点と決めてほしいことを書いて、Product Manager の答えを待つ'];
+}
+
+/** `tpm report decided` の旗。どれも、監査のページの勧告の題。 */
+export interface DecidedOptions {
+  url: string
+  /** する（TPM 担当が課題にして振る）。 */
+  adopted: string[]
+  /** 受け入れる（直さない）。 */
+  accepted: string[]
+  /** 見送る（今は決めない）。 */
+  later: string[]
+}
+
+/**
+ * Auditor が、Product Manager の決定を TPM 担当に渡す（【decided】）。TPM 担当は「する」の勧告を課題にして振る。
+ * TPM 担当が起きていなければ、送らず・記録せずに止まる（起きた後に打ち直す）。
+ */
+export function reportDecided(ctx: Context, options: DecidedOptions): string[] {
+  const self = auditor(ctx, 'tpm report decided');
+  if (options.adopted.length + options.accepted.length + options.later.length === 0) throw new TpmError('--do・--accept・--later のどれかで、勧告の題を 1 つ以上書いてください');
+  if (tpmSeat(ctx) === undefined) throw new TpmError('TPM 担当が起きていません。決定は送っていません・記録していません。Product Manager にそう伝え、TPM 担当が起きた後に、同じ命令を打ち直してください');
+  const part = (label: string, titles: string[]): string[] => titles.length === 0 ? [] : [`${label}: ${titles.join('・')}`];
+  const body = `${options.url} ${[...part('する', options.adopted), ...part('受け入れる', options.accepted), ...part('見送る', options.later)].join('／')}`;
+  const sent = toTpm(ctx, self, 'decided', body);
+  appendAudit(ctx, { kind: 'decided', url: options.url, adopted: options.adopted, accepted: options.accepted, later: options.later });
+  // Product Manager は今この席で答えたところなので、バナーは出さない（wait の記録は書かず、状態の字だけ替える）。
+  const text = WAIT.pm('次の /audit');
+  showWait(ctx, text);
+  return [sent, `状態: ${text}`];
+}
+
 // ---- TPM 担当が打つ ----
 
 /** 動いている担当に、新しい依頼書を送る。 */
@@ -471,6 +557,7 @@ export function notify(ctx: Context, key: string, options: { text: string, reply
 
 /** この課題に続きは無い、と知らせる。handover は担当の交代（課題は続くので、担当は課題を閉じない）。 */
 export function dismiss(ctx: Context, key: string, options: { handover: boolean, supersede?: boolean }): string[] {
+  if (readRole(ctx, key)?.role === 'auditor') throw new TpmError('Auditor の席に【dismiss】は送れません（Auditor の席は、Product Manager が起こし、閉じる）');
   const role = receiver(ctx, key);
   const settled = assertSettled(ctx, role, 'dismiss', options.supersede === true ? 'supersede' : undefined);
   const body = [options.handover
