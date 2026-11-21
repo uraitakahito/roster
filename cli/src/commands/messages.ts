@@ -74,7 +74,7 @@ export function askTpm(ctx: Context, options: { text: string, waitingFor: string
   return [toTpm(ctx, self, 'ask-tpm', options.text, options.replyTo), ...wait(ctx, 'tpm', options.waitingFor)];
 }
 
-/** Product Manager に決めてほしいことを書いた確認のページを、TPM 担当に送る。 */
+/** Product Manager に決めてほしいことを書いた確認のページを、TPM 担当に送る。ページは開かない（Product Manager は置き場の一覧の UI で見る）。 */
 export function askPm(ctx: Context, options: { url: string, items: string[], waitingFor: string }): string[] {
   const self = requireSelf(ctx);
   if (options.items.length === 0) throw new TpmError('--item で、決めてほしい項目の題を 1 つ以上書いてください');
@@ -85,7 +85,6 @@ export function askPm(ctx: Context, options: { url: string, items: string[], wai
     links: [{ label: '確認', url: options.url }],
     points: options.items,
   });
-  ctx.transport.show(options.url);
   const body = `${options.url} 項目: ${options.items.map((item, i) => `(${i + 1}) ${item}`).join(' ')}`;
   return [...recorded, toTpm(ctx, self, 'ask-pm', body), ...wait(ctx, 'pm', options.waitingFor)];
 }
@@ -147,7 +146,6 @@ export function reportDone(ctx: Context, options: DoneOptions): string[] {
     links: options.url === undefined ? [] : [{ label: kind, url: options.url }],
     points: options.points,
   });
-  if (options.url !== undefined) ctx.transport.show(options.url);
   const body = `${options.url === undefined ? '' : `${options.url} `}要点: ${options.summary}／残り: ${remaining}／決めてほしいこと: ${decisions}`;
   const sent = toTpm(ctx, self, 'done', body);
   ctx.transport.setStatus('wait', WAIT_NEXT_BRIEF);
