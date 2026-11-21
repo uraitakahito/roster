@@ -100,7 +100,7 @@ export interface World {
   role: (key: string, address: string) => Context
   /** file の連携（届いたメッセージ・起こす命令を読む）。 */
   wire: FileTransport
-  /** 偽の置き場（tpm page put・path・list・import と、tpm assign の課題の写しが使う）。 */
+  /** 偽の置き場（tpm page put・path・list・import・delete と、tpm assign の課題の写しが使う）。 */
   store: FakeStore
   /** sleep で待った回数。 */
   slept: () => number
