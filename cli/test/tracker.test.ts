@@ -118,12 +118,6 @@ describe('JiraTracker', () => {
     expect(calls[0]?.args).toEqual(['jira', 'workitem', 'view', 'SKILLS-14', '--fields', 'summary,status,description,comment', '--json']);
   });
 
-  test('comments は view の ADF を字にして返す', () => {
-    const { exec, calls } = fake({ stdout: JSON.stringify({ fields: { comment: { comments: [{ id: '10042', body: noteToAdf(note) }] } } }) });
-    expect(new JiraTracker(exec).comments('SKILLS-12')).toEqual([{ id: '10042', text: adfToText(noteToAdf(note)) }]);
-    expect(calls[0]?.args).toEqual(['jira', 'workitem', 'view', 'SKILLS-12', '--fields', 'comment', '--json']);
-  });
-
   test('close は状態を 完了 に進める', () => {
     const { exec, calls } = fake();
     new JiraTracker(exec).close('SKILLS-12');
@@ -150,12 +144,6 @@ describe('GithubTracker', () => {
     const { exec, calls } = fake();
     new GithubTracker(exec, '/w').comment('gh-12', note);
     expect(calls[0]).toEqual({ cmd: 'gh', args: ['issue', 'comment', '12', '--body-file', '-'], options: { cwd: '/w', input: noteToMarkdown(note) } });
-  });
-
-  test('comments は本文をそのまま返す', () => {
-    const { exec, calls } = fake({ stdout: JSON.stringify({ comments: [{ id: 'IC_1', body: 'a\n\nb', author: {} }] }) });
-    expect(new GithubTracker(exec, '/w').comments('#12')).toEqual([{ id: 'IC_1', text: 'a\n\nb' }]);
-    expect(calls[0]?.args).toEqual(['issue', 'view', '12', '--json', 'comments']);
   });
 
   test('view は題・状態・URL・本文・コメントを返す', () => {
@@ -193,7 +181,6 @@ describe('NoneTracker', () => {
     expect(none.owns()).toBe(false);
     none.comment();
     none.close();
-    expect(none.comments()).toEqual([]);
     expect(() => none.view('SKILLS-1')).toThrow(TpmError);
   });
 });

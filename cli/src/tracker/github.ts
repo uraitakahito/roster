@@ -65,11 +65,6 @@ export class GithubTracker implements Tracker {
     this.run(['comment', this.number(key), '--body-file', '-'], noteToMarkdown(note));
   }
 
-  comments(key: string): TrackerComment[] {
-    const view = JSON.parse(this.run(['view', this.number(key), '--json', 'comments'])) as { comments?: GithubComment[] };
-    return (view.comments ?? []).map(toComment);
-  }
-
   close(key: string): void {
     // PR の本文に Closes #12 と書くと merge で勝手に閉じる。閉じるのは【dismiss】の後のここだけにする。
     this.run(['close', this.number(key), '--reason', 'completed']);
