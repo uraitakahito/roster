@@ -19,7 +19,7 @@ export interface Call {
 }
 
 /**
- * 偽の置き場: tpm が打つ curl を受け、本物（pagestore）と同じ決まりで答える。
+ * 偽の置き場: tpm が打つ curl を受け、本物（pagetray）と同じ決まりで答える。
  * 番号は種類ごとに今の最大＋1（消した番号も数える）、名指した番号が使われているか消した番号なら 409。消した URL は 410。本物との揃いは、CI のつなぎの段が見る。
  */
 export class FakeStore {
@@ -29,6 +29,8 @@ export class FakeStore {
   removed = new Set<string>();
   /** true の間、つながらない（curl の exit 7）。 */
   down = false;
+  /** 答えに付ける口の版（header `Pagetray-Api`）。undefined は、口の版ができる前の置き場（header が無い）。 */
+  api: string | undefined = '1';
   /** 置く要求の答えを替える（置き場が断る時の試験）。 */
   refuse: { code: number, body: string } | undefined;
 
@@ -39,7 +41,7 @@ export class FakeStore {
     const out = args.includes('-o') ? args[args.indexOf('-o') + 1] : undefined;
     const reply = (code: number, body: Buffer | string): ExecResult => {
       if (out !== undefined) writeFileSync(out, body);
-      return { status: 0, stdout: `${out === undefined ? body.toString() : ''}\n${code}`, stderr: '' };
+      return { status: 0, stdout: `${out === undefined ? body.toString() : ''}\n${code} ${this.api ?? ''}`, stderr: '' };
     };
     const q = url.searchParams;
     if (args.includes('DELETE')) {

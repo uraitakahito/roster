@@ -1,4 +1,4 @@
-// cli と本物の置き場（pagestore）のつなぎの試験。$TPM_E2E_PAGES_URL に動いている pagestore の URL がある時だけ流す
+// cli と本物の置き場（pagetray）のつなぎの試験。$TPM_E2E_PAGES_URL に動いている pagetray の URL がある時だけ流す
 // （CI の pagetray-e2e.yml。手元では docs-site の開発のページの「pagetray（ページの置き場のサーバー）とのつなぎ」）。
 // ほかの試験は偽の置き場（helpers.ts の FakeStore）で流すので、API の形（URL・引数の名・JSON の欄）のずれはここで見つける。
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
@@ -28,7 +28,7 @@ function setup() {
   return { w, dir, real, put, list, project: basename(w.tpm.state.dir), tpm: real(w.tpm) };
 }
 
-describe.skipIf(URL === '')('cli と pagestore のつなぎ', () => {
+describe.skipIf(URL === '')('cli と pagetray のつなぎ', () => {
   test('どの役割も、どの種類も置けて、役割と種類で探せて、置き場から読み戻せる', () => {
     const s = setup();
     for (const role of ROLE_NAMES) {

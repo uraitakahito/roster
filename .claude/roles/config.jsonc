@@ -3,6 +3,21 @@
   // 課題の記録は Jira（acli が login している site。今は future-gadget-laboratory.atlassian.net の SKILLS）に書く。
   "tracker": "jira",
   "infra": {
+    // ページの置き場の新しい名（別の repo の pagetray の image で動かす container と volume）。
+    // 起こし方は pagetray の README の「動かす」。下の tpm-pagestore から、これに入れ替える。
+    "pagetray": {
+      "guard": "tpm",
+      "match": [
+        "--name pagetray",
+        "container start pagetray",
+        "container stop pagetray",
+        "container kill pagetray",
+        "container delete pagetray",
+        "container rm pagetray",
+        "container volume delete pagetray-data",
+        "container volume rm pagetray-data",
+      ],
+    },
     // ページの置き場（pagestore の container と、DB を置く volume）。止めると担当はページを置けず、
     // volume を消すと置かれたページの記録（役割・workspace の ID）が消える。
     // 起こし方は docs-site の運用のページの「ページの置き場（tpm-pagestore）」。
