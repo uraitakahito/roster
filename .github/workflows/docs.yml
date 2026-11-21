@@ -5,7 +5,8 @@ name: docs
 # **main への push のたびに出す。** この repo にはタグが無く、main がそのまま使われる版なので、
 # 公開する docs も main の docs にする。github-pages の環境も、main からの deploy だけを許す。
 # PR の検査は site.yml（deploy を持たない）が見る。
-# 公開し直すときは gh workflow run docs.yml --ref main。
+# 公開し直すときは gh workflow run docs.yml --ref main。落ちた回の gh run rerun は使わない ——
+# 前の試みの artifact が残り、同じ名の artifact が 2 つになって deploy がまた落ちる。
 
 on:
   push:
@@ -30,7 +31,7 @@ jobs:
     timeout-minutes: 10
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.deployment-retry.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
       # pnpm の版は docs-site/package.json の packageManager を読む（root に package.json は無い）
@@ -48,5 +49,16 @@ jobs:
       - uses: actions/upload-pages-artifact@v5
         with:
           path: docs-site/dist
+      # 上げた直後の deploy が、artifact を「0 個」と見て落ちることがある（上げた物が一覧に
+      # 出るまでの遅れ。2026-11-21 は 52 回のうち 15 回）。落ちても job を止めず、間を置いて
+      # 同じ回の中で 1 度だけやり直す。同じ回の中なら artifact は 1 つのままなので重ならない。
       - id: deployment
+        continue-on-error: true
+        uses: actions/deploy-pages@v5
+      - if: steps.deployment.outcome == 'failure'
+        run: |
+          echo "::warning::deploy-pages が落ちたので、30 秒おいて 1 度やり直す"
+          sleep 30
+      - id: deployment-retry
+        if: steps.deployment.outcome == 'failure'
         uses: actions/deploy-pages@v5
