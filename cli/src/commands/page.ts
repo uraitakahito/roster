@@ -8,6 +8,7 @@ import { basename, dirname, join } from 'node:path';
 import type { Context } from '../context.ts';
 import type { ExecResult } from '../exec.ts';
 import type { RoleRecord, TpmRecord } from '../roster.ts';
+import { rolesConfigFile } from '../config.ts';
 import { readRole } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
 import { roleOf } from './infra.ts';
@@ -117,6 +118,11 @@ export function pagePut(ctx: Context, file: string, options: { kind: string, key
 
 /** file の中身か字をページとして置き、控えの path と URL を返す（pagePut と、tpm assign の課題の写し）。 */
 export function putPage(ctx: Context, source: { file: string } | { text: string }, kind: PageKind, keyOption?: string): { path: string, url: string } {
+  // project は $TPM_PROJECT、無ければ今いる folder。tpm を使う project の印（設定の file・TPM 担当が起きた印）が無い folder なら、
+  // scratchpad などから打った置き間違い（その folder の名が別の project になる）なので止める。
+  if (!existsSync(rolesConfigFile(ctx.project)) && ctx.state.read('tpm.jsonc') === undefined) {
+    throw new TpmError(`tpm を使う project の folder ではありません: ${ctx.project}（.claude/roles/config.jsonc も、TPM 担当が起きた印も無い）。project の folder で打つか、$TPM_PROJECT に project の path を付けてください`);
+  }
   const key = keyOption ?? ctx.env.TPM_KEY;
   if (!key) throw new TpmError('課題の Key がわかりません。TPM 担当は --key <Key> を付けてください');
   if (!KEY.test(key)) throw new TpmError(`課題の Key に使えない字があります: ${key}`);
