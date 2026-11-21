@@ -8,13 +8,13 @@ import type { RoleRecord } from './roster.ts';
 
 /**
  * claude の引数。--add-dir は後ろの語もまとめて folder として読むので、最初の入力の前に -- を置く。
- * --settings で guard（tpm guard）の hook を付ける。hook の拒否は bypassPermissions でも効く。
+ * --settings で guard（tpm guard）の hook を付ける。hook の拒否は bypassPermissions でも効く。見る道具は役割で決まる（guardSettings）。
  * --add-dir の先の settings の hook は読まれないので、ここで渡す。
  */
 export function claudeArgs(record: RoleRecord, root: string): string[] {
   return [
     '--settings',
-    guardSettings(join(root, 'cli', 'bin', 'tpm')),
+    guardSettings(join(root, 'cli', 'bin', 'tpm'), record.role),
     '--model',
     record.model,
     '--effort',

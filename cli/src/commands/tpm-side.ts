@@ -7,7 +7,7 @@ import { shellQuote } from '../shell.ts';
 import { describeTrackers, OWN_LABEL, readRolesConfig, rolesConfigFile, sourceLabel, type ConfigSource } from '../config.ts';
 import type { Context } from '../context.ts';
 import { syncDeliveries } from '../evidence.ts';
-import { modelStatus, ROLES, TPM_TITLE, WAIT, type RoleName } from '../protocol.ts';
+import { AUDIT_KEY, modelStatus, ROLES, TPM_TITLE, WAIT, type RoleName } from '../protocol.ts';
 import { openLine } from '../incidents.ts';
 import { resolveSettings } from '../settings.ts';
 import { allRoles, assertKey, LOCAL_KEY, readRole, removeRole, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
@@ -162,6 +162,8 @@ export interface AssignOptions {
 export function assign(ctx: Context, key: string, options: AssignOptions): string[] {
   assertKey(key);
   if (!Number.isFinite(options.wait) || options.wait < 0) throw new TpmError('--wait は 0 以上の数にしてください（0 なら待たない）');
+  // Auditor は TPM 担当の回し方も見るので、TPM 担当の手では起こさない・依頼書も送らない。
+  if (options.role === 'auditor' || key === AUDIT_KEY) throw new TpmError('Auditor の席（Key audit）は、Product Manager が起こします。tpm assign では起こせません・依頼書も送れません');
   const existing = readRole(ctx, key);
   // 名簿にある担当（前の決まりの長い Key を含む）は、そのまま動き続けられるよう形を問わない。
   if (existing === undefined && key.startsWith('t-') && !LOCAL_KEY.test(key)) {

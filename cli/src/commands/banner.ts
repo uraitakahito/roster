@@ -163,7 +163,7 @@ export function bannerSetup(root: string, env: NodeJS.ProcessEnv): string[] {
     '    ]',
     '  }',
     '',
-    `何を出すかは ${bannerConfigFile(env)} で選ぶ（無ければ既定: TPM 担当が Product Manager を待つ回と、どこでも許可/質問だけ出す。消す時は音も消す）。`,
+    `何を出すかは ${bannerConfigFile(env)} で選ぶ（無ければ既定: TPM 担当と Auditor が Product Manager を待つ回と、どこでも許可/質問だけ出す。消す時は音も消す）。`,
     '足した後に tpm banner check で確かめる。Node を上げたら、これを打ち直して命令を替える（PATH に今の Node と cmux の folder を書いているため）。',
   ];
 }

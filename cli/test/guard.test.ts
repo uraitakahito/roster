@@ -1,11 +1,11 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, realpathSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { guard, infraApprove, infraList, infraRevoke, infraRun } from '../src/commands/infra.ts';
 import type { ConfigSource, InfraEnv } from '../src/config.ts';
-import { commandOf, guardSettings, judge, touched, type Approval } from '../src/guard.ts';
+import { commandOf, guardSettings, judge, judgeWrite, touched, writeOf, type Approval } from '../src/guard.ts';
 import type { RoleName } from '../src/protocol.ts';
 import { splitCommands } from '../src/shell.ts';
 import { world } from './helpers.ts';
@@ -251,12 +251,101 @@ describe('hook の入力と settings', () => {
     const tpmBin = join(dir, 'tpm');
     symlinkSync(realpathSync(join(import.meta.dirname, '..', 'bin', 'tpm')), tpmBin);
     const command = hookCommand(guardSettings(tpmBin));
-    const env = { ...process.env, TPM_PROJECT: undefined, TPM_STATE: undefined, TPM_KEY: undefined, TPM_ROLE: undefined };
+    // 止めた記録（guard.jsonl）を、この Mac の本物の状態の folder でなく、一時の folder に書かせる。
+    const state = mkdtempSync(join(tmpdir(), 'tpm-guard-state-'));
+    const env = { ...process.env, TPM_PROJECT: undefined, TPM_STATE: undefined, TPM_KEY: undefined, TPM_ROLE: undefined, XDG_STATE_HOME: state };
     const run = (cmd: string) => spawnSync('/bin/sh', ['-c', command], { cwd: dir, env, encoding: 'utf8', input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: cmd } }) });
     const denied = run(['cmux', 'set-status', 'x'].join(' '));
     expect(denied.stderr).toContain('tpm wait');
     expect(denied.status).toBe(2);
     expect(run('ls').status).toBe(0);
+    expect(existsSync(join(state, 'tpm'))).toBe(true);
+  });
+
+  test('Auditor の席の settings は、file を書き替える道具の前にも tpm guard を呼ぶ', () => {
+    const matcher = (role?: RoleName): string => (JSON.parse(guardSettings('/r/cli/bin/tpm', role)) as { hooks: { PreToolUse: { matcher: string }[] } }).hooks.PreToolUse[0]?.matcher ?? '';
+    expect(matcher('auditor')).toBe('Bash|Edit|Write|NotebookEdit');
+    expect(matcher('software-engineer')).toBe('Bash');
+  });
+
+  test('file を書き替える道具の、書く先を取り出す', () => {
+    expect(writeOf(JSON.stringify({ tool_name: 'Write', tool_input: { file_path: '/x/a.md', content: 'a' } }))).toEqual({ tool: 'Write', path: '/x/a.md' });
+    expect(writeOf(JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: '/x/a.md' } }))).toEqual({ tool: 'Edit', path: '/x/a.md' });
+    expect(writeOf(JSON.stringify({ tool_name: 'NotebookEdit', tool_input: { notebook_path: '/x/a.ipynb' } }))).toEqual({ tool: 'NotebookEdit', path: '/x/a.ipynb' });
+    expect(writeOf(JSON.stringify({ tool_name: 'NotebookEdit', tool_input: {} }))).toEqual({ tool: 'NotebookEdit', path: undefined });
+    expect(writeOf(JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'ls' } }))).toBeUndefined();
+    expect(writeOf(JSON.stringify({ tool_name: 'Read', tool_input: { file_path: '/x' } }))).toBeUndefined();
+  });
+});
+
+describe('Auditor は repo を変えない', () => {
+  test.each<[string, boolean]>([
+    ['git status', true],
+    ['git log --oneline -5 origin/main', true],
+    ['git -C /w/skills diff main...origin/main', true],
+    ['git fetch origin', true],
+    ['git show 813d86d:cli/src/guard.ts', true],
+    ['git branch -a', true],
+    ['git branch --show-current', true],
+    ['git tag -l', true],
+    ['git worktree list', true],
+    ['gh pr view 141 --json state', true],
+    ['gh pr list', true],
+    ['gh api repos/o/r/pulls/141', true],
+    ['gh api -X GET repos/o/r/rulesets', true],
+    ['grep -rn "git push" docs-site', true],
+    ['git commit -m x', false],
+    ['git -C /w/skills pull --ff-only', false],
+    ['cd /w/skills && git push origin main', false],
+    ['git checkout main', false],
+    ['git switch -c t-x/y', false],
+    ['git stash', false],
+    ['git reset --hard origin/main', false],
+    ['git branch -D t-x/y', false],
+    ['git branch t-x/y', false],
+    ['git tag v1.0.0', false],
+    ['git worktree add ../w t-x/y', false],
+    ['gh pr create --title x', false],
+    ['gh pr merge 141 --squash', false],
+    ['gh release create v1', false],
+    ['gh api -X POST repos/o/r/rulesets', false],
+    ['gh api --method=PUT repos/o/r/pages', false],
+    ['gh api repos/o/r/labels -f name=x', false],
+    ['TPM_RAW=1 git push', false],
+  ])('%s', (command, allow) => {
+    expect(ask(command, 'auditor').allow).toBe(allow);
+  });
+
+  test('ほかの担当と TPM 担当の git・gh は止めない。止めた訳に、勧告に書くよう言う', () => {
+    expect(ask('git commit -m x && git push', 'software-engineer').allow).toBe(true);
+    expect(ask('gh pr merge 141 --squash').allow).toBe(true);
+    expect(ask('git -C /w/skills pull --ff-only', 'auditor')).toEqual({ allow: false, reason: expect.stringContaining('Auditor は repo を変えません（git -C /w/skills）。直すことは、監査のページの勧告に') as string });
+  });
+
+  const roots = (base: string) => [{ name: 'project の folder', dir: join(base, 'project') }, { name: '状態の folder', dir: join(base, 'state') }];
+
+  test('project と状態の folder の下への書き込みを止め、外への書き込みは通す', () => {
+    const base = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-audit-')));
+    mkdirSync(join(base, 'project', 'skills'), { recursive: true });
+    const write = (path: string | undefined) => judgeWrite({ tool: 'Write', path }, 'auditor', roots(base));
+    expect(write(join(base, 'project', 'skills', 'README.md'))).toEqual({ allow: false, reason: expect.stringMatching(/^Auditor は、project の folder の下を書き替えません.*tpm page put/) as string });
+    // まだ無い folder の中の file と、状態の folder（まだ無い）も止める。
+    expect(write(join(base, 'project', 'new', 'dir', 'a.md')).allow).toBe(false);
+    expect(write(join(base, 'state', 'incidents', '1.jsonc')).allow).toBe(false);
+    expect(write(join(base, 'project')).allow).toBe(false);
+    expect(write(join(base, 'scratch', 'audit.html')).allow).toBe(true);
+    // 名が頭で重なるだけの隣の folder は、下ではない。
+    expect(write(join(base, 'project-notes', 'a.md')).allow).toBe(true);
+    expect(write(undefined)).toEqual({ allow: false, reason: expect.stringContaining('書く先を読めない') as string });
+  });
+
+  test('symbolic link を通した書き込みも止める。ほかの担当と TPM 担当は通す', () => {
+    const base = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-audit-')));
+    mkdirSync(join(base, 'project'), { recursive: true });
+    symlinkSync(join(base, 'project'), join(base, 'link'));
+    expect(judgeWrite({ tool: 'Edit', path: join(base, 'link', 'a.md') }, 'auditor', roots(base)).allow).toBe(false);
+    expect(judgeWrite({ tool: 'Edit', path: join(base, 'project', 'a.md') }, 'software-engineer', roots(base)).allow).toBe(true);
+    expect(judgeWrite({ tool: 'Edit', path: join(base, 'project', 'a.md') }, undefined, roots(base)).allow).toBe(true);
   });
 });
 
@@ -302,6 +391,24 @@ describe('tpm infra と tpm guard', () => {
     const w = world();
     expect(infraList(w.tpm)).toEqual(['環境の宣言は無い（設定の infra に書く）']);
     expect(guard(w.tpm, JSON.stringify({ tool_name: 'Edit', tool_input: {} })).allow).toBe(true);
+  });
+
+  test('Auditor の書き込みと git の変える命令は hook で止まり、記録に残る', () => {
+    const w = world();
+    const auditor = { ...w.role('audit', 'file:9'), env: { TPM_KEY: 'audit', TPM_ROLE: 'auditor' } };
+    const write = (path: string): string => JSON.stringify({ tool_name: 'Write', tool_input: { file_path: path, content: 'x' } });
+    expect(guard(auditor, write(join(w.tpm.project, 'README.md'))).allow).toBe(false);
+    expect(guard(auditor, write(join(w.tpm.state.dir, 'log.jsonl'))).allow).toBe(false);
+    expect(guard(auditor, write(join(tmpdir(), 'audit-page.html'))).allow).toBe(true);
+    expect(guard(auditor, hook('git pull --ff-only')).allow).toBe(false);
+    expect(guard(auditor, hook('git log -1')).allow).toBe(true);
+    // Software Engineer 担当の書き込みは見ない。
+    expect(guard({ ...w.role('t-x7k2', 'file:1'), env: { TPM_KEY: 't-x7k2', TPM_ROLE: 'software-engineer' } }, write(join(w.tpm.project, 'README.md'))).allow).toBe(true);
+    expect(w.tpm.state.lines<{ by: string, role: string, command: string }>('guard.jsonl').map(l => [l.by, l.role, l.command.split(' ')[0]])).toEqual([
+      ['audit', 'auditor', 'Write'],
+      ['audit', 'auditor', 'Write'],
+      ['audit', 'auditor', 'git'],
+    ]);
   });
 });
 
