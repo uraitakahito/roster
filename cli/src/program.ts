@@ -73,6 +73,8 @@ export function buildProgram(): Command {
     .option('--effort <effort>', '担当の effort（既定は config.jsonc の担当の欄・$TPM_EFFORT・担当の既定の順）')
     .option('--permission-mode <mode>', '担当の permission mode（既定は config.jsonc の担当の欄・$TPM_PERMISSION_MODE・担当の既定の順）')
     .option('--note <一言>', '【brief】に添える一言（担当が動いているとき）')
+    .option('--supersede', '続きの【brief】で、済んでいない前の依頼書を取り消す（本文に「取り消す: …」と載る）')
+    .option('--after', '続きの【brief】で、済んでいない前の依頼書を済ませてから、これをさせる（本文に載る）')
     .option('--no-issue-copy <訳>', '課題（Jira・GitHub の Issue の Key）の写しのページを作らずに振る。訳は担当に届く')
     .option('--wait <秒>', '起こした担当の tpm hello を待つ秒（0 なら待たない）', '90')
     .action((key: string, { issueCopy, ...options }: Omit<AssignOptions, 'wait' | 'role' | 'noIssueCopy'> & { wait: string, role: string, issueCopy: true | string }) => {

@@ -49,6 +49,8 @@ export interface Transport {
   send(to: string, from: string, text: string, replyTo?: string): Delivery
   /** 自分宛てで、まだ届いていないメッセージ（手を動かしている間は届かない道具がある）。 */
   pending(): Incoming[]
+  /** 宛先に送り、まだ届いていないメッセージの id（送る前の検査が、自分の送った物の届きを見る）。 */
+  queued(to: string): string[]
   /** 道具が覚えているメッセージの時刻（宛先を問わない。閉じた居場所の分も）。道具が持たない・読めないなら空。 */
   history(): MessageTrace[]
   /** 担当の居場所を作って命令を動かし、宛先を返す。 */

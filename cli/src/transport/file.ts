@@ -47,8 +47,12 @@ export class FileTransport implements Transport {
     this.state.write(`${DIR}/held/${fileName(address)}.jsonc`, this.inbox(address).length);
   }
 
-  /** hold をやめる（溜まっていた物は届いたことになる）。 */
-  release(address: string): void {
+  /** hold をやめる（溜まっていた物は届いたことになる）。at は届いた時刻（試験が history に出す）。 */
+  release(address: string, at?: string): void {
+    const from = this.heldFrom(address);
+    if (from !== undefined && at !== undefined) {
+      for (const m of this.inbox(address).slice(from)) this.state.append(`${DIR}/delivered.jsonl`, { id: m.id, deliveredAt: at } satisfies MessageTrace);
+    }
     this.state.remove(`${DIR}/held/${fileName(address)}.jsonc`);
   }
 
@@ -67,9 +71,14 @@ export class FileTransport implements Transport {
     return from === undefined ? [] : this.inbox(this.self).slice(from).map(m => ({ id: m.id, from: m.from, text: m.text }));
   }
 
-  /** file の連携は時刻を持たない。 */
+  queued(to: string): string[] {
+    const from = this.heldFrom(to);
+    return from === undefined ? [] : this.inbox(to).slice(from).map(m => m.id);
+  }
+
+  /** file の連携は時刻を持たない。release に時刻を渡した物だけ、届いた時刻を返す（試験用）。 */
   history(): MessageTrace[] {
-    return [];
+    return this.state.lines<MessageTrace>(`${DIR}/delivered.jsonl`);
   }
 
   spawn(options: SpawnOptions): string {

@@ -68,6 +68,14 @@ describe('CmuxTransport', () => {
     expect(calls[1]?.args).toEqual(['--json', 'agent', 'inbox', '--surface', 'workspace:7', '--state', 'queued']);
   });
 
+  test('queued は相手の宛先の、まだ届いていないメッセージの id を読む', () => {
+    const { transport, calls } = fake([
+      ['--json agent inbox', json({ messages: [{ id: ID, sender_name: 'Technical Program Manager', body: '【brief】u', state: 'queued' }] })],
+    ]);
+    expect(transport.queued('workspace:12')).toEqual([ID]);
+    expect(calls[0]?.args).toEqual(['--json', 'agent', 'inbox', '--surface', 'workspace:12', '--state', 'queued']);
+  });
+
   test('spawn は居場所を作って宛先を返し、focus を奪わない', () => {
     const { transport, calls } = fake([['--json workspace create', json({ workspace_ref: 'workspace:12', surface_ref: 'surface:3' })]]);
     expect(transport.spawn({ title: 'SWE t-x7k2: 題', cwd: '/w', command: 'tpm run-role t-x7k2' })).toBe('workspace:12');

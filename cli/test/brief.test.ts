@@ -6,7 +6,7 @@ import { summaryText, SUMMARY_MIN } from '../src/brief.ts';
 import { DEFAULT_PAGES_URL } from '../src/commands/store.ts';
 import { hello } from '../src/commands/role-side.ts';
 import { assign } from '../src/commands/tpm-side.ts';
-import { BRIEF, world } from './helpers.ts';
+import { BRIEF, finish, world } from './helpers.ts';
 
 const TPM = { model: 'claude-opus-5-5', effort: 'medium' };
 const LONG = 'あ'.repeat(SUMMARY_MIN);
@@ -62,6 +62,7 @@ describe('tpm assign が依頼書の課題の概要の節を確かめる', () =>
     const w = world();
     hello(w.tpm, TPM);
     assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: BRIEF, wait: 0 });
+    finish(w, 't-x7k2', 'file:1');
     const next = put(w, 'brief-2.html', '<h1>計画まで</h1>');
     expect(assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: next, wait: 0 })).toEqual(['送った: 【brief】→ file:1（届いた）']);
   });
