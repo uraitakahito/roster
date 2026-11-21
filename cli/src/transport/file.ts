@@ -1,7 +1,7 @@
 // 試験用の adapter。メッセージ・居場所・状態を、状態の folder の下のファイルに書くだけ（命令は動かさない）。
 // cmux 無しで決まりの 1 周を試すためと、連携の口が cmux の形に寄りすぎていないかを確かめるためにある。
 import type { State } from '../state.ts';
-import type { Delivery, Incoming, Seat, SpawnOptions, StatusKey, Transport } from './types.ts';
+import type { Delivery, Incoming, MessageTrace, Seat, SpawnOptions, StatusKey, Transport } from './types.ts';
 
 interface FileSeat extends Seat {
   cwd: string
@@ -65,6 +65,11 @@ export class FileTransport implements Transport {
   pending(): Incoming[] {
     const from = this.heldFrom(this.self);
     return from === undefined ? [] : this.inbox(this.self).slice(from).map(m => ({ id: m.id, from: m.from, text: m.text }));
+  }
+
+  /** file の連携は時刻を持たない。 */
+  history(): MessageTrace[] {
+    return [];
   }
 
   spawn(options: SpawnOptions): string {

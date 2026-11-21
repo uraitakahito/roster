@@ -1,6 +1,7 @@
 // 見出しの付いたメッセージを送る命令。送る・届いたかを見る・課題に記録を書く・状態を替える、を 1 度にする。
 // 担当が打つ物（ask・report・wait）と、TPM 担当が打つ物（answer・notify・dismiss・show）。brief は命令でなく、assign の中で使う。
 import type { Context } from '../context.ts';
+import { recordGateStop, recordWait } from '../evidence.ts';
 import { message, ROLES, TPM_TITLE, WAIT, WAIT_CLOSE, WAIT_NEXT_BRIEF, type HeadingId, type WaitKind } from '../protocol.ts';
 import { requireRole, requireSelf, requireTpm, writeRole, type RoleRecord } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
@@ -19,13 +20,15 @@ interface Sent {
   text: string
   id: string
   delivered: boolean
+  /** 返事の先のメッセージの id（--reply-to）。 */
+  replyTo?: string
 }
 
 /** メッセージを送り、送った記録を log.jsonl に足す。 */
 function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: string, body: string, replyTo?: string): string {
   const text = message(id, body);
   const d = ctx.transport.send(to, from, text, replyTo);
-  ctx.state.append('log.jsonl', { at: ctx.now().toISOString(), key, heading: id, from, to, text, id: d.id, delivered: d.delivered } satisfies Sent);
+  ctx.state.append('log.jsonl', { at: ctx.now().toISOString(), key, heading: id, from, to, text, id: d.id, delivered: d.delivered, ...(replyTo === undefined ? {} : { replyTo }) } satisfies Sent);
   return `送った: 【${id}】→ ${to}（${d.delivered ? '届いた' : '相手が手を動かしているので、まだ届いていない。空いたら届く'}）`;
 }
 
@@ -78,6 +81,7 @@ export function assertRead(ctx: Context, who: string, from?: string): void {
   const unread = pending.filter(m => !shown.has(m.id));
   if (unread.length === 0) return;
   markShown(ctx, unread);
+  recordGateStop(ctx, 'unread', unread.map(m => m.id).join(' '));
   throw new TpmError([
     `${who}から、まだ読んでいないメッセージが ${unread.length} 件あります。送っていません。`,
     ...unread.flatMap(m => [`--- ${m.from}（id ${m.id}）`, m.text]),
@@ -117,10 +121,12 @@ export function assertMerged(ctx: Context, prs: string[], unchecked?: string): s
   for (const pr of prs) {
     const r = ctx.exec('gh', ['pr', 'view', pr, '--json', 'state']);
     if (r.status !== 0) {
+      recordGateStop(ctx, 'pr-unreadable', pr);
       throw new TpmError(`PR の状態を読めません（gh pr view が失敗）: ${pr}\n${(r.stderr || r.stdout).trim()}\n送っていません。gh で読めない PR なら、merge を自分で確かめてから --unchecked "<確かめた方法>" を付けて打ち直してください。`);
     }
     const state = (JSON.parse(r.stdout) as PrView).state;
     if (state !== 'MERGED') {
+      recordGateStop(ctx, 'not-merged', `${pr} ${state ?? '不明'}`);
       throw new TpmError(`PR はまだ merge されていません（state: ${state ?? '不明'}）: ${pr}\n送っていません。merge を確かめてから打ち直してください。`);
     }
   }
@@ -152,9 +158,17 @@ export const waitFile = (address: string): string => `waits/${address.replaceAll
 /** 状態 wait を替え、打った時刻を記録する。 */
 export function wait(ctx: Context, kind: WaitKind, what: string): string[] {
   const text = WAIT[kind](what);
-  ctx.transport.setStatus('wait', text);
-  ctx.state.write(waitFile(ctx.transport.whoami()), { kind, text, at: ctx.now().toISOString() } satisfies WaitRecord);
+  const address = showWait(ctx, text);
+  ctx.state.write(waitFile(address), { kind, text, at: ctx.now().toISOString() } satisfies WaitRecord);
   return [`状態: ${text}`];
+}
+
+/** 状態 wait の字を出し、移りを waits.jsonl に残す。自分の宛先を返す。 */
+function showWait(ctx: Context, text: string): string {
+  const address = ctx.transport.whoami();
+  ctx.transport.setStatus('wait', text);
+  recordWait(ctx, address, text);
+  return address;
 }
 
 /** TPM 担当に決めてほしいことを送り（【ask-tpm】）、状態を回答待ちにする。 */
@@ -240,7 +254,7 @@ export function reportDone(ctx: Context, options: DoneOptions): string[] {
   });
   const body = `${options.url === undefined ? '' : `${options.url} `}要点: ${options.summary}／残り: ${remaining}／決めてほしいこと: ${decisions}`;
   const sent = toTpm(ctx, self, 'done', body);
-  ctx.transport.setStatus('wait', WAIT_NEXT_BRIEF);
+  showWait(ctx, WAIT_NEXT_BRIEF);
   return [...recorded, sent, `状態: ${WAIT_NEXT_BRIEF}（次の【brief】か【dismiss】を待つ。自分から【end】を送らない）`];
 }
 
@@ -279,7 +293,7 @@ export function reportEnd(ctx: Context, options: EndOptions): string[] {
   }
   const body = `成果: ${options.url ?? 'なし'}／merge した PR: ${options.prs.join(' ') || 'なし'}／消した worktree: ${options.removed.join(' ') || 'なし'}／残っている物: ${left}${checked}`;
   out.push(toTpm(ctx, self, 'end', body));
-  ctx.transport.setStatus('wait', WAIT_CLOSE);
+  showWait(ctx, WAIT_CLOSE);
   out.push(`状態: ${WAIT_CLOSE}（居場所は自分で閉じない）`);
   return out;
 }

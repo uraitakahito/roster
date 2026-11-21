@@ -1,6 +1,7 @@
 // tpm infra …: インフラの環境の宣言と承認を見る・書く。tpm guard: hook から呼ばれる guard。
 import { OWN_LABEL } from '../config.ts';
 import type { Context } from '../context.ts';
+import { recordGuardStop } from '../evidence.ts';
 import { commandOf, judge, judgeEnv, readApprovals, removeApproval, writeApproval, type Verdict } from '../guard.ts';
 import { ROLE_NAMES, type RoleName } from '../protocol.ts';
 import { TpmError } from '../skill-sets.ts';
@@ -69,9 +70,11 @@ export function infraRun(ctx: Context, name: string, command: string[]): { lines
   return { lines: [r.stdout.trimEnd(), r.stderr.trimEnd()].filter(l => l !== ''), status: r.status };
 }
 
-/** hook の標準入力を読んで決める。Bash でなければ通す。 */
+/** hook の標準入力を読んで決める。Bash でなければ通す。止めた命令は guard.jsonl に残す。 */
 export function guard(ctx: Context, stdin: string): Verdict {
   const command = commandOf(stdin);
   if (command === undefined) return { allow: true };
-  return judge({ command, role: roleOf(ctx.env), config: ctx.config, approvals: readApprovals(ctx.state, ctx.config.infra), now: ctx.now() });
+  const verdict = judge({ command, role: roleOf(ctx.env), config: ctx.config, approvals: readApprovals(ctx.state, ctx.config.infra), now: ctx.now() });
+  if (!verdict.allow) recordGuardStop(ctx, command, verdict.reason);
+  return verdict;
 }

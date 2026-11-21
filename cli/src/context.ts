@@ -2,8 +2,10 @@
 import { realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { composeRolesConfig, composeSkillSets, type RolesConfig } from './config.ts';
+import { actor } from './evidence.ts';
 import { exec as realExec, type Exec } from './exec.ts';
 import { migrateLegacyJson, State, stateDir } from './state.ts';
+import { RecordedTracker } from './tracker/recorded.ts';
 import { RoutedTracker } from './tracker/routed.ts';
 import type { Tracker } from './tracker/types.ts';
 import { CmuxTransport } from './transport/cmux.ts';
@@ -46,6 +48,7 @@ export function createContext(env: NodeJS.ProcessEnv = process.env, cwd: string 
   const state = new State(stateDir(project, env));
   migrateLegacyJson(state.dir);
   const transport = config.transport === 'file' ? new FileTransport(state, env.TPM_ADDRESS || 'file:tpm') : new CmuxTransport(exec);
-  const tracker = new RoutedTracker(config.trackers, exec);
+  // 課題管理への書き込みは tracker.jsonl に残す。
+  const tracker = new RecordedTracker(new RoutedTracker(config.trackers, exec), state, actor(env));
   return { project, config, state, transport, tracker, env, exec, root, skillSets: composeSkillSets(config.sources, root), sleep: sleepSync, now: () => new Date() };
 }

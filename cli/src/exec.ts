@@ -18,9 +18,12 @@ export interface ExecOptions {
 /** 外の命令を打つ関数の形。 */
 export type Exec = (cmd: string, args: string[], options?: ExecOptions) => ExecResult;
 
+/** 出力の上限（バイト）。Node の既定の 1 MiB では、cmux の受信箱の 1,000 件（本文つきで 1 MiB を超える）が読めない。 */
+const MAX_OUTPUT = 64 * 1024 * 1024;
+
 /** 命令を打ち、終わるまで待つ。命令が無いなど、起こせなかったときは status 127。 */
 export const exec: Exec = (cmd, args, options = {}) => {
-  const r = spawnSync(cmd, args, { cwd: options.cwd, input: options.input, encoding: 'utf8' });
+  const r = spawnSync(cmd, args, { cwd: options.cwd, input: options.input, encoding: 'utf8', maxBuffer: MAX_OUTPUT });
   if (r.error) return { status: 127, stdout: '', stderr: r.error.message };
   return { status: r.status ?? 1, stdout: r.stdout, stderr: r.stderr };
 };

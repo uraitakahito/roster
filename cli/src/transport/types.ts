@@ -20,6 +20,16 @@ export interface Incoming {
   text: string
 }
 
+/** メッセージ 1 件の、送った・届いた・読んだ時刻（道具が覚えている物。ISO の字）。 */
+export interface MessageTrace {
+  id: string
+  sentAt?: string
+  deliveredAt?: string
+  readAt?: string
+  /** 返事の先のメッセージの id。 */
+  replyTo?: string
+}
+
 /** 居場所を作るときに渡す物。title は居場所の題、cwd は命令を動かす folder。 */
 export interface SpawnOptions {
   title: string
@@ -39,6 +49,8 @@ export interface Transport {
   send(to: string, from: string, text: string, replyTo?: string): Delivery
   /** 自分宛てで、まだ届いていないメッセージ（手を動かしている間は届かない道具がある）。 */
   pending(): Incoming[]
+  /** 道具が覚えているメッセージの時刻（宛先を問わない。閉じた居場所の分も）。道具が持たない・読めないなら空。 */
+  history(): MessageTrace[]
   /** 担当の居場所を作って命令を動かし、宛先を返す。 */
   spawn(options: SpawnOptions): string
   /** 今ある居場所の一覧。 */
