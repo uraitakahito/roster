@@ -24,8 +24,29 @@ interface Sent {
   replyTo?: string
 }
 
+/** 同じメッセージの 2 度送りとみなす間（秒）。 */
+const REPEAT_SECONDS = 30;
+
+/**
+ * 同じ差出人が、同じ宛先に、同じ見出し・本文・返事の先のメッセージを REPEAT_SECONDS 秒の内に送っていたら止まる。
+ * 止まった命令の打ち直しを `;` や `||` で 1 行に続けて書くと、止まらなかった時にも 2 度目が動く（課題の記録も 2 件になる）。
+ * 課題に記録を書く命令は、記録の前にもこれを呼ぶ。
+ */
+function assertNotRepeat(ctx: Context, id: HeadingId, from: string, to: string, body: string, replyTo?: string): void {
+  const text = message(id, body);
+  const since = ctx.now().getTime() - REPEAT_SECONDS * 1000;
+  const same = ctx.state.lines<Sent>('log.jsonl').findLast(l => l.from === from && l.to === to && l.text === text && l.replyTo === replyTo);
+  if (same === undefined || Date.parse(same.at) < since) return;
+  recordGateStop(ctx, 'repeat', same.id);
+  throw new TpmError(`同じ【${id}】を、${same.at} にもう送っています（id ${same.id}）。2 度目は送っていません。\n打ち直しを ; や || で 1 行に続けて書いていないか確かめてください。もう 1 度送る必要があれば、${REPEAT_SECONDS} 秒待つか、中身を変えて打つ。`);
+}
+
+/** 担当が TPM 担当へ送る物の 2 度送りを見る（課題に記録を書く前に呼ぶ）。 */
+const notRepeatToTpm = (ctx: Context, self: RoleRecord, id: HeadingId, body: string): void => assertNotRepeat(ctx, id, self.title, requireTpm(ctx).address, body);
+
 /** メッセージを送り、送った記録を log.jsonl に足す。 */
 function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: string, body: string, replyTo?: string): string {
+  assertNotRepeat(ctx, id, from, to, body, replyTo);
   const text = message(id, body);
   const d = ctx.transport.send(to, from, text, replyTo);
   ctx.state.append('log.jsonl', { at: ctx.now().toISOString(), key, heading: id, from, to, text, id: d.id, delivered: d.delivered, ...(replyTo === undefined ? {} : { replyTo }) } satisfies Sent);
@@ -181,6 +202,8 @@ export function askTpm(ctx: Context, options: { text: string, waitingFor: string
 export function askPm(ctx: Context, options: { url: string, items: string[], waitingFor: string }): string[] {
   const self = sender(ctx);
   if (options.items.length === 0) throw new TpmError('--item で、決めてほしい項目の題を 1 つ以上書いてください');
+  const body = `${options.url} 項目: ${options.items.map((item, i) => `(${i + 1}) ${item}`).join(' ')}`;
+  notRepeatToTpm(ctx, self, 'ask-pm', body);
   const recorded = record(ctx, self, {
     kind: '確認',
     role: ROLES[self.role].label,
@@ -188,7 +211,6 @@ export function askPm(ctx: Context, options: { url: string, items: string[], wai
     links: [{ label: '確認', url: options.url }],
     points: options.items,
   });
-  const body = `${options.url} 項目: ${options.items.map((item, i) => `(${i + 1}) ${item}`).join(' ')}`;
   return [...recorded, toTpm(ctx, self, 'ask-pm', body), ...wait(ctx, 'pm', options.waitingFor)];
 }
 
@@ -209,8 +231,10 @@ export function reportMerged(ctx: Context, options: { pr: string, note: string, 
 export function reportDocFix(ctx: Context, options: { pr: string, note: string, unchecked?: string }): string[] {
   const self = sender(ctx);
   const checked = assertMerged(ctx, [options.pr], options.unchecked);
+  const body = `${options.pr}（merge 済み）${options.note}${checked}`;
+  notRepeatToTpm(ctx, self, 'doc-fix', body);
   const recorded = record(ctx, self, { kind: '文書の修正', role: ROLES[self.role].label, summary: options.note, links: [{ label: 'PR（merge 済み）', url: options.pr }], points: [] });
-  return [...recorded, toTpm(ctx, self, 'doc-fix', `${options.pr}（merge 済み）${options.note}${checked}`)];
+  return [...recorded, toTpm(ctx, self, 'doc-fix', body)];
 }
 
 /** `tpm report done --kind` の値（`tpm page put --kind` と同じ語）と、課題に書く記録の種類。 */
@@ -245,6 +269,8 @@ export function reportDone(ctx: Context, options: DoneOptions): string[] {
   const remaining = required(options.remaining, '--remaining（残り）');
   const decisions = required(options.decisions, '--decisions（決めてほしいこと）');
   const kind = DONE_KINDS[options.kind];
+  const body = `${options.url === undefined ? '' : `${options.url} `}要点: ${options.summary}／残り: ${remaining}／決めてほしいこと: ${decisions}`;
+  notRepeatToTpm(ctx, self, 'done', body);
   const recorded = record(ctx, self, {
     kind,
     role: ROLES[self.role].label,
@@ -252,7 +278,6 @@ export function reportDone(ctx: Context, options: DoneOptions): string[] {
     links: options.url === undefined ? [] : [{ label: kind, url: options.url }],
     points: options.points,
   });
-  const body = `${options.url === undefined ? '' : `${options.url} `}要点: ${options.summary}／残り: ${remaining}／決めてほしいこと: ${decisions}`;
   const sent = toTpm(ctx, self, 'done', body);
   showWait(ctx, WAIT_NEXT_BRIEF);
   return [...recorded, sent, `状態: ${WAIT_NEXT_BRIEF}（次の【brief】か【dismiss】を待つ。自分から【end】を送らない）`];
@@ -277,6 +302,8 @@ export function reportEnd(ctx: Context, options: EndOptions): string[] {
   }
   const left = required(options.left, '--left（残っている物）');
   const checked = assertMerged(ctx, options.prs, options.prs.length === 0 ? undefined : options.unchecked);
+  const body = `成果: ${options.url ?? 'なし'}／merge した PR: ${options.prs.join(' ') || 'なし'}／消した worktree: ${options.removed.join(' ') || 'なし'}／残っている物: ${left}${checked}`;
+  notRepeatToTpm(ctx, self, 'end', body);
   const links: NoteLink[] = [
     ...(options.url === undefined ? [] : [{ label: '成果', url: options.url }]),
     ...options.prs.map(pr => ({ label: 'PR（merge 済み）', url: pr })),
@@ -291,7 +318,6 @@ export function reportEnd(ctx: Context, options: EndOptions): string[] {
       out.push(`課題を閉じた: ${self.issue}`);
     }
   }
-  const body = `成果: ${options.url ?? 'なし'}／merge した PR: ${options.prs.join(' ') || 'なし'}／消した worktree: ${options.removed.join(' ') || 'なし'}／残っている物: ${left}${checked}`;
   out.push(toTpm(ctx, self, 'end', body));
   showWait(ctx, WAIT_CLOSE);
   out.push(`状態: ${WAIT_CLOSE}（居場所は自分で閉じない）`);
@@ -336,6 +362,7 @@ export function issueCopyLine(role: RoleRecord): string | undefined {
 /** Product Manager の答えを返す。課題があれば、返す前に「決定」の記録を書く。 */
 export function answer(ctx: Context, key: string, options: { text: string, replyTo?: string }): string[] {
   const role = receiver(ctx, key);
+  if (role.address !== undefined) assertNotRepeat(ctx, 'answer', TPM_TITLE, role.address, options.text, options.replyTo);
   const recorded = record(ctx, role, { kind: '決定', role: 'TPM', summary: oneLine(options.text), links: [], points: [] });
   return [...recorded, toRole(ctx, role, 'answer', options.text, options.replyTo)];
 }

@@ -324,19 +324,66 @@ describe('入口の検査: 送る前に、読んでいないメッセージを�
     askTpm(other, { text: '別の課題の問い', waitingFor: 'a' });
     // ほかの担当のメッセージでは止まらない
     notify(w.tpm, 't-x7k2', { text: '知らせ' });
-    for (const send of [
+    for (const [i, send] of [
       () => answer(w.tpm, 't-x7k2', { text: '案 A' }),
       () => notify(w.tpm, 't-x7k2', { text: '待つこと' }),
       () => dismiss(w.tpm, 't-x7k2', { handover: false }),
       () => assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: BRIEF, wait: 0 }),
-    ]) {
+    ].entries()) {
       const before = { sent: texts(w, 'file:1').length, comments: comments(), dismissed: requireRole(w.tpm, 't-x7k2').dismissed, pages: w.store.pages.size };
-      reportMerged(w.se, { pr: PR, note: '入れた' });
+      reportMerged(w.se, { pr: PR, note: `入れた ${i}` });
       expect(send).toThrow(/^t-x7k2 の担当から、まだ読んでいないメッセージが 1 件あります。[\s\S]*【merged】/);
       // 止まった回は、メッセージ・課題の記録・課題の写しを書かない
       expect({ sent: texts(w, 'file:1').length, comments: comments(), dismissed: requireRole(w.tpm, 't-x7k2').dismissed, pages: w.store.pages.size }).toEqual(before);
       send();
       expect(texts(w, 'file:1')).toHaveLength(before.sent + 1);
     }
+  });
+});
+
+describe('入口の検査: 同じメッセージの 2 度送り', () => {
+  const at = (seconds: number) => (): Date => new Date(Date.parse('2026-11-20T12:00:00.000Z') + seconds * 1000);
+
+  test('同じ【done】を 30 秒の内に 2 度送ると止まる。課題の記録も 2 件にならない', () => {
+    const w = started({ tracker: 'github' }, 'gh-12');
+    const comments = (): number => w.calls.filter(c => c.args[1] === 'comment').length;
+    const done = (summary = '実装した'): string[] => reportDone(w.se, { url: OUT, kind: 'result', summary, remaining: 'なし', decisions: 'なし', points: [] });
+    done();
+    expect(comments()).toBe(1);
+    w.se.now = at(2);
+    expect(done).toThrow('同じ【done】を、2026-11-20T12:00:00.000Z にもう送っています（id m1-file-tpm）。2 度目は送っていません。\n打ち直しを ; や || で 1 行に続けて書いていないか確かめてください。もう 1 度送る必要があれば、30 秒待つか、中身を変えて打つ。');
+    expect(comments()).toBe(1);
+    expect(texts(w, 'file:tpm')).toHaveLength(1);
+    expect(w.tpm.state.lines<{ gate: string, detail: string }>('gate.jsonl').map(l => [l.gate, l.detail])).toEqual([['repeat', 'm1-file-tpm']]);
+    // 中身が違えば送る。30 秒を過ぎれば、同じ中身でも送る
+    done('実装した（直した）');
+    w.se.now = at(31);
+    done();
+    expect(comments()).toBe(3);
+  });
+
+  test('課題に記録を書くほかの命令（ask-pm・doc-fix・end・answer）も、記録の前に止まる', () => {
+    const w = started({ tracker: 'github' }, 'gh-12');
+    const comments = (): number => w.calls.filter(c => c.args[1] === 'comment').length;
+    for (const send of [
+      () => askPm(w.se, { url: OUT, items: ['案'], waitingFor: '案' }),
+      () => reportDocFix(w.se, { pr: PR, note: '直した' }),
+      () => answer(w.tpm, 't-x7k2', { text: '案 A' }),
+      () => (dismiss(w.tpm, 't-x7k2', { handover: true }), reportEnd(w.se, { prs: [], removed: [], left: 'なし' })),
+    ]) {
+      send();
+      const before = comments();
+      expect(send).toThrow(/^同じ【(ask-pm|doc-fix|answer|dismiss)】を/);
+      expect(comments()).toBe(before);
+    }
+    expect(() => reportEnd(w.se, { prs: [], removed: [], left: 'なし' })).toThrow(/^同じ【end】を/);
+  });
+
+  test('返事の先が違えば、同じ本文でも送る（「受け取った」を続けて返す）', () => {
+    const w = started();
+    notify(w.tpm, 't-x7k2', { text: '受け取った', replyTo: 'a' });
+    notify(w.tpm, 't-x7k2', { text: '受け取った', replyTo: 'b' });
+    expect(() => notify(w.tpm, 't-x7k2', { text: '受け取った', replyTo: 'b' })).toThrow(/^同じ【notify】を/);
+    expect(texts(w, 'file:1')).toHaveLength(2);
   });
 });
