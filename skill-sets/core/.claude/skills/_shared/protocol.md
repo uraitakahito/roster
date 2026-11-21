@@ -27,7 +27,7 @@ TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・De
 | 【doc-fix】 | 文書やコメントの食い違いを直した PR を merge した | `tpm report doc-fix --pr <URL> --note "<一言>" [--unchecked "<訳>"]` |
 | 【incident】 | 思わぬ出来事（信頼性・安全性・効率性が落ちた）に気づいた（下の「思わぬ出来事」） | `tpm report incident "<起きた事実>" --type <reliability\|safety\|efficiency> [--tag <tag>] [--severe]` |
 | 【merged】 | 自分の PR を 1 本 merge した | `tpm report merged --pr <URL> --note "<一言>" [--unchecked "<訳>"]` |
-| 【done】 | 依頼書の成果（提案・計画・結果のページ）を置いた | `tpm report done --url <URL> --kind <proposal\|plan\|result> --summary "<要点>" --remaining "<残り>" --decisions "<決めてほしいこと>"` |
+| 【done】 | 依頼書の成果（提案・計画・結果・監査のページ）を置いた | `tpm report done --url <URL> --kind <proposal\|plan\|result\|audit> --summary "<要点>" --remaining "<残り>" --decisions "<決めてほしいこと>"` |
 | 【end】 | 【dismiss】を受けて片付けた（Sustaining Engineer 担当は PR を merge した後） | `tpm report end --url <URL> --pr <URL> … --removed <worktree> … --left "<残っている物>"` |
 
 - 【done】の「残り」は、依頼の外で直すとよい物・やらなかった物・merge していない PR。「決めてほしいこと」は、【ask-pm】で送った項目の題。どちらも無ければ「なし」と書く（書かないと送れない）。TPM 担当はこの 2 つで【dismiss】を送るかを決める。
@@ -63,7 +63,7 @@ Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【
 
 | 命令 | 書く記録（1 行目は `【<種類>】<担当>: <一言>`） |
 |---|---|
-| `tpm report done --kind <種類>` | `提案`・`計画`・`結果`（`--kind` の `proposal`・`plan`・`result`）。成果の URL と、`--point` の要点（3 つまで） |
+| `tpm report done --kind <種類>` | `提案`・`計画`・`結果`・`監査`（`--kind` の `proposal`・`plan`・`result`・`audit`）。成果の URL と、`--point` の要点（3 つまで） |
 | `tpm report doc-fix` | `文書の修正`。PR の URL |
 | `tpm ask pm` | `確認`。確認のページの URL と、項目の題 |
 | `tpm answer`（TPM 担当） | `決定`。【answer】を返す前に書かれる |
@@ -87,6 +87,7 @@ Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【
 - すぐ止めないと害が広がる物は `--severe` を付ける。TPM 担当が、見直しを待たずに調べを振る。
 - 【done】の「残り」と【end】の「残っている物」は、「なし」でなければ命令が台帳に入れる（書き直さなくてよい）。TPM 担当が Product Manager に手の操作を頼んだ回（`tpm wait pm "<何を>" --hand`）も入る。
 - `tpm incident timeline <件の番号|課題の Key>` が、その前後の記録（メッセージと届いた時刻・課題管理への書き込み・guard と入口の検査が止めた回・`wait` の移り）を時刻の順に 1 枚のページにして置く。届く前に相手が次を送った所には「行き違い」の印が付く。原因を調べる担当が読む。
+- 原因の調べは、TPM 担当が監査の依頼書で担当に振る（既定は、関わっていない新しい担当）。振られた担当は、原因と改善案を監査のページ（`--kind audit`）に書き、どの改善をするかを確認のページにして【ask-pm】で送り、`tpm report done --kind audit` を打つ。
 - TPM 担当は `tpm incident add <Key> "<起きた事実>" --type <種類>` で書き、`tpm incident review` で見直す（`/tpm` の「監査」）。見直す・扱いを決める命令は、担当からは打てない。
 - **台帳・送ったメッセージの記録（state の `*.jsonl`）は、メッセージや命令の字を持つ。この Mac の外（課題管理のコメント・PR の本文・公開の site）に写さない。**【incident】は課題管理に記録を書かない。
 
@@ -102,9 +103,9 @@ Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【
 
 ## ページ
 
-依頼書・確認・提案・計画・結果は、HTML の file に書いて、この Mac の置き場（`127.0.0.1` の pagetray。ページを DB に持つサーバーで、起こすのは DevOps Engineer 担当）に置く。置いた物を「ページ」と言う。Artifact tool（publish・read・open）は、依頼書と成果には使わない。
+依頼書・確認・提案・計画・結果・監査は、HTML の file に書いて、この Mac の置き場（`127.0.0.1` の pagetray。ページを DB に持つサーバーで、起こすのは DevOps Engineer 担当）に置く。置いた物を「ページ」と言う。Artifact tool（publish・read・open）は、依頼書と成果には使わない。
 
-- 置く: `tpm page put <file> --kind <brief|confirm|proposal|plan|result|issue>`。担当の Key は今の課題の Key。TPM 担当は `--key <Key>` を付ける。出た `URL:` を、`tpm assign --brief`・`tpm ask pm --url`・`tpm report done --url` に書く。番号は置き場が決める。同じ種類を置き直すと次の番号になり、前の版は残る。置いた担当の役割と居場所の宛先も、置き場が覚える。
+- 置く: `tpm page put <file> --kind <brief|confirm|proposal|plan|result|audit|issue>`。担当の Key は今の課題の Key。TPM 担当は `--key <Key>` を付ける。出た `URL:` を、`tpm assign --brief`・`tpm ask pm --url`・`tpm report done --url` に書く。番号は置き場が決める。同じ種類を置き直すと次の番号になり、前の版は残る。置いた担当の役割と居場所の宛先も、置き場が覚える。
 - 読む: `tpm page path <URL>` で file の path にして Read tool で読む（この Mac の控えの path。控えに無ければ置き場から取る。前の置き場の `8800` の URL も読める）。
 - 時系列のページ（種類は `timeline`）は、`tpm incident timeline` が state の記録から作って置く（下の「思わぬ出来事」）。手では置かない。
 - 探す: `tpm page list`（今の project の新しい順）。`--key <Key>`・`--role <役割>`・`--workspace <宛先>`・`--kind <種類>`・`--q <語>` で絞り、`--json` で記録を出す。Product Manager は、置き場の一覧の UI（`http://127.0.0.1:8801/`）で同じように絞って見る。

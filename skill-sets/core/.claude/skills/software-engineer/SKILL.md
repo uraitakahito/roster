@@ -45,13 +45,18 @@ tpm hello
 
 ## 3. 成果を出す
 
-- 提案・計画・報告は HTML の file に書き、`tpm page put <file> --kind <proposal|plan|result>` で置く（protocol.md の「ページ」）。図があった方がわかりやすい所は図を入れる。
+- 提案・計画・報告は HTML の file に書き、`tpm page put <file> --kind <proposal|plan|result|audit>` で置く（protocol.md の「ページ」）。図があった方がわかりやすい所は図を入れる。
 - 画面の写しや PDF をページに付けるときは `tpm file put <file> --reviewed` で上げ、ページから相対で参照する（protocol.md の「ページ」）。画像や PDF を上げる前に Read で見て、秘密が写っていないか確かめる。
 - 直した PR（文書の食い違いを含む）は、成果のページに一覧で載せる。
+- **監査の依頼書（思わぬ出来事の原因の調べ）を受けたら**、成果は監査のページ（`--kind audit`）にする:
+  - 材料は、依頼書の時系列のページと、state の記録（`~/.local/state/tpm/<project の名>/` の `log.jsonl`・`deliveries.jsonl`・`tracker.jsonl`・`guard.jsonl`・`gate.jsonl`・`waits.jsonl`。file ごとの中身の表は `docs-site/src/content/docs/protocol.md` にある）、関わった依頼書と成果のページ、skill と `tpm` のコード。足りなければ `tpm incident timeline <Key>` で、その Key の時系列を作り直せる。
+  - 件ごとに、起きた事実（記録で確かめた順）・原因・改善案を書く。**原因は「誰が誤ったか」で終えず、仕組みのどこが許したかまで書く**（どの skill の文・どの命令・どの権限が、それを止めなかったか）。記録で確かめられなかった所は、推したと分かるように書く。
+  - 改善案は、何で防ぐか（`tpm` の検査・skill や protocol の文・権限・教訓）と手間を書き、同じ tag の前の件にも効くかを書く。**提案まで。**repo は変えない。
+  - どの改善をするかを確認のページにして `tpm ask pm` で送る。メッセージの本文や命令の字は、監査のページの外（PR・課題のコメント）に写さない。
 - 成果に Product Manager に決めてほしいことがあれば、ページに書くだけで済ませない。protocol.md の「Product Manager に確かめる」で `tpm ask pm` も送る。
 - 置いたら、出た URL で `tpm report done` を打つ:
   ```sh
-  tpm report done --url <成果の URL> --kind <proposal|plan|result> --summary "<要点>" --remaining "<残り>" --decisions "<決めてほしいこと>"
+  tpm report done --url <成果の URL> --kind <proposal|plan|result|audit> --summary "<要点>" --remaining "<残り>" --decisions "<決めてほしいこと>"
   ```
   「残り」と「決めてほしいこと」は必ず書く（無ければ「なし」）。TPM 担当に【done】が行き、課題があれば記録が書かれ、状態が `回答待ち(TPM): 次の依頼` になる。
 
