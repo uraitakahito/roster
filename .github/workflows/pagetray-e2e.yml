@@ -12,6 +12,7 @@ permissions:
 jobs:
   cli:
     # tpm page put・path・list・import・delete を、.pagetray-version の版の pagetray に向けて流す。
+    # tpm file put・path・list・delete は、置き場に file のエンドポイントがある版（0.4.0 から）でだけ流れる（無い版では試験が飛ばす）。
     # pagetray の image は arm64 だけ（動かす Mac と同じ）なので、arm64 の runner で流す。
     runs-on: ubuntu-24.04-arm
     steps:

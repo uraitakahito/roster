@@ -99,7 +99,7 @@ disable-model-invocation: true
 - 送った命令が「まだ届いていない」と返したら、相手が手を動かしている。空いたら届くので、送り直さない。
 - 担当に送る命令（`tpm answer`・`tpm notify`・`tpm dismiss`・続きの `tpm assign`）が「まだ読んでいないメッセージがあります」と止まったら、その担当から来たメッセージを読む前に送ろうとしている（行き違いの元）。出たメッセージを読み、同じ命令を打ち直す。事情が変わっていたら、中身を変えて打つ。
 - Product Manager の答えを待つ間は `tpm wait pm "<何を>"`、答えが来たら `tpm wait work "<段>"` などに更新する。Product Manager に返して手を止める回は、毎回その回の最後に打つ（上の 1 の 3）。
-- ページを消してよいのは TPM 担当だけ（protocol.md の「ページ」）。担当が【ask-tpm】で「試しに置いた・置き間違えた」ページを送ってきたら、`tpm page delete <URL>…` で消す物を見て、`--yes` を付けて消す（戻せない）。置き間違えた project ごとなら `--project <名>`、Key ごとなら `--key <Key>`。Product Manager が消したいと言ったときも同じ。消したら `tpm notify <Key> "消した" --reply-to <id>` で返す。
+- ページを消してよいのは TPM 担当だけ（protocol.md の「ページ」）。担当が【ask-tpm】で「試しに置いた・置き間違えた」ページを送ってきたら、`tpm page delete <URL>…` で消す物を見て、`--yes` を付けて消す（戻せない）。置き間違えた project ごとなら `--project <名>`、Key ごとなら `--key <Key>`。Product Manager が消したいと言ったときも同じ。消したら `tpm notify <Key> "消した" --reply-to <id>` で返す。file（画像など）も同じで、`tpm file delete <URL>…` で消す物と参照しているページを見て、`--yes` を付けて消す。依頼書に画像や PDF を付ける時は、上げる前に Read で見て、秘密が写っていないか確かめる（`tpm file put <file> --reviewed --key <Key>`）。
 - Product Manager が共有の環境を変えることを承認したら、`tpm infra approve <環境> --minutes <分> --note "<何の承認か>"` で承認を書いてから【answer】を返す。済んだら `tpm infra revoke <環境>` で承認を消す。
 
 ### 【dismiss】を送るか

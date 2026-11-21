@@ -1,10 +1,12 @@
 // cli と本物の置き場（pagetray）のつなぎの試験。$TPM_E2E_PAGES_URL に動いている pagetray の URL がある時だけ流す
 // （CI の pagetray-e2e.yml。手元では docs-site の開発のページの「pagetray（ページの置き場のサーバー）とのつなぎ」）。
 // ほかの試験は偽の置き場（helpers.ts の FakeStore）で流すので、API の形（URL・引数の名・JSON の欄）のずれはここで見つける。
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
+import { fileDelete, fileList, filePath, filePut, type FileRecord } from '../src/commands/file.ts';
 import { PAGE_KINDS, pageDelete, pageImport, pageList, pagePath, pagePut, type PageRecord } from '../src/commands/page.ts';
 import type { Context } from '../src/context.ts';
 import { exec } from '../src/exec.ts';
@@ -12,6 +14,13 @@ import { ROLE_NAMES } from '../src/protocol.ts';
 import { world } from './helpers.ts';
 
 const URL = process.env.TPM_E2E_PAGES_URL ?? '';
+/**
+ * 置き場に file のエンドポイントがあるか（pagetray 0.4.0 から）。.pagetray-version が 0.3 の間は、file の試験を飛ばして CI を緑に保つ。
+ * 版の番号でなくエンドポイントで見るのは、0.4.0 の release の前の手元のサーバー（版は 0.3.x のまま）にも向けて流せるように。
+ */
+const FILES = URL !== '' && execFileSync('curl', ['-s', '-o', '/dev/null', '-w', '%{http_code}', `${URL}/api/files?limit=1`], { encoding: 'utf8' }) === '200';
+/** PNG の頭の 8 byte と、少しの中身。 */
+const PNG = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('つなぎの試験の図')]);
 
 /** 本物の curl で本物の置き場に向けた周り。project の名（状態の folder の名）は world ごとに違う。 */
 function setup() {
@@ -115,5 +124,72 @@ describe.skipIf(URL === '')('cli と pagetray のつなぎ', () => {
     writeFileSync(empty, '');
     expect(() => pagePut(ctx, empty, { kind: 'plan' })).toThrow('（400）: 本文が空');
     expect(() => pagePath(ctx, `${URL}/${s.project}/K-4/plan-1.html`)).toThrow('置き場にページがありません（404）');
+  });
+});
+
+describe.skipIf(!FILES)('cli と pagetray のつなぎ（file。置き場が 0.4.0 から）', () => {
+  /** 図を書いて上げ、URL を返す。 */
+  function upload(s: ReturnType<typeof setup>, ctx: Context, name: string, body: Buffer | string = PNG, key?: string): string {
+    const src = join(s.dir, `src-${name}`);
+    writeFileSync(src, body);
+    return filePut(ctx, src, { reviewed: true, name, ...(key === undefined ? {} : { key }) })[1]?.replace('URL: ', '') ?? '';
+  }
+  const files = (s: ReturnType<typeof setup>, options: Parameters<typeof fileList>[1]): (FileRecord & { url: string })[] =>
+    JSON.parse(fileList(s.tpm, { ...options, json: true }).join('\n')) as (FileRecord & { url: string })[];
+
+  test('上げると番号が付き、控えを消しても読み戻せる。ページの <img> の参照も tpm page path が控えに写す', () => {
+    const s = setup();
+    const ctx = s.real(s.w.role('K-6', 'file:1'), { TPM_ROLE: 'software-engineer' });
+    const url = upload(s, ctx, 'shot.png');
+    expect(url).toBe(`${URL}/${s.project}/K-6/files/shot-1.png`);
+    expect(upload(s, ctx, 'shot.png')).toBe(`${URL}/${s.project}/K-6/files/shot-2.png`);
+    const [path = ''] = filePath(ctx, url);
+    rmSync(path);
+    expect(readFileSync(filePath(ctx, url)[0] ?? '').equals(PNG)).toBe(true);
+    expect(files(s, { key: 'K-6' }).map(f => [f.name, f.ext, f.n, f.type, f.size, f.role, f.workspace])).toEqual([
+      ['shot', 'png', 2, 'image/png', PNG.length, 'software-engineer', ''],
+      ['shot', 'png', 1, 'image/png', PNG.length, 'software-engineer', ''],
+    ]);
+    expect(files(s, { q: 'shot.png' })).toHaveLength(2);
+    const page = s.put(ctx, 'result', '<title>図のある結果</title><img src="files/shot-1.png">');
+    rmSync(path);
+    rmSync(join(s.dir, s.project, 'K-6', 'result-1.html'));
+    expect(pagePath(ctx, page)).toEqual([join(s.dir, s.project, 'K-6', 'result-1.html'), `参照の file: ${path}`]);
+    expect(readFileSync(path).equals(PNG)).toBe(true);
+  });
+
+  test('置き場が中身の合わない file を断れば、訳を添えて止まる。無い file は 404', () => {
+    const s = setup();
+    const ctx = s.real(s.w.role('K-7', 'file:1'));
+    expect(() => upload(s, ctx, 'fake.png', '%PDF-1.4')).toThrow('置き場が file を受け取りませんでした（415）');
+    expect(() => filePath(ctx, `${URL}/${s.project}/K-7/files/none-1.png`)).toThrow('置き場に file がありません（404）');
+  });
+
+  test('TPM 担当が消す前に、参照しているページを出す。消すと 410 で、番号は使い回さない', () => {
+    const s = setup();
+    const ctx = s.real(s.w.role('K-8', 'file:1'), { TPM_ROLE: 'software-engineer' });
+    const url = upload(s, ctx, 'shot.png');
+    const page = s.put(ctx, 'plan', '<title>図のある計画</title><img src="files/shot-1.png">');
+    expect(() => fileDelete(ctx, [url], { yes: true })).toThrow('TPM 担当だけ');
+    expect(fileDelete(s.tpm, [url], {})).toContain(`  ${page}  図のある計画（shot-1.png を参照）`);
+    expect(fileDelete(s.tpm, [url], { yes: true })).toEqual(['消した: 1 個（控えも消した）', `- ${url}`]);
+    expect(() => filePath(ctx, url)).toThrow('（410）');
+    expect(upload(s, ctx, 'shot.png')).toBe(`${URL}/${s.project}/K-8/files/shot-2.png`);
+    // Key ごと消すと、ページと file が一緒に消える。
+    expect(pageDelete(s.tpm, [], { key: 'K-8', yes: true }).slice(-2)).toEqual(['消した file: 1 個', `- ${URL}/${s.project}/K-8/files/shot-2.png`]);
+    expect(files(s, { key: 'K-8' })).toEqual([]);
+    expect(existsSync(join(s.dir, s.project, 'K-8'))).toBe(false);
+  });
+
+  test('控えの files/ の file を、同じ番号と時刻で取り込める。打ち直しても増えない', () => {
+    const s = setup();
+    const project = `${s.project}-legacy`;
+    const folder = join(s.dir, project, 'K-9', 'files');
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(join(folder, 'shot-3.png'), PNG);
+    utimesSync(join(folder, 'shot-3.png'), new Date('2026-11-19T01:02:03.456Z'), new Date('2026-11-19T01:02:03.456Z'));
+    expect(pageImport(s.tpm).at(-2)).toBe('file: 入れた: 1 個・もう入っていた: 0 個・消した file: 0 個・ぶつかった: 0 個');
+    expect(pageImport(s.tpm).at(-1)).toBe('file: 入れた: 0 個・もう入っていた: 1 個・消した file: 0 個・ぶつかった: 0 個');
+    expect(files(s, { allProjects: true, key: 'K-9' }).filter(f => f.project === project).map(f => [f.n, f.role, f.created_at])).toEqual([[3, 'unknown', '2026-11-19T01:02:03.456Z']]);
   });
 });

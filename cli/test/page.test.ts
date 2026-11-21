@@ -2,7 +2,9 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpath
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { isPageUrl, pageDelete, pageImport, pageList, pagePath, pagePut, pagesDir, pagesUrl } from '../src/commands/page.ts';
+import { filePut } from '../src/commands/file.ts';
+import { pageDelete, pageImport, pageList, pagePath, pagePut } from '../src/commands/page.ts';
+import { isPageUrl, pagesDir, pagesUrl } from '../src/commands/store.ts';
 import type { Context } from '../src/context.ts';
 import { writeRole } from '../src/roster.ts';
 import { State } from '../src/state.ts';
@@ -10,6 +12,8 @@ import { world } from './helpers.ts';
 
 const BASE = 'http://127.0.0.1:8801';
 const HTML = '<title>試し</title><p>日本語</p>';
+/** PNG の頭の 8 byte と、少しの中身。 */
+const PNG = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('png')]);
 
 /** 控えを一時の folder にし、偽の置き場に向けた、t-x7k2 の Software Engineer 担当（居場所 file:1）と TPM 担当の周り。 */
 function setup() {
@@ -210,6 +214,63 @@ describe('tpm page path', () => {
   });
 });
 
+describe('tpm page path と、ページが参照する file', () => {
+  /** 画像を t-x7k2 と t-y に上げ、それを参照するページを置いて、別の Mac（控えが空）の周りを返す。 */
+  function referenced(body: (key: string) => string) {
+    const s = setup();
+    const png = join(s.dir, '..', `${basename(s.dir)}-shot.png`);
+    writeFileSync(png, PNG);
+    filePut(s.role, png, { reviewed: true, name: 'shot.png' });
+    filePut(s.tpm, png, { reviewed: true, name: 'shot.png', key: 't-y' });
+    writeFileSync(s.html, body('t-y'));
+    const url = pagePut(s.role, s.html, { kind: 'result' })[1]?.replace('URL: ', '') ?? '';
+    const other = { ...s.role, env: { ...s.role.env, TPM_PAGES_DIR: join(s.dir, 'other') } };
+    const at = (...parts: string[]) => join(s.dir, 'other', s.project, ...parts);
+    return { ...s, url, other, at };
+  }
+
+  test('ページが相対で参照する file（同じ Key・別の Key）も、控えの同じ相対の所に取ってくる', () => {
+    const s = referenced(key => `<title>結果</title><img src="files/shot-1.png"><img src='./files/shot-1.png?v=2'><a href=../${key}/files/shot-1.png>図</a>`);
+    expect(pagePath(s.other, s.url)).toEqual([
+      s.at('t-x7k2', 'result-1.html'),
+      `参照の file: ${s.at('t-x7k2', 'files', 'shot-1.png')}`,
+      `参照の file: ${s.at('t-y', 'files', 'shot-1.png')}`,
+    ]);
+    expect(readFileSync(s.at('t-x7k2', 'files', 'shot-1.png')).equals(PNG)).toBe(true);
+    expect(readFileSync(s.at('t-y', 'files', 'shot-1.png')).equals(PNG)).toBe(true);
+    // 控えにある物は、もう取らない。
+    const before = s.curls().length;
+    pagePath(s.other, s.url);
+    expect(s.curls()).toHaveLength(before);
+  });
+
+  test('ページが控えにあっても、控えに無い参照の file は取る', () => {
+    const s = referenced(() => '<img src="files/shot-1.png">');
+    rmSync(join(s.dir, s.project, 't-x7k2', 'files'), { recursive: true });
+    expect(pagePath(s.role, s.url)[1]).toBe(`参照の file: ${join(s.dir, s.project, 't-x7k2', 'files', 'shot-1.png')}`);
+    expect(existsSync(join(s.dir, s.project, 't-x7k2', 'files', 'shot-1.png'))).toBe(true);
+  });
+
+  test('取れない参照は注意の行にし、ページの path は返す。控えの外へ出る参照・形の違う参照は見ない', () => {
+    const s = referenced(() => [
+      '<img src="files/none-1.png">',
+      '<img src="files/../../../etc/x-1.png"><img src="../../x/files/a-1.png"><img src="../../files/a-1.png">',
+      '<img src="files/a-01.png"><img src="files/a-1.svg"><img src="/abs/files/a-1.png"><img src="https://example.com/files/a-1.png">',
+    ].join(''));
+    const lines = pagePath(s.other, s.url);
+    expect(lines[0]).toBe(s.at('t-x7k2', 'result-1.html'));
+    expect(lines.slice(1)).toEqual([expect.stringMatching(/^注意: ページが参照する file を取れなかった（.*\/t-x7k2\/files\/none-1\.png）: 置き場に file がありません（404）/)]);
+  });
+
+  test('置き場が file を扱えない（0.4.0 より前）・応えない時も、ページは読める', () => {
+    const s = referenced(() => '<img src="files/shot-1.png">');
+    s.store.noFiles = true;
+    expect(pagePath(s.other, s.url)[1]).toMatch(/^注意: .*版が古く/);
+    s.store.down = true;
+    expect(pagePath(s.other, s.url)).toEqual([s.at('t-x7k2', 'result-1.html'), expect.stringMatching(/^注意: .*応えません/)]);
+  });
+});
+
 describe('tpm page list', () => {
   /** 役割・Key・種類の違う 3 枚を置く。 */
   function seeded() {
@@ -322,6 +383,40 @@ describe('tpm page import', () => {
     s.store.down = true;
     expect(() => pageImport(s.tpm)).toThrow('tpm ask devops');
   });
+
+  test('控えの <Key>/files/ の file も、同じ番号と時刻で入れる。打ち直しても増えず、ぶつかった物・消した物は入れない', () => {
+    const s = legacy();
+    mkdirSync(join(s.folder, 'files'));
+    for (const [name, body] of [['shot-2.png', PNG], ['log-1.txt', 'ログ'], ['bad-01.png', PNG], ['x.svg', '<svg/>']] as const) {
+      writeFileSync(join(s.folder, 'files', name), body);
+      utimesSync(join(s.folder, 'files', name), new Date('2026-11-19T01:02:03.456Z'), new Date('2026-11-19T01:02:03.456Z'));
+    }
+    const lines = pageImport(s.tpm);
+    expect(lines.slice(4)).toEqual([
+      'file: 入れた: 2 個・もう入っていた: 0 個・消した file: 0 個・ぶつかった: 0 個',
+      `+ ${BASE}/-Users-me-projects-x/AI-14/files/log-1.txt`,
+      `+ ${BASE}/-Users-me-projects-x/AI-14/files/shot-2.png`,
+    ]);
+    expect(s.store.files.get('/-Users-me-projects-x/AI-14/files/shot-2.png')?.record).toMatchObject({ n: 2, role: 'unknown', workspace: '', created_at: '2026-11-19T01:02:03.456Z', type: 'image/png' });
+    expect(s.store.files.get('/-Users-me-projects-x/AI-14/files/log-1.txt')?.body.toString()).toBe('ログ');
+    expect(pageImport(s.tpm).at(-1)).toBe('file: 入れた: 0 個・もう入っていた: 2 個・消した file: 0 個・ぶつかった: 0 個');
+    writeFileSync(join(s.folder, 'files', 'log-1.txt'), '別のログ');
+    s.store.files.delete('/-Users-me-projects-x/AI-14/files/shot-2.png');
+    s.store.removedFiles.add('/-Users-me-projects-x/AI-14/files/shot-2.png');
+    expect(pageImport(s.tpm).slice(-2)).toEqual([
+      'file: 入れた: 0 個・もう入っていた: 0 個・消した file: 1 個・ぶつかった: 1 個',
+      `! 同じ番号に別の中身がある（入れていない。要るなら tpm file put で上げ直す）: ${join(s.folder, 'files', 'log-1.txt')}`,
+    ]);
+  });
+
+  test('控えに file が無ければ、file のエンドポイントに聞かない（0.4.0 より前の置き場にも入れられる）', () => {
+    const s = legacy();
+    s.store.noFiles = true;
+    expect(pageImport(s.tpm)[0]).toContain('入れた: 3 枚');
+    mkdirSync(join(s.folder, 'files'));
+    writeFileSync(join(s.folder, 'files', 'a-1.png'), PNG);
+    expect(() => pageImport(s.tpm)).toThrow('版が古く');
+  });
 });
 
 describe('tpm page delete', () => {
@@ -397,6 +492,43 @@ describe('tpm page delete', () => {
       expect(() => pageDelete(s.tpm, [bad], {}), bad).toThrow('URL ではありません');
     }
     expect(() => pageDelete(s.tpm, [], { key: '../x' })).toThrow('使えない字');
+  });
+
+  test('--key・--project は、合う file も一緒に出して消す。URL の名指しは file を消さない', () => {
+    const s = placed();
+    const png = join(s.dir, '..', `${basename(s.dir)}-a.png`);
+    writeFileSync(png, PNG);
+    filePut(s.role, png, { reviewed: true, name: 'a.png' });
+    filePut(s.tpm, png, { reviewed: true, name: 'a.png', key: 't-y' });
+    expect(pageDelete(s.tpm, [s.url('t-x7k2', 'plan-1.html')], { yes: true })).toEqual(['消した: 1 枚（控えも消した）', `- ${s.url('t-x7k2', 'plan-1.html')}`]);
+    expect(s.store.files.size).toBe(2);
+    expect(pageDelete(s.tpm, [], { key: 't-x7k2' })).toEqual([
+      '消すページ（2 枚。戻せない）:',
+      `${s.url('t-x7k2', 'proposal-2.html')}  試し`,
+      `${s.url('t-x7k2', 'proposal-1.html')}  試し`,
+      '消す file（1 個。戻せない）:',
+      `${s.url('t-x7k2', 'files/a-1.png')}  ${PNG.length} byte`,
+      '消すには、同じ命令に --yes を付けて打ってください',
+    ]);
+    expect(pageDelete(s.tpm, [], { key: 't-x7k2', yes: true })).toEqual([
+      '消した: 2 枚（控えも消した）',
+      `- ${s.url('t-x7k2', 'proposal-1.html')}`,
+      `- ${s.url('t-x7k2', 'proposal-2.html')}`,
+      '消した file: 1 個',
+      `- ${s.url('t-x7k2', 'files/a-1.png')}`,
+    ]);
+    expect(existsSync(join(s.dir, s.project, 't-x7k2'))).toBe(false);
+    expect(s.store.removedFiles.has(`/${s.project}/t-x7k2/files/a-1.png`)).toBe(true);
+    // ページの無い Key でも、file だけ消せる。
+    pageDelete(s.tpm, [], { key: 't-y', yes: true });
+    expect(pageDelete(s.tpm, [], { project: s.project })).toEqual(['置き場に、消すページは無い']);
+    expect(s.store.files.size).toBe(0);
+  });
+
+  test('file を扱えない置き場（0.4.0 より前）でも、--key でページは消せる', () => {
+    const s = placed();
+    s.store.noFiles = true;
+    expect(pageDelete(s.tpm, [], { key: 't-x7k2', yes: true })[0]).toBe('消した: 3 枚（控えも消した）');
   });
 
   test('置き場が応えなければ、消さずに DevOps に頼むよう言う', () => {

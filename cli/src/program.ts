@@ -6,6 +6,7 @@ import { buildCommand } from './command.ts';
 import { bannerCheck, bannerHook, bannerLog, bannerSetup } from './commands/banner.ts';
 import { guard, infraApprove, infraList, infraRevoke, infraRun } from './commands/infra.ts';
 import { issueView } from './commands/issue.ts';
+import { fileDelete, fileList, filePath, filePut, type FileListOptions, type FilePutOptions } from './commands/file.ts';
 import { PAGE_KINDS, pageDelete, pageImport, pageList, pagePath, pagePut, type PageDeleteOptions, type PageListOptions } from './commands/page.ts';
 import { registerMessages } from './commands/register.ts';
 import { hello, inbox } from './commands/role-side.ts';
@@ -128,8 +129,29 @@ export function buildProgram(): Command {
     .option('--project <name>', 'この project（状態の folder の名）のページを消す。--key が無ければ project のページをみな消す（既定は今の project）')
     .option('--yes', '一覧を見せるだけでなく、本当に消す')
     .action((urls: string[], options: PageDeleteOptions) => print(pageDelete(createContext(), urls, options)));
-  page.command('import').description('控えの folder にあって置き場に無いページを、同じ番号で置き場に入れる（切り替えと、DB を失った後）')
+  page.command('import').description('控えの folder にあって置き場に無いページと file を、同じ番号で置き場に入れる（切り替えと、DB を失った後）')
     .action(() => print(pageImport(createContext())));
+
+  const file = program.command('file').description('ページから参照する画像・PDF・字の file を、置き場（127.0.0.1 の pagetray）に上げる・読む・探す・消す');
+  file.command('put <file>').description('file を置き場に上げ、控えを写して URL とページからの参照を出す（画像・PDF は --reviewed が要る）')
+    .option('--name <語.拡張子>', '置き場での名（無ければ元の file の名から作る）')
+    .option('--reviewed', '画像・PDF の中身を Read tool で見て、秘密が写っていないと確かめた')
+    .option('--allow-secret', '秘密の形に当たる字の file を、わかった上で上げる（記録に残る）')
+    .option('--key <Key>', '課題の Key（担当は $TPM_KEY。TPM 担当は要る）')
+    .action((path: string, options: FilePutOptions) => print(filePut(createContext(), path, options)));
+  file.command('path <url>').description('置き場の file の URL を控えの file の path にする（Read tool で読むため。控えに無ければ置き場から取る）')
+    .action((url: string) => print(filePath(createContext(), url)));
+  file.command('list').description('置き場の file を絞って探す（今の project の新しい順）')
+    .option('--key <Key>', '課題の Key')
+    .option('--role <役割>', '上げた担当の役割')
+    .option('--q <語>', '名（<語>.<拡張子>）を探す')
+    .option('--limit <件数>', '出す件数（1000 まで）', '50')
+    .option('--all-projects', 'ほかの project の file も出す')
+    .option('--json', '記録を JSON で出す')
+    .action((options: FileListOptions) => print(fileList(createContext(), options)));
+  file.command('delete <urls...>').description('file を置き場と控えから消す（TPM 担当だけ。戻せない。消す物と参照しているページを見せ、--yes で消す）')
+    .option('--yes', '一覧を見せるだけでなく、本当に消す')
+    .action((urls: string[], options: { yes?: boolean }) => print(fileDelete(createContext(), urls, options)));
 
   program.command('guard').description('（hook が呼ぶ）標準入力の命令を通すか止めるかを決める')
     .action(() => {
