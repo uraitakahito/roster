@@ -72,7 +72,7 @@ export function configLines(ctx: Context): string[] {
   return [
     '設定（この folder と直下の folder を合わせた物）:',
     ...sources.map(s => `- ${sourceLabel(s)}  ${sourceSummary(ctx, s)}`),
-    `課題管理: Jira の Key（SKILLS-12 の形）→ ${declared(trackers.jira, 'jira')}／gh- の Key → ${github}／t- の Key → 記録しない`,
+    `課題管理: Jira の Key（AI-12 の形）→ ${declared(trackers.jira, 'jira')}／gh- の Key → ${github}／t- の Key → 記録しない`,
     transportLine,
     ...(envs.length === 0 ? [] : [`infra: ${envs.join('・')}（手続きは tpm infra list）`]),
   ];

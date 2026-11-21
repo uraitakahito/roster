@@ -15,7 +15,7 @@ const TPM = { model: 'claude-opus-5-5', effort: 'medium' };
 const SE = { role: 'software-engineer', title: '提案', brief: BRIEF, wait: 0 } as const;
 
 const JIRA = JSON.stringify({
-  key: 'SKILLS-14',
+  key: 'AI-14',
   fields: {
     summary: 'Artifact を見る <UI>',
     status: { name: '未着手' },
@@ -33,15 +33,15 @@ function withAcli(ctx: Context, acli: { status: number, stdout: string, stderr: 
 describe('課題の写しのページ', () => {
   test('題・状態・本文・コメントを出し、課題の中の tag は escape する', () => {
     const html = issuePage({
-      key: 'SKILLS-14',
+      key: 'AI-14',
       tool: 'Jira',
       title: 'A <b>',
       status: '未着手',
-      url: 'https://x.example/browse/SKILLS-14',
+      url: 'https://x.example/browse/AI-14',
       body: '<script>x</script>',
       comments: [{ id: '1', text: 'c & d', author: 'pm', created: '2026-11-20' }],
     }, new Date('2026-11-21T00:00:00.000Z'));
-    expect(html).toContain('<h1>SKILLS-14: A &lt;b&gt;</h1>');
+    expect(html).toContain('<h1>AI-14: A &lt;b&gt;</h1>');
     expect(html).toContain('<pre>&lt;script&gt;x&lt;/script&gt;</pre>');
     expect(html).toContain('<h3>コメント 1（pm・2026-11-20）</h3>\n<pre>c &amp; d</pre>');
     expect(html).toContain('写した時刻: 2026-11-21T00:00:00.000Z');
@@ -54,12 +54,12 @@ describe('tpm assign が課題の写しを作る', () => {
     const w = world();
     const tpm = withAcli(w.tpm, { status: 0, stdout: JIRA, stderr: '' });
     hello(tpm, TPM);
-    assign(tpm, 'SKILLS-14', SE);
-    const file = join(pageFolder(tpm, 'SKILLS-14'), 'issue-1.html');
+    assign(tpm, 'AI-14', SE);
+    const file = join(pageFolder(tpm, 'AI-14'), 'issue-1.html');
     expect(readFileSync(file, 'utf8')).toContain('Artifact を見る &lt;UI&gt;');
-    const page = requireRole(tpm, 'SKILLS-14').issuePage;
-    expect(page).toMatch(/\/SKILLS-14\/issue-1\.html$/);
-    expect(hello(w.role('SKILLS-14', 'file:1'))).toContain(`課題の写し: ${page}`);
+    const page = requireRole(tpm, 'AI-14').issuePage;
+    expect(page).toMatch(/\/AI-14\/issue-1\.html$/);
+    expect(hello(w.role('AI-14', 'file:1'))).toContain(`課題の写し: ${page}`);
     expect(roles(tpm).join('\n')).toContain(`課題の写し: ${page}`);
   });
 
@@ -67,10 +67,10 @@ describe('tpm assign が課題の写しを作る', () => {
     const w = world();
     const tpm = withAcli(w.tpm, { status: 0, stdout: JIRA, stderr: '' });
     hello(tpm, TPM);
-    assign(tpm, 'SKILLS-14', SE);
-    assign(tpm, 'SKILLS-14', { ...SE, brief: 'https://claude.ai/artifact/b2', note: '計画まで' });
-    const page = requireRole(tpm, 'SKILLS-14').issuePage ?? '';
-    expect(page).toMatch(/\/SKILLS-14\/issue-2\.html$/);
+    assign(tpm, 'AI-14', SE);
+    assign(tpm, 'AI-14', { ...SE, brief: 'https://claude.ai/artifact/b2', note: '計画まで' });
+    const page = requireRole(tpm, 'AI-14').issuePage ?? '';
+    expect(page).toMatch(/\/AI-14\/issue-2\.html$/);
     expect(w.wire.inbox('file:1').map(m => m.text)).toEqual([`【brief】https://claude.ai/artifact/b2 課題の写し: ${page} 計画まで`]);
   });
 
@@ -88,24 +88,24 @@ describe('tpm assign が課題の写しを作る', () => {
     const w = world();
     const tpm = withAcli(w.tpm, { status: 1, stdout: '', stderr: 'unauthorized' });
     hello(tpm, TPM);
-    expect(() => assign(tpm, 'SKILLS-14', SE)).toThrow(/SKILLS-14 の課題の写しを作れませんでした: [\s\S]*unauthorized[\s\S]*acli jira auth status[\s\S]*--no-issue-copy "<訳>"/);
+    expect(() => assign(tpm, 'AI-14', SE)).toThrow(/AI-14 の課題の写しを作れませんでした: [\s\S]*unauthorized[\s\S]*acli jira auth status[\s\S]*--no-issue-copy "<訳>"/);
     expect(w.wire.seats()).toHaveLength(0);
-    expect(existsSync(pageFolder(tpm, 'SKILLS-14'))).toBe(false);
+    expect(existsSync(pageFolder(tpm, 'AI-14'))).toBe(false);
   });
 
   test('--no-issue-copy の訳を付ければ、写しなしで振り、訳が担当に届く', () => {
     const w = world();
     const tpm = withAcli(w.tpm, { status: 1, stdout: '', stderr: 'unauthorized' });
     hello(tpm, TPM);
-    assign(tpm, 'SKILLS-14', { ...SE, noIssueCopy: '認証切れ。中身は依頼書に写した' });
-    expect(hello(w.role('SKILLS-14', 'file:1'))).toContain('課題の写し: 無し（認証切れ。中身は依頼書に写した）');
-    assign(tpm, 'SKILLS-14', { ...SE, brief: 'https://claude.ai/artifact/b2', noIssueCopy: 'まだ認証切れ' });
+    assign(tpm, 'AI-14', { ...SE, noIssueCopy: '認証切れ。中身は依頼書に写した' });
+    expect(hello(w.role('AI-14', 'file:1'))).toContain('課題の写し: 無し（認証切れ。中身は依頼書に写した）');
+    assign(tpm, 'AI-14', { ...SE, brief: 'https://claude.ai/artifact/b2', noIssueCopy: 'まだ認証切れ' });
     expect(w.wire.inbox('file:1').map(m => m.text)).toEqual(['【brief】https://claude.ai/artifact/b2 課題の写し: 無し（まだ認証切れ）']);
   });
 
   test('--no-issue-copy の訳が空なら止まる', () => {
     const w = world();
     hello(w.tpm, TPM);
-    expect(() => assign(w.tpm, 'SKILLS-14', { ...SE, noIssueCopy: ' ' })).toThrow(/--no-issue-copy には、写しを作らずに振る訳を書いてください/);
+    expect(() => assign(w.tpm, 'AI-14', { ...SE, noIssueCopy: ' ' })).toThrow(/--no-issue-copy には、写しを作らずに振る訳を書いてください/);
   });
 });

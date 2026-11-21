@@ -146,7 +146,7 @@ describe('assign', () => {
   });
 
   test('どの設定の課題管理の Key でもない課題は、読んだ設定を並べて断る', () => {
-    expect(() => assign(world().tpm, 't-x7k2', { ...SE, issue: 'SKILLS-12' })).toThrow(/SKILLS-12 に記録を書く課題管理が、どの設定にもありません（読んだ設定: この folder＝none）/);
+    expect(() => assign(world().tpm, 't-x7k2', { ...SE, issue: 'AI-12' })).toThrow(/AI-12 に記録を書く課題管理が、どの設定にもありません（読んだ設定: この folder＝none）/);
     expect(() => assign(world({}, {}, { skills: { tracker: 'jira' } }).tpm, 'gh-12', { ...SE, issue: 'gh-12' })).toThrow(/読んだ設定: この folder＝none・skills＝jira/);
     const w = world({ tracker: 'github' });
     assign(w.tpm, 'gh-12', { ...SE, issue: 'gh-12' });
@@ -233,7 +233,7 @@ describe('設定の出どころ（tpm hello・tpm assign）', () => {
       '- skills  課題管理: jira・infra: store',
       '- web  課題管理: github・skill-sets: dependabot・担当の既定: software-engineer・連携: cmux（読まない。連携はこの folder の設定で決まる）',
       '- x  道具の欄は無い',
-      '課題管理: Jira の Key（SKILLS-12 の形）→ jira（skills）／gh- の Key → github（web）／t- の Key → 記録しない',
+      '課題管理: Jira の Key（AI-12 の形）→ jira（skills）／gh- の Key → github（web）／t- の Key → 記録しない',
       '連携: file',
       'infra: store（skills）（手続きは tpm infra list）',
     ]);
@@ -241,21 +241,21 @@ describe('設定の出どころ（tpm hello・tpm assign）', () => {
 
   test('宣言した設定が無い道具と、github の設定が 2 つ以上のときは、そう出す（止まらない）', () => {
     const lines = config(world({}, {}, { api: { tracker: 'github' }, web: { tracker: 'github' } }));
-    expect(lines[4]).toBe('課題管理: Jira の Key（SKILLS-12 の形）→ 宣言した設定が無い（記録しない）／gh- の Key → 決まらない（github の設定が 2 つ以上: api・web。この folder の設定の folders で 1 つに絞る。Product Manager に伝える）／t- の Key → 記録しない');
+    expect(lines[4]).toBe('課題管理: Jira の Key（AI-12 の形）→ 宣言した設定が無い（記録しない）／gh- の Key → 決まらない（github の設定が 2 つ以上: api・web。この folder の設定の folders で 1 つに絞る。Product Manager に伝える）／t- の Key → 記録しない');
   });
 
   test('tpm assign は、担当を起こした folder と課題の記録の先を出す', () => {
     const w = world({}, {}, { skills: { tracker: 'jira' } });
-    expect(assign(w.tpm, 'SKILLS-20', { ...SE, issue: 'SKILLS-20', noIssueCopy: '試験' })).toEqual([
-      '起こした: SWE SKILLS-20: 計画と実装（file:1・Opus 5.5 · medium）',
+    expect(assign(w.tpm, 'AI-20', { ...SE, issue: 'AI-20', noIssueCopy: '試験' })).toEqual([
+      '起こした: SWE AI-20: 計画と実装（file:1・Opus 5.5 · medium）',
       `folder: ${w.project}`,
       '課題の記録: jira（skills の設定）',
       '名乗り（tpm hello）は待っていない',
     ]);
     // project の folder 自身の設定なら、道具の名だけ
     const own = world({ tracker: 'jira' });
-    expect(assign(own.tpm, 'SKILLS-20', { ...SE, issue: 'SKILLS-20', noIssueCopy: '試験', cwd: join(own.project, 'sub') })[1]).toBe(`folder: ${join(own.project, 'sub')}`);
-    expect(recordingTo(own.tpm, 'SKILLS-20')).toBe('jira');
+    expect(assign(own.tpm, 'AI-20', { ...SE, issue: 'AI-20', noIssueCopy: '試験', cwd: join(own.project, 'sub') })[1]).toBe(`folder: ${join(own.project, 'sub')}`);
+    expect(recordingTo(own.tpm, 'AI-20')).toBe('jira');
   });
 });
 
@@ -279,8 +279,8 @@ describe('hello', () => {
   test('課題の Key が Jira の形なら、課題管理が none でも中身の読み方を返す', () => {
     const w = world();
     hello(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
-    assign(w.tpm, 'SKILLS-14', SE);
-    expect(hello(w.role('SKILLS-14', 'file:1'))).toContain('課題の中身: tpm issue view SKILLS-14');
+    assign(w.tpm, 'AI-14', SE);
+    expect(hello(w.role('AI-14', 'file:1'))).toContain('課題の中身: tpm issue view AI-14');
   });
 
   test('名簿にいない Key なら止まる', () => {

@@ -28,7 +28,7 @@ function commentHead(c: TrackerComment, i: number): string {
 function readIssue(ctx: Context, key: string): TrackerIssue {
   const tracker = issueTracker(ctx, key);
   if (tracker === undefined) {
-    throw new TpmError(`${key} は課題管理の課題の Key ではありません（Jira は SKILLS-12、GitHub の Issue は gh-12 の形）。t- の Key の課題の中身は依頼書にあります`);
+    throw new TpmError(`${key} は課題管理の課題の Key ではありません（Jira は AI-12、GitHub の Issue は gh-12 の形）。t- の Key の課題の中身は依頼書にあります`);
   }
   try {
     return tracker.view(key);

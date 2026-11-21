@@ -257,7 +257,7 @@ describe('tpm page import', () => {
   /** 前の置き場の形（控えの folder に file だけがある）を作る。 */
   function legacy() {
     const s = setup();
-    const folder = join(s.dir, '-Users-me-projects-x', 'SKILLS-14');
+    const folder = join(s.dir, '-Users-me-projects-x', 'AI-14');
     mkdirSync(folder, { recursive: true });
     const files = { 'brief-1.html': '<title>依頼書</title>', 'issue-1.html': '<title>写し</title>', 'plan-2.html': '<title>計画</title>' };
     for (const [name, html] of Object.entries(files)) {
@@ -277,13 +277,13 @@ describe('tpm page import', () => {
     const lines = pageImport(s.tpm);
     expect(lines[0]).toBe(`入れた: 3 枚・もう入っていた: 0 枚・消したページ: 0 枚・ぶつかった: 0 枚（控えの folder: ${s.dir}）`);
     expect(lines.slice(1).sort()).toEqual([
-      `+ ${BASE}/-Users-me-projects-x/SKILLS-14/brief-1.html`,
-      `+ ${BASE}/-Users-me-projects-x/SKILLS-14/issue-1.html`,
-      `+ ${BASE}/-Users-me-projects-x/SKILLS-14/plan-2.html`,
+      `+ ${BASE}/-Users-me-projects-x/AI-14/brief-1.html`,
+      `+ ${BASE}/-Users-me-projects-x/AI-14/issue-1.html`,
+      `+ ${BASE}/-Users-me-projects-x/AI-14/plan-2.html`,
     ]);
-    expect(s.stored('/-Users-me-projects-x/SKILLS-14/plan-2.html')).toMatchObject({ n: 2, role: 'unknown', workspace: '', created_at: '2026-11-19T01:02:03.456Z', title: '計画' });
-    expect(s.stored('/-Users-me-projects-x/SKILLS-14/brief-1.html')).toMatchObject({ role: 'tpm' });
-    expect(s.stored('/-Users-me-projects-x/SKILLS-14/issue-1.html')).toMatchObject({ role: 'tpm' });
+    expect(s.stored('/-Users-me-projects-x/AI-14/plan-2.html')).toMatchObject({ n: 2, role: 'unknown', workspace: '', created_at: '2026-11-19T01:02:03.456Z', title: '計画' });
+    expect(s.stored('/-Users-me-projects-x/AI-14/brief-1.html')).toMatchObject({ role: 'tpm' });
+    expect(s.stored('/-Users-me-projects-x/AI-14/issue-1.html')).toMatchObject({ role: 'tpm' });
     expect(s.store.pages.size).toBe(3);
   });
 
@@ -293,7 +293,7 @@ describe('tpm page import', () => {
     writeFileSync(join(s.folder, 'result-1.html'), '<title>結果</title>');
     expect(pageImport(s.tpm)).toEqual([
       `入れた: 1 枚・もう入っていた: 3 枚・消したページ: 0 枚・ぶつかった: 0 枚（控えの folder: ${s.dir}）`,
-      `+ ${BASE}/-Users-me-projects-x/SKILLS-14/result-1.html`,
+      `+ ${BASE}/-Users-me-projects-x/AI-14/result-1.html`,
     ]);
     expect(readdirSync(s.folder).filter(f => f.includes('.check-'))).toEqual([]);
   });
@@ -305,16 +305,16 @@ describe('tpm page import', () => {
     const lines = pageImport(s.tpm);
     expect(lines[0]).toContain('入れた: 0 枚・もう入っていた: 2 枚・消したページ: 0 枚・ぶつかった: 1 枚');
     expect(lines[1]).toBe(`! 同じ番号に別の中身がある（入れていない。要るなら tpm page put で置き直す）: ${join(s.folder, 'plan-2.html')}`);
-    expect(s.store.pages.get('/-Users-me-projects-x/SKILLS-14/plan-2.html')?.body.toString()).toBe('<title>計画</title>');
+    expect(s.store.pages.get('/-Users-me-projects-x/AI-14/plan-2.html')?.body.toString()).toBe('<title>計画</title>');
   });
 
   test('消したページは、控えに残っていても入れない（生き返らない）', () => {
     const s = legacy();
     pageImport(s.tpm);
-    s.store.pages.delete('/-Users-me-projects-x/SKILLS-14/plan-2.html');
-    s.store.removed.add('/-Users-me-projects-x/SKILLS-14/plan-2.html');
+    s.store.pages.delete('/-Users-me-projects-x/AI-14/plan-2.html');
+    s.store.removed.add('/-Users-me-projects-x/AI-14/plan-2.html');
     expect(pageImport(s.tpm)).toEqual([`入れた: 0 枚・もう入っていた: 2 枚・消したページ: 1 枚・ぶつかった: 0 枚（控えの folder: ${s.dir}）`]);
-    expect(s.store.pages.has('/-Users-me-projects-x/SKILLS-14/plan-2.html')).toBe(false);
+    expect(s.store.pages.has('/-Users-me-projects-x/AI-14/plan-2.html')).toBe(false);
   });
 
   test('置き場が応えなければ止まる', () => {

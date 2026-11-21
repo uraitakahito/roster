@@ -83,8 +83,8 @@ describe('道具の直打ち', () => {
     'cmux set-status wait "作業中: 読む" --icon hourglass',
     'cmux workspace create --name x --cwd /w --command y',
     'cd /w && cmux workspace close workspace:3 --force',
-    'acli jira workitem comment create --key SKILLS-1 --body-file f.json',
-    'acli jira workitem transition --key SKILLS-1 --status "完了" --yes',
+    'acli jira workitem comment create --key AI-1 --body-file f.json',
+    'acli jira workitem transition --key AI-1 --status "完了" --yes',
     // 命令の頭が道具なら、前に何が付いても、どこに並んでも止める。
     'true; acli jira workitem transition --key A',
     'ls | cmux set-status wait x',
@@ -115,7 +115,7 @@ describe('道具の直打ち', () => {
     'cmux --json workspace list',
     'cmux read-screen --workspace workspace:3',
     'cmux --json agent inbox --surface workspace:1 --limit 3',
-    'acli jira workitem view SKILLS-1 --fields comment --json',
+    'acli jira workitem view AI-1 --fields comment --json',
     'gh pr create --title x',
     'tpm report done --summary "cmux の adapter を直した"',
     // 道具の名が、命令でない字（文・型・中身）に入るだけなら止めない。

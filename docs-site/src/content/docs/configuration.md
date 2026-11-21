@@ -78,7 +78,7 @@ TPM 担当の宛先: workspace:1
 - この folder  /path/to/ai/.claude/roles/config.jsonc（無い）
 - skills  課題管理: jira・infra: pagetray
 - web  課題管理: github・skill-sets: dependabot
-課題管理: Jira の Key（SKILLS-12 の形）→ jira（skills）／gh- の Key → github（web）／t- の Key → 記録しない
+課題管理: Jira の Key（AI-12 の形）→ jira（skills）／gh- の Key → github（web）／t- の Key → 記録しない
 連携: cmux（既定）
 infra: pagetray（skills）（手続きは tpm infra list）
 名簿: 担当はいない
@@ -94,13 +94,13 @@ infra: pagetray（skills）（手続きは tpm infra list）
 
 | `tracker` | Key の形 | 記録 | 課題を閉じる |
 |---|---|---|---|
-| `jira` | `SKILLS-12` | コメント（ADF・段落だけ） | 状態を `完了` に進める |
+| `jira` | `AI-12` | コメント（ADF・段落だけ） | 状態を `完了` に進める |
 | `github` | `gh-12`（`#12`・`12` も受ける） | コメント（Markdown） | `completed` で閉じる |
 | `none` | `t-x7k2`（`tpm key` が作る） | 書かない | 何もしない |
 
-記録を書く先は Key の形で決まる: `SKILLS-12` の形は、`jira` を宣言した設定が（project の folder か直下の folder に）1 つでもあれば Jira。`gh-12` の形は、`github` を宣言した設定の folder の repo。宣言した設定が無い道具の Key に `tpm assign --issue` を付けると、読んだ設定を並べて止まる。
+記録を書く先は Key の形で決まる: `AI-12` の形は、`jira` を宣言した設定が（project の folder か直下の folder に）1 つでもあれば Jira。`gh-12` の形は、`github` を宣言した設定の folder の repo。宣言した設定が無い道具の Key に `tpm assign --issue` を付けると、読んだ設定を並べて止まる。
 
-課題の中身（題・状態・本文・コメント）は、どの担当も `tpm issue view <Key>` で読む。読むだけで記録を書かないので、`tracker` によらず Key の形で道具を選ぶ（どの設定も宣言していない道具の Key でも、`SKILLS-12` は acli、`gh-12` は gh で読む。`github` を宣言した設定が無ければ、`gh` は project の folder で打つ）。`tpm hello` は、担当の Key が読める形なら `課題の中身: tpm issue view <Key>` の行を返す。
+課題の中身（題・状態・本文・コメント）は、どの担当も `tpm issue view <Key>` で読む。読むだけで記録を書かないので、`tracker` によらず Key の形で道具を選ぶ（どの設定も宣言していない道具の Key でも、`AI-12` は acli、`gh-12` は gh で読む。`github` を宣言した設定が無ければ、`gh` は project の folder で打つ）。`tpm hello` は、担当の Key が読める形なら `課題の中身: tpm issue view <Key>` の行を返す。
 
 `tpm assign` は、Key（`--issue` があればそれ）が読める形なら、振るたびに課題を読んで写しのページ（`<Key>/issue-<番号>.html`）を置き、URL を名簿に書いて、担当の `tpm hello` と【brief】に `課題の写し: <URL>` として渡す。読めなければ担当を起こさずに止まる。`--no-issue-copy "<訳>"` を付けると写しを作らずに振り、訳を担当に渡す。
 

@@ -15,7 +15,7 @@ function fake(result: Partial<ExecResult>) {
 }
 
 const JIRA = JSON.stringify({
-  key: 'SKILLS-14',
+  key: 'AI-14',
   fields: {
     summary: 'Artifact を見る UI',
     status: { name: '未着手' },
@@ -28,8 +28,8 @@ describe('tpm issue view', () => {
   test('課題管理が none の project でも、Jira の Key なら acli で読む', () => {
     const { exec, calls } = fake({ stdout: JIRA });
     const ctx = { ...world().tpm, exec };
-    expect(issueView(ctx, 'SKILLS-14')).toEqual([
-      '課題: SKILLS-14（Jira）',
+    expect(issueView(ctx, 'AI-14')).toEqual([
+      '課題: AI-14（Jira）',
       '題: Artifact を見る UI',
       '状態: 未着手',
       '--- 本文',
@@ -64,7 +64,7 @@ describe('tpm issue view', () => {
 
   test('道具が失敗したら、認証を確かめる命令を添えて止まる', () => {
     const { exec } = fake({ status: 1, stderr: 'unauthorized' });
-    const run = () => issueView({ ...world().tpm, exec }, 'SKILLS-14');
+    const run = () => issueView({ ...world().tpm, exec }, 'AI-14');
     expect(run).toThrow(TpmError);
     expect(run).toThrow(/unauthorized[\s\S]*acli jira auth status/);
   });
