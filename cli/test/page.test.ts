@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
@@ -51,7 +51,7 @@ describe('tpm page put', () => {
       '--max-time',
       '10',
       '-w',
-      '\n%{http_code}',
+      '\n%{http_code} %header{pagetray-api}',
       '-X',
       'POST',
       '-H',
@@ -86,6 +86,20 @@ describe('tpm page put', () => {
     s.store.down = true;
     expect(() => pagePut(s.role, s.html, { kind: 'result' })).toThrow(/置き場（http:\/\/127\.0\.0\.1:8801）が応えません。ページは置けていません.*tpm ask devops/);
     expect(existsSync(join(s.dir, s.project))).toBe(false);
+  });
+
+  test('置き場の口の版が違えば、答えを使わずに止まる。控えも書かない', () => {
+    const s = setup();
+    s.store.api = '2';
+    expect(() => pagePut(s.role, s.html, { kind: 'result' })).toThrow(/口の版は 2 で、この tpm が話せるのは 1 です.*\.pagetray-version.*tpm ask devops/);
+    expect(existsSync(join(s.dir, s.project))).toBe(false);
+    expect(() => pageList(s.role, {})).toThrow(/口の版は 2/);
+  });
+
+  test('口の版を付けない置き場（版ができる前の物）には、今までどおり置ける', () => {
+    const s = setup();
+    s.store.api = undefined;
+    expect(pagePut(s.role, s.html, { kind: 'result' })[1]).toBe(`URL: ${BASE}/${s.project}/t-x7k2/result-1.html`);
   });
 
   test('置き場が断れば、置き場の言う訳を出す', () => {
@@ -177,6 +191,16 @@ describe('tpm page path', () => {
     expect(() => pagePath(s.role, `${BASE}/api/backup`)).toThrow('file がありません');
     expect(() => pagePath(s.role, `${BASE}/${s.project}/t-x7k2/notes.txt`)).toThrow('file がありません');
     expect(s.curls()).toHaveLength(before);
+  });
+
+  test('置き場の口の版が違えば読まず、途中の file も残さない', () => {
+    const s = setup();
+    pagePut(s.role, s.html, { kind: 'plan' });
+    const folder = join(s.dir, s.project, 't-x7k2');
+    for (const name of readdirSync(folder)) rmSync(join(folder, name));
+    s.store.api = '2';
+    expect(() => pagePath(s.role, `${BASE}/${s.project}/t-x7k2/plan-1.html`)).toThrow(/口の版は 2/);
+    expect(readdirSync(folder)).toEqual([]);
   });
 
   test('控えに無く、置き場も応えなければ、DevOps に頼むよう言う', () => {
@@ -338,7 +362,7 @@ describe('tpm page delete', () => {
       '消した: 1 枚（控えも消した）',
       `- ${s.url('t-x7k2', 'proposal-2.html')}`,
     ]);
-    expect(s.curls().at(-1)).toEqual(['-sS', '--max-time', '10', '-w', '\n%{http_code}', '-X', 'DELETE', `${BASE}/api/pages?project=${encodeURIComponent(s.project)}&key=t-x7k2&kind=proposal&n=2`]);
+    expect(s.curls().at(-1)).toEqual(['-sS', '--max-time', '10', '-w', '\n%{http_code} %header{pagetray-api}', '-X', 'DELETE', `${BASE}/api/pages?project=${encodeURIComponent(s.project)}&key=t-x7k2&kind=proposal&n=2`]);
     expect(existsSync(s.cachedFile('t-x7k2', 'proposal-2.html'))).toBe(false);
     expect(existsSync(s.cachedFile('t-x7k2', 'proposal-1.html'))).toBe(true);
     expect(s.store.pages.size).toBe(4);

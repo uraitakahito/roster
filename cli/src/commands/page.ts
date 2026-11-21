@@ -1,4 +1,4 @@
-// 依頼書と成果のページを、置き場（pagestore。127.0.0.1 で待つ、ページを DB に持つサーバー）に置く・読む・探す・消す。
+// 依頼書と成果のページを、置き場（別の repo の pagetray。127.0.0.1 で待つ、ページを DB に持つサーバー）に置く・読む・探す・消す。
 // 番号は置き場が決める。置いた・読んだページは、この Mac の控えの folder にも写す（Read tool で読むためと、置き場が止まっても読めるため）。
 // 置き場は Mac に 1 つで、project をまたいで同じなので、控えの folder と URL は設定（config.jsonc）でなく環境変数で替える。
 // 置き場を起こす・止めるのは DevOps Engineer 担当（docs-site の運用のページの「ページの置き場（tpm-pagestore）」）。
@@ -22,6 +22,9 @@ export type PageKind = typeof PAGE_KINDS[number];
 export const DEFAULT_PAGES_URL = 'http://127.0.0.1:8801';
 /** 前の置き場（Nginx）の URL。前に置いたページの URL も、読む時は受ける。 */
 export const LEGACY_PAGES_URLS = ['http://127.0.0.1:8800'];
+
+/** この cli が話せる、置き場の口の版（pagetray の docs/api.md。置き場は、どの答えにも header `Pagetray-Api` で自分の版を付ける）。 */
+export const PAGES_API = '1';
 
 /** 課題の Key として folder の名にしてよい字（path の外へ出ないように）。 */
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -75,11 +78,17 @@ export const isPageUrl = (env: NodeJS.ProcessEnv, url: string): boolean => inSto
 /** 課題の Key のページの控えを置く folder（`<控えの folder>/<状態の folder の名>/<Key>`）。 */
 export const pageFolder = (ctx: Context, key: string): string => join(pagesDir(ctx.env), basename(ctx.state.dir), key);
 
-/** 置き場に curl で頼む。答えの本文と HTTP の code を返す（つながらなければ code は 000）。 */
+/**
+ * 置き場に curl で頼む。答えの本文と HTTP の code を返す（つながらなければ code は 000）。
+ * 答えの口の版がこの cli の話せる版と違えば、答えを使わずに止まる。header の無い答えは、口の版ができる前の置き場の物で、形は版 1 と同じなので通す。
+ */
 function call(ctx: Context, args: string[], input?: string): { body: string, code: string, result: ExecResult } {
-  const result = ctx.exec('curl', ['-sS', '--max-time', TIMEOUT, '-w', '\n%{http_code}', ...args], input === undefined ? undefined : { input });
+  const result = ctx.exec('curl', ['-sS', '--max-time', TIMEOUT, '-w', '\n%{http_code} %header{pagetray-api}', ...args], input === undefined ? undefined : { input });
   const cut = result.stdout.lastIndexOf('\n');
-  const code = result.stdout.slice(cut + 1).trim();
+  const [code = '', api = ''] = result.stdout.slice(cut + 1).trim().split(' ');
+  if (result.status === 0 && api !== '' && api !== PAGES_API) {
+    throw new TpmError(`置き場（${pagesUrl(ctx.env)}）の口の版は ${api} で、この tpm が話せるのは ${PAGES_API} です。置き場の版（pagetray）と skills の版が合っていません。skills を pull するか、置き場の版を skills の .pagetray-version に合わせるよう tpm ask devops で頼んでください`);
+  }
   return { body: result.stdout.slice(0, Math.max(cut, 0)), code: result.status !== 0 || code === '' ? '000' : code, result };
 }
 
@@ -185,7 +194,14 @@ export function pagePath(ctx: Context, url: string): string[] {
 function fetchPage(ctx: Context, storePath: string, path: string): void {
   mkdirSync(dirname(path), { recursive: true });
   const partial = `${path}.part-${process.pid}`;
-  const r = call(ctx, ['-o', partial, `${pagesUrl(ctx.env)}${storePath}`]);
+  let r: ReturnType<typeof call>;
+  try {
+    r = call(ctx, ['-o', partial, `${pagesUrl(ctx.env)}${storePath}`]);
+  }
+  catch (error) {
+    rmSync(partial, { force: true });
+    throw error;
+  }
   if (r.code === '200') {
     renameSync(partial, path);
     return;
