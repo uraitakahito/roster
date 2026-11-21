@@ -52,6 +52,7 @@ tpm infra run pagetray -- container run -d --name pagetray \
 - `-p` には必ず `127.0.0.1:` を書く。`-p 8801:8080` と書くと LAN に開く。
 - 8801 が使われていたら別の port にし、担当が使う URL を環境変数 `TPM_PAGES_URL`（[設定](/configuration/)）で合わせる。
 - 起こしたら、pagetray の docs の「[確かめる](https://uraitakahito.github.io/pagetray/run.html#確かめる)」をする。試しのページを置いたら、TPM 担当が `tpm page delete <URL> --yes` で消す（[担当のあいだの決まり](/protocol/#ページの置き場)）。
+- 「確かめる」の 6（一覧の UI を、読むだけの試験で見る。pagetray 0.3.2 から）は、DevOps Engineer 担当が自分で流す。pagetray の checkout のある folder で打ち、Node と pnpm が要る。試験は本物の browser（この Mac の Chrome）で一覧の UI を開くが、置き場には何も書かない。出力を結果のページに載せる。browser で一覧を見ることを、Product Manager に頼まない。試験が落ちたら、落ちた所を【ask-tpm】で知らせる。
 
 ### 止める・Mac を起こし直した後
 
@@ -79,7 +80,7 @@ pagetray の新しい版が出て、この repo の `.pagetray-version` が上�
 
 1. pagetray の `CHANGELOG.md` で、API の版が変わるか・移行の SQL が足されるかを見る。
 2. 【ask-tpm】で止める時を決める。
-3. pagetray の docs の「[版を上げる](https://uraitakahito.github.io/pagetray/run.html#版を上げる)」のとおりに、DB の写しを取り、container を作り直して、確かめる（volume はそのまま付く）。
+3. pagetray の docs の「[版を上げる](https://uraitakahito.github.io/pagetray/run.html#版を上げる)」のとおりに、DB の写しを取り、container を作り直して、確かめる（volume はそのまま付く）。「確かめる」は、6 の読むだけの試験まで流す。
 4. `tpm page` が「API の版が違う」と言って止まる時は、置き場の版とこの repo の版（`.pagetray-version`）が合っていない。どちらかが古いので、合わせる。
 
 ### ほかの project で使う
