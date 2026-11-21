@@ -14,5 +14,22 @@
         "container rm tpm-pages",
       ],
     },
+    // 新しい置き場（pagestore の container と、DB を置く volume）。止めると担当はページを置けず、
+    // volume を消すと置かれたページの記録（役割・workspace の ID）が消える。
+    // 起こし方は docs-site の運用のページの「新しい置き場（tpm-pagestore）」。
+    // 名が tpm-pages で始まるので、この環境に触る命令は tpm-pages の match にも当たる（手続きは同じ）。
+    "tpm-pagestore": {
+      "guard": "tpm",
+      "match": [
+        "--name tpm-pagestore",
+        "container start tpm-pagestore",
+        "container stop tpm-pagestore",
+        "container kill tpm-pagestore",
+        "container delete tpm-pagestore",
+        "container rm tpm-pagestore",
+        "container volume delete tpm-pagestore-data",
+        "container volume rm tpm-pagestore-data",
+      ],
+    },
   },
 }
