@@ -2,6 +2,7 @@
 // 担当が打つ物（ask・report・wait）と、TPM 担当が打つ物（answer・notify・dismiss・show）。brief は命令でなく、assign の中で使う。
 import type { Context } from '../context.ts';
 import { recordGateStop, recordWait } from '../evidence.ts';
+import { addIncident, incidentLine, incidentType, INCIDENT_TYPES, tagLines } from '../incidents.ts';
 import { message, ROLES, TPM_TITLE, WAIT, WAIT_CLOSE, WAIT_NEXT_BRIEF, type HeadingId, type WaitKind } from '../protocol.ts';
 import { requireRole, requireSelf, requireTpm, writeRole, type RoleRecord } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
@@ -176,12 +177,46 @@ export interface WaitRecord {
 /** `waits/` の file の名（宛先の : などを替える）。 */
 export const waitFile = (address: string): string => `waits/${address.replaceAll(/[^A-Za-z0-9._-]/g, '-')}.jsonc`;
 
-/** 状態 wait を替え、打った時刻を記録する。 */
-export function wait(ctx: Context, kind: WaitKind, what: string): string[] {
+/** Product Manager に頼んだ手の操作の tag（`tpm wait pm --hand`）。 */
+export const PM_HAND = 'pm-hand';
+
+/**
+ * 状態 wait を替え、打った時刻を記録する。hand は、Product Manager に手の操作を頼んで待つ回（wait pm だけ）。
+ * 頼んだ手を台帳に数える（権限が足りず人の手が要った回数を、後から数で言えるように）。
+ */
+export function wait(ctx: Context, kind: WaitKind, what: string, options: { hand?: boolean } = {}): string[] {
+  if (options.hand === true && kind !== 'pm') throw new TpmError('--hand は tpm wait pm だけに付ける（Product Manager に手の操作を頼んだ回）');
   const text = WAIT[kind](what);
   const address = showWait(ctx, text);
   ctx.state.write(waitFile(address), { kind, text, at: ctx.now().toISOString() } satisfies WaitRecord);
-  return [`状態: ${text}`];
+  if (options.hand !== true) return [`状態: ${text}`];
+  const incident = addIncident(ctx, { key: ctx.env.TPM_KEY || 'tpm', source: 'pm-hand', text: what, tags: [PM_HAND] });
+  return [`状態: ${text}`, `台帳に入れた: ${incidentLine(incident)}`, ...tagLines(ctx, incident)];
+}
+
+/** 「残り」「残っている物」が「なし」でなければ、台帳に入れる（振るか捨てるかを決めるまで、見直しに出続ける）。入れた行を返す。 */
+function keepRemaining(ctx: Context, self: RoleRecord, heading: 'done' | 'end', text: string): string[] {
+  if (/^(なし|無し)/.test(text.trim())) return [];
+  const incident = addIncident(ctx, { key: self.key, source: 'remaining', text: `【${heading}】の残り: ${text}` });
+  return [`台帳に入れた（TPM 担当が、振るか捨てるかを決める）: #${incident.n}`];
+}
+
+/** `tpm report incident` の旗。 */
+export interface IncidentOptions {
+  text: string
+  type: string
+  tags: string[]
+  severe: boolean
+}
+
+/** 担当が、気づいた出来事（起きた事実）を台帳に書き、TPM 担当に知らせる（【incident】）。課題管理には書かない。 */
+export function reportIncident(ctx: Context, options: IncidentOptions): string[] {
+  const type = incidentType(options.type);
+  const self = sender(ctx);
+  const incident = addIncident(ctx, { key: self.key, source: 'report', text: options.text, type, tags: options.tags, severe: options.severe });
+  const tags = incident.tags.length === 0 ? '' : `（tag: ${incident.tags.join('・')}）`;
+  const body = `#${incident.n}${incident.severe ? ' [重い]' : ''} ${INCIDENT_TYPES[type]}: ${options.text}${tags}`;
+  return [`台帳に書いた: ${incidentLine(incident)}`, ...tagLines(ctx, incident), toTpm(ctx, self, 'incident', body)];
 }
 
 /** 状態 wait の字を出し、移りを waits.jsonl に残す。自分の宛先を返す。 */
@@ -280,7 +315,7 @@ export function reportDone(ctx: Context, options: DoneOptions): string[] {
   });
   const sent = toTpm(ctx, self, 'done', body);
   showWait(ctx, WAIT_NEXT_BRIEF);
-  return [...recorded, sent, `状態: ${WAIT_NEXT_BRIEF}（次の【brief】か【dismiss】を待つ。自分から【end】を送らない）`];
+  return [...recorded, sent, ...keepRemaining(ctx, self, 'done', remaining), `状態: ${WAIT_NEXT_BRIEF}（次の【brief】か【dismiss】を待つ。自分から【end】を送らない）`];
 }
 
 /** `tpm report end` の旗。 */
@@ -318,7 +353,7 @@ export function reportEnd(ctx: Context, options: EndOptions): string[] {
       out.push(`課題を閉じた: ${self.issue}`);
     }
   }
-  out.push(toTpm(ctx, self, 'end', body));
+  out.push(toTpm(ctx, self, 'end', body), ...keepRemaining(ctx, self, 'end', left));
   showWait(ctx, WAIT_CLOSE);
   out.push(`状態: ${WAIT_CLOSE}（居場所は自分で閉じない）`);
   return out;

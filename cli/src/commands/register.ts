@@ -3,16 +3,18 @@ import type { Command } from 'commander';
 import { createContext } from '../context.ts';
 import { WAIT, type WaitKind } from '../protocol.ts';
 import { TpmError } from '../skill-sets.ts';
-import { answer, askDevops, askPm, askTpm, dismiss, DONE_KINDS, doneKind, notify, reportDependabot, reportDocFix, reportDone, reportEnd, reportMerged, show, wait } from './messages.ts';
+import { INCIDENT_TYPES } from '../incidents.ts';
+import { answer, askDevops, askPm, askTpm, dismiss, DONE_KINDS, doneKind, notify, reportDependabot, reportDocFix, reportDone, reportEnd, reportIncident, reportMerged, show, wait } from './messages.ts';
 
 const collect = (value: string, all: string[]): string[] => [...all, value];
 
 /** やりとりの命令（状態を替える `wait`・人に見せる `show`・メッセージを送る `ask`・`report`・TPM 担当の `answer`・`notify`・`dismiss`）を命令の木に足す。print は命令の出す行を書き出す。 */
 export function registerMessages(program: Command, print: (lines: string[]) => void): void {
   program.command('wait <kind> <what>').description(`状態 wait を替える（kind は ${Object.keys(WAIT).join('・')}）`)
-    .action((kind: string, what: string) => {
+    .option('--hand', '（wait pm）Product Manager に手の操作（画面の操作・! の 1 行）を頼んだ。頼んだ手を台帳に数える', false)
+    .action((kind: string, what: string, options: { hand: boolean }) => {
       if (!(kind in WAIT)) throw new TpmError(`kind は ${Object.keys(WAIT).join('・')} のどれかにしてください`);
-      print(wait(createContext(), kind as WaitKind, what));
+      print(wait(createContext(), kind as WaitKind, what, options));
     });
   program.command('show <url>').description('URL を自分の居場所で開いて人に見せる').action((url: string) => print(show(createContext(), url)));
 
@@ -57,6 +59,11 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
     .option('--left <残っている物>', '残っている物（無ければ「なし」）')
     .option('--unchecked <訳>', 'PR が merge 済みかを gh で確かめずに送る（gh で読めない PR。確かめた方法を書く）')
     .action((options: { url?: string, pr: string[], removed: string[], left?: string, unchecked?: string }) => print(reportEnd(createContext(), { ...options, prs: options.pr })));
+  report.command('incident <text>').description('【incident】思わぬ出来事（起きた事実）を台帳に書き、TPM 担当に知らせる')
+    .requiredOption('--type <種類>', Object.keys(INCIDENT_TYPES).join('・'))
+    .option('--tag <tag>', '同じ種の出来事を数える印（繰り返せる。権限で断られた命令は 権限）', collect, [] as string[])
+    .option('--severe', 'すぐ止めないと害が広がる', false)
+    .action((text: string, options: { type: string, tag: string[], severe: boolean }) => print(reportIncident(createContext(), { ...options, text, tags: options.tag })));
   for (const [id, description] of [
     ['merge-request', '【merge-request】（Dependabot）PR の merge を頼む'],
     ['not-yet', '【not-yet】（Dependabot）まだ対象でない・rebase に応じない'],

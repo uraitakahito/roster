@@ -61,6 +61,20 @@ export class State {
     renameSync(tmp, file);
   }
 
+  /** 無い file を作って JSON を書く。もう在れば書かずに false（同時に書く担当のうち、1 人だけが作れる）。 */
+  create(name: string, value: unknown): boolean {
+    const file = join(this.dir, name);
+    mkdirSync(dirname(file), { recursive: true });
+    try {
+      writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, { flag: 'wx' });
+      return true;
+    }
+    catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'EEXIST') return false;
+      throw e;
+    }
+  }
+
   /** ファイルを消す。無くても誤りにしない。 */
   remove(name: string): void {
     rmSync(join(this.dir, name), { force: true });
