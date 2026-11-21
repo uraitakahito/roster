@@ -1,6 +1,6 @@
 ---
 title: 開発
-description: 試験の流し方・Rust の置き場（pagestore）・Dependabot の判定の道具・この docs の見方と公開の流れ
+description: 試験の流し方・ページの置き場のサーバー（pagetray）とのつなぎ・Dependabot の判定の道具・この docs の見方と公開の流れ
 ---
 
 ## 試験
@@ -46,54 +46,16 @@ build は無い。`cli/bin/tpm` は `cli/src/cli.ts` を node で直に動かす
 - **試し方**: 決まりの命令は、連携を `file`（メッセージ・居場所・状態をファイルに書くだけ）にした project で cmux 無しに試せる（`cli/test/helpers.ts`）。実機で担当を起こして試すときは、`TPM_STATE` を一時の folder に向けて本物の名簿を汚さない。
 - **道具を直に打つ**: `tpm` が起こした session では、guard が `cmux` のメッセージ・状態・居場所の命令と、`acli`・`gh issue` の記録と状態の命令の直打ちを止める（課題を読む命令は止めない。見るのは単純な命令の頭だけなので、commit の文や here-document に道具の名を書いても止まらない）。担当が置き場に消す要求（`curl -X DELETE …/api/pages…`）を直に送るのも止める（消してよいのは TPM 担当だけ）。adapter の開発で直に打つときは、命令の頭に `TPM_RAW=1` を付ける。
 
-## pagestore（Rust の置き場）
+## pagetray（ページの置き場のサーバー）とのつなぎ
 
-`pagestore/` は、担当が置くページを DB に持つサーバー（Rust）。`cli/` とは別の project で、道具も lockfile も自分で持つ。`tpm page put`・`path`・`list`・`import`・`delete`（`cli/src/commands/page.ts`）が、`curl` でここの口を呼ぶ。
+担当が置くページを DB に持つサーバー（Rust）は、別の repo [pagetray](https://github.com/uraitakahito/pagetray) にある（もとは、この repo の folder だった物を履歴ごと分けた）。作り・口の一覧・Rust の開発の手引きは、pagetray の README。この repo が持つのは、その口を `curl` で呼ぶ側（`tpm page put`・`path`・`list`・`import`・`delete`。`cli/src/commands/page.ts`）と、つなぎの試験。
 
-| ファイル | 中身 |
-|---|---|
-| `pagestore/src/main.rs` | 設定を読む・起こす・止める |
-| `pagestore/src/lib.rs` | 道筋と、この Mac の中からの要求だけを受ける守り |
-| `pagestore/src/db.rs` | 接続・移行・SQL |
-| `pagestore/src/api.rs` | 置く・探す・消す・DB の写し |
-| `pagestore/src/pages.rs` | ページの本文を返す |
-| `pagestore/src/ui.rs`・`pagestore/templates/index.html` | 一覧の UI（askama の template。build の時に検査される） |
-| `pagestore/src/events.rs` | 新着の push（SSE） |
-| `pagestore/src/text.rs` | HTML から題と検索用の字を取り出す |
-| `pagestore/migrations/` | 表を作る SQL（起きる時に、まだ当てていない物を当てる） |
-| `pagestore/.sqlx/` | SQL の検査用の file（commit する） |
-| `pagestore/Containerfile` | image の作り方（静的な binary を、空の image に 1 つだけ置く）。作る・起こす手順は [運用](/operations/#ページの置き場tpm-pagestore) |
-
-Rust は `rustup` で入れる（Homebrew の `rust` は `pagestore/rust-toolchain.toml` を読まない）。版は `pagestore/rust-toolchain.toml` が決め、`pagestore/` の中で `cargo` を打つと、その版が入って使われる。
-
-```sh
-brew install rustup                              # keg-only。PATH に /opt/homebrew/opt/rustup/bin を足す
-cd pagestore
-cargo fmt --check
-cargo clippy --locked --all-targets -- -D warnings
-SQLX_OFFLINE=true cargo test --locked
-PAGESTORE_DB=/tmp/pages.db PAGESTORE_LISTEN=127.0.0.1:18801 cargo run   # 手元で起こす
-```
-
-GitHub Actions でも同じ順に流す（`.github/workflows/pagestore.yml`）。試験は、試験ごとに一時の DB を作る。workflow の `image` は、`pagestore/Containerfile` を arm64 の runner で build し、空の image の中で起きて置いて読めること・止める合図で終わること・起こし直しても残ることを見る。workflow の `cli` は、build した pagestore を起こし、`cli/test/pagestore-e2e.test.ts` で `tpm page put`・`path`・`list`・`import`・`delete` を本物に向けて流す（`cli/src/` のすべての役割とページの種類で 1 枚ずつ置いて読む）。`cli/` のほかの試験は偽の置き場（`cli/test/helpers.ts` の `FakeStore`）で流すので、口の形（URL・引数の名・JSON の欄）を変えたら、両方を合わせて直す。手元では、上の「手元で起こす」の後に `cd cli && TPM_E2E_PAGES_URL=http://127.0.0.1:18801 pnpm exec vitest run test/pagestore-e2e.test.ts`。
-
-- **口**: `POST /api/pages?project=&key=&kind=&role=&workspace=`（本文は HTML。番号を決めて `201` と JSON を返す。`n`・`created_at` は取り込みの時だけ付け、番号が使われていれば `409`）・`GET /api/pages`（`project`・`key`・`kind`・`role`・`workspace`・`q`・`sort`・`limit`・`before`・`after` で絞る）・`DELETE /api/pages?project=[&key=][&kind=][&n=]`（合うページを消し、番号を表 `removed` に残して、消した path の一覧を返す。`n` には `key` と `kind` が要る。人は見分けない。TPM 担当だけという決まりは cli と guard が持つ）・`GET /<project>/<key>/<kind>-<n>.html`（本文。消したページは `410`）・`GET /`（一覧の UI。`/<project>/`・`/<project>/<key>/` は絞った一覧）・`GET /api/events`（置かれるたびに 1 件を push）・`GET /api/backup`（DB の写し）・`GET /healthz`。
+- **合わせる版**: `.pagetray-version` に、合わせる pagetray の commit の名を書く。workflow の `pagetray-e2e`（`.github/workflows/pagetray-e2e.yml`）が、その commit を checkout して build して起こし、`cli/test/pagestore-e2e.test.ts` で `tpm page put`・`path`・`list`・`import`・`delete` を本物に向けて流す（`cli/src/` のすべての役割とページの種類で 1 枚ずつ置いて読む）。
+- **偽の置き場**: `cli/` のほかの試験は、偽の置き場（`cli/test/helpers.ts` の `FakeStore`）で流す。口の形（URL・引数の名・JSON の欄）が変わったら、`FakeStore` と `page.ts` を合わせて直す。
+- **pagetray を上げる時**: pagetray で変更を merge する → この repo で `.pagetray-version` を新しい commit の名にする PR を出す（つなぎの試験が通る）→ [運用](/operations/#image-を上げる)の「image を上げる」で container を作り直す。口を変える変更は、古い cli でも新しい cli でも通る順に分ける。
+- **手元で流す**: pagetray の checkout で `PAGESTORE_DB=/tmp/pages.db PAGESTORE_LISTEN=127.0.0.1:18801 cargo run` と起こした後に、`cd cli && TPM_E2E_PAGES_URL=http://127.0.0.1:18801 pnpm exec vitest run test/pagestore-e2e.test.ts`。
 - **種類と役割の名**: 一覧は `cli/src/` だけが持つ。サーバーは字の形（英小文字で始まり、英小文字・数字・`-` で 32 字まで）だけを見るので、`cli` に種類や役割を足してもサーバーは変えない。
-- **一覧の UI**: サーバーが HTML を組んで返す。絞り込み・並べ替え・検索は link と form で、条件は URL に出る（script が無くても動く）。script がするのは、新着の印・未読の印（browser が覚える）・時刻をこの Mac の時刻で出すことだけ。選んだページは、右の枠（`sandbox` を付けた iframe）に 1 枚だけ出す。見た目を変えたら、手元で起こして browser で見る。
-- **番号**: 書く接続は 1 本で、1 つの SQL が「今の最大 ＋ 1」を取って足す。最大は、置いてあるページ（`pages`）と消したページ（`removed`）の両方から取るので、消した番号は 2 度使わない（古い URL が別のページを指さない）。取り込みで消した番号を名指すと `409`。置いたページを書き換える口は無い。
-- **消す**: 1 つの取引で、`removed` に番号を写し、`pages_fts` と `pages` の行を消す。本文は残さない（戻せない）。
-- **SQL を変えた時**: SQL は `query!` が build の時に `pagestore/.sqlx/` と突き合わせる。SQL か `pagestore/migrations/` を変えたら、一時の DB を作って作り直し、commit する（忘れると CI の `cargo sqlx prepare --check` が落ちる）。`sqlx-cli` の版は workflow の `SQLX_CLI_VERSION` と合わせる。
-
-  ```sh
-  cargo install sqlx-cli@0.9.1 --no-default-features --features sqlite
-  export DATABASE_URL=sqlite://$PWD/target/dev.db
-  cargo sqlx database create && cargo sqlx migrate run
-  cargo sqlx prepare
-  ```
-
-- **当てた移行の SQL は変えない**: 動いている DB が、当てた SQL の中身を覚えている。表を変える時は `pagestore/migrations/` に次の番号の file を足す。
-- **crate を上げる**: `pagestore/.cargo/config.toml` の `global-min-publish-age` が、公開から 2 日たっていない版を選ばせない（Cargo 1.100 から。`cli` の `minimumReleaseAge` と同じ日数）。上げる時は `cargo update` → 試験 → PR。Dependabot の版上げの PR は入れていない。`cargo install` はこの決まりを見ないので、道具は版を書いて入れる。
-- **弱点の見張り**: workflow の `advisories` が `cargo deny check advisories`（設定は `pagestore/deny.toml`）を、PR ごとと週に 1 度流す。
+- **だれが消してよいか**: サーバーは人を見分けない。「消してよいのは TPM 担当だけ」という決まりは、`tpm page delete` と guard（`cli/src/guard.ts`）が持つ。
 
 ## 判定の道具
 

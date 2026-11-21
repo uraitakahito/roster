@@ -22,7 +22,7 @@ description: この repo を別の folder へ移す手順、Node の version の
 
 ## ページの置き場（tpm-pagestore）
 
-依頼書と成果のページを置く、この Mac だけの置き場。担当が `tpm page put` で置いたページを DB に持ち、絞って探せる一覧の UI を出すサーバー（`pagestore/`。作りは [開発](/development/#pagestorerust-の置き場)）を、Apple Container（`container` CLI）で動かす。`127.0.0.1` だけで待ち受け、LAN にもインターネットにも開かない。起こす・止める・直すのは DevOps Engineer 担当で、命令は `tpm infra run tpm-pagestore -- <命令>` で打つ（この repo の `.claude/roles/config.jsonc` が、環境 `tpm-pagestore` を「TPM に相談」の手続きで宣言している）。
+依頼書と成果のページを置く、この Mac だけの置き場。担当が `tpm page put` で置いたページを DB に持ち、絞って探せる一覧の UI を出すサーバー（別の repo の [pagetray](https://github.com/uraitakahito/pagetray)。この repo とのつなぎは [開発](/development/#pagetrayページの置き場のサーバーとのつなぎ)）を、Apple Container（`container` CLI）で動かす。`127.0.0.1` だけで待ち受け、LAN にもインターネットにも開かない。起こす・止める・直すのは DevOps Engineer 担当で、命令は `tpm infra run tpm-pagestore -- <命令>` で打つ（この repo の `.claude/roles/config.jsonc` が、環境 `tpm-pagestore` を「TPM に相談」の手続きで宣言している）。
 
 | 物 | 値 |
 |---|---|
@@ -30,18 +30,20 @@ description: この repo を別の folder へ移す手順、Node の version の
 | URL | `http://127.0.0.1:8801/`（一覧の UI。ページは `/<状態の folder の名>/<Key>/<種類>-<番号>.html`）。`http://127.0.0.1:8800/` は、前の置き場（Nginx。今は無い）の port。前に置いたページの URL と、ページの中の link を同じ path で開けるように、同じ container が待ち受ける |
 | 控えの folder | `~/.local/share/tpm/pages/`（`tpm` が、置いた・読んだページをこの Mac に写す所。container には mount しない） |
 | DB | 名前つきの volume `tpm-pagestore-data`（中の `/data/pages.db`）。Mac の folder は mount しない |
-| image | この Mac で `pagestore/Containerfile` から作る `tpm-pagestore:<commit の短い名>`。registry には上げない |
+| image | この Mac で、pagetray の repo の `Containerfile` から作る `tpm-pagestore:<pagetray の commit の短い名>`。registry には上げない |
 
 ### image を作る
 
 ```sh
-git -C <この repo> pull --ff-only
-cd <この repo>/pagestore
+cd <pagetray の repo>          # 無ければ git clone https://github.com/uraitakahito/pagetray
+git pull --ff-only
+git checkout --detach "$(cat <この repo>/.pagetray-version)"   # この repo の cli と合わせてある版
 container build --progress plain -t tpm-pagestore:$(git rev-parse --short HEAD) -f Containerfile .
 ```
 
 - 初めからで 2 分ほど。`--progress plain` を付ける（`-q` は止まったまま進まないことがあった）。
-- build の段は公式の `rust` の alpine で、tag と digest で固定してある。SQL の検査は commit した `pagestore/.sqlx/` で行うので、build の中に DB は要らない。
+- build の段は公式の `rust` の alpine で、tag と digest で固定してある。SQL の検査は pagetray が commit した `.sqlx/` で行うので、build の中に DB は要らない。
+- 作り終えたら、pagetray の checkout を `git switch main` で戻す。
 
 ### 起こす
 
@@ -58,7 +60,7 @@ tpm infra run tpm-pagestore -- container run -d --name tpm-pagestore \
 - `-p` には必ず `127.0.0.1:` を書く。`-p 8801:8080` と書くと LAN に開く。
 - 2 行目の `-p`（8800）は、前の置き場の URL のため。新しいページの URL は 8801 で出る。
 - 8801 が使われていたら別の port にし、この節の URL と 1 行を合わせて直す。担当が使う URL も、環境変数 `TPM_PAGES_URL`（[設定](/configuration/)）で合わせる。
-- 起きる時に、まだ当てていない移行の SQL（`pagestore/migrations/`）を DB に当てる。
+- 起きる時に、まだ当てていない移行の SQL（pagetray の `migrations/`）を DB に当てる。
 
 ### 確かめる
 
@@ -87,7 +89,7 @@ volume を失った・DB が壊れた時。先に【ask-tpm】を送り、答え
 tpm infra run tpm-pagestore -- container stop tpm-pagestore
 tpm infra run tpm-pagestore -- container run --rm \
   -v tpm-pagestore-data:/data -v "<写しのある folder>:/in:ro" \
-  <pagestore/Containerfile の 1 つ目の FROM の image> \
+  <pagetray の Containerfile の 1 つ目の FROM の image> \
   sh -c 'rm -f /data/pages.db-wal /data/pages.db-shm && cp /in/<写しの file> /data/pages.db'
 tpm infra run tpm-pagestore -- container start tpm-pagestore
 ```
@@ -117,14 +119,14 @@ tpm page import
 
 ### image を上げる
 
-`pagestore/` のコードが変わった時。
+pagetray のコードが変わり、この repo の `.pagetray-version` が上がった時。
 
 1. 「image を作る」で、新しい commit の名の image を作る。
 2. 「DB の写しを取る」をする。
 3. 【ask-tpm】で止める時を決めてから、`container stop tpm-pagestore`・`container delete tpm-pagestore` を `tpm infra run tpm-pagestore --` で打ち、新しい image の名で「起こす」の 1 行を打って「確かめる」をする（volume はそのまま付く）。
 4. 古い image は `container image delete` で消す。
 
-build の段の `rust` の image を上げる時は、`pagestore/rust-toolchain.toml` と同じ版の alpine を選び、`pagestore/Containerfile` の tag と digest を合わせて直す PR を出す（tag は rebuild で中身が替わるので、digest まで書く）。
+build の段の `rust` の image を上げる時は、pagetray の `rust-toolchain.toml` と同じ版の alpine を選び、pagetray の `Containerfile` の tag と digest を合わせて直す PR を、pagetray の repo に出す（tag は rebuild で中身が替わるので、digest まで書く）。
 
 ### ほかの project で使う
 
