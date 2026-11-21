@@ -226,7 +226,8 @@ describe('命令の一覧', () => {
   });
 
   test('決まりの誤りは tpm: で始まる 1 行を出して exit 1', () => {
-    const r = spawnSync(tpm, ['ask', 'tpm', 'x', '--waiting-for', 'y'], { cwd: scratch, encoding: 'utf8', env: { ...process.env, TPM_KEY: '', TPM_STATE: join(scratch, 'state') } });
+    // scratch の直下には、ほかの試験がわざと誤りを書いた設定がある（集めて読むと止まる）ので、空の folder で打つ。受け継いだ $TPM_PROJECT も消す。
+    const r = spawnSync(tpm, ['ask', 'tpm', 'x', '--waiting-for', 'y'], { cwd: folder(null), encoding: 'utf8', env: { ...process.env, TPM_PROJECT: '', TPM_KEY: '', TPM_STATE: join(scratch, 'state') } });
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(/^tpm: \$TPM_KEY がありません/);
   });
