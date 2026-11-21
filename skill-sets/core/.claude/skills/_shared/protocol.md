@@ -40,10 +40,10 @@ Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【
 
 | 見出し | 中身 | 命令（TPM 担当が打つ） |
 |---|---|---|
-| 【brief】 | 新しい依頼書の URL。下の「ページ」のとおり読み、それに従う | `tpm assign <Key> --role <役割> --brief <URL>` |
+| 【brief】 | 新しい依頼書の URL。下の「ページ」のとおり読み、それに従う。「取り消す: brief-N」とあれば brief-N の作業をやめてこちらに従い、「brief-N を済ませてから、これをする」とあれば brief-N の【done】の後に始める | `tpm assign <Key> --role <役割> --brief <URL> [--supersede\|--after]` |
 | 【answer】 | Product Manager の答え。待ちの表示を作業中に戻して続ける | `tpm answer <Key> "<答え>"` |
 | 【notify】 | 知っておくこと・受け取ったという返事。返事は要らない | `tpm notify <Key> "<本文>"` |
-| 【dismiss】 | この課題に続きは無い（Product Manager が決めたか、TPM 担当が聞かなくてよいと決めた）。worktree を片付けて【end】を返す。担当の交代のためなら、そう書いてある | `tpm dismiss <Key> [--handover]` |
+| 【dismiss】 | この課題に続きは無い（Product Manager が決めたか、TPM 担当が聞かなくてよいと決めた）。worktree を片付けて【end】を返す。担当の交代のためなら、そう書いてある。「取り消す: brief-N」とあれば brief-N の作業もやめる | `tpm dismiss <Key> [--handover] [--supersede]` |
 
 ## 状態
 

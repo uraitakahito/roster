@@ -15,7 +15,7 @@ import { readSkillSets, skillSetDir, TpmError } from '../skill-sets.ts';
 import { route } from '../tracker/routed.ts';
 import { findHook } from './banner.ts';
 import { copyIssue, issueTracker } from './issue.ts';
-import { assertRead, brief } from './messages.ts';
+import { assertRead, assertSettled, brief } from './messages.ts';
 import { pageFolder } from './page.ts';
 
 /** 名乗ったかを見る間（ミリ秒）。 */
@@ -145,6 +145,10 @@ export interface AssignOptions {
   permissionMode?: string
   /** 【brief】に添える一言。 */
   note?: string
+  /** 続きの【brief】で、済んでいない前の依頼書を取り消す。 */
+  supersede?: boolean
+  /** 続きの【brief】で、済んでいない前の依頼書を済ませてから、これをさせる。 */
+  after?: boolean
   /** 課題の写しを作らずに振る訳（--no-issue-copy の訳）。 */
   noIssueCopy?: string
   /** 起こした担当の tpm hello を待つ秒。0 なら待たない。 */
@@ -165,11 +169,13 @@ export function assign(ctx: Context, key: string, options: AssignOptions): strin
   }
   if (existing?.address !== undefined && ctx.transport.seats().some(s => s.address === existing.address)) {
     if (options.brief === undefined) throw new TpmError(`${key} の担当はもう動いています（${existing.address}）。新しい依頼書を --brief で渡してください`);
+    if (options.supersede === true && options.after === true) throw new TpmError('--supersede と --after は、どちらか 1 つにしてください');
     // 写しを置く前に、送る前の検査を通す（止まった回に写しだけが増えないように）。
     assertRead(ctx, `${existing.key} の担当`, existing.title);
+    const settled = assertSettled(ctx, existing, 'assign', options.supersede === true ? 'supersede' : options.after === true ? 'after' : undefined);
     // 続きのときも写しを作り直す（コメントが増えているため）。
     Object.assign(existing, issueCopy(ctx, existing.issue ?? key, key, options.noIssueCopy));
-    return brief(ctx, existing, options.brief, options.note);
+    return brief(ctx, existing, options.brief, options.note, settled);
   }
   if (options.issue !== undefined && !ctx.tracker.owns(options.issue)) {
     throw new TpmError(`${options.issue} に記録を書く課題管理が、どの設定にもありません（読んだ設定: ${describeTrackers(ctx.config.sources)}）。記録するなら、その課題を扱う repo の .claude/roles/config.jsonc に "tracker"（jira・github）を書いてください`);

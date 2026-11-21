@@ -80,6 +80,11 @@ export class CmuxTransport implements Transport {
     return (inbox.messages ?? []).map(m => ({ id: m.id, from: m.sender_name, text: m.body }));
   }
 
+  queued(to: string): string[] {
+    const inbox = this.json(['agent', 'inbox', '--surface', to, '--state', 'queued']) as { messages?: { id: string }[] };
+    return (inbox.messages ?? []).map(m => m.id);
+  }
+
   history(): MessageTrace[] {
     // --surface を付けないと、閉じた居場所の分も含めて返る。記録のための読みなので、読めなくても命令は止めない。
     const r = this.exec('cmux', ['--json', 'agent', 'inbox', '--limit', String(HISTORY_LIMIT)]);

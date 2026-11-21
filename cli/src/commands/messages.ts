@@ -59,12 +59,18 @@ function toTpm(ctx: Context, self: RoleRecord, id: HeadingId, body: string, repl
   return deliver(ctx, id, self.key, self.title, requireTpm(ctx).address, body, replyTo);
 }
 
-/** TPM 担当から担当へ。居場所が無ければ止まる。 */
-function toRole(ctx: Context, role: RoleRecord, id: HeadingId, body: string, replyTo?: string): string {
-  if (role.address === undefined || !ctx.transport.seats().some(s => s.address === role.address)) {
+/** 担当の居場所が今あるかを見て、宛先を返す。無ければ止まる。 */
+function seatOf(ctx: Context, role: RoleRecord): string {
+  const address = role.address;
+  if (address === undefined || !ctx.transport.seats().some(s => s.address === address)) {
     throw new TpmError(`${role.key} の担当の居場所がありません（tpm roles で名簿を見る）`);
   }
-  return deliver(ctx, id, role.key, TPM_TITLE, role.address, body, replyTo);
+  return address;
+}
+
+/** TPM 担当から担当へ。居場所が無ければ止まる。 */
+function toRole(ctx: Context, role: RoleRecord, id: HeadingId, body: string, replyTo?: string): string {
+  return deliver(ctx, id, role.key, TPM_TITLE, seatOf(ctx, role), body, replyTo);
 }
 
 /** 課題に記録を書く。課題が無い・課題管理を使わない project なら書かない。 */
@@ -124,6 +130,62 @@ function receiver(ctx: Context, key: string): RoleRecord {
   const role = requireRole(ctx, key);
   assertRead(ctx, `${role.key} の担当`, role.title);
   return role;
+}
+
+/** 済んでいない物を、どう扱って送るか（--supersede は取り消す、--after は済ませてから。after は続きの assign だけ）。 */
+export type SettleChoice = 'supersede' | 'after';
+
+/** 依頼書の URL から、見せる名（brief-4 など）。 */
+const briefName = (url: string): string => url.replace(/[?#].*$/, '').split('/').at(-1)?.replace(/\.html$/, '') || url;
+
+/**
+ * TPM 担当がその担当に送り、まだ済んでいない物。
+ * queued は、送ってまだ届いていないメッセージ（headings があれば、その見出しだけ）。
+ * brief は、いちばん新しい依頼書に、届いた後の【done】か【end】が返っていなければ、その URL。
+ * 依頼書が届いた時は、送った時に届いていればその行、届いていなければ連携の道具の届いた時刻（読めなければ送った時刻）。最初の依頼書は tpm hello で受けるので、名乗った時刻。
+ * 【done】は、log.jsonl でその行より後に書かれ、時刻が届いた時刻より前でない物だけを数える（依頼書が届く前に出た【done】は、前の依頼書の分）。
+ */
+function unsettled(ctx: Context, role: RoleRecord, address: string, headings?: HeadingId[]): { queued: Sent[], brief?: string } {
+  const log = ctx.state.lines<Sent>('log.jsonl');
+  const ids = new Set(ctx.transport.queued(address));
+  const ours = (l: Sent): boolean => l.key === role.key && l.from === TPM_TITLE && l.to === address;
+  const queued = log.filter(l => ours(l) && ids.has(l.id) && (headings === undefined || headings.includes(l.heading as HeadingId)));
+  if (role.brief === undefined) return { queued };
+  const index = log.findLastIndex(l => ours(l) && l.heading === 'brief');
+  const sent = log[index];
+  let since: string | undefined;
+  if (sent === undefined) since = role.helloAt;
+  else if (ids.has(sent.id)) since = undefined;
+  else if (sent.delivered) since = sent.at;
+  else since = ctx.transport.history().find(h => h.id === sent.id)?.deliveredAt ?? sent.at;
+  const done = since !== undefined && log.slice(index + 1).some(l => l.key === role.key && l.from !== TPM_TITLE && (l.heading === 'done' || l.heading === 'end') && l.at >= since);
+  return done ? { queued } : { queued, brief: role.brief };
+}
+
+/**
+ * 送る前の検査（TPM 担当の dismiss と続きの assign）。その担当に、送って済んでいない物があれば、出して止まる（自分の送った物どうしの行き違いを減らす）。
+ * choice があれば止まらず、本文に足す一言を返す（取り消す物・済ませてから進む物）。済んでいない物が無いのに choice を付けたら止まる（うその一言を送らない）。
+ */
+export function assertSettled(ctx: Context, role: RoleRecord, command: 'dismiss' | 'assign', choice?: SettleChoice): string | undefined {
+  const { queued, brief } = unsettled(ctx, role, seatOf(ctx, role), command === 'assign' ? ['brief'] : undefined);
+  const late = queued.filter(l => l.heading !== 'brief' || l.text.split(' ')[0] !== `【brief】${brief ?? ''}`);
+  const names = [...(brief === undefined ? [] : [`${briefName(brief)}（${brief}）`]), ...late.map(l => `届いていない【${l.heading}】（${l.at} に送った。id ${l.id}）`)];
+  if (choice !== undefined) {
+    if (names.length === 0) throw new TpmError(`${role.key} の担当に、済んでいない物はありません。--${choice} を付けずに打ってください`);
+    return choice === 'supersede' ? `取り消す: ${names.join('・')}` : `${names.join('・')}を済ませてから、これをする`;
+  }
+  if (queued.length === 0 && brief === undefined) return undefined;
+  recordGateStop(ctx, 'unsettled', [`${role.key}:`, ...queued.map(l => l.id), ...(brief === undefined ? [] : [brief])].join(' '));
+  const how = command === 'dismiss'
+    ? 'この依頼書・メッセージをどうするかを Product Manager に確かめてください。取り消すなら --supersede を付けて打ち直す（本文に「取り消す: …」と載る）。'
+    : 'させてから進むなら --after、取り消すなら --supersede を付けて打ち直す（本文に一言が載る）。';
+  throw new TpmError([
+    `${role.key} の担当に、まだ済んでいない物があります。送っていません。`,
+    ...queued.flatMap(l => [`--- 届いていない（${l.at} に送った。id ${l.id}）`, l.text]),
+    ...(brief === undefined ? [] : [`--- 【done】が返っていない依頼書: ${briefName(brief)}（${brief}）`]),
+    '--- ここまで',
+    how,
+  ].join('\n'));
 }
 
 /** `gh pr view` の JSON（読む欄だけ）。 */
@@ -377,9 +439,9 @@ export function reportDependabot(ctx: Context, id: 'merge-request' | 'not-yet' |
 // ---- TPM 担当が打つ ----
 
 /** 動いている担当に、新しい依頼書を送る。 */
-export function brief(ctx: Context, role: RoleRecord, url: string, note?: string): string[] {
+export function brief(ctx: Context, role: RoleRecord, url: string, note?: string, settled?: string): string[] {
   assertRead(ctx, `${role.key} の担当`, role.title);
-  const body = [url, issueCopyLine(role), note].filter(v => v !== undefined).join(' ');
+  const body = [url, issueCopyLine(role), note, settled].filter(v => v !== undefined).join(' ');
   const sent = toRole(ctx, role, 'brief', body);
   role.brief = url;
   delete role.dismissed;
@@ -408,11 +470,12 @@ export function notify(ctx: Context, key: string, options: { text: string, reply
 }
 
 /** この課題に続きは無い、と知らせる。handover は担当の交代（課題は続くので、担当は課題を閉じない）。 */
-export function dismiss(ctx: Context, key: string, options: { handover: boolean }): string[] {
+export function dismiss(ctx: Context, key: string, options: { handover: boolean, supersede?: boolean }): string[] {
   const role = receiver(ctx, key);
-  const body = options.handover
+  const settled = assertSettled(ctx, role, 'dismiss', options.supersede === true ? 'supersede' : undefined);
+  const body = [options.handover
     ? '担当の交代のため（課題は続くので、課題は閉じない）。worktree を片付けて【end】を返す。'
-    : 'この課題に続きは無い。worktree と課題を片付けて【end】を返す。';
+    : 'この課題に続きは無い。worktree と課題を片付けて【end】を返す。', settled].filter(v => v !== undefined).join('');
   const sent = toRole(ctx, role, 'dismiss', body);
   role.dismissed = options.handover ? 'handover' : 'done';
   writeRole(ctx, role);

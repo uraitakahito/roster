@@ -171,7 +171,8 @@ describe('assign', () => {
     const w = world();
     writeRole(w.tpm, { key: 't-jsonc-check', role: 'software-engineer', title: 'Software Engineer t-jsonc-check: JSONC', cwd: w.project, addDirs: [], model: 'claude-opus-5-5', effort: 'medium', permissionMode: 'bypassPermissions' });
     expect(assign(w.tpm, 't-jsonc-check', SE)[0]).toMatch(/^起こし直した: SWE t-jsonc-check: 計画と実装/);
-    expect(assign(w.tpm, 't-jsonc-check', { role: 'software-engineer', brief: 'https://claude.ai/artifact/b2', wait: 0 })[0]).toMatch(/^送った: 【brief】/);
+    // 起こし直した担当はまだ名乗っていない（最初の依頼書が済んでいない）ので、済ませてからと添えて送る
+    expect(assign(w.tpm, 't-jsonc-check', { role: 'software-engineer', brief: 'https://claude.ai/artifact/b2', wait: 0, after: true })[0]).toMatch(/^送った: 【brief】/);
   });
 });
 

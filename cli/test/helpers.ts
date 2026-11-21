@@ -7,6 +7,8 @@ import type { PageRecord } from '../src/commands/page.ts';
 import { DEFAULT_PAGES_URL } from '../src/commands/store.ts';
 import { createContext, type Context } from '../src/context.ts';
 import type { Exec, ExecOptions, ExecResult } from '../src/exec.ts';
+import { reportDone } from '../src/commands/messages.ts';
+import { hello } from '../src/commands/role-side.ts';
 import { FileTransport } from '../src/transport/file.ts';
 
 /** 課題の概要の節（40 字以上）のある依頼書。world が置き場に置く。 */
@@ -229,4 +231,11 @@ export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessE
     slept: () => slept,
     prs,
   };
+}
+
+/** 担当が名乗り、いちばん新しい依頼書の【done】を返す（TPM 担当の dismiss・続きの assign が、済んでいない依頼書で止まらないように）。 */
+export function finish(w: World, key: string, address: string): void {
+  const se = w.role(key, address);
+  hello(se);
+  reportDone(se, { kind: 'result', summary: '済んだ', remaining: 'なし', decisions: 'なし', points: [] });
 }

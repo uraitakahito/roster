@@ -3,7 +3,7 @@ import { answer, askDevops, askPm, askTpm, dismiss, doneKind, notify, reportDepe
 import { hello, inbox } from '../src/commands/role-side.ts';
 import { assign, close, roles } from '../src/commands/tpm-side.ts';
 import { requireRole } from '../src/roster.ts';
-import { BRIEF, world, type World } from './helpers.ts';
+import { BRIEF, finish, world, type World } from './helpers.ts';
 
 const OUT = 'https://claude.ai/artifact/o1';
 const PR = 'https://github.com/o/r/pull/7';
@@ -126,6 +126,7 @@ describe('課題への記録（GitHub の Issue）', () => {
 
   test('担当の交代の【dismiss】では、課題を閉じない', () => {
     const w = started({ tracker: 'github' }, 'gh-12');
+    finish(w, 't-x7k2', 'file:1');
     dismiss(w.tpm, 't-x7k2', { handover: true });
     expect(texts(w, 'file:1')[0]).toMatch(/^【dismiss】担当の交代のため/);
     expect(reportEnd(w.se, { prs: [], removed: [], left: 'なし' })).toContain('課題は閉じない: gh-12（担当の交代。次の担当が引き継ぐ）');
@@ -134,6 +135,7 @@ describe('課題への記録（GitHub の Issue）', () => {
 
   test('新しい【brief】を受けた担当は、dismiss 済みでなくなる', () => {
     const w = started();
+    finish(w, 't-x7k2', 'file:1');
     dismiss(w.tpm, 't-x7k2', { handover: false });
     assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: 'https://claude.ai/artifact/b2', wait: 0 });
     expect(requireRole(w.tpm, 't-x7k2').dismissed).toBeUndefined();
@@ -181,6 +183,7 @@ describe('【done】と【end】に要る欄', () => {
 
   test('残っている物が無ければ【end】を送らない', () => {
     const w = started();
+    finish(w, 't-x7k2', 'file:1');
     dismiss(w.tpm, 't-x7k2', { handover: false });
     expect(() => reportEnd(w.se, { prs: [], removed: [] })).toThrow(/--left/);
   });
@@ -286,12 +289,13 @@ describe('入口の検査: PR が merge 済みか', () => {
 
   test('【end】の --pr も見る。PR が無ければ gh を打たない', () => {
     const w = started();
+    finish(w, 't-x7k2', 'file:1');
     dismiss(w.tpm, 't-x7k2', { handover: false });
     w.prs.set(PR, 'CLOSED');
     expect(() => reportEnd(w.se, { prs: [PR], removed: [], left: 'なし' })).toThrow(/state: CLOSED/);
-    expect(texts(w, 'file:tpm')).toEqual([]);
+    expect(texts(w, 'file:tpm').filter(text => text.startsWith('【end】'))).toEqual([]);
     reportEnd(w.se, { prs: [], removed: [], left: 'なし', unchecked: '使わない' });
-    expect(texts(w, 'file:tpm')).toEqual(['【end】成果: なし／merge した PR: なし／消した worktree: なし／残っている物: なし']);
+    expect(texts(w, 'file:tpm').filter(text => text.startsWith('【end】'))).toEqual(['【end】成果: なし／merge した PR: なし／消した worktree: なし／残っている物: なし']);
   });
 });
 
@@ -323,6 +327,7 @@ describe('入口の検査: 送る前に、読んでいないメッセージを�
 
   test('TPM 担当: 送る相手からのメッセージだけで止まる。answer・notify・dismiss・続きの assign', () => {
     const w = started({ tracker: 'github' }, 'gh-12');
+    finish(w, 't-x7k2', 'file:1');
     assign(w.tpm, 't-b2c3', { role: 'software-engineer', title: '別の課題', brief: BRIEF, wait: 0 });
     const other = w.role('t-b2c3', 'file:2');
     hello(other);
@@ -371,6 +376,7 @@ describe('入口の検査: 同じメッセージの 2 度送り', () => {
 
   test('課題に記録を書くほかの命令（ask-pm・doc-fix・end・answer）も、記録の前に止まる', () => {
     const w = started({ tracker: 'github' }, 'gh-12');
+    finish(w, 't-x7k2', 'file:1');
     const comments = (): number => w.calls.filter(c => c.args[1] === 'comment').length;
     for (const send of [
       () => askPm(w.se, { url: OUT, items: ['案'], waitingFor: '案' }),
@@ -392,5 +398,113 @@ describe('入口の検査: 同じメッセージの 2 度送り', () => {
     notify(w.tpm, 't-x7k2', { text: '受け取った', replyTo: 'b' });
     expect(() => notify(w.tpm, 't-x7k2', { text: '受け取った', replyTo: 'b' })).toThrow(/^同じ【notify】を/);
     expect(texts(w, 'file:1')).toHaveLength(2);
+  });
+});
+
+describe('入口の検査: TPM 担当が送って済んでいない物（dismiss・続きの assign）', () => {
+  const B4 = 'http://127.0.0.1:8801/p/t-x7k2/brief-4.html';
+  const B5 = 'http://127.0.0.1:8801/p/t-x7k2/brief-5.html';
+  /** 1 つ目の依頼書を済ませ、brief-4 を送った世界。held なら担当は手を動かしていて、brief-4 は届いていない。 */
+  function sentBrief4(held: boolean): World & { se: ReturnType<World['role']> } {
+    const w = started();
+    reportDone(w.se, { kind: 'result', summary: '1 つ目', remaining: 'なし', decisions: 'なし', points: [] });
+    if (held) w.wire.hold('file:1');
+    assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B4, wait: 0 });
+    return w;
+  }
+  const gates = (w: World): string[][] => w.tpm.state.lines<{ gate: string, detail: string }>('gate.jsonl').map(l => [l.gate, l.detail]);
+
+  test('#17 の形: 届いていない brief-4 があるのに交代の dismiss を打つと、出して止まる', () => {
+    const w = sentBrief4(true);
+    const sent = texts(w, 'file:1').length;
+    expect(() => dismiss(w.tpm, 't-x7k2', { handover: true })).toThrow([
+      't-x7k2 の担当に、まだ済んでいない物があります。送っていません。',
+      '--- 届いていない（2026-11-20T12:00:00.000Z に送った。id m1-file-1）',
+      `【brief】${B4}`,
+      `--- 【done】が返っていない依頼書: brief-4（${B4}）`,
+      '--- ここまで',
+      'この依頼書・メッセージをどうするかを Product Manager に確かめてください。取り消すなら --supersede を付けて打ち直す（本文に「取り消す: …」と載る）。',
+    ].join('\n'));
+    // 止まった回は送らず、名簿も変えない。gate.jsonl に残す
+    expect(texts(w, 'file:1')).toHaveLength(sent);
+    expect(requireRole(w.tpm, 't-x7k2').dismissed).toBeUndefined();
+    expect(gates(w)).toEqual([['unsettled', `t-x7k2: m1-file-1 ${B4}`]]);
+  });
+
+  test('--supersede を付ければ送り、本文に取り消す依頼書が載る', () => {
+    const w = sentBrief4(true);
+    dismiss(w.tpm, 't-x7k2', { handover: true, supersede: true });
+    expect(texts(w, 'file:1').at(-1)).toBe(`【dismiss】担当の交代のため（課題は続くので、課題は閉じない）。worktree を片付けて【end】を返す。取り消す: brief-4（${B4}）`);
+    expect(requireRole(w.tpm, 't-x7k2').dismissed).toBe('handover');
+  });
+
+  test('届いた依頼書でも、【done】が返っていなければ dismiss も続きの assign も止まる', () => {
+    const w = sentBrief4(false);
+    expect(() => dismiss(w.tpm, 't-x7k2', { handover: false })).toThrow(/^t-x7k2 の担当に、まだ済んでいない物があります。[\s\S]*【done】が返っていない依頼書: brief-4/);
+    expect(() => assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B5, wait: 0 })).toThrow(/【done】が返っていない依頼書: brief-4[\s\S]*--after、取り消すなら --supersede/);
+    expect(() => dismiss(w.tpm, 't-x7k2', { handover: false })).not.toThrow(/届いていない/);
+  });
+
+  test('ふつうの流れ（依頼書 → 【done】 → dismiss・続きの assign）では止まらない', () => {
+    const w = sentBrief4(false);
+    reportDone(w.se, { kind: 'result', summary: '2 つ目', remaining: 'なし', decisions: 'なし', points: [] });
+    expect(assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B5, wait: 0 })).toEqual(['送った: 【brief】→ file:1（届いた）']);
+    reportDone(w.se, { kind: 'result', summary: '3 つ目', remaining: 'なし', decisions: 'なし', points: [] });
+    dismiss(w.tpm, 't-x7k2', { handover: false });
+    expect(gates(w)).toEqual([]);
+  });
+
+  test('brief-4 が済む前の続きの assign は、--after で「済ませてから」、--supersede で「取り消す」と載せて送る', () => {
+    const w = sentBrief4(false);
+    assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B5, wait: 0, after: true });
+    expect(texts(w, 'file:1').at(-1)).toBe(`【brief】${B5} brief-4（${B4}）を済ませてから、これをする`);
+    assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B4.replace('brief-4', 'brief-6'), wait: 0, supersede: true });
+    expect(texts(w, 'file:1').at(-1)).toBe(`【brief】${B4.replace('brief-4', 'brief-6')} 取り消す: brief-5（${B5}）`);
+  });
+
+  test('答えが届く前に続きの assign を打っても止まらない（答え → すぐ続きの依頼書）', () => {
+    const w = started();
+    reportDone(w.se, { kind: 'plan', summary: '計画', remaining: 'なし', decisions: 'なし', points: [] });
+    w.wire.hold('file:1');
+    answer(w.tpm, 't-x7k2', { text: '確認の 1 は案 A。続けて依頼書を送る' });
+    expect(assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B4, wait: 0 })[0]).toMatch(/^送った: 【brief】/);
+  });
+
+  test('済んでいない物があっても、answer と notify は止めない', () => {
+    const w = sentBrief4(true);
+    expect(answer(w.tpm, 't-x7k2', { text: '案 A' })[0]).toMatch(/^送った: 【answer】/);
+    expect(notify(w.tpm, 't-x7k2', { text: '知らせ' })[0]).toMatch(/^送った: 【notify】/);
+  });
+
+  test('#3 の形（担当が手を動かす間に「待て」を送る）は、送る側では止めない（A1 の外）', () => {
+    const w = started();
+    reportDone(w.se, { kind: 'result', summary: '済んだ', remaining: 'なし', decisions: 'なし', points: [] });
+    w.wire.hold('file:1');
+    expect(notify(w.tpm, 't-x7k2', { text: 'tag はまだ打たないで待つこと' })[0]).toMatch(/まだ届いていない/);
+    expect(gates(w)).toEqual([]);
+  });
+
+  test('依頼書が届く前に出た【done】は、その依頼書の分に数えない（行き違い）', () => {
+    const w = sentBrief4(true);
+    // 担当は brief-4 を受ける前に、前の依頼書の分の【done】を出した
+    inbox(w.se);
+    reportDone(w.se, { kind: 'result', summary: '前の分', remaining: 'なし', decisions: 'なし', points: [] });
+    w.wire.release('file:1', '2026-11-20T12:00:01.000Z');
+    expect(() => dismiss(w.tpm, 't-x7k2', { handover: false })).toThrow(/【done】が返っていない依頼書: brief-4/);
+  });
+
+  test('--supersede と --after を両方付けるか、済んでいない物が無いのに付けたら止まる', () => {
+    const w = sentBrief4(false);
+    expect(() => assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B5, wait: 0, supersede: true, after: true })).toThrow('--supersede と --after は、どちらか 1 つにしてください');
+    reportDone(w.se, { kind: 'result', summary: '2 つ目', remaining: 'なし', decisions: 'なし', points: [] });
+    expect(() => dismiss(w.tpm, 't-x7k2', { handover: false, supersede: true })).toThrow('t-x7k2 の担当に、済んでいない物はありません。--supersede を付けずに打ってください');
+    expect(() => assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B5, wait: 0, after: true })).toThrow(/済んでいない物はありません。--after/);
+  });
+
+  test('最初の依頼書（tpm hello で受けた物）も、【done】が無ければ dismiss は止まり、あれば通る', () => {
+    const w = started();
+    expect(() => dismiss(w.tpm, 't-x7k2', { handover: false })).toThrow(/【done】が返っていない依頼書: brief-1/);
+    reportDone(w.se, { kind: 'result', summary: '済んだ', remaining: 'なし', decisions: 'なし', points: [] });
+    expect(dismiss(w.tpm, 't-x7k2', { handover: false })[0]).toMatch(/^送った: 【dismiss】/);
   });
 });

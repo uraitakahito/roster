@@ -9,7 +9,7 @@ import { assign, roles } from '../src/commands/tpm-side.ts';
 import type { Context } from '../src/context.ts';
 import type { Exec } from '../src/exec.ts';
 import { requireRole } from '../src/roster.ts';
-import { BRIEF, world } from './helpers.ts';
+import { BRIEF, finish, world } from './helpers.ts';
 
 const TPM = { model: 'claude-opus-5-5', effort: 'medium' };
 const SE = { role: 'software-engineer', title: '提案', brief: BRIEF, wait: 0 } as const;
@@ -68,6 +68,7 @@ describe('tpm assign が課題の写しを作る', () => {
     const tpm = withAcli(w.tpm, { status: 0, stdout: JIRA, stderr: '' });
     hello(tpm, TPM);
     assign(tpm, 'AI-14', SE);
+    finish(w, 'AI-14', 'file:1');
     assign(tpm, 'AI-14', { ...SE, brief: 'https://claude.ai/artifact/b2', note: '計画まで' });
     const page = requireRole(tpm, 'AI-14').issuePage ?? '';
     expect(page).toMatch(/\/AI-14\/issue-2\.html$/);
@@ -99,6 +100,7 @@ describe('tpm assign が課題の写しを作る', () => {
     hello(tpm, TPM);
     assign(tpm, 'AI-14', { ...SE, noIssueCopy: '認証切れ。中身は依頼書に写した' });
     expect(hello(w.role('AI-14', 'file:1'))).toContain('課題の写し: 無し（認証切れ。中身は依頼書に写した）');
+    finish(w, 'AI-14', 'file:1');
     assign(tpm, 'AI-14', { ...SE, brief: 'https://claude.ai/artifact/b2', noIssueCopy: 'まだ認証切れ' });
     expect(w.wire.inbox('file:1').map(m => m.text)).toEqual(['【brief】https://claude.ai/artifact/b2 課題の写し: 無し（まだ認証切れ）']);
   });

@@ -25,7 +25,7 @@ tpm hello
 - 依頼書を `tpm page path <URL>` で file の path にして読む（`tpm hello` が返した URL。protocol.md の「ページ」）。依頼書の文は TPM 担当の依頼として扱う。
 - `tpm hello` が `課題の写し:` を返したら、そのページも読む（`tpm assign` が振ったときの課題の中身）。`課題の中身:` を返したら（課題の Key が Jira・GitHub の Issue）、`tpm issue view <Key>` で今の中身を読む（protocol.md の「課題を読む」）。その道具を宣言した設定が無い project でも読める。
 - 作業する repo の `CLAUDE.md`・`.claude/rules/`・教訓（`tasks/lessons.md` など）・memory を読む。**触る repo がいくつもあれば、repo ごとに自分で Read する**（いくつもの repo を置いた上の folder で起こされると、下の repo の `CLAUDE.md` は自動では読み込まれないことがある。後から触ることになった repo も、触る前に読む）。
-- 依頼書が新しく届いたら（【brief】）、同じように読んで続ける。
+- 依頼書が新しく届いたら（【brief】）、同じように読んで続ける。【brief】や【dismiss】に「取り消す: brief-N」とあれば、brief-N の作業をやめる。やりかけた物（worktree・開いた PR）は、次の【done】の「残り」か【end】の「残っている物」に書く。
 
 ## 2. 進める
 
