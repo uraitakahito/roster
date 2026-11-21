@@ -63,6 +63,7 @@ describe('assign', () => {
       effort: 'medium',
       permissionMode: 'bypassPermissions',
       brief: BRIEF,
+      firstBrief: BRIEF,
       address: 'file:1',
     });
     expect(w.wire.command('file:1')).toBe(`${w.tpm.root}/cli/bin/tpm run-role t-x7k2 --project ${w.project} --state ${w.tpm.state.dir}`);

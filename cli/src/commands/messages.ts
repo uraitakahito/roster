@@ -26,6 +26,11 @@ interface Sent {
   delivered: boolean
   /** 返事の先のメッセージの id（--reply-to）。 */
   replyTo?: string
+  /**
+   * 【brief】の行だけ: 送った時に、済んでいない前の依頼書をどう扱ったか（none は扱う物が無かった）。
+   * 前の版が書いた行には無いので、本文の「取り消す: 」で読む（openBriefs）。
+   */
+  settle?: SettleChoice | 'none'
 }
 
 /** 同じメッセージの 2 度送りとみなす間（秒）。 */
@@ -48,12 +53,12 @@ function assertNotRepeat(ctx: Context, id: HeadingId, from: string, to: string, 
 /** 担当が TPM 担当へ送る物の 2 度送りを見る（課題に記録を書く前に呼ぶ）。 */
 const notRepeatToTpm = (ctx: Context, self: RoleRecord, id: HeadingId, body: string): void => assertNotRepeat(ctx, id, self.title, requireTpm(ctx).address, body);
 
-/** メッセージを送り、送った記録を log.jsonl に足す。 */
-function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: string, body: string, replyTo?: string): string {
+/** メッセージを送り、送った記録を log.jsonl に足す。extra は記録の行に足す欄。 */
+function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: string, body: string, replyTo?: string, extra: Pick<Sent, 'settle'> = {}): string {
   assertNotRepeat(ctx, id, from, to, body, replyTo);
   const text = message(id, body);
   const d = ctx.transport.send(to, from, text, replyTo);
-  ctx.state.append('log.jsonl', { at: ctx.now().toISOString(), key, heading: id, from, to, text, id: d.id, delivered: d.delivered, ...(replyTo === undefined ? {} : { replyTo }) } satisfies Sent);
+  ctx.state.append('log.jsonl', { at: ctx.now().toISOString(), key, heading: id, from, to, text, id: d.id, delivered: d.delivered, ...(replyTo === undefined ? {} : { replyTo }), ...extra } satisfies Sent);
   return `送った: 【${id}】→ ${to}（${d.delivered ? '届いた' : '相手が手を動かしているので、まだ届いていない。空いたら届く'}）`;
 }
 
@@ -72,8 +77,8 @@ function seatOf(ctx: Context, role: RoleRecord): string {
 }
 
 /** TPM 担当から担当へ。居場所が無ければ止まる。 */
-function toRole(ctx: Context, role: RoleRecord, id: HeadingId, body: string, replyTo?: string): string {
-  return deliver(ctx, id, role.key, TPM_TITLE, seatOf(ctx, role), body, replyTo);
+function toRole(ctx: Context, role: RoleRecord, id: HeadingId, body: string, replyTo?: string, extra: Pick<Sent, 'settle'> = {}): string {
+  return deliver(ctx, id, role.key, TPM_TITLE, seatOf(ctx, role), body, replyTo, extra);
 }
 
 /** 課題に記録を書く。課題が無い・課題管理を使わない project なら書かない。 */
@@ -89,15 +94,29 @@ function record(ctx: Context, role: RoleRecord, note: Note): string[] {
 /** 見せたメッセージの id を覚える数（居場所ごと）。 */
 const SHOWN_KEEP = 200;
 
-/** 見せたメッセージの id を覚える file（`shown/<宛先>.jsonc`）。 */
+/** 見せたメッセージの id と、初めて見せた時刻を覚える file（`shown/<宛先>.jsonc`）。 */
 const shownFile = (address: string): string => `shown/${address.replaceAll(/[^A-Za-z0-9._-]/g, '-')}.jsonc`;
 
-/** メッセージを「見せた」と覚える（`tpm inbox` と、送る前の検査が呼ぶ）。覚えた物では、送る前の検査は止まらない。 */
+/** 見せたメッセージ 1 件。前の版は id の字だけを書いたので、その分は at が無い。 */
+interface Shown {
+  id: string
+  at?: string
+}
+
+/** その居場所に見せたメッセージ（古い順）。 */
+function readShown(ctx: Context, address: string): Shown[] {
+  return (ctx.state.read<(Shown | string)[]>(shownFile(address)) ?? []).map(e => typeof e === 'string' ? { id: e } : e);
+}
+
+/** メッセージを「見せた」と、初めて見せた時刻とともに覚える（`tpm inbox`・`tpm hello` と、送る前の検査が呼ぶ）。覚えた物では、送る前の検査は止まらない。 */
 export function markShown(ctx: Context, messages: Incoming[]): void {
-  if (messages.length === 0) return;
-  const file = shownFile(ctx.transport.whoami());
-  const ids = [...(ctx.state.read<string[]>(file) ?? []), ...messages.map(m => m.id)];
-  ctx.state.write(file, [...new Set(ids)].slice(-SHOWN_KEEP));
+  const address = ctx.transport.whoami();
+  const shown = readShown(ctx, address);
+  const known = new Set(shown.map(e => e.id));
+  const at = ctx.now().toISOString();
+  const added = [...new Set(messages.map(m => m.id))].filter(id => !known.has(id)).map(id => ({ id, at }));
+  if (added.length === 0) return;
+  ctx.state.write(shownFile(address), [...shown, ...added].slice(-SHOWN_KEEP));
 }
 
 /**
@@ -108,7 +127,7 @@ export function markShown(ctx: Context, messages: Incoming[]): void {
 export function assertRead(ctx: Context, who: string, from?: string): void {
   const pending = ctx.transport.pending().filter(m => from === undefined || m.from === from);
   if (pending.length === 0) return;
-  const shown = new Set(ctx.state.read<string[]>(shownFile(ctx.transport.whoami())) ?? []);
+  const shown = new Set(readShown(ctx, ctx.transport.whoami()).map(e => e.id));
   const unread = pending.filter(m => !shown.has(m.id));
   if (unread.length === 0) return;
   markShown(ctx, unread);
@@ -163,28 +182,61 @@ export type SettleChoice = 'supersede' | 'after';
 /** 依頼書の URL から、見せる名（brief-4 など）。 */
 const briefName = (url: string): string => url.replace(/[?#].*$/, '').split('/').at(-1)?.replace(/\.html$/, '') || url;
 
+/** 【done】が返っていない依頼書 1 つ。seen は担当がそれを見た時刻（まだ見ていなければ undefined）。id は【brief】で送った物だけ。 */
+interface OpenBrief {
+  url: string
+  id?: string
+  seen?: string
+}
+
+/** 時刻の字（ISO）のうち、いちばん早い物。どれも無ければ undefined。 */
+const earliest = (times: (string | undefined)[]): string | undefined => times.filter(t => t !== undefined).sort()[0];
+
+/**
+ * その担当（今の居場所）に渡し、【done】が返っていない依頼書（古い順）。log.jsonl の順に、次のとおり数える。
+ * - 起こしたときに渡した依頼書（firstBrief）は、名乗った時刻に見た物とする。
+ * - 【brief】は積む（--after で送った物も、旗を付けずに送った物も）。--supersede で送った物は、それより前を取り消してから積む。【dismiss】は全部を取り消す。
+ * - 【done】は、その時刻までに担当が見ていた依頼書のうち、いちばん古い物を 1 つ済ませる（担当は積まれた順にこなす）。まだ見ていない依頼書の分には数えない（行き違いで出た、前の依頼書の分）。【end】は全部を済ませる。
+ * 見た時刻は、画面に届いた時刻（送った時に届いていれば送った時刻。読めなければ送った時刻）と、tpm inbox・tpm hello・送る前の検査が見せた時刻（shown/）の早い方。
+ * 担当は画面に届く前に tpm inbox で読んで済ませることがあるので、届いた時刻だけでは【done】が依頼書より前に見える（台帳 #36）。
+ */
+function openBriefs(ctx: Context, role: RoleRecord, address: string, log: Sent[], queued: Set<string>): OpenBrief[] {
+  const delivered = new Map(ctx.transport.history().map(h => [h.id, h.deliveredAt]));
+  const shown = new Map(readShown(ctx, address).map(e => [e.id, e.at]));
+  const seen = (l: Sent): string | undefined => earliest([queued.has(l.id) ? undefined : l.delivered ? l.at : delivered.get(l.id) ?? l.at, shown.get(l.id)]);
+  // 前の版で起こした担当（名簿に firstBrief の欄が無い）の最初の依頼書は数えない（止めすぎるより、見逃す側に倒す）。
+  const first = role.firstBrief;
+  let open: OpenBrief[] = first === undefined ? [] : [{ url: first, ...(role.helloAt === undefined ? {} : { seen: role.helloAt }) }];
+  for (const l of log) {
+    if (l.key !== role.key) continue;
+    if (l.from === TPM_TITLE) {
+      if (l.to !== address) continue;
+      if (l.heading === 'dismiss') open = [];
+      if (l.heading !== 'brief') continue;
+      if ((l.settle ?? (l.text.includes(' 取り消す: ') ? 'supersede' : 'none')) === 'supersede') open = [];
+      const at = seen(l);
+      open.push({ url: l.text.slice('【brief】'.length).split(' ')[0] ?? '', id: l.id, ...(at === undefined ? {} : { seen: at }) });
+    }
+    else if (role.helloAt !== undefined && l.at >= role.helloAt) {
+      // 前の居場所（担当の交代の前）が出した物は数えない。
+      if (l.heading === 'end') open = [];
+      if (l.heading !== 'done') continue;
+      const i = open.findIndex(b => b.seen !== undefined && b.seen <= l.at);
+      if (i >= 0) open.splice(i, 1);
+    }
+  }
+  return open;
+}
+
 /**
  * TPM 担当がその担当に送り、まだ済んでいない物。
- * queued は、送ってまだ届いていないメッセージ（headings があれば、その見出しだけ）。
- * brief は、いちばん新しい依頼書に、届いた後の【done】か【end】が返っていなければ、その URL。
- * 依頼書が届いた時は、送った時に届いていればその行、届いていなければ連携の道具の届いた時刻（読めなければ送った時刻）。最初の依頼書は tpm hello で受けるので、名乗った時刻。
- * 【done】は、log.jsonl でその行より後に書かれ、時刻が届いた時刻より前でない物だけを数える（依頼書が届く前に出た【done】は、前の依頼書の分）。
+ * queued は、送ってまだ届いていないメッセージ（headings があれば、その見出しだけ）。briefs は、【done】が返っていない依頼書（openBriefs）。
  */
-function unsettled(ctx: Context, role: RoleRecord, address: string, headings?: HeadingId[]): { queued: Sent[], brief?: string } {
+function unsettled(ctx: Context, role: RoleRecord, address: string, headings?: HeadingId[]): { queued: Sent[], briefs: OpenBrief[] } {
   const log = ctx.state.lines<Sent>('log.jsonl');
   const ids = new Set(ctx.transport.queued(address));
-  const ours = (l: Sent): boolean => l.key === role.key && l.from === TPM_TITLE && l.to === address;
-  const queued = log.filter(l => ours(l) && ids.has(l.id) && (headings === undefined || headings.includes(l.heading as HeadingId)));
-  if (role.brief === undefined) return { queued };
-  const index = log.findLastIndex(l => ours(l) && l.heading === 'brief');
-  const sent = log[index];
-  let since: string | undefined;
-  if (sent === undefined) since = role.helloAt;
-  else if (ids.has(sent.id)) since = undefined;
-  else if (sent.delivered) since = sent.at;
-  else since = ctx.transport.history().find(h => h.id === sent.id)?.deliveredAt ?? sent.at;
-  const done = since !== undefined && log.slice(index + 1).some(l => l.key === role.key && l.from !== TPM_TITLE && (l.heading === 'done' || l.heading === 'end') && l.at >= since);
-  return done ? { queued } : { queued, brief: role.brief };
+  const queued = log.filter(l => l.key === role.key && l.from === TPM_TITLE && l.to === address && ids.has(l.id) && (headings === undefined || headings.includes(l.heading as HeadingId)));
+  return { queued, briefs: openBriefs(ctx, role, address, log, ids) };
 }
 
 /**
@@ -192,22 +244,23 @@ function unsettled(ctx: Context, role: RoleRecord, address: string, headings?: H
  * choice があれば止まらず、本文に足す一言を返す（取り消す物・済ませてから進む物）。済んでいない物が無いのに choice を付けたら止まる（うその一言を送らない）。
  */
 export function assertSettled(ctx: Context, role: RoleRecord, command: 'dismiss' | 'assign', choice?: SettleChoice): string | undefined {
-  const { queued, brief } = unsettled(ctx, role, seatOf(ctx, role), command === 'assign' ? ['brief'] : undefined);
-  const late = queued.filter(l => l.heading !== 'brief' || l.text.split(' ')[0] !== `【brief】${brief ?? ''}`);
-  const names = [...(brief === undefined ? [] : [`${briefName(brief)}（${brief}）`]), ...late.map(l => `届いていない【${l.heading}】（${l.at} に送った。id ${l.id}）`)];
+  const { queued, briefs } = unsettled(ctx, role, seatOf(ctx, role), command === 'assign' ? ['brief'] : undefined);
+  // 済んでいない依頼書として挙げる【brief】は、届いていない物として 2 度挙げない。
+  const late = queued.filter(l => !briefs.some(b => b.id === l.id));
+  const names = [...briefs.map(b => `${briefName(b.url)}（${b.url}）`), ...late.map(l => `届いていない【${l.heading}】（${l.at} に送った。id ${l.id}）`)];
   if (choice !== undefined) {
     if (names.length === 0) throw new TpmError(`${role.key} の担当に、済んでいない物はありません。--${choice} を付けずに打ってください`);
     return choice === 'supersede' ? `取り消す: ${names.join('・')}` : `${names.join('・')}を済ませてから、これをする`;
   }
-  if (queued.length === 0 && brief === undefined) return undefined;
-  recordGateStop(ctx, 'unsettled', [`${role.key}:`, ...queued.map(l => l.id), ...(brief === undefined ? [] : [brief])].join(' '));
+  if (queued.length === 0 && briefs.length === 0) return undefined;
+  recordGateStop(ctx, 'unsettled', [`${role.key}:`, ...queued.map(l => l.id), ...briefs.map(b => b.url)].join(' '));
   const how = command === 'dismiss'
     ? 'この依頼書・メッセージをどうするかを Product Manager に確かめてください。取り消すなら --supersede を付けて打ち直す（本文に「取り消す: …」と載る）。'
     : 'させてから進むなら --after、取り消すなら --supersede を付けて打ち直す（本文に一言が載る）。';
   throw new TpmError([
     `${role.key} の担当に、まだ済んでいない物があります。送っていません。`,
     ...queued.flatMap(l => [`--- 届いていない（${l.at} に送った。id ${l.id}）`, l.text]),
-    ...(brief === undefined ? [] : [`--- 【done】が返っていない依頼書: ${briefName(brief)}（${brief}）`]),
+    ...(briefs.length === 0 ? [] : [`--- 【done】が返っていない依頼書: ${briefs.map(b => `${briefName(b.url)}（${b.url}）`).join('・')}`]),
     '--- ここまで',
     how,
   ].join('\n'));
@@ -525,10 +578,10 @@ export function reportDecided(ctx: Context, options: DecidedOptions): string[] {
 // ---- TPM 担当が打つ ----
 
 /** 動いている担当に、新しい依頼書を送る。 */
-export function brief(ctx: Context, role: RoleRecord, url: string, note?: string, settled?: string): string[] {
+export function brief(ctx: Context, role: RoleRecord, url: string, note?: string, settled?: { text: string, choice: SettleChoice }): string[] {
   assertRead(ctx, `${role.key} の担当`, role.title);
-  const body = [url, issueCopyLine(role), note, settled].filter(v => v !== undefined).join(' ');
-  const sent = toRole(ctx, role, 'brief', body);
+  const body = [url, issueCopyLine(role), note, settled?.text].filter(v => v !== undefined).join(' ');
+  const sent = toRole(ctx, role, 'brief', body, undefined, { settle: settled?.choice ?? 'none' });
   role.brief = url;
   delete role.dismissed;
   writeRole(ctx, role);
