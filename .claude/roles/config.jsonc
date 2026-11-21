@@ -19,20 +19,5 @@
         "container volume rm pagetray-data",
       ],
     },
-    // 前の置き場（pagetray に入れ替える前の container と volume）。戻す先として、止めたまま残してある。
-    // 消したら、この宣言も消す（docs-site の運用のページの「前の置き場（tpm-pagestore）」）。
-    "tpm-pagestore": {
-      "guard": "tpm",
-      "match": [
-        "--name tpm-pagestore",
-        "container start tpm-pagestore",
-        "container stop tpm-pagestore",
-        "container kill tpm-pagestore",
-        "container delete tpm-pagestore",
-        "container rm tpm-pagestore",
-        "container volume delete tpm-pagestore-data",
-        "container volume rm tpm-pagestore-data",
-      ],
-    },
   },
 }
