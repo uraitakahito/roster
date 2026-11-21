@@ -356,7 +356,7 @@ function deleteTargets(ctx: Context, urls: string[], options: PageDeleteOptions)
     return [{ query: new URLSearchParams({ project }), covers: p => p.startsWith(`/${project}/`), local: [join(dir, project)] }];
   }
   const key = options.key;
-  if (!KEY.test(key)) throw new TpmError(`課題の鍵に使えない字があります: ${key}`);
+  if (!KEY.test(key)) throw new TpmError(`課題の Key に使えない字があります: ${key}`);
   return [{ query: new URLSearchParams({ project, key }), covers: p => p.startsWith(`/${project}/${key}/`), local: [join(dir, project, key)] }];
 }
 
