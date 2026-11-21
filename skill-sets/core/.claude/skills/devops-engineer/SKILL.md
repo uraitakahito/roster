@@ -34,7 +34,7 @@ tpm infra list
   - 設定に書かれていない環境でも、並べて動いている担当やほかの人が困りそうなら、先に `tpm ask tpm`。
   - 誰も困らない操作（新しい物を足す・読むだけ）は確かめずに進める。
 - 承認の下で環境を変える命令は `tpm infra run <環境> -- <命令>` で打つ（打った記録が残る）。
-- repo を変えるときは `/software-engineer` と同じく git worktree で作業し、PR を出して CI が緑になってから merge する（置き場所・branch の名前・片付け方は `${CLAUDE_SKILL_DIR}/../software-engineer/SKILL.md` の 2 と 4）。merge したら `tpm report merged`。
+- repo を変えるときは `/software-engineer` と同じく git worktree で作業し、PR を出して CI が緑になってから merge する（置き場所・branch の名前・片付け方は `${CLAUDE_SKILL_DIR}/../software-engineer/SKILL.md` の 2 と 4）。merge したら、main の push で動く workflow が通ったかを見てから `tpm report merged`（同じ 2）。
 - 動いたことを示してから「できた」と言う（container の状態・log・health check・job の結果。置き場の一覧の UI は、読むだけの試験の結果）。
 - 思わぬ出来事（計画と違う公開や削除・権限で断られた命令・依頼書と計画の食い違い・自分の誤り）に気づいたら、その場で `tpm report incident` で台帳に 1 行書いて続ける（protocol.md の「思わぬ出来事」）。
 - 迷ったら `tpm ask tpm`。
