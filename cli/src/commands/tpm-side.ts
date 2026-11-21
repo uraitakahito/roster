@@ -9,6 +9,7 @@ import { modelStatus, ROLES, TPM_TITLE, WAIT, type RoleName } from '../protocol.
 import { resolveSettings } from '../settings.ts';
 import { allRoles, assertKey, LOCAL_KEY, readRole, removeRole, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
 import { skillSetDir, TpmError } from '../skill-sets.ts';
+import { findHook } from './banner.ts';
 import { copyIssue, issueTracker } from './issue.ts';
 import { brief } from './messages.ts';
 import { pageFolder } from './page.ts';
@@ -27,7 +28,19 @@ export function tpmHello(ctx: Context, options: { model?: string, effort?: strin
   ctx.transport.setStatus('model', modelStatus(settings.model, settings.effort));
   ctx.transport.setStatus('wait', WAIT.work('起動'));
   ctx.state.write('tpm.jsonc', { address } satisfies TpmRecord);
-  return [`TPM 担当の宛先: ${address}`, `課題管理: ${ctx.config.tracker}・連携: ${ctx.config.transport}`, ...roles(ctx)];
+  return [`TPM 担当の宛先: ${address}`, `課題管理: ${ctx.config.tracker}・連携: ${ctx.config.transport}`, ...bannerHint(ctx), ...roles(ctx)];
+}
+
+/** cmux の連携で、cmux.json に Mac のバナーの hook が無ければ 1 行出す（TPM 担当が Product Manager に伝える）。 */
+export function bannerHint(ctx: Context, cmuxFile?: string): string[] {
+  if (ctx.config.transport !== 'cmux') return [];
+  try {
+    if (findHook(cmuxFile) !== undefined) return [];
+    return ['Mac のバナー: cmux.json に tpm の hook がありません。tpm banner setup の字を足すと、Product Manager に要るバナーだけになる（Product Manager に伝える）'];
+  }
+  catch (e) {
+    return [`Mac のバナー: cmux.json を読めません（${(e as Error).message}）`];
+  }
 }
 
 /** 名簿を、実際に動いている居場所と突き合わせて出す。 */
