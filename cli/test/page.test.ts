@@ -88,15 +88,15 @@ describe('tpm page put', () => {
     expect(existsSync(join(s.dir, s.project))).toBe(false);
   });
 
-  test('置き場の口の版が違えば、答えを使わずに止まる。控えも書かない', () => {
+  test('置き場の API の版が違えば、答えを使わずに止まる。控えも書かない', () => {
     const s = setup();
     s.store.api = '2';
-    expect(() => pagePut(s.role, s.html, { kind: 'result' })).toThrow(/口の版は 2 で、この tpm が話せるのは 1 です.*\.pagetray-version.*tpm ask devops/);
+    expect(() => pagePut(s.role, s.html, { kind: 'result' })).toThrow(/API の版は 2 で、この tpm が話せるのは 1 です.*\.pagetray-version.*tpm ask devops/);
     expect(existsSync(join(s.dir, s.project))).toBe(false);
-    expect(() => pageList(s.role, {})).toThrow(/口の版は 2/);
+    expect(() => pageList(s.role, {})).toThrow(/API の版は 2/);
   });
 
-  test('口の版を付けない置き場（版ができる前の物）には、今までどおり置ける', () => {
+  test('API の版を付けない置き場（版ができる前の物）には、今までどおり置ける', () => {
     const s = setup();
     s.store.api = undefined;
     expect(pagePut(s.role, s.html, { kind: 'result' })[1]).toBe(`URL: ${BASE}/${s.project}/t-x7k2/result-1.html`);
@@ -193,13 +193,13 @@ describe('tpm page path', () => {
     expect(s.curls()).toHaveLength(before);
   });
 
-  test('置き場の口の版が違えば読まず、途中の file も残さない', () => {
+  test('置き場の API の版が違えば読まず、途中の file も残さない', () => {
     const s = setup();
     pagePut(s.role, s.html, { kind: 'plan' });
     const folder = join(s.dir, s.project, 't-x7k2');
     for (const name of readdirSync(folder)) rmSync(join(folder, name));
     s.store.api = '2';
-    expect(() => pagePath(s.role, `${BASE}/${s.project}/t-x7k2/plan-1.html`)).toThrow(/口の版は 2/);
+    expect(() => pagePath(s.role, `${BASE}/${s.project}/t-x7k2/plan-1.html`)).toThrow(/API の版は 2/);
     expect(readdirSync(folder)).toEqual([]);
   });
 

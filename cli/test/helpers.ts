@@ -29,7 +29,7 @@ export class FakeStore {
   removed = new Set<string>();
   /** true の間、つながらない（curl の exit 7）。 */
   down = false;
-  /** 答えに付ける口の版（header `Pagetray-Api`）。undefined は、口の版ができる前の置き場（header が無い）。 */
+  /** 答えに付ける API の版（header `Pagetray-Api`）。undefined は、API の版ができる前の置き場（header が無い）。 */
   api: string | undefined = '1';
   /** 置く要求の答えを替える（置き場が断る時の試験）。 */
   refuse: { code: number, body: string } | undefined;

@@ -37,7 +37,7 @@ const DIRECT: [pattern: RegExp, instead: string][] = [
 const REMOVE_PAGES = /^curl\b.*(?:-X ?|--request[ =])DELETE\b/;
 
 /**
- * 置き場の CLI（pagetray。path で名指した物も）の、ページを消す命令: `pagetray page delete` と、口を直に呼ぶ `pagetray api` の DELETE
+ * 置き場の CLI（pagetray。path で名指した物も）の、ページを消す命令: `pagetray page delete` と、API を直に呼ぶ `pagetray api` の DELETE
  * （method は大文字でも小文字でも通るので、どちらも見る）。
  */
 const PAGETRAY_REMOVE = [
