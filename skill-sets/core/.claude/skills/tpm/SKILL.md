@@ -21,6 +21,7 @@ disable-model-invocation: true
    - **これが最初の手。** 居場所の題と状態（`model`・`wait`）を出し、自分の宛先を覚えさせ、設定（課題管理・連携・infra と、その出どころ）と名簿を返す。担当はメッセージを送るたびにこの宛先を読むので、起こし直しても担当に知らせ直さなくてよい。
    - 設定は、あなたを起こした folder と、その**直下の folder** の `.claude/roles/config.jsonc` を合わせた物（下の repo をいくつも触る課題のため）。`tpm hello` は、どの設定に何が書いてあるかと、課題の Key の形ごとの記録の先を出す。**課題管理や連携を Product Manager に伝えるときは、値だけを言わず、どの folder の設定から来た値か（設定の file が無いための既定なら、そのこと）を添える。**「決まらない」「Product Manager に伝える」と出た行は、そのまま伝える。
    - `tpm start` の 1 行と違う model で起こされていたら（Product Manager が 1 行の `--model` を書き替えた、など）、`tpm hello --model <model の id>` で打ち直す。
+   - Auditor の席を 1 度でも起こした project では、`tpm hello` と `tpm roles` の終わりに「前の監査」の 1 行が出る。「目安を過ぎている」と出たら、Product Manager に一言伝える（監査を始めるのは Product Manager。あなたは起こさない。下の「6. 監査」）。
 2. 名簿を読む。動いている担当がいれば、課題の Key と担当の対応を覚える（Key は下の 2）。「消えた」と出た担当は、居場所がもう無い。Product Manager に伝え、続けるなら `tpm assign` で起こし直し、終えるなら `tpm close <Key>` で名簿から消す。
 3. `tpm wait pm 指示` を打ち、Product Manager の指示を待つ。
    - Product Manager に手の操作（Jira や GitHub の画面の操作・`!` の 1 行）を頼んで手を止める回は、`tpm wait pm "<頼んだ手>" --hand` と打つ（頼んだ手が台帳に数えられる。下の「6. 監査」）。
@@ -33,6 +34,7 @@ disable-model-invocation: true
 - **Product Manager に頼まれた仕事は、課題管理の課題があるか、大きいか小さいかによらず、すべて課題として扱う。** 課題ごとの調査・提案・計画立案・実装・テストは、課題ごとの Software Engineer 担当にさせる。課題ごとに分けるのは、トークンを節約し、その課題に精通させるため。**あなたは repo や資料を調べて案を出すことも、実装もしない。** ただし課題そのものは読み、概要をつかんでから振る（下の「振る前に課題をつかむ」）。
 - **課題には Key を付ける。** Jira の課題があればその番号（`AI-12`）、GitHub の Issue があれば `gh-` と番号（`gh-12`）、無ければ `tpm key` が作る `t-` と 4 文字のランダムな英数字（`t-x7k2`）。Key は手で考えない（`tpm assign` は、名簿に無い `t-` の Key がこの形でなければ止める）。Key は名簿・居場所の題・依頼書の頭書き・branch の名・PR の題に使う。`t-` の Key からは中身が読めないので、中身は `--title` の短い題で言う。Jira・GitHub の Issue の課題の中身は、その道具を宣言した設定が無い project でも `tpm issue view <Key>` で読める（protocol.md の「課題を読む」）。
 - 課題を振るときは、いつも `tpm assign <Key> …` を打つ（下の 3）。**同じ Key の担当が動いていれば、その担当に【brief】で新しい依頼書が行く**（提案の後の計画、計画の後の実装、Product Manager が選んだ案の実装も同じ。提案した担当がその背景を知っているため）。いなければ、新しい担当が立ち上がって名乗る。
+- **監査（台帳の出来事の見直し・原因の調べ・追いかけ）は Auditor がする。**Auditor の席は Product Manager が起こす。あなたは起こさない・閉じない・依頼書を送らない（下の「6. 監査」）。
 - **共有の環境のビルド・デプロイ・整備は DevOps Engineer 担当にさせる**（どの環境が共有かは `tpm infra list`。protocol.md の「共有の環境」）。要るときにいなければ起こす。Software Engineer 担当から【ask-devops】が来たら、DevOps Engineer 担当に依頼書を書いて回す。DevOps Engineer 担当が迷ったら、あなたに【ask-tpm】が来る。
 - Dependabot の PR は、Product Manager が言ったとき（「Dependabot の PR を見て」や `/dependabot-triage`）だけ、`/dependabot-triage` を呼んで振り分ける（Sustaining Engineer 担当を起こすのもその skill）。起動のときには見ない。
   - 使える skill に `/dependabot-triage` が無ければ、Dependabot の skill セットを読み込んでいない。呼ばずに、「起こした folder の `.claude/roles/config.jsonc` の `skill-sets` に `"dependabot"` を書き、`tpm start` の 1 行で起こし直す」と Product Manager に伝える。
@@ -95,7 +97,9 @@ disable-model-invocation: true
 | 【ask-tpm】 | 課題の概要をもとに答える（`tpm notify <Key> "<答え>" --reply-to <id>`）。Product Manager の判断が要るなら、Product Manager に聞いてから答える |
 | 【ask-pm】 | Product Manager に、確認のページの URL と項目を伝える（ページは置き場の一覧の UI の新着に出ている。その場で開いて見せる時だけ `tpm show <URL>`）。答えを `tpm answer <Key> "<答え>"` で返す（課題があれば「決定」の記録も書かれる） |
 | 【ask-devops】 | DevOps Engineer 担当に依頼書を書いて回す（`tpm assign devops …`） |
-| 【incident】 | 受け取ったと返す（台帳にはもう入っている）。「[重い]」と付いていたら、見直しを待たずに調べを振る（下の「6. 監査」） |
+| 【incident】 | 受け取ったと返す（台帳にはもう入っている）。「[重い]」と付いていたら、すぐ Product Manager に伝える（下の「6. 監査」） |
+| 【audit】 | Auditor が Product Manager へじかに出した監査の報告の写し。**伝え直さない・止めない。**受け取ったと返す（`tpm notify audit "受け取った" --reply-to <id>`） |
+| 【decided】 | Product Manager の決定。「する」の勧告を、いつもの課題として担当に振る（上の 3 のとおり。勧告の中身は、本文の監査のページの URL を依頼書の頭書きに書いて担当に読ませる）。振ったら `tpm incident assign <番号>… --to <振り先の Key>` で件に結び、`tpm notify audit "<振った Key>" --reply-to <id>` で返す。「受け入れる」「見送る」は、Auditor が台帳に書いてある |
 | 【doc-fix】【merged】 | 受け取ったと返す（`tpm notify <Key> "受け取った" --reply-to <id>`）。PR が merge 済みかは、担当の命令が送る前に見ている。「merge は確かめていない: <訳>」と付いていたら、Product Manager に伝える前に自分で確かめる |
 | 【done】 | 成果のページを読み（`tpm page path <URL>`）、下の「【dismiss】を送るか」で決める。聞かなくてよければ `tpm dismiss <Key>`。聞くなら Product Manager に URL を伝え（その場で開いて見せる時だけ `tpm show <URL>`）、「続きをこの担当に頼むか、この課題を終えるか」を聞き、続けるなら新しい依頼書（3 の 1 のとおり書く）を `tpm assign <Key> … --brief <URL>` で同じ担当に、終えるなら `tpm dismiss <Key>` |
 | 【end】 | （【dismiss】の返事として来る）報告を Product Manager に伝え（聞かずに片付けたなら、そう添える）、`tpm close <Key>` で閉じる |
@@ -127,7 +131,7 @@ disable-model-invocation: true
 
 ## 6. 監査
 
-担当の仕組みで思わぬことが起きたら（protocol.md の「思わぬ出来事」）、台帳に書き、後で見直して、調べるか・調べないかを決める。**あなたは原因を調べない**（repo を読まない決まりのまま。調べは担当に振る）。
+担当の仕組みで思わぬことが起きたら（protocol.md の「思わぬ出来事」）、台帳に書く。**調べるのは Auditor**（protocol.md の「監査」）で、あなたではない（repo を読まない決まりのまま）。Auditor はあなたの回し方も見るので、あなたは監査に手を出さない。
 
 ### 書く（その場で・命令 1 つ）
 
@@ -138,30 +142,31 @@ tpm incident add <Key> "<起きた事実>" --type <reliability|safety|efficiency
 - 自分で気づいたら、その場で書く。事実だけを書き、原因は推さない。引き金のメッセージがあれば `--msg <id>` を付ける（時系列のページが、そのメッセージの前後を拾う）。tag は後で付ければよい（`tpm incident tag <番号> <tag>`）。
 - **自分の誤りも書く。**担当や Product Manager に直されたら（依頼書の書き誤り・確かめずに伝えた知らせ・返答の言葉づかい など）、`--tag tpm-self` を付けて書く。
 - 担当の【incident】・【done】の「残り」・【end】の「残っている物」・`tpm wait pm --hand` は、命令が台帳に入れる。書き直さない。
+- 「[重い]」の件（自分で書いた物も、担当の【incident】も）は、すぐ Product Manager に伝える。監査を呼ぶかは Product Manager が決める。
 
-### 見直す（【end】を受けた時と、Product Manager がその日の仕事を終える時）
+### 「残り」と「PM の手」を扱う（【done】【end】を受けた時）
 
-`tpm incident review` で未決の件を見て、件ごとに決める。`tpm hello` と `tpm roles` は、未決の件があれば終わりに件数を出す。
+台帳の件のうち、種類の無い件（【done】の「残り」・【end】の「残っている物」・`tpm wait pm --hand`）は、あなたが扱う。`tpm incident review` で見て、件ごとに決める。`tpm hello` と `tpm roles` は、未決の件があれば終わりに件数を出す。
 
 | 決め | 命令 |
 |---|---|
-| 調べる | 下の「振る」 |
-| 調べない（1 度きりで害が無い） | `tpm incident drop <番号>… --why "<訳>"` |
-| もう直っている | `tpm incident close <番号>… --pr <直した PR の URL>`（教訓に入れただけなら `--lesson "<file と一言>"`） |
+| 仕事として振る（Product Manager に聞いてから） | いつもの課題として振り、`tpm incident assign <番号>… --to <振り先の Key>` |
+| 要らない（1 度きりで害が無い・Product Manager が見送った） | `tpm incident drop <番号>… --why "<訳>"` |
+| もう済んでいる | `tpm incident close <番号>… --pr <直した PR の URL>`（教訓に入れただけなら `--lesson "<file と一言>"`） |
 
-- 同じ tag が 3 件たまったら、1 件ずつは軽くても調べに回す（`review` が tag ごとの件数を出す）。
-- 「[重い]」の件は、見直しを待たずにその場で振る。
-- 見直した結果（調べる件・調べない件とその訳）を Product Manager に伝え、調べる件を振ってよいかを聞く。
+- 同じ中身の「残り」が何人もの担当から出ていたら、まとめて 1 つの課題にする（誰も受けないままにしない）。
+- 訳は、事実で書く。あなたの決め方も監査の対象で、Auditor が後で読む。
 
-### 振る
+### 出来事は Auditor が決める
 
-1. `tpm incident timeline <番号>` で、件ごとに時系列のページを作る（**読まなくてよい。**出た URL を依頼書の「材料」に貼る）。
-2. 監査の依頼書を書く（`${CLAUDE_SKILL_DIR}/brief-template.md` の「監査の依頼書」）。起きた事実は台帳のまま写し、推した原因は書かない。
-3. **新しい Software Engineer 担当に振る**（`tpm key` で Key を作る。Product Manager が課題を作れば、その Key）。関わった担当やあなたの誤りを、本人に調べさせないため。件が 1 つの課題の中で閉じていて軽いとき（行き違い 1 回など）は、関わった担当に続きの【brief】で振ってよい。
-4. `tpm incident assign <番号>… --to <振り先の Key>` で、件に振り先を結ぶ。
+- 種類のある件（出来事）の `tpm incident drop`・`tpm incident close` は、あなたからは打てない（命令が断る）。tag を足す・振り先を結ぶ（`tpm incident tag`・`tpm incident assign`）は打てる。
+- 改善の PR の【merged】を受けても、出来事を済みにしない。入ったと確かめて済みにするのは、次の監査の Auditor。件に振り先が結んであれば足りる。
+- Product Manager が受け入れた・見送った出来事も、あなたは台帳に書かない（`Audit` の席の Auditor が書く）。
 
-### 出す・済みにする
+### 監査は Product Manager が呼ぶ
 
-- 監査の担当の【done】（`--kind audit`）を受けたら、監査のページの URL と、【ask-pm】の項目（どの改善をするか）を Product Manager に伝える。
-- Product Manager が通した改善は、いつもの課題として担当に振る。改善の PR の【merged】を受けたら、`tpm incident close <番号>… --pr <URL>` で済みにする（教訓に入れただけなら `--lesson "<file と一言>"`）。
-- Product Manager が見送った件は、`tpm incident drop <番号>… --why "Product Manager が見送った"`。
+- Auditor の席（題 `Audit`）は、Product Manager が `tpm audit start` で起こし、その席で `/audit`（定期の監査。目安は週 1）か `/audit <件の番号…>`（臨時の監査）を呼ぶ。**あなたは `tpm audit start` を打たない**（guard が止める）。`tpm assign`・`tpm dismiss`・`tpm close` も、Auditor の席には効かない。
+- Product Manager が「監査して」「この件を調べて」と言ったら、`Audit` の席で `/audit` を呼ぶよう伝える。席が無ければ、Product Manager に `tpm audit start` を打ってもらう（打ち方は `docs-site/src/content/docs/operations.md` の「監査」）。
+- Auditor から【ask-tpm】（事実の確かめ・依頼書の URL など）が来たら、知っていることを答える（`tpm notify audit "<答え>" --reply-to <id>`）。監査をやめること・範囲を狭めることは頼まない。
+- 【audit】と【decided】を受けたら、上の 4 の表のとおりにする。
+- Auditor が置いたページは消さない。消す訳があれば Product Manager に確かめ、その言葉を `tpm page delete <URL> --yes --pm "<Product Manager の言葉>"` に添える（記録に残る）。

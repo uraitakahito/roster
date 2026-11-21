@@ -1,6 +1,6 @@
 # 担当のあいだの決まり（どの担当も読む）
 
-TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・DevOps Engineer 担当（`/devops-engineer`）・Sustaining Engineer 担当（`/sustaining-engineer`）が共通に従う決まり。依頼主は Product Manager（利用者）。返答と報告は日本語で書く。
+TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・DevOps Engineer 担当（`/devops-engineer`）・Sustaining Engineer 担当（`/sustaining-engineer`）・Auditor（`/audit`）が共通に従う決まり。依頼主は Product Manager（利用者）。返答と報告は日本語で書く。
 
 担当どうしのやりとりは、すべて `tpm` の命令でする。`tpm` が、メッセージを送る・届いたかを見る・課題に記録を書く・状態を出す、を 1 度にする。連携の道具（cmux など）の命令と、課題管理の道具（Jira・GitHub の Issue）で記録を書く・状態を進める命令は直に打たない（直に打つと記録と状態が抜けるので、guard が止める）。課題管理の課題を読む命令は止めないが、読むときも `tpm issue view` を使う（下の「課題を読む」）。どの道具を使うかは、TPM 担当を起こした folder と、その直下の folder の `.claude/roles/config.jsonc` を合わせた設定で決まる（下の repo をいくつも触る課題のため。課題の記録の先は、課題の Key の形で決まる）。
 
@@ -12,7 +12,7 @@ TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・De
 - **打ち直しは、止まったのを見てから別の回に打つ。**`;` や `||` で 1 行に続けて書かない（止まらなかった時にも 2 度目が動く）。同じメッセージを 30 秒の内に 2 度送ろうとすると、命令は 2 度目を送らずに止まる。
 - 届いたメッセージには id が付いている。そのメッセージへの返事は `--reply-to <id>` を付けて送る。
 - 宛先は書かない。担当のメッセージは TPM 担当へ行き、TPM 担当は課題の Key で担当を名指す。
-- **Product Manager に直接聞かない。** Product Manager とのやりとりは、すべて TPM 担当を通す。
+- **Product Manager に直接聞かない。** Product Manager とのやりとりは、すべて TPM 担当を通す。例外は Auditor だけ: Product Manager が起こした `Audit` の席で、Product Manager とじかに話す（下の「監査」）。
 - 命令の使い方は `tpm <命令> --help`。命令が誤りで止まったら、出た文に従って直す（道具の命令に替えて先へ進まない）。
 
 ## 見出し
@@ -36,7 +36,7 @@ TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・De
 
 Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【recreated】）は `/sustaining-engineer` と `/dependabot-triage` に書いてある。
 
-Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけが使う見出しは 2 つ。【audit】は、Product Manager へじかに出した監査の報告の写し（`tpm report audit`）。【decided】は、Product Manager の決定（`tpm report decided`）。
+Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけが使う見出しは 2 つ。【audit】は、Product Manager へじかに出した監査の報告の写し（`tpm report audit`）。【decided】は、Product Manager の決定（`tpm report decided`）。Auditor は、【done】【end】【merged】【doc-fix】【ask-pm】を送らない（下の「監査」）。
 
 ### TPM 担当から
 
@@ -76,7 +76,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 
 ## 思わぬ出来事
 
-担当の仕組み（`tpm`・skill・この決まり・ページの置き場）で思わぬことが起きたら、気づいた担当が、その場で台帳に 1 行書く。書くのは事実だけ（何が起きたか）。原因はその場で調べず、仕事を続ける。後で TPM 担当が見直し、調べを担当に振る。
+担当の仕組み（`tpm`・skill・この決まり・ページの置き場）で思わぬことが起きたら、気づいた担当が、その場で台帳に 1 行書く。書くのは事実だけ（何が起きたか）。原因はその場で調べず、仕事を続ける。後で Auditor が見直し、調べる（下の「監査」）。
 
 | 種類（`--type`） | 例 |
 |---|---|
@@ -86,12 +86,23 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 
 - 担当は `tpm report incident "<起きた事実>" --type <種類>`（TPM 担当に【incident】が行く）。**自分の誤りも書く。**
 - session の権限で断られた命令は、`--tag 権限` を付けて書く。別の書き方で通そうとしない。
-- すぐ止めないと害が広がる物は `--severe` を付ける。TPM 担当が、見直しを待たずに調べを振る。
-- 【done】の「残り」と【end】の「残っている物」は、「なし」でなければ命令が台帳に入れる（書き直さなくてよい）。TPM 担当が Product Manager に手の操作を頼んだ回（`tpm wait pm "<何を>" --hand`）も入る。
-- `tpm incident timeline <件の番号|課題の Key>` が、その前後の記録（メッセージと届いた時刻・課題管理への書き込み・guard と入口の検査が止めた回・`wait` の移り）を時刻の順に 1 枚のページにして置く。届く前に相手が次を送った所には「行き違い」の印が付く。原因を調べる担当が読む。
-- 原因の調べは、TPM 担当が監査の依頼書で担当に振る（既定は、関わっていない新しい担当）。振られた担当は、原因と改善案を監査のページ（`--kind audit`）に書き、どの改善をするかを確認のページにして【ask-pm】で送り、`tpm report done --kind audit` を打つ。
-- TPM 担当は `tpm incident add <Key> "<起きた事実>" --type <種類>` で書き、`tpm incident review` で見直す（`/tpm` の「監査」）。見直す・扱いを決める命令は、担当からは打てない。
+- すぐ止めないと害が広がる物は `--severe` を付ける。TPM 担当が、すぐ Product Manager に伝える（監査を呼ぶかは Product Manager が決める）。
+- 【done】の「残り」と【end】の「残っている物」は、「なし」でなければ命令が台帳に入れる（書き直さなくてよい）。TPM 担当が Product Manager に手の操作を頼んだ回（`tpm wait pm "<何を>" --hand`）も入る。この 2 つ（種類の無い件）は、TPM 担当が扱う（振る・調べない・済み）。
+- `tpm incident timeline <件の番号|課題の Key>` が、その前後の記録（メッセージと届いた時刻・課題管理への書き込み・guard と入口の検査が止めた回・`wait` の移り）を時刻の順に 1 枚のページにして置く。届く前に相手が次を送った所には「行き違い」の印が付く。原因を調べる Auditor が読む。
+- 原因の調べと、種類のある件（出来事）の扱い（調べない・済み）を決めるのは、Auditor（下の「監査」）。TPM 担当は出来事を「調べない」「済み」にできない（命令が断る）。振り先を結ぶ・tag を足すことはできる。
+- TPM 担当は `tpm incident add <Key> "<起きた事実>" --type <種類>` で書く。見直す・扱いを決める命令（`tpm incident review` など）は、TPM 担当と Auditor のほかの担当からは打てない。
 - **台帳・送ったメッセージの記録（state の `*.jsonl`）は、メッセージや命令の字を持つ。この Mac の外（課題管理のコメント・PR の本文・公開の site）に写さない。**【incident】は課題管理に記録を書かない。
+
+## 監査
+
+担当の仕組みが、信頼でき、安全で、むだなく回っているかは、Auditor が調べる。Auditor は TPM 担当の回し方も見るので、監査は TPM 担当の手を通らない。何のために・どこまで・誰に、は監査の規程（この folder の `audit-charter.md`。Product Manager が承認した物）にあり、どの担当もそれに従う。
+
+- **始めるのは、いつも Product Manager。** Product Manager が `tpm audit start` で `Audit` の席を起こし、その席で `/audit`（定期の監査。目安は週 1）か `/audit <件の番号…>`（臨時の監査）を呼ぶ。自動では始まらない。
+- **報告は Product Manager へじかに。** Auditor は監査のページを置き、`Audit` の席で Product Manager に報告する。TPM 担当には写し（【audit】）が行く。Product Manager はその席で答え、Auditor が決定を TPM 担当に渡す（【decided】）。
+- **TPM 担当**は、【audit】を伝え直さない。【decided】の「する」の勧告を、いつもの課題として担当に振り、`tpm incident assign <番号>… --to <振り先の Key>` で件に結ぶ。Auditor からの【ask-tpm】（事実の確かめ）には、知っていることを答える。
+- **TPM 担当とほかの担当は、監査を止めない・範囲を狭めない。** `Audit` の席を起こさない・閉じない（`tpm audit start` を打つのは Product Manager。`tpm assign`・`tpm dismiss`・`tpm close` は、この席を断る）。Auditor の置いたページを消さない（消す訳があれば、Product Manager の言葉を `tpm page delete … --pm "<言葉>"` に添える。記録に残る）。
+- **Auditor は直さない・決めない。** repo・設定・環境を変えず、PR を出さず、課題を振らず、課題管理に書かない（書き込みと `git`・`gh` の変える命令は guard が止める）。どの改善をするか・受け入れるかは Product Manager が決める。
+- Auditor の席に、依頼書・【dismiss】・【end】は無い。席は Product Manager が閉じる。
 
 ## 課題を読む
 
@@ -126,7 +137,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 - 時系列のページ（種類は `timeline`）は、`tpm incident timeline` が state の記録から作って置く（下の「思わぬ出来事」）。手では置かない。
 - 探す: `tpm page list`（今の project の新しい順）。`--key <Key>`・`--role <役割>`・`--workspace <宛先>`・`--kind <種類>`・`--q <語>` で絞り、`--json` で記録を出す。Product Manager は、置き場の一覧の UI（`http://127.0.0.1:8801/`）で同じように絞って見る。
 - 開く: ページは自動では開かない（`tpm ask pm`・`tpm report done` も開かない）。Product Manager は、置き場の一覧の UI（`http://127.0.0.1:8801/`）を 1 つ開いておき、新着の印で気づいて読む。その場で開いて人に見せる時だけ `tpm show <URL>`。
-- 消す: **消してよいのは TPM 担当だけ**（戻せない）。試しに置いた・置き間違えたページは、担当は自分で消さず、`tpm ask tpm` で URL と訳を送って頼む（担当の居場所からの `tpm page delete` と、置き場に消す要求を直に送る `curl`、置き場の CLI の `pagetray page delete` は止まる）。TPM 担当は `tpm page delete <URL>…`（Key ごとなら `--key <Key>`、project ごとなら `--project <名>`。その Key・project の file も一緒に消える）で消す物を見て、`--yes` を付けて消す。控えの file も消える。消したページの URL は 410 を返し、その番号は 2 度使われない。
+- 消す: **消してよいのは TPM 担当だけ**（戻せない。Auditor が置いたページは、Product Manager の言葉を添えなければ TPM 担当も消せない。上の「監査」）。試しに置いた・置き間違えたページは、担当は自分で消さず、`tpm ask tpm` で URL と訳を送って頼む（担当の居場所からの `tpm page delete` と、置き場に消す要求を直に送る `curl`、置き場の CLI の `pagetray page delete` は止まる）。TPM 担当は `tpm page delete <URL>…`（Key ごとなら `--key <Key>`、project ごとなら `--project <名>`。その Key・project の file も一緒に消える）で消す物を見て、`--yes` を付けて消す。控えの file も消える。消したページの URL は 410 を返し、その番号は 2 度使われない。
 - 置き場が応えなければ、ページは置けない（`tpm page put` が止まる。番号を置き場が決めるため）。控えにあるページは読める。`tpm ask devops --what "置き場（pagetray）を起こす" --why "<何が置けないか>"` で頼む。自分では container を起こさない。
 - 図があった方がわかりやすい所は図を入れる。
 - file（画像・PDF・字の file）: ページに付ける画面の写し・図・log は、置き場に上げて、ページから相対で参照する。受けるのは png・jpg・jpeg・gif・webp・pdf・txt・log・md・csv・json で、1 つ 16 MiB まで（動画・HTML・SVG は受けない）。
@@ -147,7 +158,15 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 
 ## 文書の食い違い
 
-TPM 担当は自分で直さず、課題として Software Engineer 担当に回す（`/tpm` の 2）。ほかの担当は、調べている途中で文書やコメントの食い違いを見つけたら、お勧めの直し方で直し、PR を merge まで自分で進める（Product Manager の確認は要らない）。worktree で作業し、PR の題か本文に課題の Key を入れる。merge したら【doc-fix】で知らせ、成果のページにも一覧で載せる。文書とコードが食い違うときは、コードの方に合わせる。
+文書やコメントの食い違いを見つけた時にすることは、担当で違う。
+
+| 担当 | すること |
+|---|---|
+| TPM 担当 | 自分で直さず、課題として Software Engineer 担当に回す（`/tpm` の 2） |
+| Software Engineer 担当・DevOps Engineer 担当・Sustaining Engineer 担当 | お勧めの直し方で直し、PR を merge まで自分で進める（Product Manager の確認は要らない）。worktree で作業し、PR の題か本文に課題の Key を入れる。merge したら【doc-fix】で知らせ、成果のページにも一覧で載せる |
+| Auditor | **直さない。**監査のページの「見つけた食い違い」に、file・今の文・コードの実際・お勧めの直し方を挙げる。Product Manager が通せば、TPM 担当が課題にして振る |
+
+文書とコードが食い違うときは、コードの方に合わせる。
 
 ## 共有の環境
 
@@ -168,3 +187,4 @@ TPM 担当は自分で直さず、課題として Software Engineer 担当に回
 - Software Engineer 担当と DevOps Engineer 担当は、依頼書 1 つが済むごとに【done】を送り、次の【brief】を待つ。同じ課題の続きは同じ担当が受ける。【dismiss】が来るまで自分から終えない（`tpm report end` は【dismiss】の前には送れない）。
 - 自分の居場所（workspace）は自分で閉じない。【end】を送った後、TPM 担当が報告を受けてから閉じる。
 - 自分で作った worktree と branch は、merge の後に消す（`git worktree list` に本体だけが残ること）。
+- Auditor の席は、Product Manager が起こし、閉じる。【done】も【end】も送らず、報告と決定の後は次の `/audit` を待つ。

@@ -1,11 +1,11 @@
 ---
 title: 運用
-description: この repo を別の folder へ移す手順、Node の version の上げ方、ページの置き場（pagetray）の起こし方と保ち方
+description: この repo を別の folder へ移す手順、Node の version の上げ方、ページの置き場（pagetray）の起こし方と保ち方、監査（Auditor の席）の運び
 ---
 
 ## 移す手順
 
-1. TPM 担当のほかに動いている担当（Software Engineer・DevOps Engineer・Sustaining Engineer）が 0 のときに行う。
+1. TPM 担当のほかに動いている担当（Software Engineer・DevOps Engineer・Sustaining Engineer・Auditor）が 0 のときに行う。
 2. `mv <今の folder> <新しい folder>`（git の履歴ごと移る）。
 3. 新しい folder で 1 度 Claude Code を対話で起こして信頼する（[信頼のダイアログ](/getting-started/#信頼のダイアログ)。信頼は path に付くので、移すたびに要る）。
 4. 新しい folder で `pnpm --dir cli install --frozen-lockfile` を打つ。`~/.local/bin/tpm` の symlink を張っていれば張り直す（`ln -sf <新しい folder>/cli/bin/tpm ~/.local/bin/tpm`）。
@@ -19,6 +19,46 @@ description: この repo を別の folder へ移す手順、Node の version の
 2. 手元で `nodenv install` と、corepack の入れ直し（[Node と pnpm を入れる](/getting-started/#node-と-pnpm-を入れる)）。
 3. 新しい version で試験と docs の検査を流してから PR にする（[開発](/development/)）。major を上げるときは `cli/package.json` と `docs-site/package.json` の `engines.node` と、`@types/node` も合わせる。
 4. merge して新しい Node に替えた後、`tpm banner setup` を打ち直し、出た命令で `~/.config/cmux/cmux.json` の hook を替える（hook の命令は Node の folder を path で書いている）。`tpm banner check` で確かめる。
+
+## 監査（Auditor の席）
+
+監査は、Product Manager が呼んだ時にだけ始まる（自動では始まらない。目安は週 1）。Auditor は TPM 担当の回し方も見るので、席を起こすのも、呼ぶのも、報告を読んで答えるのも、Product Manager が `Audit` の席でじかにする。決まりは監査の規程（`skill-sets/core/.claude/skills/_shared/audit-charter.md`）。
+
+### 席を起こす（初めと、Mac を起こし直した後）
+
+cmux の中の shell で、TPM 担当を起こした folder に移って打つ。
+
+```sh
+cd <TPM 担当を起こした folder>
+<skills の置き場所>/cli/bin/tpm audit start
+```
+
+- cmux に `Audit` の居場所ができ、Auditor が名乗って待つ。席は project に 1 つで、もうあれば「その席で `/clear` を打ってから、`/audit` を呼んでください」と断る。
+- この命令は Product Manager が自分の手で打つ。TPM 担当とほかの担当が打つと guard が止める。
+- model などを替えるなら `--model`・`--effort` を付けるか、`.claude/roles/config.jsonc` の `auditor` に書く（[設定](/configuration/)）。既定は Fable 5.2・high。
+
+### 監査を呼ぶ
+
+`Audit` の席で打つ。
+
+| 打つ字 | すること |
+|---|---|
+| `/audit` | 定期の監査。台帳の出来事を見直し、調べ、前の勧告と「残り」を追いかけ、報告する |
+| `/audit 7 9` | 臨時の監査。名指した件（台帳の番号）を調べ、報告する |
+
+- **2 度目からは、先に `/clear` を打つ。** 前の監査の文脈が残ったままだと、Auditor が自分の前の勧告を自分で追いかけることになる。`/clear` していなければ、Auditor は監査を始めずに止まり、`/clear` を頼む（`tpm audit begin` が、前の報告の後に `/clear` したかを記録で見る）。
+- 「[重い]」の件が台帳に入ると、TPM 担当が伝えてくる。調べさせるなら、`Audit` の席で `/audit <番号>` を呼ぶ。
+
+### 報告を読んで、答える
+
+1. 監査が済むと、`Audit` の席から Mac のバナーが出る。席の画面に、要点と、決めてほしいこと（勧告ごとに、する・受け入れる・見送る）が出ている。詳しくは監査のページ（置き場の一覧の UI で、役割 `auditor`・種類 `audit`）。
+2. **その席に答えを書く**（「R1 はする、R2 は受け入れる、R3 は見送る」）。TPM 担当を通さない。
+3. Auditor が、受け入れた件を台帳に書き、決定を TPM 担当に渡す。TPM 担当は、「する」の勧告を課題にして担当に振る。TPM 担当が起きていなければ、Auditor はそう言って待つ（TPM 担当を起こした後に、送り直させる）。
+
+### 席を閉じる・起こし直す
+
+- 席は Product Manager が閉じる（cmux で居場所を閉じる）。TPM 担当は閉じられない。閉じても、監査のページ・台帳・監査線の記録（状態の folder の `audits.jsonl`）は残る。
+- 閉じた・消えた後は、上の `tpm audit start` で起こし直す。
 
 ## ページの置き場（pagetray）
 
