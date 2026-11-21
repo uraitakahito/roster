@@ -537,14 +537,27 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
     expect(dismiss(w.tpm, 't-x7k2', { handover: false })[0]).toMatch(/^送った: 【dismiss】/);
   });
 
-  test('見た時刻が言えない依頼書（前の版の shown/ は id の字だけ）は、画面に届く前の【done】で済まない（行き違い）', () => {
+  test('見せていない依頼書は、画面に届く前の【done】で済まない（行き違い）', () => {
+    const w = sentBrief4(true);
+    // 担当が brief-4 を見る前に【done】が出た（送る命令と依頼書が行き違った）。送る前の検査を通らない形を、log に直に書いて作る
+    w.se.state.append('log.jsonl', { at: '2026-11-20T12:00:03.000Z', key: 't-x7k2', heading: 'done', from: 'SWE t-x7k2: 計画と実装', to: 'file:tpm', text: '【done】前の分', id: 'd-race', delivered: true });
+    w.wire.release('file:1', '2026-11-20T12:00:08.000Z');
+    expect(() => dismiss(w.tpm, 't-x7k2', { handover: false })).toThrow(/【done】が返っていない依頼書: brief-4/);
+  });
+
+  test('#58 の形: 前の版が時刻を書かずに覚えた依頼書は、送った時刻に見せた物として、画面に届く前の【done】で済む', () => {
     const w = sentBrief4(true);
     w.tpm.state.write('shown/file-1.jsonc', ['m1-file-1']);
     // 送る前の検査は、前の形で覚えた物でも止まらない
-    reportDone(w.se, { kind: 'proposal', summary: 'brief-4', remaining: 'なし', decisions: 'なし', points: [] });
-    w.wire.release('file:1', '2026-11-20T12:00:08.000Z');
-    expect(() => dismiss(w.tpm, 't-x7k2', { handover: false })).toThrow(/【done】が返っていない依頼書: brief-4/);
-    expect(w.tpm.state.read('shown/file-1.jsonc')).toEqual(['m1-file-1']);
+    w.se.now = at(60);
+    reportDone(w.se, { kind: 'result', summary: 'brief-4', remaining: 'なし', decisions: 'なし', points: [] });
+    // 新しい版が書き直しても、時刻の無い項目は時刻の無いまま
+    w.se.now = at(90);
+    w.wire.send('file:1', 'Technical Program Manager', '【notify】受け取った');
+    inbox(w.se);
+    expect(w.tpm.state.read('shown/file-1.jsonc')).toEqual([{ id: 'm1-file-1' }, { id: 'm2-file-1', at: '2026-11-20T12:01:30.000Z' }]);
+    w.wire.release('file:1', '2026-11-20T12:05:00.000Z');
+    expect(dismiss(w.tpm, 't-x7k2', { handover: false })[0]).toMatch(/^送った: 【dismiss】/);
   });
 
   test('--supersede と --after を両方付けるか、済んでいない物が無いのに付けたら止まる', () => {
