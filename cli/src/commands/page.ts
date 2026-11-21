@@ -1,7 +1,7 @@
 // 依頼書と成果のページを、置き場（別の repo の pagetray。127.0.0.1 で待つ、ページを DB に持つサーバー）に置く・読む・探す・消す。
 // 番号は置き場が決める。置いた・読んだページは、この Mac の控えの folder にも写す（Read tool で読むためと、置き場が止まっても読めるため）。
 // 置き場は Mac に 1 つで、project をまたいで同じなので、控えの folder と URL は設定（config.jsonc）でなく環境変数で替える。
-// 置き場を起こす・止めるのは DevOps Engineer 担当（docs-site の運用のページの「ページの置き場（tpm-pagestore）」）。
+// 置き場を起こす・止めるのは DevOps Engineer 担当（docs-site の運用のページの「ページの置き場（pagetray）」）。
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';

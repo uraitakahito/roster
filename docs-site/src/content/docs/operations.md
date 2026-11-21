@@ -1,6 +1,6 @@
 ---
 title: 運用
-description: この repo を別の folder へ移す手順、Node の version の上げ方、ページの置き場（tpm-pagestore）の起こし方と保ち方
+description: この repo を別の folder へ移す手順、Node の version の上げ方、ページの置き場（pagetray）の起こし方と保ち方
 ---
 
 ## 移す手順
@@ -20,87 +20,48 @@ description: この repo を別の folder へ移す手順、Node の version の
 3. 新しい version で試験と docs の検査を流してから PR にする（[開発](/development/)）。major を上げるときは `cli/package.json` と `docs-site/package.json` の `engines.node` と、`@types/node` も合わせる。
 4. merge して新しい Node に替えた後、`tpm banner setup` を打ち直し、出た命令で `~/.config/cmux/cmux.json` の hook を替える（hook の命令は Node の folder を path で書いている）。`tpm banner check` で確かめる。
 
-## ページの置き場（tpm-pagestore）
+## ページの置き場（pagetray）
 
-依頼書と成果のページを置く、この Mac だけの置き場。担当が `tpm page put` で置いたページを DB に持ち、絞って探せる一覧の UI を出すサーバー（別の repo の [pagetray](https://github.com/uraitakahito/pagetray)。この repo とのつなぎは [開発](/development/#pagetrayページの置き場のサーバーとのつなぎ)）を、Apple Container（`container` CLI）で動かす。`127.0.0.1` だけで待ち受け、LAN にもインターネットにも開かない。起こす・止める・直すのは DevOps Engineer 担当で、命令は `tpm infra run tpm-pagestore -- <命令>` で打つ（この repo の `.claude/roles/config.jsonc` が、環境 `tpm-pagestore` を「TPM に相談」の手続きで宣言している）。
+依頼書と成果のページを置く、この Mac だけの置き場。担当が `tpm page put` で置いたページを DB に持ち、絞って探せる一覧の UI を出すサーバー（別の repo の [pagetray](https://github.com/uraitakahito/pagetray)。この repo とのつなぎは [開発](/development/#pagetrayページの置き場のサーバーとのつなぎ)）を、Apple Container（`container` CLI）で動かす。`127.0.0.1` だけで待ち受け、LAN にもインターネットにも開かない。起こす・止める・直すのは DevOps Engineer 担当で、命令は `tpm infra run pagetray -- <命令>` で打つ（この repo と pagetray の repo の `.claude/roles/config.jsonc` が、環境 `pagetray` を「TPM に相談」の手続きで宣言している）。
 
 | 物 | 値 |
 |---|---|
-| container | `tpm-pagestore`（`127.0.0.1:8801` と `127.0.0.1:8800` → 中の 8080。メモリは Apple Container の下限の 200 MiB、CPU は 1） |
+| image | `ghcr.io/uraitakahito/pagetray:<版>`。版と digest は、この repo の `.pagetray-version`（`v<版>@<digest>`。この repo の cli と合わせてある版） |
+| container | `pagetray`（`127.0.0.1:8801` と `127.0.0.1:8800` → 中の 8080。メモリは Apple Container の下限の 200 MiB、CPU は 1） |
 | URL | `http://127.0.0.1:8801/`（一覧の UI。ページは `/<状態の folder の名>/<Key>/<種類>-<番号>.html`）。`http://127.0.0.1:8800/` は、前の置き場（Nginx。今は無い）の port。前に置いたページの URL と、ページの中の link を同じ path で開けるように、同じ container が待ち受ける |
 | 控えの folder | `~/.local/share/tpm/pages/`（`tpm` が、置いた・読んだページをこの Mac に写す所。container には mount しない） |
-| DB | 名前つきの volume `tpm-pagestore-data`（中の `/data/pages.db`）。Mac の folder は mount しない |
-| image | この Mac で、pagetray の repo の `Containerfile` から作る `tpm-pagestore:<pagetray の commit の短い名>`。registry には上げない |
+| DB | 名前つきの volume `pagetray-data`（中の `/data/pages.db`）。Mac の folder は mount しない |
 
-### image を作る
-
-```sh
-cd <pagetray の repo>          # 無ければ git clone https://github.com/uraitakahito/pagetray
-git pull --ff-only
-git checkout --detach "$(cat <この repo>/.pagetray-version)"   # この repo の cli と合わせてある版
-container build --progress plain -t tpm-pagestore:$(git rev-parse --short HEAD) -f Containerfile .
-```
-
-- 初めからで 2 分ほど。`--progress plain` を付ける（`-q` は止まったまま進まないことがあった）。
-- build の段は公式の `rust` の alpine で、tag と digest で固定してある。SQL の検査は pagetray が commit した `.sqlx/` で行うので、build の中に DB は要らない。
-- 作り終えたら、pagetray の checkout を `git switch main` で戻す。
+**手順は、pagetray の README の「[動かす](https://github.com/uraitakahito/pagetray#動かす)」にある**（起こす・確かめる・DB の写しを取る・写しから戻す・止める・版を上げる）。README の命令のうち、container と volume に触る物は、頭に `tpm infra run pagetray --` を付けて打つ。下は、この repo の側の決まりだけを書く。
 
 ### 起こす
 
 ```sh
-container volume create tpm-pagestore-data     # 初めての時だけ
-tpm infra run tpm-pagestore -- container run -d --name tpm-pagestore \
+container image pull ghcr.io/uraitakahito/pagetray:<版>
+container volume create pagetray-data     # 初めての時だけ
+tpm infra run pagetray -- container run -d --name pagetray \
   -p 127.0.0.1:8801:8080 \
   -p 127.0.0.1:8800:8080 \
-  -v tpm-pagestore-data:/data \
+  -v pagetray-data:/data \
   -m 200M -c 1 \
-  tpm-pagestore:<commit の短い名>
+  ghcr.io/uraitakahito/pagetray:<版>
 ```
 
+- `<版>` は `.pagetray-version` の `@` の前（`v0.2.0` など）。pull した image の digest が `@` の後ろと同じかを見る（見方は pagetray の README の「起こす」）。
 - `-p` には必ず `127.0.0.1:` を書く。`-p 8801:8080` と書くと LAN に開く。
-- 2 行目の `-p`（8800）は、前の置き場の URL のため。新しいページの URL は 8801 で出る。
-- 8801 が使われていたら別の port にし、この節の URL と 1 行を合わせて直す。担当が使う URL も、環境変数 `TPM_PAGES_URL`（[設定](/configuration/)）で合わせる。
-- 起きる時に、まだ当てていない移行の SQL（pagetray の `migrations/`）を DB に当てる。
+- 8801 が使われていたら別の port にし、担当が使う URL を環境変数 `TPM_PAGES_URL`（[設定](/configuration/)）で合わせる。
+- 起こしたら、pagetray の README の「確かめる」をする。試しのページを置いたら、TPM 担当が `tpm page delete <URL> --yes` で消す（[担当のあいだの決まり](/protocol/#ページの置き場)）。
 
-### 確かめる
+### 止める・Mac を起こし直した後
 
-1. `container list` で `tpm-pagestore` が `running`。
-2. `lsof -nP -iTCP:8801 -iTCP:8800 -sTCP:LISTEN` が `127.0.0.1:8801` と `127.0.0.1:8800` だけを出す（`*:` で始まる行があれば LAN に開いている）。
-3. `curl -s http://127.0.0.1:8801/healthz` が `ok` を返し、`curl -s 'http://127.0.0.1:8801/api/pages?limit=1'` が JSON を返す。browser で `http://127.0.0.1:8801/` が一覧を出す。`curl -s http://127.0.0.1:8800/healthz` も `ok` を返す。
-4. `container logs tpm-pagestore` の頭に `pagestore <版> listen=0.0.0.0:8080 db=/data/pages.db` が出ている。
-5. `container stats --no-stream tpm-pagestore` のメモリが数 MiB〜20 MiB ほど（初めて起こした直後と、たくさん置いた直後は、OS が file を覚えている分で 50 MiB を超えることがある。起こし直すと戻る）。
-
-試しのページを置いたら、TPM 担当が `tpm page delete <URL> --yes` で消す（[担当のあいだの決まり](/protocol/#ページの置き場)）。
-
-### DB の写しを取る
-
-本文は、担当が置いた時に Mac の控えの folder（`~/.local/share/tpm/pages/`）にも残る。置いた担当の役割と workspace の ID は DB にだけあるので、**image を上げる前と、volume に触る前**に、DB の写しを取る。動かしたまま取れる。
-
-```sh
-curl -fsS -o ~/tpm-pagestore-$(date +%Y%m%d-%H%M).db http://127.0.0.1:8801/api/backup
-sqlite3 ~/tpm-pagestore-<日時>.db 'select count(*) from pages'    # 開けて、件数が合うか
-```
-
-### 写しから戻す
-
-volume を失った・DB が壊れた時。先に【ask-tpm】を送り、答えを待つ（戻す間、担当はページを置けない）。
-
-```sh
-tpm infra run tpm-pagestore -- container stop tpm-pagestore
-tpm infra run tpm-pagestore -- container run --rm \
-  -v tpm-pagestore-data:/data -v "<写しのある folder>:/in:ro" \
-  <pagetray の Containerfile の 1 つ目の FROM の image> \
-  sh -c 'rm -f /data/pages.db-wal /data/pages.db-shm && cp /in/<写しの file> /data/pages.db'
-tpm infra run tpm-pagestore -- container start tpm-pagestore
-```
-
-- 動かす image は空で `cp` も無いので、file を volume に入れる時だけ、build の段の image（もうこの Mac にある）を借りる。
-- 起こしたら「確かめる」をし、`curl -s 'http://127.0.0.1:8801/api/pages?limit=1'` で一番新しいページを見る。
-- 写しが無ければ、空の volume で起こし、下の「控えから取り込む」をする（役割と workspace の ID は戻らない）。
+- 止めている間、担当はページを置けず、Product Manager は一覧の UI を開けない（番号をサーバーが決めるため。担当は、控えにあるページなら読める）。先に【ask-tpm】を送り、答えを待つ。止めるのは `tpm infra run pagetray -- container stop pagetray`。DB は volume に残る。
+- Mac を起こし直すと止まったままになる。`container system start` の後に `tpm infra run pagetray -- container start pagetray` を打ち、「確かめる」をする。
+- volume（`pagetray-data`）は消さない。消す命令も「TPM に相談」の手続きに入れてある。
+- **DB の写し**（`curl -fsS -o ~/pagetray-$(date +%Y%m%d-%H%M).db http://127.0.0.1:8801/api/backup`）は、版を上げる前と volume に触る前に取る。本文は控えの folder にも残るが、置いた担当の役割と workspace の ID は DB にだけある。
 
 ### 控えから取り込む
 
-DB を失って空の volume で起こした時は、控えの folder のページを置き場に入れる。
+DB を失い、写しも無くて、空の volume で起こした時は、控えの folder のページを置き場に入れる。
 
 ```sh
 tpm page import
@@ -111,23 +72,19 @@ tpm page import
 - 「消したページ」と出た物は、置き場で消した番号（`tpm page delete`）。控えにだけ残っていた物で、入れない。
 - 「ぶつかった」と出たページは、同じ番号に別の中身が置き場にある。入れていないので、要る物なら `tpm page put` で置き直す。
 
-### 止める・Mac を起こし直した後
+### 版を上げる
 
-- 止めている間、担当はページを置けず、Product Manager は一覧の UI を開けない（番号をサーバーが決めるため。担当は、控えにあるページなら読める）。先に【ask-tpm】を送り、答えを待つ。止めるのは `tpm infra run tpm-pagestore -- container stop tpm-pagestore`。DB は volume に残る。
-- Mac を起こし直すと止まったままになる。`container system start` の後に `tpm infra run tpm-pagestore -- container start tpm-pagestore` を打ち、「確かめる」をする。
-- volume（`tpm-pagestore-data`）は消さない。消す命令も「TPM に相談」の手続きに入れてある。
+pagetray の新しい版が出て、この repo の `.pagetray-version` が上がった時（上げ方は [開発](/development/#pagetrayページの置き場のサーバーとのつなぎ)の「pagetray を上げる時」）。
 
-### image を上げる
-
-pagetray のコードが変わり、この repo の `.pagetray-version` が上がった時。
-
-1. 「image を作る」で、新しい commit の名の image を作る。
-2. 「DB の写しを取る」をする。
-3. 【ask-tpm】で止める時を決めてから、`container stop tpm-pagestore`・`container delete tpm-pagestore` を `tpm infra run tpm-pagestore --` で打ち、新しい image の名で「起こす」の 1 行を打って「確かめる」をする（volume はそのまま付く）。
-4. 古い image は `container image delete` で消す。
-
-build の段の `rust` の image を上げる時は、pagetray の `rust-toolchain.toml` と同じ版の alpine を選び、pagetray の `Containerfile` の tag と digest を合わせて直す PR を、pagetray の repo に出す（tag は rebuild で中身が替わるので、digest まで書く）。
+1. pagetray の `CHANGELOG.md` で、口の版が変わるか・移行の SQL が足されるかを見る。
+2. 【ask-tpm】で止める時を決める。
+3. pagetray の README の「版を上げる」のとおりに、DB の写しを取り、container を作り直して、確かめる（volume はそのまま付く）。
+4. `tpm page` が「口の版が違う」と言って止まる時は、置き場の版とこの repo の版（`.pagetray-version`）が合っていない。どちらかが古いので、合わせる。
 
 ### ほかの project で使う
 
-置き場は Mac に 1 つで、どの project の担当も同じ置き場を使う（一覧の UI では project で絞れる）。ほかの project で TPM 担当を起こすときも、その project の `.claude/roles/config.jsonc` に、この repo と同じ `infra.tpm-pagestore` の宣言を写す（写さないと、その project の担当は止める命令を断りなく打てる。[設定](/configuration/#環境の手続き)）。
+置き場は Mac に 1 つで、どの project の担当も同じ置き場を使う（一覧の UI では project で絞れる）。ほかの project で TPM 担当を起こすときも、その project の `.claude/roles/config.jsonc` に、この repo と同じ `infra.pagetray` の宣言を写す（写さないと、その project の担当は止める命令を断りなく打てる。[設定](/configuration/#環境の手続き)）。
+
+### 前の置き場（tpm-pagestore）
+
+pagetray に分ける前の container `tpm-pagestore`（image `tpm-pagestore:a8bdb88`・volume `tpm-pagestore-data`）は、入れ替えた後も、戻す先として止めたまま残してある。**起こさない**（同じ port を取り合い、古い DB を見せてしまう）。Mac を起こし直した後に起こすのは `pagetray`。消すのは、TPM 担当に聞いてから（`tpm infra run tpm-pagestore -- …`）。消したら、設定の `tpm-pagestore` の宣言と、この節を消す。

@@ -55,7 +55,7 @@ TPM 担当を起こした folder（project）に置くと、道具の選び方�
 
 ```text
 ai/                               ← ここで tpm start（設定は任意）
-├── skills/.claude/roles/config.jsonc     { "tracker": "jira", "infra": { "tpm-pagestore": … } }
+├── skills/.claude/roles/config.jsonc     { "tracker": "jira", "infra": { "pagetray": … } }
 ├── web/.claude/roles/config.jsonc        { "tracker": "github", "skill-sets": ["dependabot"] }
 └── notes/                                （設定が無い folder は集めない）
 ```
@@ -76,11 +76,11 @@ ai/                               ← ここで tpm start（設定は任意）
 TPM 担当の宛先: workspace:1
 設定（この folder と直下の folder を合わせた物）:
 - この folder  /path/to/ai/.claude/roles/config.jsonc（無い）
-- skills  課題管理: jira・infra: tpm-pagestore
+- skills  課題管理: jira・infra: pagetray
 - web  課題管理: github・skill-sets: dependabot
 課題管理: Jira の Key（SKILLS-12 の形）→ jira（skills）／gh- の Key → github（web）／t- の Key → 記録しない
 連携: cmux（既定）
-infra: tpm-pagestore（skills）（手続きは tpm infra list）
+infra: pagetray（skills）（手続きは tpm infra list）
 名簿: 担当はいない
 ```
 
