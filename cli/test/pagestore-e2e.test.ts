@@ -49,7 +49,7 @@ describe.skipIf(URL === '')('cli と pagestore のつなぎ', () => {
     for (const kind of PAGE_KINDS) expect(s.list(s.tpm, { kind })).toHaveLength(ROLE_NAMES.length);
   });
 
-  test('TPM 担当が置くと役割は tpm。居場所・鍵・語で絞れ、時刻の順に並ぶ', () => {
+  test('TPM 担当が置くと役割は tpm。居場所・Key・語で絞れ、時刻の順に並ぶ', () => {
     const s = setup();
     s.tpm.state.write('tpm.jsonc', { address: 'workspace:7' });
     const brief = s.put(s.tpm, 'brief', '<title>依頼書</title><p>絞り込みを作る</p>', 'K-2');

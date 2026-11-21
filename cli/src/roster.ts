@@ -1,5 +1,5 @@
-// 名簿: 課題の鍵 → 担当（どの役割で・どこで動き・どの依頼書を受けているか）。状態の folder の roles/ に 1 人 1 ファイル。
-// 名簿は「鍵 → 宛先」を覚えるだけで、動いているかは毎回、連携の道具に聞く（名簿だけを信じない）。
+// 名簿: 課題の Key → 担当（どの役割で・どこで動き・どの依頼書を受けているか）。状態の folder の roles/ に 1 人 1 ファイル。
+// 名簿は「Key → 宛先」を覚えるだけで、動いているかは毎回、連携の道具に聞く（名簿だけを信じない）。
 import type { Context } from './context.ts';
 import type { RoleName, RoleSettings } from './protocol.ts';
 import { TpmError } from './skill-sets.ts';
@@ -14,7 +14,7 @@ export interface RoleRecord extends RoleSettings {
   addDirs: string[]
   /** いちばん新しい依頼書の URL。 */
   brief?: string
-  /** 課題管理の課題の鍵（あれば）。 */
+  /** 課題管理の課題の Key（あれば）。 */
   issue?: string
   /** いちばん新しい課題の写しのページの URL（tpm assign が置く）。 */
   issuePage?: string
@@ -35,21 +35,21 @@ export interface TpmRecord {
 
 const KEY = /^[A-Za-z0-9][A-Za-z0-9#._/-]*$/;
 
-/** 鍵をファイルの名にする（<repo>#<PR> の # と / を替える）。 */
+/** Key をファイルの名にする（<repo>#<PR> の # と / を替える）。 */
 const fileOf = (key: string): string => `roles/${key.replaceAll(/[^A-Za-z0-9._-]/g, '_')}.jsonc`;
 
-/** 課題管理の課題が無いときの鍵の形（`t-` と英小文字・数字 4 文字。tpm key が作る）。 */
+/** 課題管理の課題が無いときの Key の形（`t-` と英小文字・数字 4 文字。tpm key が作る）。 */
 export const LOCAL_KEY = /^t-[a-z0-9]{4}$/;
 
-/** 課題の鍵が、使ってよい字（英数字と # . _ / -）だけかを見る。違えば止める。 */
+/** 課題の Key が、使ってよい字（英数字と # . _ / -）だけかを見る。違えば止める。 */
 export function assertKey(key: string): void {
-  if (!KEY.test(key)) throw new TpmError(`課題の鍵は英数字と # . _ / - だけにしてください: ${key}`);
+  if (!KEY.test(key)) throw new TpmError(`課題の Key は英数字と # . _ / - だけにしてください: ${key}`);
 }
 
-/** 鍵の担当を名簿から読む。いなければ undefined。 */
+/** Key の担当を名簿から読む。いなければ undefined。 */
 export const readRole = (ctx: Context, key: string): RoleRecord | undefined => ctx.state.read<RoleRecord>(fileOf(key));
 
-/** 鍵の担当を名簿から読む。いなければ止める。 */
+/** Key の担当を名簿から読む。いなければ止める。 */
 export function requireRole(ctx: Context, key: string): RoleRecord {
   const record = readRole(ctx, key);
   if (record === undefined) throw new TpmError(`名簿に担当がいません: ${key}（tpm roles で名簿を見る）`);

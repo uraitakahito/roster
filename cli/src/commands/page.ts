@@ -22,7 +22,7 @@ export const DEFAULT_PAGES_URL = 'http://127.0.0.1:8801';
 /** 前の置き場（Nginx）の URL。前に置いたページの URL も、読む時は受ける。 */
 export const LEGACY_PAGES_URLS = ['http://127.0.0.1:8800'];
 
-/** 課題の鍵として folder の名にしてよい字（path の外へ出ないように）。 */
+/** 課題の Key として folder の名にしてよい字（path の外へ出ないように）。 */
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 /** 控えの folder の中の、project の folder の名にある字（状態の folder の名は - で始まる）。 */
 const PROJECT = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
@@ -47,7 +47,7 @@ export interface PageRecord {
   /** 置いた時刻（UTC の ISO）。 */
   created_at: string
   size: number
-  /** 置き場の中の path（`/<project>/<鍵>/<種類>-<番号>.html`）。 */
+  /** 置き場の中の path（`/<project>/<Key>/<種類>-<番号>.html`）。 */
   path: string
 }
 
@@ -62,7 +62,7 @@ export function pagesUrl(env: NodeJS.ProcessEnv): string {
   return (env.TPM_PAGES_URL || DEFAULT_PAGES_URL).replace(/\/+$/, '');
 }
 
-/** URL が置き場（今の URL か、前の置き場の URL）のページを指していれば、置き場の中の path（`<project>/<鍵>/<file>`）。違えば undefined。 */
+/** URL が置き場（今の URL か、前の置き場の URL）のページを指していれば、置き場の中の path（`<project>/<Key>/<file>`）。違えば undefined。 */
 function inStore(env: NodeJS.ProcessEnv, url: string): string | undefined {
   const base = [pagesUrl(env), ...LEGACY_PAGES_URLS].find(b => url.startsWith(`${b}/`));
   return base === undefined ? undefined : url.slice(base.length + 1);
@@ -71,7 +71,7 @@ function inStore(env: NodeJS.ProcessEnv, url: string): string | undefined {
 /** URL が置き場のページを指しているか。 */
 export const isPageUrl = (env: NodeJS.ProcessEnv, url: string): boolean => inStore(env, url) !== undefined;
 
-/** 課題の鍵のページの控えを置く folder（`<控えの folder>/<状態の folder の名>/<鍵>`）。 */
+/** 課題の Key のページの控えを置く folder（`<控えの folder>/<状態の folder の名>/<Key>`）。 */
 export const pageFolder = (ctx: Context, key: string): string => join(pagesDir(ctx.env), basename(ctx.state.dir), key);
 
 /** 置き場に curl で頼む。答えの本文と HTTP の code を返す（つながらなければ code は 000）。 */
@@ -104,9 +104,9 @@ function selfAddress(ctx: Context): string {
 }
 
 /**
- * ページを置く。置き場が番号を決めて DB に持ち、`<控えの folder>/<状態の folder の名>/<鍵>/<種類>-<番号>.html` に控えを写して URL を返す。
+ * ページを置く。置き場が番号を決めて DB に持ち、`<控えの folder>/<状態の folder の名>/<Key>/<種類>-<番号>.html` に控えを写して URL を返す。
  * project の名を状態の folder の名にするのは、起こされた担当も $TPM_STATE で同じ folder を受け取り、TPM 担当と名がずれないため。
- * 鍵は --key、無ければ $TPM_KEY（担当）。置き直すと次の番号になり、前の版は残る。置き場が応えなければ置けない。
+ * Key は --key、無ければ $TPM_KEY（担当）。置き直すと次の番号になり、前の版は残る。置き場が応えなければ置けない。
  */
 export function pagePut(ctx: Context, file: string, options: { kind: string, key?: string }): string[] {
   if (!(PAGE_KINDS as readonly string[]).includes(options.kind)) throw new TpmError(`--kind は ${PAGE_KINDS.join('・')} のどれかにしてください`);
@@ -118,8 +118,8 @@ export function pagePut(ctx: Context, file: string, options: { kind: string, key
 /** file の中身か字をページとして置き、控えの path と URL を返す（pagePut と、tpm assign の課題の写し）。 */
 export function putPage(ctx: Context, source: { file: string } | { text: string }, kind: PageKind, keyOption?: string): { path: string, url: string } {
   const key = keyOption ?? ctx.env.TPM_KEY;
-  if (!key) throw new TpmError('課題の鍵がわかりません。TPM 担当は --key <鍵> を付けてください');
-  if (!KEY.test(key)) throw new TpmError(`課題の鍵に使えない字があります: ${key}`);
+  if (!key) throw new TpmError('課題の Key がわかりません。TPM 担当は --key <Key> を付けてください');
+  if (!KEY.test(key)) throw new TpmError(`課題の Key に使えない字があります: ${key}`);
   const query = new URLSearchParams({
     project: basename(ctx.state.dir),
     key,
@@ -223,7 +223,7 @@ export function pageList(ctx: Context, options: PageListOptions): string[] {
   return pages.map(p => [p.created_at, p.key, `${p.kind}-${p.n}`, p.role, p.workspace === '' ? '-' : p.workspace, p.url, p.title].join('  '));
 }
 
-/** 控えの folder にあるページ（`<project>/<鍵>/<種類>-<番号>.html`）を並べる。 */
+/** 控えの folder にあるページ（`<project>/<Key>/<種類>-<番号>.html`）を並べる。 */
 function cached(dir: string): { project: string, key: string, kind: string, n: string, file: string }[] {
   const folders = (path: string): string[] => existsSync(path) ? readdirSync(path, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name) : [];
   return folders(dir).filter(project => PROJECT.test(project)).flatMap(project =>

@@ -122,7 +122,7 @@ describe('assign', () => {
     expect(readRole(w.tpm, 't-x7k2')).toBeUndefined();
   });
 
-  test('動いている担当の鍵では起こさない。居場所が消えていれば起こし直す', () => {
+  test('動いている担当の Key では起こさない。居場所が消えていれば起こし直す', () => {
     const w = world();
     assign(w.tpm, 't-x7k2', SE);
     expect(() => assign(w.tpm, 't-x7k2', { role: 'software-engineer', wait: 0 })).toThrow(/t-x7k2 の担当はもう動いています（file:1）。新しい依頼書を --brief で/);
@@ -131,18 +131,18 @@ describe('assign', () => {
     expect(assign(w.tpm, 't-x7k2', SE)[0]).toMatch(/^起こし直した: .*file:2/);
   });
 
-  test('この project の課題管理の鍵でない課題は断る', () => {
-    expect(() => assign(world().tpm, 't-x7k2', { ...SE, issue: 'SKILLS-12' })).toThrow(/課題管理（none）の鍵ではありません/);
+  test('この project の課題管理の Key でない課題は断る', () => {
+    expect(() => assign(world().tpm, 't-x7k2', { ...SE, issue: 'SKILLS-12' })).toThrow(/課題管理（none）の Key ではありません/);
     const w = world({ tracker: 'github' });
     assign(w.tpm, 'gh-12', { ...SE, issue: 'gh-12' });
     expect(requireRole(w.tpm, 'gh-12').issue).toBe('gh-12');
   });
 
-  test('鍵に空白などは使えない', () => {
+  test('Key に空白などは使えない', () => {
     expect(() => assign(world().tpm, 't x', SE)).toThrow(TpmError);
   });
 
-  test('t- の鍵は t- と英小文字・数字 4 文字だけ。課題管理の鍵・devops・<repo>#<PR> は問わない', () => {
+  test('t- の Key は t- と英小文字・数字 4 文字だけ。課題管理の Key・devops・<repo>#<PR> は問わない', () => {
     for (const key of ['t-jsonc-check', 't-abc', 't-abcde', 't-AB12']) {
       expect(() => assign(world().tpm, key, SE)).toThrow(/t- と英小文字・数字 4 文字にしてください（tpm key で作る）/);
     }
@@ -152,7 +152,7 @@ describe('assign', () => {
     expect(assign(w.tpm, 'app#12', { role: 'sustaining-engineer', wait: 0 })[0]).toMatch(/^起こした: Sustaining app#12（/);
   });
 
-  test('名簿にある前の決まりの長い鍵は、そのまま【brief】を送れ、起こし直せる', () => {
+  test('名簿にある前の決まりの長い Key は、そのまま【brief】を送れ、起こし直せる', () => {
     const w = world();
     writeRole(w.tpm, { key: 't-jsonc-check', role: 'software-engineer', title: 'Software Engineer t-jsonc-check: JSONC', cwd: w.project, addDirs: [], model: 'claude-opus-5-5', effort: 'medium', permissionMode: 'bypassPermissions' });
     expect(assign(w.tpm, 't-jsonc-check', SE)[0]).toMatch(/^起こし直した: SWE t-jsonc-check: 計画と実装/);
@@ -178,7 +178,7 @@ describe('newKey', () => {
     expect(newKey(tpm, sequence(0, 7, 8, 30))).toBe('t-29az');
   });
 
-  test('名簿の担当の鍵と、置き場にページの folder がある鍵は避ける', () => {
+  test('名簿の担当の Key と、置き場にページの folder がある Key は避ける', () => {
     const { tpm, pages } = setup();
     assign(tpm, 't-2222', SE);
     mkdirSync(join(pages, basename(tpm.state.dir), 't-3333'), { recursive: true });
@@ -188,7 +188,7 @@ describe('newKey', () => {
   test('100 回ぶつかれば止める', () => {
     const { tpm } = setup();
     assign(tpm, 't-2222', SE);
-    expect(() => newKey(tpm, () => 0)).toThrow(/使われていない鍵を 100 回で作れませんでした/);
+    expect(() => newKey(tpm, () => 0)).toThrow(/使われていない Key を 100 回で作れませんでした/);
   });
 });
 
@@ -199,7 +199,7 @@ describe('hello', () => {
     assign(w.tpm, 't-x7k2', { ...SE, model: 'claude-fable-5-2' });
     expect(hello(w.role('t-x7k2', 'file:1'))).toEqual([
       '役割: Software Engineer',
-      '課題の鍵: t-x7k2',
+      '課題の Key: t-x7k2',
       `依頼書: ${BRIEF}`,
       '課題管理の課題: 無し（道具: none）',
       'TPM 担当の宛先: file:tpm',
@@ -209,14 +209,14 @@ describe('hello', () => {
     expect(w.wire.status('file:1')).toEqual({ model: 'Fable 5.2 · medium', wait: '作業中: 依頼書を読む' });
   });
 
-  test('課題の鍵が Jira の形なら、課題管理が none でも中身の読み方を返す', () => {
+  test('課題の Key が Jira の形なら、課題管理が none でも中身の読み方を返す', () => {
     const w = world();
     hello(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
     assign(w.tpm, 'SKILLS-14', SE);
     expect(hello(w.role('SKILLS-14', 'file:1'))).toContain('課題の中身: tpm issue view SKILLS-14');
   });
 
-  test('名簿にいない鍵なら止まる', () => {
+  test('名簿にいない Key なら止まる', () => {
     expect(() => hello(world().role('t-nope', 'file:9'))).toThrow(/名簿に担当がいません: t-nope/);
   });
 
@@ -290,7 +290,7 @@ describe('run-role', () => {
     ]);
   });
 
-  test('担当に project・状態の folder・鍵・役割と、tpm の在り処を渡す', () => {
+  test('担当に project・状態の folder・Key・役割と、tpm の在り処を渡す', () => {
     const w = world();
     assign(w.tpm, 't-x7k2', SE);
     expect(roleEnv(requireRole(w.tpm, 't-x7k2'), '/p', '/s', '/r', { PATH: '/usr/bin', HOME: '/h' })).toEqual({

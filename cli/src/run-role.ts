@@ -1,4 +1,4 @@
-// tpm run-role <鍵> --project <folder> --state <folder>: 連携の道具が担当の居場所で動かす短い命令。名簿を読み、旗と環境変数を付けて claude を起こす。
+// tpm run-role <Key> --project <folder> --state <folder>: 連携の道具が担当の居場所で動かす短い命令。名簿を読み、旗と環境変数を付けて claude を起こす。
 // 起動の命令に長さの上限がある道具（cmux は 1,024 バイト）でも、model・skill セット・最初の入力を気にせず渡せる。
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
@@ -28,7 +28,7 @@ export function claudeArgs(record: RoleRecord, root: string): string[] {
   ];
 }
 
-/** 担当に渡す環境変数。担当の tpm は、これで project（設定）・状態の folder・自分の鍵を知る。PATH の頭に tpm の folder を足す。 */
+/** 担当に渡す環境変数。担当の tpm は、これで project（設定）・状態の folder・自分の Key を知る。PATH の頭に tpm の folder を足す。 */
 export function roleEnv(record: RoleRecord, project: string, state: string, root: string, env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return {
     ...env,

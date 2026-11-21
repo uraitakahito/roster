@@ -2,7 +2,7 @@
 import { TpmError } from '../skill-sets.ts';
 import type { Tracker, TrackerIssue } from './types.ts';
 
-/** 何もしない adapter。どの鍵も自分の物としない。 */
+/** 何もしない adapter。どの Key も自分の物としない。 */
 export class NoneTracker implements Tracker {
   owns(): boolean {
     return false;

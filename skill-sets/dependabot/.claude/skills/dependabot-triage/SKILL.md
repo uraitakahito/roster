@@ -72,7 +72,7 @@ node "${CLAUDE_SKILL_DIR}/../../../../../cli/src/release-age.ts" <config.owner>/
 4. 同じ組の中は eligibleAt の古い順。
 5. 同じ repo の PR は 1 本ずつ（lockfile がぶつかる）。2 本目は 1 本目の merge の後に起こす。
 
-起こす 1 行（`<cwd>` は `config.cwd`、無ければ `${CLAUDE_PROJECT_DIR}`）。鍵は `<repo>#<PR>`（`#` があるので引用する）:
+起こす 1 行（`<cwd>` は `config.cwd`、無ければ `${CLAUDE_PROJECT_DIR}`）。Key は `<repo>#<PR>`（`#` があるので引用する）:
 
 ```sh
 tpm assign "<repo>#<PR>" --role sustaining-engineer --cwd <cwd> \
@@ -97,7 +97,7 @@ Sustaining Engineer 担当から届くメッセージ:
 | 【ask-tpm】 | 答える（`tpm notify`）。Product Manager の判断が要るなら、Product Manager に聞いてから答える。 |
 | 【ask-pm】 | Product Manager に、確認のページの URL と項目を伝える（その場で開いて見せる時だけ `tpm show <URL>`）。答えを `tpm answer` で返す。 |
 | 【not-yet】 | 時間の【not-yet】なら表の「待ち」に戻し、その担当は 5 と同じに閉じる。`rebase に … 分応じない` の【not-yet】なら、もう一度待たせるか、worktree で `origin/main` を merge させるかを決めて返す。 |
-| 【recreated】 | group の PR が閉じて新しい番号で作り直された。表の行を新しい番号に替え、同じ Sustaining Engineer 担当に新しい番号で続けさせる（居場所の題は担当が替える。名簿の鍵は元の `<repo>#<旧>` のまま）。判定は変わらない。 |
+| 【recreated】 | group の PR が閉じて新しい番号で作り直された。表の行を新しい番号に替え、同じ Sustaining Engineer 担当に新しい番号で続けさせる（居場所の題は担当が替える。名簿の Key は元の `<repo>#<旧>` のまま）。判定は変わらない。 |
 | 【end】 | 5 へ。 |
 
 命令が「まだ届いていない」と返しても送り直さない（protocol.md の「連絡の仕方」）。
@@ -121,7 +121,7 @@ Sustaining Engineer 担当の手順（`${CLAUDE_SKILL_DIR}/../sustaining-enginee
 tpm close "<repo>#<PR>"
 ```
 
-鍵は起こしたときの番号（【recreated】の後も元の番号）。閉じた後、表の「待ち」に対象の PR があれば 3 に戻る。
+Key は起こしたときの番号（【recreated】の後も元の番号）。閉じた後、表の「待ち」に対象の PR があれば 3 に戻る。
 
 ## 終わったら
 

@@ -1,4 +1,4 @@
-// TPM 担当が打つ命令: 名乗る（tpmHello。tpm hello から呼ばれる）・名簿を見る（roles）・鍵を作る（newKey）・課題を担当に振る（assign）・閉じる（close）。
+// TPM 担当が打つ命令: 名乗る（tpmHello。tpm hello から呼ばれる）・名簿を見る（roles）・Key を作る（newKey）・課題を担当に振る（assign）・閉じる（close）。
 import { randomInt } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -43,13 +43,13 @@ export function roles(ctx: Context): string[] {
   })];
 }
 
-/** 鍵に使う字: 英小文字と数字から、読み違えやすい 0・o・1・l・i を除いた 31 字。 */
+/** Key に使う字: 英小文字と数字から、読み違えやすい 0・o・1・l・i を除いた 31 字。 */
 const SAFE_CHARS = [...'0123456789abcdefghijklmnopqrstuvwxyz'].filter(c => !'0o1li'.includes(c)).join('');
-/** 使われていない鍵を探す回数（31 の 4 乗 ≒ 92 万通りなので、まず 1 回目で見つかる）。 */
+/** 使われていない Key を探す回数（31 の 4 乗 ≒ 92 万通りなので、まず 1 回目で見つかる）。 */
 const KEY_TRIES = 100;
 
 /**
- * 課題管理の課題が無い課題の鍵を作る（`t-` と SAFE_CHARS の 4 文字）。名簿の担当とも、置き場のページの folder（前に使った鍵）ともぶつからない物を返す。
+ * 課題管理の課題が無い課題の Key を作る（`t-` と SAFE_CHARS の 4 文字）。名簿の担当とも、置き場のページの folder（前に使った Key）ともぶつからない物を返す。
  * pick は 0 以上 n 未満の整数を返す（試験で替える）。
  */
 export function newKey(ctx: Context, pick: (n: number) => number = randomInt): string {
@@ -57,7 +57,7 @@ export function newKey(ctx: Context, pick: (n: number) => number = randomInt): s
     const key = `t-${Array.from({ length: 4 }, () => SAFE_CHARS.charAt(pick(SAFE_CHARS.length))).join('')}`;
     if (readRole(ctx, key) === undefined && !existsSync(pageFolder(ctx, key))) return key;
   }
-  throw new TpmError(`使われていない鍵を ${KEY_TRIES} 回で作れませんでした`);
+  throw new TpmError(`使われていない Key を ${KEY_TRIES} 回で作れませんでした`);
 }
 
 /** `tpm assign` の旗。 */
@@ -80,16 +80,16 @@ export interface AssignOptions {
 }
 
 /**
- * 課題を担当に振る。同じ鍵の担当が動いていれば、その担当に【brief】で新しい依頼書を送る（背景を知っているため）。
+ * 課題を担当に振る。同じ Key の担当が動いていれば、その担当に【brief】で新しい依頼書を送る（背景を知っているため）。
  * いなければ（居場所が消えていても）起こし、名乗るまで待つ。
  */
 export function assign(ctx: Context, key: string, options: AssignOptions): string[] {
   assertKey(key);
   if (!Number.isFinite(options.wait) || options.wait < 0) throw new TpmError('--wait は 0 以上の数にしてください（0 なら待たない）');
   const existing = readRole(ctx, key);
-  // 名簿にある担当（前の決まりの長い鍵を含む）は、そのまま動き続けられるよう形を問わない。
+  // 名簿にある担当（前の決まりの長い Key を含む）は、そのまま動き続けられるよう形を問わない。
   if (existing === undefined && key.startsWith('t-') && !LOCAL_KEY.test(key)) {
-    throw new TpmError(`課題管理の課題が無いときの鍵は、t- と英小文字・数字 4 文字にしてください（tpm key で作る）: ${key}`);
+    throw new TpmError(`課題管理の課題が無いときの Key は、t- と英小文字・数字 4 文字にしてください（tpm key で作る）: ${key}`);
   }
   if (existing?.address !== undefined && ctx.transport.seats().some(s => s.address === existing.address)) {
     if (options.brief === undefined) throw new TpmError(`${key} の担当はもう動いています（${existing.address}）。新しい依頼書を --brief で渡してください`);
@@ -98,7 +98,7 @@ export function assign(ctx: Context, key: string, options: AssignOptions): strin
     return brief(ctx, existing, options.brief, options.note);
   }
   if (options.issue !== undefined && !ctx.tracker.owns(options.issue)) {
-    throw new TpmError(`${options.issue} は、この project の課題管理（${ctx.config.tracker}）の鍵ではありません`);
+    throw new TpmError(`${options.issue} は、この project の課題管理（${ctx.config.tracker}）の Key ではありません`);
   }
   // 新しい担当（交代を含む）は背景を知らないので、依頼書に課題の概要の節を求める。続きの【brief】には求めない。
   if (options.brief !== undefined) assertSummary(ctx, key, options.brief);
@@ -132,7 +132,7 @@ export function assign(ctx: Context, key: string, options: AssignOptions): strin
 }
 
 /**
- * 課題の写し（名簿に書く欄）。読める形の鍵なら写しを置いて URL を、--no-issue-copy ならその訳を返す。読める形でなければ空。
+ * 課題の写し（名簿に書く欄）。読める形の Key なら写しを置いて URL を、--no-issue-copy ならその訳を返す。読める形でなければ空。
  * 前の写しの欄は、どちらかに上書きするため両方を返す（undefined は消す）。
  */
 function issueCopy(ctx: Context, issueKey: string, roleKey: string, skip: string | undefined): Pick<RoleRecord, 'issuePage' | 'issueCopySkipped'> {

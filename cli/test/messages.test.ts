@@ -40,7 +40,7 @@ describe('1 つの課題の 1 周（課題管理なし）', () => {
     ]);
     expect(waitOf(w, 'file:1')).toBe('回答待ち(TPM): 次の依頼');
 
-    // 同じ鍵に振ると、起こさずに同じ担当へ【brief】が行く
+    // 同じ Key に振ると、起こさずに同じ担当へ【brief】が行く
     expect(assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: 'https://claude.ai/artifact/b2', note: '計画の実装', wait: 0 })).toEqual(['送った: 【brief】→ file:1（届いた）']);
     expect(requireRole(w.tpm, 't-x7k2').brief).toBe('https://claude.ai/artifact/b2');
     expect(w.wire.seats()).toHaveLength(1);

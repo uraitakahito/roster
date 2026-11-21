@@ -23,11 +23,11 @@ export function hello(ctx: Context, options: { model?: string, effort?: string }
   ctx.transport.setStatus('model', modelStatus(record.model, record.effort));
   ctx.transport.setStatus('wait', WAIT.work('依頼書を読む'));
   writeRole(ctx, record);
-  // 課題の鍵が Jira か GitHub の Issue の形なら、課題管理の設定によらず中身を読める。
+  // 課題の Key が Jira か GitHub の Issue の形なら、課題管理の設定によらず中身を読める。
   const issueKey = record.issue ?? record.key;
   return [
     `役割: ${ROLES[record.role].label}`,
-    `課題の鍵: ${record.key}`,
+    `課題の Key: ${record.key}`,
     `依頼書: ${record.brief ?? '無し（【brief】を待つ）'}`,
     `課題管理の課題: ${record.issue ?? '無し'}（道具: ${ctx.config.tracker}）`,
     ...[issueCopyLine(record)].filter(v => v !== undefined),

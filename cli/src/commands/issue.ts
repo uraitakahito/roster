@@ -1,5 +1,5 @@
 // 課題管理の課題の中身を読む（tpm issue view）。どの担当も打つ。
-// 読むだけで記録を書かないので、設定の tracker が none の project でも、鍵の形で道具を選んで読む。
+// 読むだけで記録を書かないので、設定の tracker が none の project でも、Key の形で道具を選んで読む。
 import type { Context } from '../context.ts';
 import { TpmError } from '../skill-sets.ts';
 import { GithubTracker } from '../tracker/github.ts';
@@ -7,7 +7,7 @@ import { JiraTracker } from '../tracker/jira.ts';
 import type { Tracker, TrackerComment, TrackerIssue } from '../tracker/types.ts';
 import { putPage } from './page.ts';
 
-/** 鍵を読める道具。設定の道具が持つ鍵ならそれ、無ければ鍵の形で選ぶ（Jira が先。t- の鍵はどれも持たない）。 */
+/** Key を読める道具。設定の道具が持つ Key ならそれ、無ければ Key の形で選ぶ（Jira が先。t- の Key はどれも持たない）。 */
 export function issueTracker(ctx: Context, key: string): Tracker | undefined {
   return [ctx.tracker, new JiraTracker(ctx.exec), new GithubTracker(ctx.exec, ctx.project)].find(t => t.owns(key));
 }
@@ -21,18 +21,18 @@ function commentHead(c: TrackerComment, i: number): string {
   return `--- コメント ${i + 1}${by.length === 0 ? '' : `（${by.join('・')}）`}`;
 }
 
-/** 課題を読む。読める道具が無い鍵・読めなかったときは、直し方を添えて止まる。 */
+/** 課題を読む。読める道具が無い Key・読めなかったときは、直し方を添えて止まる。 */
 function readIssue(ctx: Context, key: string): TrackerIssue {
   const tracker = issueTracker(ctx, key);
   if (tracker === undefined) {
-    throw new TpmError(`${key} は課題管理の課題の鍵ではありません（Jira は SKILLS-12、GitHub の Issue は gh-12 の形）。t- の鍵の課題の中身は依頼書にあります`);
+    throw new TpmError(`${key} は課題管理の課題の Key ではありません（Jira は SKILLS-12、GitHub の Issue は gh-12 の形）。t- の Key の課題の中身は依頼書にあります`);
   }
   try {
     return tracker.view(key);
   }
   catch (e) {
     if (!(e instanceof TpmError)) throw e;
-    throw new TpmError(`${e.message}\n鍵が正しいかと、認証を ${authCheck(tracker)} で確かめてください。認証が無ければ、tpm ask tpm で Product Manager に login を頼んでください`);
+    throw new TpmError(`${e.message}\nKey が正しいかと、認証を ${authCheck(tracker)} で確かめてください。認証が無ければ、tpm ask tpm で Product Manager に login を頼んでください`);
   }
 }
 
@@ -81,8 +81,8 @@ export function issuePage(issue: TrackerIssue, at: Date): string {
 }
 
 /**
- * 課題の写しのページを置き、URL を返す（tpm assign）。issueKey が読める形でなければ（t- の鍵・Dependabot の PR）何もせず undefined。
- * 読めなければ、--no-issue-copy で抜けられることを添えて止まる。ページは担当の鍵（roleKey）の folder に置く。
+ * 課題の写しのページを置き、URL を返す（tpm assign）。issueKey が読める形でなければ（t- の Key・Dependabot の PR）何もせず undefined。
+ * 読めなければ、--no-issue-copy で抜けられることを添えて止まる。ページは担当の Key（roleKey）の folder に置く。
  */
 export function copyIssue(ctx: Context, issueKey: string, roleKey: string): string | undefined {
   if (issueTracker(ctx, issueKey) === undefined) return undefined;

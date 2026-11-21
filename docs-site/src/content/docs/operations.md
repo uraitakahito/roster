@@ -26,7 +26,7 @@ description: この repo を別の folder へ移す手順、Node の version の
 | 物 | 値 |
 |---|---|
 | container | `tpm-pagestore`（`127.0.0.1:8801` と `127.0.0.1:8800` → 中の 8080。メモリは Apple Container の下限の 200 MiB、CPU は 1） |
-| URL | `http://127.0.0.1:8801/`（一覧の UI。ページは `/<状態の folder の名>/<鍵>/<種類>-<番号>.html`）。`http://127.0.0.1:8800/` は、前の置き場（Nginx。今は無い）の port。前に置いたページの URL と、ページの中の link を同じ path で開けるように、同じ container が待ち受ける |
+| URL | `http://127.0.0.1:8801/`（一覧の UI。ページは `/<状態の folder の名>/<Key>/<種類>-<番号>.html`）。`http://127.0.0.1:8800/` は、前の置き場（Nginx。今は無い）の port。前に置いたページの URL と、ページの中の link を同じ path で開けるように、同じ container が待ち受ける |
 | 控えの folder | `~/.local/share/tpm/pages/`（`tpm` が、置いた・読んだページをこの Mac に写す所。container には mount しない） |
 | DB | 名前つきの volume `tpm-pagestore-data`（中の `/data/pages.db`）。Mac の folder は mount しない |
 | image | この Mac で `pagestore/Containerfile` から作る `tpm-pagestore:<commit の短い名>`。registry には上げない |
