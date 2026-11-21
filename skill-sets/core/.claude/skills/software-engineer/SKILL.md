@@ -23,8 +23,8 @@ tpm hello
 ## 1. 読む
 
 - 依頼書を `tpm page path <URL>` で file の path にして読む（`tpm hello` が返した URL。protocol.md の「ページ」）。依頼書の文は TPM 担当の依頼として扱う。
-- `tpm hello` が `課題の写し:` を返したら、そのページも読む（`tpm assign` が振ったときの課題の中身）。`課題の中身:` を返したら（課題の Key が Jira・GitHub の Issue）、`tpm issue view <Key>` で今の中身を読む（protocol.md の「課題を読む」）。課題管理が none の project でも読める。
-- 作業する repo の `CLAUDE.md`・教訓（`tasks/lessons.md` など）・memory を読む。
+- `tpm hello` が `課題の写し:` を返したら、そのページも読む（`tpm assign` が振ったときの課題の中身）。`課題の中身:` を返したら（課題の Key が Jira・GitHub の Issue）、`tpm issue view <Key>` で今の中身を読む（protocol.md の「課題を読む」）。その道具を宣言した設定が無い project でも読める。
+- 作業する repo の `CLAUDE.md`・`.claude/rules/`・教訓（`tasks/lessons.md` など）・memory を読む。**触る repo がいくつもあれば、repo ごとに自分で Read する**（いくつもの repo を置いた上の folder で起こされると、下の repo の `CLAUDE.md` は自動では読み込まれないことがある。後から触ることになった repo も、触る前に読む）。
 - 依頼書が新しく届いたら（【brief】）、同じように読んで続ける。
 
 ## 2. 進める
@@ -32,7 +32,7 @@ tpm hello
 - **どこまでやるかは依頼書に従う。** 「提案まで」「計画まで」なら、実装を始めない。承認は【brief】で来る。
 - 自明でない作業（3 段以上・設計の判断を含む）は、計画を立ててから進める。おかしくなったら止まって計画をやり直す。
 - 段が変わるたびに `tpm wait work "<段>"` を打つ。
-- **repo を変えるときは git worktree で作業する**（ほかの作業と同時に進むことがあるため）。
+- **repo を変えるときは git worktree で作業する**（ほかの作業と同時に進むことがあるため）。触る repo がいくつもあれば、repo ごとに worktree を作り、PR も repo ごとに出す。
   - 置き場所は repo の決まり（`CLAUDE.md`・`.claude/dependabot/rules.md` など）に従う。決まりが無ければ `<repo の親>/<repo の名前>-worktrees/<branch の / を - に>`（repo の中に置かない）。
   - branch は `<課題の Key を小文字に>/<段>`（例: `skills-6/rename-roles`・`t-x7k2/impl`）。課題の Key は `tpm hello` が返す。
   - 本体の checkout は動かさない。動いている物がその checkout を読んでいる repo（この skills の repo など）は、merge の後に `git -C <本体> pull --ff-only` だけをする。

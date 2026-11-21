@@ -25,7 +25,7 @@ tpm infra list
 
 - 依頼書を `tpm page path <URL>` で file の path にして読み（protocol.md の「ページ」）、どこまでやるかに従う。依頼が続けて来たら、同じ居場所で 1 つずつ受ける。
 - `tpm hello` が `課題の写し:` を返したら、そのページも読む。`課題の中身:` を返したら、`tpm issue view <Key>` で今の中身を読む（protocol.md の「課題を読む」）。
-- 作業する repo の `CLAUDE.md`・教訓・memory と、環境の手順書を先に読む。
+- 作業する repo の `CLAUDE.md`・`.claude/rules/`・教訓・memory と、環境の手順書を先に読む。触る repo がいくつもあれば、repo ごとに自分で Read する（上の folder で起こされると、下の repo の `CLAUDE.md` は自動では読み込まれないことがある）。
 - 環境を変える前に、その環境の手続きを見る（protocol.md の「共有の環境」）:
   - **TPM に相談**（並べて動いている担当が困る。動いている container や worker を止める・消す・作り直す、共有の volume・network・secret を変える）: 先に `tpm ask tpm` で何が止まるかとお勧めを送り、答えを待つ。
   - **PM の承認**（ほかの人やチームが困る）: 何を・なぜ・何が止まるか・戻し方を確認のページに書き、`tpm ask pm` で送る。【answer】で承認が来るまで変えない。承認は時間を限って効くので、切れたら頼み直す。
