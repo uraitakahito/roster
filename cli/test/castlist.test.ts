@@ -270,6 +270,7 @@ describe('名の決まり', () => {
     ['roster#12', 'sustaining-engineer', 'roster-12-sus'],
     ['AI-12', 'software-engineer', 'ai-12-swe'],
     ['audit', 'auditor', 'audit-audit'],
+    ['AI-12', 'staff-engineer', 'ai-12-staff'],
   ])('担当の名の接頭辞: %s・%s → %s', (key, role, prefix) => {
     expect(seatPrefix(key, role)).toBe(prefix);
   });
