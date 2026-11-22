@@ -51,7 +51,7 @@ function asked(config: Record<string, unknown> = {}, issue?: string): Seats & { 
 const texts = (w: World, address: string): string[] => w.wire.inbox(address).map(m => m.text);
 
 describe('tpm ask review', () => {
-  test('TPM 担当に【ask-review】を送り、頼みを reviews.jsonl に書き、状態を回答待ちにする', () => {
+  test('TPM 担当に【ask-review】を送り、頼みを記録に書き、状態を回答待ちにする', () => {
     const w = started();
     expect(askReview(w.se, { url: w.plan, focus: '名簿の Key の決め方' })).toEqual(['送った: 【ask-review】→ file:tpm（届いた）', '状態: 回答待ち(TPM): レビュー']);
     expect(texts(w, 'file:tpm')).toEqual([`【ask-review】#1 ${w.plan} 見てほしい所: 名簿の Key の決め方`]);
@@ -115,8 +115,89 @@ describe('tpm assign --role staff-engineer（頼みから起こす）', () => {
   });
 });
 
+describe('頼みと依頼書を取り違えない', () => {
+  /** 頼み #1 を Staff が見ている間に、課題の担当が PR のレビュー（#2）を頼んだ世界。 */
+  function second(): ReturnType<typeof asked> {
+    const w = asked();
+    w.se.now = () => new Date('2026-11-20T12:10:00.000Z');
+    askReview(w.se, { url: PR });
+    w.wire.inbox('file:tpm');
+    return w;
+  }
+
+  test('--after で渡した 2 つ目の頼みは、1 つ目のレビューでは閉じない。2 つ目も返せる', () => {
+    const w = second();
+    assign(w.tpm, 'AI-8', { ...STAFF, after: true });
+    w.staff.now = () => new Date('2026-11-20T12:20:00.000Z');
+    const first = w.put(w.staff, 'review');
+    reportReview(w.staff, { url: first, verdict: 'reject', summary: '依頼と違う' });
+    expect(texts(w, 'file:tpm').at(-1)).toMatch(/／頼み: #1$/);
+    expect(readReviews(w.tpm).map(r => [r.n, r.verdict])).toEqual([[1, 'reject'], [2, undefined]]);
+    w.staff.now = () => new Date('2026-11-20T12:30:00.000Z');
+    reportReview(w.staff, { url: w.put(w.staff, 'review'), verdict: 'approve', summary: 'よい' });
+    expect(texts(w, 'file:tpm').at(-1)).toMatch(/／頼み: #2$/);
+    expect(readReviews(w.tpm).map(r => [r.n, r.verdict, r.page === first])).toEqual([[1, 'reject', true], [2, 'approve', false]]);
+    // 済んでいない依頼書は残らない（次の頼みを、旗なしで渡せる）
+    w.se.now = () => new Date('2026-11-20T12:40:00.000Z');
+    askReview(w.se, { url: w.put(w.se, 'plan') });
+    w.wire.inbox('file:tpm');
+    expect(assign(w.tpm, 'AI-8', STAFF)).toEqual(['送った: 【brief】→ file:2（届いた）']);
+  });
+
+  test('--supersede で取り消した依頼書の頼みは、新しい依頼書に入れ直す', () => {
+    const w = second();
+    assign(w.tpm, 'AI-8', { ...STAFF, supersede: true });
+    const [one, two] = readReviews(w.tpm);
+    expect(one?.brief).toMatch(/brief-2\.html$/);
+    expect(two?.brief).toBe(one?.brief);
+    w.staff.now = () => new Date('2026-11-20T12:20:00.000Z');
+    reportReview(w.staff, { url: w.put(w.staff, 'review'), verdict: 'concerns', summary: '2 つとも見た' });
+    expect(texts(w, 'file:tpm').at(-1)).toMatch(/／頼み: #1 #2$/);
+  });
+
+  test('【ask-review】を送れなかった回は、頼みを書かない（打ち直せる）', () => {
+    const w = started();
+    w.tpm.state.remove('tpm.jsonc');
+    expect(() => askReview(w.se, { url: w.plan })).toThrow(/TPM 担当の宛先がありません/);
+    expect(readReviews(w.tpm)).toEqual([]);
+    hello(w.tpm, TPM);
+    expect(askReview(w.se, { url: w.plan })[0]).toBe('送った: 【ask-review】→ file:tpm（届いた）');
+    expect(readReviews(w.tpm).map(r => r.n)).toEqual([1]);
+  });
+
+  test('居る席への【brief】を送れなかった回は、頼みを依頼書にした事にしない（打ち直せる）', () => {
+    const w = asked();
+    reportReview(w.staff, { url: w.put(w.staff, 'review'), verdict: 'approve', summary: 'よい' });
+    w.se.now = () => new Date('2026-11-20T12:10:00.000Z');
+    askReview(w.se, { url: PR });
+    w.wire.inbox('file:tpm');
+    const send = w.tpm.transport.send.bind(w.tpm.transport);
+    w.tpm.transport.send = () => {
+      throw new Error('送れない');
+    };
+    expect(() => assign(w.tpm, 'AI-8', STAFF)).toThrow('送れない');
+    expect(readReviews(w.tpm)[1]?.brief).toBeUndefined();
+    w.tpm.transport.send = send;
+    expect(assign(w.tpm, 'AI-8', STAFF)).toEqual(['送った: 【brief】→ file:2（届いた）']);
+  });
+
+  test('頼みの番号は、同じ番号の file を「在れば失敗」で作って決める（同時に頼んでも重ならない）', () => {
+    const w = started();
+    // 別の担当が、番号を読んだ後・書く前に #1 を取った形
+    w.tpm.state.write('reviews/1.jsonc', { n: 1, key: 't-a3b4', url: PR, by: 'SWE t-a3b4', askedAt: '2026-11-20T11:59:00.000Z' });
+    askReview(w.se, { url: w.plan });
+    expect(readReviews(w.tpm).map(r => [r.n, r.key])).toEqual([[1, 't-a3b4'], [2, 'AI-8']]);
+  });
+
+  test('別の課題のレビューのページでは返せない', () => {
+    const w = asked();
+    const other = w.put(w.staff, 'review').replace('/AI-8/', '/AI-9/');
+    expect(() => reportReview(w.staff, { url: other, verdict: 'approve', summary: 'x' })).toThrow(/AI-8 のレビューのページにしてください/);
+  });
+});
+
 describe('tpm report review', () => {
-  test('TPM 担当に【review】を送り、判定を reviews.jsonl に書き、次のレビューを待つ', () => {
+  test('TPM 担当に【review】を送り、判定を記録に書き、次のレビューを待つ', () => {
     const w = asked();
     const page = w.put(w.staff, 'review');
     expect(page).toMatch(/\/AI-8\/review-1\.html$/);
@@ -172,6 +253,9 @@ describe('tpm review list', () => {
     hello(other);
     reportDone(other, { url: w.put(other, 'result'), kind: 'result', summary: '直した', remaining: 'なし', decisions: 'なし', points: [] });
     reportDone(w.se, { url: w.put(w.se, 'result'), kind: 'result', summary: '入れた', remaining: 'なし', decisions: 'なし', points: [] });
+    expect(reviewList(w.tpm, {}).at(-1)).toBe('結果の【done】を出した課題 2 件のうち、レビューを頼んでいない課題: 1 件（t-x7k2）');
+    // 初めての頼みより前に出た【done】は数えない（レビューの仕組みが入る前の課題）
+    w.tpm.state.append('log.jsonl', { at: '2026-11-19T10:00:00.000Z', key: 't-old1', heading: 'done', from: 'SWE t-old1', to: 'file:tpm', text: '【done】http://127.0.0.1:8801/p/t-old1/result-1.html 要点: 前の課題', id: 'old', delivered: true });
     expect(reviewList(w.tpm, {}).at(-1)).toBe('結果の【done】を出した課題 2 件のうち、レビューを頼んでいない課題: 1 件（t-x7k2）');
   });
 });
