@@ -207,7 +207,7 @@ Dependabot の skill を使う project では、`.claude/roles/config.jsonc` の
 
 ### `.claude/dependabot/config.jsonc`
 
-`/dependabot-triage` と `/sustaining-engineer` はこの表を読み、欄を `config.<欄>` と書く（表と skill の欄の揃いは `docs-site/scripts/check-refs.mjs` が見る）。`.claude/roles/config.jsonc` と同じく JSONC で書く。古い名前の `config.json` があれば、skill は読まずに止まる（扱いは `.claude/roles/config.json` と同じ）。
+`/dependabot-triage`・`dependabot-scan`（`/dependabot-triage` が PR の表を作らせる助手の skill）・`/sustaining-engineer` はこの表を読み、欄を `config.<欄>` と書く（表と skill の欄の揃いは `docs-site/scripts/check-refs.mjs` が見る）。`.claude/roles/config.jsonc` と同じく JSONC で書く。古い名前の `config.json` があれば、skill は読まずに止まる（扱いは `.claude/roles/config.json` と同じ）。
 
 | 欄 | 中身 | 例 |
 |---|---|---|
