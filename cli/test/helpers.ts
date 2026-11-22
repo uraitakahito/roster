@@ -44,6 +44,11 @@ export class FakeStore {
   removedFiles = new Set<string>();
   /** true の間、file のエンドポイントが無い（0.4.0 より前の置き場。404 を返す）。 */
   noFiles = false;
+  /** true の間、返事の状態を持てない（0.5.0 より前の置き場。書く道は 405 を返し、一覧は reply の絞りを読まずにみな返す）。 */
+  noReply = false;
+
+  /** 返事の状態を書いた回数（時刻をずらすため）。 */
+  private replies = 0;
 
   /** curl の引数を読んで答える。答えの形は `<本文>\n<HTTP の code>`（-o があれば本文は file に書く）。 */
   curl(args: string[], options?: ExecOptions): ExecResult {
@@ -58,6 +63,25 @@ export class FakeStore {
     if (url.pathname === '/api/files' || url.pathname.split('/')[3] === 'files') {
       if (this.noFiles) return reply(404, '');
       return this.file(args, url, reply);
+    }
+    if (url.pathname === '/api/pages/reply') {
+      if (this.noReply || !args.includes('POST')) return reply(405, '');
+      const page = this.pages.get(`/${q.get('project')}/${q.get('key')}/${q.get('kind')}-${q.get('n')}.html`);
+      if (page === undefined) return reply(404, '{"error":"そのページは無い"}');
+      const now = `2026-11-20T13:00:${String(this.replies += 1).padStart(2, '0')}.000Z`;
+      const r = page.record;
+      if (q.get('state') === 'waiting') {
+        if (r.asked_at === undefined || r.answered_at !== undefined) r.asked_at = now;
+        delete r.answered_at;
+      }
+      else if (q.get('state') === 'answered') {
+        r.asked_at ??= now;
+        r.answered_at ??= now;
+      }
+      else {
+        return reply(400, '{"error":"state は waiting か answered"}');
+      }
+      return reply(200, JSON.stringify(r));
     }
     if (args.includes('DELETE')) {
       const gone = [...this.pages.values()].map(p => p.record)
@@ -97,6 +121,7 @@ export class FakeStore {
       const found = [...this.pages.values()].map(p => p.record)
         .filter(r => (['project', 'key', 'kind', 'role', 'workspace'] as const).every(f => !q.has(f) || q.get(f) === r[f]))
         .filter(r => !q.has('q') || r.title.includes(q.get('q') ?? ''))
+        .filter(r => this.noReply || !q.has('reply') || (q.get('reply') === 'answered' ? r.answered_at !== undefined : r.asked_at !== undefined && r.answered_at === undefined))
         .sort((a, b) => (q.get('sort') === 'created_at' ? 1 : -1) * a.created_at.localeCompare(b.created_at))
         .slice(0, Number(q.get('limit') ?? 100));
       return reply(200, JSON.stringify({ pages: found }));

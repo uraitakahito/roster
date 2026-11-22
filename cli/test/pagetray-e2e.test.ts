@@ -7,7 +7,8 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { fileDelete, fileList, filePath, filePut, type FileRecord } from '../src/commands/file.ts';
-import { PAGE_KINDS, pageDelete, pageImport, pageList, pagePath, pagePut, type PageRecord } from '../src/commands/page.ts';
+import { PAGE_KINDS, pageDelete, pageImport, pageList, pagePath, pagePut, pageReply, type PageRecord } from '../src/commands/page.ts';
+import { setReply, waitingUrls } from '../src/commands/reply.ts';
 import type { Context } from '../src/context.ts';
 import { exec } from '../src/exec.ts';
 import { ROLE_NAMES } from '../src/protocol.ts';
@@ -19,6 +20,11 @@ const URL = process.env.TPM_E2E_PAGES_URL ?? '';
  * 版の番号でなくエンドポイントで見るのは、0.4.0 の release の前の手元のサーバー（版は 0.3.x のまま）にも向けて流せるように。
  */
 const FILES = URL !== '' && execFileSync('curl', ['-s', '-o', '/dev/null', '-w', '%{http_code}', `${URL}/api/files?limit=1`], { encoding: 'utf8' }) === '200';
+/**
+ * 置き場が返事の状態を持てるか（pagetray 0.5.0 から）。引数の無い POST に、持てる置き場は 400、前の置き場は 405（その道が無い）を返す。
+ * 持てない置き場には、「印を付けずに通る」方の試験を流す（新しい tpm が古い置き場に当たった時の振る舞い）。
+ */
+const REPLY = URL !== '' && execFileSync('curl', ['-s', '-o', '/dev/null', '-w', '%{http_code}', '-X', 'POST', `${URL}/api/pages/reply`], { encoding: 'utf8' }) === '400';
 /** PNG の頭の 8 byte と、少しの中身。 */
 const PNG = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('つなぎの試験の図')]);
 
@@ -191,5 +197,47 @@ describe.skipIf(!FILES)('cli と pagetray のつなぎ（file。置き場が 0.4
     expect(pageImport(s.tpm).at(-2)).toBe('file: 入れた: 1 個・もう入っていた: 0 個・消した file: 0 個・ぶつかった: 0 個');
     expect(pageImport(s.tpm).at(-1)).toBe('file: 入れた: 0 個・もう入っていた: 1 個・消した file: 0 個・ぶつかった: 0 個');
     expect(files(s, { allProjects: true, key: 'K-9' }).filter(f => f.project === project).map(f => [f.n, f.role, f.created_at])).toEqual([[3, 'unknown', '2026-11-19T01:02:03.456Z']]);
+  });
+
+  test.skipIf(!REPLY)('返事の状態: 返事待ちにして、絞って探せて、答えたにできる。消したページ・無いページには書けない', () => {
+    const s = setup();
+    const se = s.real(s.w.role('K-9', 'file:1'), { TPM_ROLE: 'software-engineer' });
+    const first = s.put(se, 'confirm', '<title>案を選ぶ</title>');
+    const second = s.put(se, 'confirm', '<title>計画の確認</title>');
+    const result = s.put(se, 'result', '<title>結果</title>');
+    expect(waitingUrls(s.tpm, 'K-9')).toEqual([]);
+    expect(s.list(s.tpm, { key: 'K-9' }).every(p => p.asked_at === undefined && p.answered_at === undefined)).toBe(true);
+
+    expect(setReply(se, first, 'waiting')).toBe('done');
+    expect(pageReply(s.tpm, [second], { waiting: true })).toEqual([`返事待ちにした: ${second}`]);
+    // 古い順に返る（tpm answer が、止まった時に並べる順）。
+    expect(waitingUrls(s.tpm, 'K-9')).toEqual([first, second]);
+    expect(s.list(s.tpm, { reply: 'waiting' }).map(p => p.url)).toEqual([second, first]);
+
+    expect(setReply(s.tpm, first, 'answered')).toBe('done');
+    expect(waitingUrls(s.tpm, 'K-9')).toEqual([second]);
+    const answered = s.list(s.tpm, { reply: 'answered' });
+    expect(answered.map(p => p.url)).toEqual([first]);
+    expect(answered[0]?.asked_at).toMatch(/^\d{4}-\d\d-\d\dT/);
+    expect((answered[0]?.answered_at ?? '') >= (answered[0]?.asked_at ?? 'x')).toBe(true);
+    // 返事を求めていないページは、どちらの絞りにも出ない。
+    expect([...s.list(s.tpm, { reply: 'waiting' }), ...answered].map(p => p.url)).not.toContain(result);
+
+    expect(setReply(s.tpm, `${URL}/${s.project}/K-9/confirm-9.html`, 'waiting')).toBe('missing');
+    pageDelete(s.tpm, [second], { yes: true });
+    expect(setReply(s.tpm, second, 'answered')).toBe('missing');
+    expect(waitingUrls(s.tpm, 'K-9')).toEqual([]);
+  });
+
+  test.skipIf(REPLY)('返事の状態を持てない置き場（0.5.0 より前）: 書く道は old を返し、返事待ちは 1 枚も数えない', () => {
+    const s = setup();
+    const se = s.real(s.w.role('K-9', 'file:1'), { TPM_ROLE: 'software-engineer' });
+    const first = s.put(se, 'confirm', '<title>案を選ぶ</title>');
+    s.put(se, 'confirm', '<title>計画の確認</title>');
+    expect(setReply(se, first, 'waiting')).toBe('old');
+    // 前の置き場は reply の絞りを読まずに 2 枚とも返すが、返事待ちとは数えない。
+    expect(waitingUrls(s.tpm, 'K-9')).toEqual([]);
+    expect(s.list(s.tpm, { reply: 'waiting' })).toEqual([]);
+    expect(() => pageReply(s.tpm, [first], { waiting: true })).toThrow(/版が古く/);
   });
 });

@@ -9,7 +9,7 @@ import { registerIncident } from './commands/incident.ts';
 import { guard, infraApprove, infraList, infraRevoke, infraRun } from './commands/infra.ts';
 import { issueView } from './commands/issue.ts';
 import { fileDelete, fileList, filePath, filePut, type FileListOptions, type FilePutOptions } from './commands/file.ts';
-import { PAGE_KINDS, pageDelete, pageImport, pageList, pagePath, pagePut, type PageDeleteOptions, type PageListOptions } from './commands/page.ts';
+import { PAGE_KINDS, pageDelete, pageImport, pageList, pagePath, pagePut, pageReply, type PageDeleteOptions, type PageListOptions } from './commands/page.ts';
 import { registerMessages } from './commands/register.ts';
 import { hello, inbox } from './commands/role-side.ts';
 import { assign, close, newKey, roles, type AssignOptions } from './commands/tpm-side.ts';
@@ -128,8 +128,13 @@ export function buildProgram(): Command {
     .option('--limit <件数>', '出す件数（1000 まで）', '50')
     .option('--oldest', '古い順に出す')
     .option('--all-projects', 'ほかの project のページも出す')
+    .option('--reply <状態>', '返事の状態で絞る（waiting は Product Manager の返事待ち、answered は答えた物）')
     .option('--json', '記録を JSON で出す')
     .action((options: PageListOptions) => print(pageList(createContext(), options)));
+  page.command('reply <urls...>').description('ページの返事の状態を手で直す（TPM 担当だけ。いつもは tpm ask pm と tpm answer が書く）')
+    .option('--waiting', 'Product Manager の返事待ちにする')
+    .option('--answered', '答えたにする')
+    .action((urls: string[], options: { waiting?: boolean, answered?: boolean }) => print(pageReply(createContext(), urls, options)));
   page.command('delete [urls...]').description('ページを置き場と控えから消す（TPM 担当だけ。戻せない。一覧を見せ、--yes で消す）')
     .option('--key <key>', 'この Key のページをみな消す')
     .option('--project <name>', 'この project（状態の folder の名）のページを消す。--key が無ければ project のページをみな消す（既定は今の project）')

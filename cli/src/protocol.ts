@@ -54,6 +54,7 @@ export const COMMANDS = [
   'page put',
   'page path',
   'page list',
+  'page reply',
   'page import',
   'page delete',
   'file put',

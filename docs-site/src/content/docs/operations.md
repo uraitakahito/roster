@@ -121,7 +121,8 @@ pagetray の新しい版が出て、この repo の `.pagetray-version` が上�
 1. pagetray の `CHANGELOG.md` で、API の版が変わるか・移行の SQL が足されるかを見る。
 2. 【ask-tpm】で止める時を決める。
 3. pagetray の docs の「[版を上げる](https://uraitakahito.github.io/pagetray/run.html#版を上げる)」のとおりに、DB の写しを取り、container を作り直して、確かめる（volume はそのまま付く）。「確かめる」は、6 の読むだけの試験まで流す。
-4. `tpm page` が「API の版が違う」と言って止まる時は、置き場の版とこの repo の版（`.pagetray-version`）が合っていない。どちらかが古いので、合わせる。`tpm file` が「置き場（pagetray）の版が古く」と言って止まる時は、置き場が 0.4.0 より前。`.pagetray-version` の版に上げる。
+4. `tpm page` が「API の版が違う」と言って止まる時は、置き場の版とこの repo の版（`.pagetray-version`）が合っていない。どちらかが古いので、合わせる。`tpm file` が「置き場（pagetray）の版が古く」と言って止まる時は、置き場が 0.4.0 より前。`tpm ask pm`・`tpm answer` が「置き場の印: 付けていない（置き場の版が古く…）」と出す時と、`tpm page reply` が「版が古く」と言って止まる時は、置き場が 0.5.0 より前（返事の状態を持てない）。`.pagetray-version` の版に上げる。
+5. **0.5.0 に上げる時**: 移行の SQL が足される版なので、上げた後の DB では 0.4.2 までの版は起きない。戻す道は、3 で取った DB の写しだけ（写しの後に置かれたページと file は、`tpm page import` で控えから入れ直す）。上げた直後は、返事待ちは 0 件（前からあるページには印が付かない）。
 
 ### 秘密を上げてしまった時
 
