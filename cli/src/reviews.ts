@@ -66,3 +66,31 @@ export function patchReview(ctx: Context, n: number, fields: Partial<Omit<Review
 
 /** その課題の、まだ判定が返っていない頼み。 */
 export const openReviews = (ctx: Context, key: string): Review[] => readReviews(ctx).filter(r => r.key === key && r.verdict === undefined);
+
+/** 置き場のページの種類（file の名の頭）を、題に書く名にする。無い種類は file の名だけ。 */
+const KIND_NAMES: Record<string, string> = { plan: '計画', proposal: '提案', result: '結果' };
+/** 説明に出す見てほしい所の字の数の上限（サイドバーで切れないように）。 */
+const DESCRIPTION_LIMIT = 24;
+
+/** 見る物の URL を、題に書く短い名にする（`PR #180`・`計画 plan-2`）。 */
+function targetName(url: string): string {
+  const pr = /\/pull\/(\d+)/.exec(url);
+  if (pr !== null) return `PR #${pr[1] ?? ''}`;
+  const name = (url.split('/').at(-1) ?? url).replace(/\.html$/, '');
+  const kind = KIND_NAMES[name.split('-')[0] ?? ''];
+  return kind === undefined ? name : `${kind} ${name}`;
+}
+
+/**
+ * Staff Engineer 担当の席の題に入れる見る物（target）と、題の下の説明（description）を、依頼書にした頼みから作る。
+ * 頼みが 2 つ以上なら、番号の新しい頼みに `+<残りの数>` を付ける。説明は新しい頼みの見てほしい所（無ければ付けない）。
+ */
+export function reviewLabel(asks: Review[]): { target: string, description?: string } {
+  const latest = asks.reduce((a, b) => (b.n > a.n ? b : a));
+  const more = asks.length > 1 ? ` +${asks.length - 1}` : '';
+  const focus = latest.focus === undefined ? undefined : [...latest.focus];
+  return {
+    target: `${targetName(latest.url)}${more}`,
+    ...(focus === undefined ? {} : { description: focus.length > DESCRIPTION_LIMIT ? `${focus.slice(0, DESCRIPTION_LIMIT).join('')}…` : focus.join('') }),
+  };
+}

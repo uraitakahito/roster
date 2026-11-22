@@ -124,6 +124,25 @@ describe('tpm assign --role staff-engineer（頼みから起こす）', () => {
   });
 });
 
+describe('Staff の席の題を替えられない時', () => {
+  test('依頼書は渡したまま、名簿の題は替えずに 1 行で知らせる', () => {
+    const w = asked();
+    w.staff.now = () => new Date('2026-11-20T12:20:00.000Z');
+    reportReview(w.staff, { url: w.put(w.staff, 'review'), verdict: 'approve', summary: 'よい' });
+    w.wire.inbox('file:tpm');
+    w.se.now = () => new Date('2026-11-20T12:30:00.000Z');
+    askReview(w.se, { url: PR });
+    w.wire.inbox('file:tpm');
+    const relabel = (): never => {
+      throw new Error('Workspace ref not found');
+    };
+    const tpm = { ...w.tpm, transport: Object.assign(Object.create(w.tpm.transport) as Context['transport'], { relabel }) };
+    expect(assign(tpm, 'AI-8', STAFF)).toEqual(['送った: 【brief】→ file:2（届いた）', '居場所の題を替えられなかった（名簿の題は レビュー AI-8: 計画 plan-1 のまま）: Workspace ref not found']);
+    expect(requireRole(w.tpm, 'AI-8.staff').title).toBe('レビュー AI-8: 計画 plan-1');
+    expect(readReviews(w.tpm)[1]?.brief).toMatch(/brief-2\.html$/);
+  });
+});
+
 describe('頼みと依頼書を取り違えない', () => {
   /** 頼み #1 を Staff が見ている間に、課題の担当が PR のレビュー（#2）を頼んだ世界。 */
   function second(): ReturnType<typeof asked> {

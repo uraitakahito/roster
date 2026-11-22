@@ -1,7 +1,7 @@
 // cmux の adapter。連携の口を cmux の命令に写す。cmux の言葉（workspace・surface・サイドバー）はこのファイルの外に出さない。
 import type { Exec, ExecResult } from '../exec.ts';
 import { TpmError } from '../skill-sets.ts';
-import type { Delivery, Incoming, MessageTrace, Seat, SpawnOptions, StatusKey, Transport } from './types.ts';
+import type { Delivery, Incoming, MessageTrace, Seat, SeatLabel, SpawnOptions, StatusKey, Transport } from './types.ts';
 
 /** 状態の鍵ごとの見た目（protocol の「サイドバー」）。 */
 const STATUS_STYLE: Record<StatusKey, string[]> = {
@@ -109,8 +109,11 @@ export class CmuxTransport implements Transport {
     if (Buffer.byteLength(options.command) > COMMAND_LIMIT) {
       throw new TpmError(`起動の命令が ${COMMAND_LIMIT} バイトを超えています（cmux は黙って実行しません）: ${options.command}`);
     }
-    const created = this.json(['workspace', 'create', '--name', options.title, '--cwd', options.cwd, '--command', options.command, '--focus', 'false']) as { workspace_ref?: string };
+    const description = options.description === undefined ? [] : ['--description', options.description];
+    const created = this.json(['workspace', 'create', '--name', options.title, '--cwd', options.cwd, '--command', options.command, '--focus', 'false', ...description]) as { workspace_ref?: string };
     if (!created.workspace_ref) throw new TpmError('cmux workspace create が workspace を返しません');
+    // create は色を受けないので、作った居場所に後から付ける。
+    if (options.color !== undefined) this.workspaceAction(created.workspace_ref, ['set-color', '--color', options.color]);
     return created.workspace_ref;
   }
 
@@ -141,6 +144,16 @@ export class CmuxTransport implements Transport {
 
   setTitle(title: string): void {
     this.run(['workspace', 'rename', this.whoami(), '--title', title]);
+  }
+
+  relabel(address: string, label: SeatLabel): void {
+    this.run(['workspace', 'rename', address, '--title', label.title]);
+    this.workspaceAction(address, label.description === undefined ? ['clear-description'] : ['set-description', '--description', label.description]);
+  }
+
+  /** 居場所の右クリックの操作（色・説明）を、名指した居場所に打つ。 */
+  private workspaceAction(address: string, action: string[]): void {
+    this.run(['workspace-action', '--workspace', address, '--action', ...action]);
   }
 
   setStatus(key: StatusKey, text: string): void {
