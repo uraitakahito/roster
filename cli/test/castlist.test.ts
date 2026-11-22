@@ -747,6 +747,60 @@ describe('落ちた session の突き合わせ（推しの幕引き）', () => {
     expect(inferredCloses(after())).toEqual([]);
   });
 
+  /** 外の命令を差し替えた周り（when に当たる curl の時だけ do を呼ぶ）。 */
+  function hooked(ctx: Context, when: RegExp, run: (pass: () => ReturnType<Context['exec']>) => ReturnType<Context['exec']>): Context {
+    const exec: Context['exec'] = (cmd, args, options) => {
+      const pass = () => ctx.exec(cmd, args, options);
+      return cmd === 'curl' && when.test(args.join(' ')) ? run(pass) : pass();
+    };
+    return { ...ctx, exec };
+  }
+
+  test('castlist から居場所を引く間に控えが替わっても、替わった所を消さず、居場所だけを足す', () => {
+    const { w, tpmIn } = world2();
+    const record = readSession(w.tpm, SID);
+    if (record === undefined) throw new Error('控えが無い');
+    delete record.workspace;
+    w.tpm.state.write(`sessions/${SID}.jsonc`, record);
+    // 引く間に、その session の SessionEnd が退場を送った（控えは居ないになり、番号が進む）。
+    const racing = hooked(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref, [SE_AT.uuid]: SE_AT.ref }), /-X GET [\s\S]*\/v1\/actors\//, (pass) => {
+      const now = readSession(w.tpm, SID);
+      if (now !== undefined) w.tpm.state.write(`sessions/${SID}.jsonc`, { ...now, present: false, seq: { ...now.seq, exited: 1 } });
+      return pass();
+    });
+    const got = mark();
+    roles(racing);
+    expect(readSession(w.tpm, SID)).toMatchObject({ present: false, seq: { exited: 1 }, workspace: SE_AT });
+    expect(inferredCloses(got())).toEqual([]);
+  });
+
+  test('自分の session の id が無い所（tpm の起こした session の外）で打っても、突き合わせない', () => {
+    const { tpmIn } = world2();
+    const outside = tpmIn({ [TPM_AT.uuid]: TPM_AT.ref });
+    const got = mark();
+    roles({ ...outside, env: { ...outside.env, CLAUDE_CODE_SESSION_ID: undefined } });
+    expect(inferredCloses(got())).toEqual([]);
+  });
+
+  test('castlist が応えなければ、そこでやめて 1 行出し、命令は続ける', () => {
+    const { w, tpmIn } = world2();
+    const record = readSession(w.tpm, SID);
+    if (record === undefined) throw new Error('控えが無い');
+    delete record.workspace;
+    w.tpm.state.write(`sessions/${SID}.jsonc`, record);
+    const down = hooked(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref }), /\/v1\/actors\//, () => ({ status: 7, stdout: '', stderr: 'refused' }));
+    const lines = roles(down);
+    expect(lines.join('\n')).toContain('落ちた session の突き合わせをやめました');
+    expect(lines.join('\n')).toContain('名簿');
+  });
+
+  test('幕引きを送れなければ、送れなかった session を 1 行で出す', () => {
+    const { tpmIn } = world2();
+    const down = hooked(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref }), /-X PUT [\s\S]*\/v1\/events\//, () => ({ status: 7, stdout: '', stderr: 'refused' }));
+    const lines = roles(down);
+    expect(lines.join('\n')).toContain('落ちたと推した幕引きを送れませんでした（t-x7k2-swe.1）');
+  });
+
   test('推しで閉じた session が tpm hello を打てば、名乗りより前に再登場を送る', () => {
     const { se, tpmIn } = world2();
     roles(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref }));

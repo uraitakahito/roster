@@ -112,8 +112,10 @@ flowchart TB
   - `workspace_gone`: その session の居場所の uuid が、一覧に無い。
   - `superseded`: uuid は残り ref が替わった（cmux が起こし直され、居場所を同じ uuid で復元した）うえ、今の組（uuid と今の ref）に別の session が登録した。ref が替わっただけでは送らない（cmux は起こし直しの後に Claude の session を続けることがある）。ref も同じ組に 2 つ居ても、後先を決められないので送らない。
   - 居場所は、登録の時に控え（`sessions/<session の id>.jsonc` の `workspace`）に書く。控えに無い session（前の版で登録した物）は、castlist のアクターの付随する id（種類ごとに最新）から引く。
-  - 自分の session は見ない。一覧が引けない・一覧に自分の組が無い（一覧を信じられない）時は何もしない。cmux でない連携（file）でもしない。送れなくても命令は止めない。
+  - 自分の session は見ない。自分の session の id（`$CLAUDE_CODE_SESSION_ID`）が無い（tpm の起こした session の外で打った）・一覧が引けない・一覧に自分の組が無い（一覧を信じられない）時は何もしない。cmux でない連携（file）でもしない。castlist が応えなければ、そこでやめて 1 行出す。送れなくても命令は止めず、送れなかった session を 1 行で出す。
+  - 控えに居場所を書く時は、読み直した控えに居場所だけを足す（その間に session の hook が書いた物を消さない）。
   - 気づけないのは、Claude Code だけが落ちて居場所が残った時。castlist では稼働中のまま残る。
+  - 誤って閉じうるのは、生きている session の復元された居場所で、別の pane から tpm の起こした session が始まった時（その session を `superseded` で閉じる）。生きていれば、次の Bash か `tpm hello` で再登場して戻る。
 - **ページと file の送り手**: castlist の設定があれば、`tpm page put`・`tpm file put` が、置き場に送り手（session の付随する id）を付けて置き、置き場が castlist に聞いて記録に残す（[ページの置き場](#ページの置き場)の「送り手」。置き場の側の設定は [運用](/operations/#起こす) の `PAGETRAY_CASTLIST_URL`）。tpm は castlist に何も送らない。
 - **時計**: 起こす前に見る `/healthz` の時刻と tpm を動かす機械の時計が 2 秒より離れていれば、`tpm report incident` で台帳に挙げるよう 1 行出す（止めない。`tpm start` は stderr に出す）。
 

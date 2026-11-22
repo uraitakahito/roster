@@ -327,16 +327,21 @@ const swept = new WeakSet<Context>();
 type Place = { ref: string, uuid: string };
 const isPlace = (w: SessionRecord['workspace']): w is Place => w?.ref !== undefined && w.uuid !== undefined;
 
-/** 控えの居場所。無ければ castlist のアクターの付随する id（種類ごとに最新）から引いて控えに書く。引けなければ undefined。 */
-function placeOf(ctx: Context, url: string, record: SessionRecord): Place | undefined {
+/**
+ * 控えの居場所。無ければ castlist のアクターの付随する id（種類ごとに最新）から引き、読み直した控えに居場所だけを足して書く
+ * （引く間に、その session の hook が控えを書いても消さない）。引けなければ undefined、castlist が止まっている・混んでいれば、その印。
+ */
+function placeOf(ctx: Context, url: string, record: SessionRecord): Place | undefined | Exclude<Sent, 'ok'> {
   if (isPlace(record.workspace)) return record.workspace;
   const reply = request(ctx, url, 'GET', `/v1/actors/${encodeURIComponent(record.id)}`);
+  if (reply.kind === 'down' || reply.kind === 'busy') return reply.kind;
   if (reply.kind !== 'ok') return undefined;
   const bindings = (reply.body as { current_bindings?: { type?: unknown, value?: unknown }[] }).current_bindings ?? [];
   const value = (type: string): string | undefined => text(bindings.find(b => b.type === type)?.value);
   const workspace = { ref: value('cmux.workspace.ref'), uuid: value('cmux.workspace.uuid') };
   if (!isPlace(workspace)) return undefined;
-  ctx.state.write(sessionFile(record.session), { ...record, workspace });
+  const fresh = readSession(ctx, record.session);
+  if (fresh !== undefined) ctx.state.write(sessionFile(record.session), { ...fresh, workspace });
   return workspace;
 }
 
@@ -346,7 +351,8 @@ function placeOf(ctx: Context, url: string, record: SessionRecord): Place | unde
  * - workspace_gone: 居場所の uuid が一覧に無い。
  * - superseded: uuid は残り ref が替わった（cmux が起こし直され、居場所を復元した）うえ、今の組（uuid と今の ref）に別の session が登録した
  *   （今の ref は起こし直しの後に振られたので、その session は後から来た）。ref が替わっただけでは送らない（cmux が session を続けることがある）。
- * 自分の session は見ない。一覧が引けない・自分の組が一覧に無い（一覧を信じられない）時は、何もしない。送れなくても命令は止めない。
+ * 自分の session は見ない。自分の session の id が無い（tpm の起こした session の外で打った）・一覧が引けない・自分の組が一覧に無い（一覧を信じられない）時は、
+ * 何もしない。castlist が止まっている・混んでいれば、そこでやめる。送れなくても命令は止めず、送れなかった session を 1 行で出す。
  */
 export function sweep(ctx: Context): string[] {
   const url = castlistUrl(ctx);
@@ -359,22 +365,29 @@ export function sweep(ctx: Context): string[] {
   catch {
     return [];
   }
+  const mine = text(ctx.env.CLAUDE_CODE_SESSION_ID);
   const ref = workspaceRef(ctx);
   const uuid = text(ctx.env.CMUX_WORKSPACE_ID);
-  if (ref === undefined || uuid === undefined || seats.get(uuid)?.address !== ref) return [];
-  const mine = text(ctx.env.CLAUDE_CODE_SESSION_ID);
+  if (mine === undefined || ref === undefined || uuid === undefined || seats.get(uuid)?.address !== ref) return [];
   const records = ctx.state.list('sessions')
     .map(name => ctx.state.read<SessionRecord>(`sessions/${name}.jsonc`))
     .filter((r): r is SessionRecord => r !== undefined && r.session !== mine);
-  const places = new Map(records.filter(r => r.present).map(r => [r.session, placeOf(ctx, url, r)]));
+  const stopped = (): string[] => [`castlist（${url}）が応えないので、落ちた session の突き合わせをやめました（次の tpm roles などで、また見ます）`];
+  const places = new Map<string, Place | undefined>();
+  for (const r of records.filter(r => r.present)) {
+    const p = placeOf(ctx, url, r);
+    if (p === 'down' || p === 'busy') return stopped();
+    places.set(r.session, p);
+  }
   // 組ごとの、登録した session（自分も）。
   const at = (p: Place): string => `${p.uuid} ${p.ref}`;
-  const seated = new Map<string, string[]>([[at({ ref, uuid }), [mine ?? 'me']]]);
+  const seated = new Map<string, string[]>([[at({ ref, uuid }), [mine]]]);
   for (const r of records) {
     const p = places.get(r.session) ?? r.workspace;
     if (isPlace(p)) seated.set(at(p), [...seated.get(at(p)) ?? [], r.session]);
   }
   const closed: string[] = [];
+  const failed: string[] = [];
   for (const r of records.filter(r => r.present)) {
     const p = places.get(r.session);
     if (p === undefined) continue;
@@ -386,7 +399,15 @@ export function sweep(ctx: Context): string[] {
     // 送る直前に読み直す（その session の guard と書き合わないため）。
     const fresh = readSession(ctx, r.session);
     if (fresh?.present !== true) continue;
-    if (event(ctx, url, fresh, 'closed', { inferred: true, reason }, true) === 'ok') closed.push(`${fresh.name}（${reason === 'workspace_gone' ? '居場所が消えた' : '居場所に後から別の session が入った'}）`);
+    const sent = event(ctx, url, fresh, 'closed', { inferred: true, reason }, true);
+    if (sent === 'ok') closed.push(`${fresh.name}（${reason === 'workspace_gone' ? '居場所が消えた' : '居場所に後から別の session が入った'}）`);
+    else {
+      failed.push(fresh.name);
+      break;
+    }
   }
-  return closed.length === 0 ? [] : [`castlist: 落ちたと推して幕引きを送った: ${closed.join('・')}`];
+  return [
+    ...(closed.length === 0 ? [] : [`castlist: 落ちたと推して幕引きを送った: ${closed.join('・')}`]),
+    ...(failed.length === 0 ? [] : [`castlist（${url}）に、落ちたと推した幕引きを送れませんでした（${failed.join('・')}）。castlist が応えないので、残りもやめました（次の tpm roles などで、また見ます）`]),
+  ];
 }
