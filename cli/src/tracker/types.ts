@@ -2,7 +2,7 @@
 // 誰が・いつ・どの種類を書くかは、この上の層（決まり）が持つ。
 
 /** 記録の種類（1 行目の【】の中）。 */
-export const NOTE_KINDS = ['提案', '計画', '結果', '監査', '文書の修正', '確認', '決定'] as const;
+export const NOTE_KINDS = ['提案', '計画', '結果', '監査', 'レビュー', '文書の修正', '確認', '決定'] as const;
 /** 記録の種類の 1 つ。 */
 export type NoteKind = typeof NOTE_KINDS[number];
 

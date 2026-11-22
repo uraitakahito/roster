@@ -15,14 +15,14 @@ import { inState, isStorePage, REPLY_LABEL, setReply, type ReplyState } from './
 import { call, compareStored, down, fetchTo, inStore, KEY, localPath, pagesDir, pagesUrl, PROJECT, reason, removeLocal, requireKey, selfAddress, sender, senderRefused, writeCopy } from './store.ts';
 
 /** ページの種類。file の名の頭になる（`<種類>-<番号>.html`）。置き場は名の一覧を持たないので、種類を足すのはここだけ。 */
-export const PAGE_KINDS = ['brief', 'confirm', 'proposal', 'plan', 'result', 'issue', 'timeline', 'audit'] as const;
+export const PAGE_KINDS = ['brief', 'confirm', 'proposal', 'plan', 'result', 'review', 'issue', 'timeline', 'audit'] as const;
 /** ページの種類の名前。 */
 export type PageKind = typeof PAGE_KINDS[number];
 /**
- * tpm page put が、置く前に未読のメッセージで 1 度止まる種類（担当の成果と確認）。
+ * tpm page put が、置く前に未読のメッセージで 1 度止まる種類（担当の成果と確認、Staff Engineer 担当のレビュー）。
  * 相手の答えを読む前に、古い前提のページを置かないため（台帳 #45）。依頼書・課題の写し・時系列・監査のページは止めない。
  */
-const READ_FIRST: readonly PageKind[] = ['confirm', 'proposal', 'plan', 'result'];
+const READ_FIRST: readonly PageKind[] = ['confirm', 'proposal', 'plan', 'result', 'review'];
 
 /** 控えの folder にあるページの file の名（`<種類>-<番号>.html`。番号は頭に 0 の無い 1 以上）。 */
 const PAGE_FILE = /^([a-z][a-z0-9-]{0,31})-([1-9]\d*)\.html$/;

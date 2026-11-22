@@ -11,6 +11,7 @@ import { syncDeliveries } from '../evidence.ts';
 import { AUDIT_KEY, modelStatus, ROLES, TPM_TITLE, WAIT, type RoleName } from '../protocol.ts';
 import { lastAuditLine } from '../audits.ts';
 import { openLine } from '../incidents.ts';
+import { openReviews, patchReview, type Review } from '../reviews.ts';
 import { resolveSettings } from '../settings.ts';
 import { allRoles, assertKey, isStaffKey, LOCAL_KEY, readRole, removeRole, staffKey, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
 import { readSkillSets, skillSetDir, TpmError } from '../skill-sets.ts';
@@ -19,7 +20,7 @@ import { findHook, staleHook } from './banner.ts';
 import { castlistHello, closeLaunch } from './castlist.ts';
 import { copyIssue, issueTracker } from './issue.ts';
 import { assertRead, assertSettled, brief } from './messages.ts';
-import { pageFolder } from './page.ts';
+import { pageFolder, putPage } from './page.ts';
 
 /** 名乗ったかを見る間（ミリ秒）。 */
 const HELLO_INTERVAL_MS = 2000;
@@ -178,10 +179,40 @@ function staffSubject(ctx: Context, key: string): RoleRecord {
   return subject;
 }
 
+/** HTML に入れる字の escape。 */
+const escapeHtml = (text: string): string => text.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' })[c] ?? c);
+
+/** Staff Engineer 担当への依頼書（レビューの頼みから作る）。課題の概要の節を持つ。 */
+function staffBriefPage(subject: RoleRecord, asks: Review[]): string {
+  const e = escapeHtml;
+  const link = (url: string): string => `<a href="${e(url)}">${e(url)}</a>`;
+  return [
+    `<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>${e(subject.key)} レビューの依頼書</title></head><body>`,
+    `<h1>${e(subject.key)}: レビューの依頼書</h1>`,
+    '<section id="summary"><h2>課題の概要</h2>',
+    `<p>課題 ${e(subject.key)} の担当（${e(subject.title)}）が、下の物のレビューを頼んだ。見る物を読み、課題の担当の依頼書と照らして、レビューのページを置き、tpm report review で返す。直さない・決めない（レビューは助言）。</p>`,
+    `<ul><li>課題の担当の依頼書: ${subject.brief === undefined ? '無し' : link(subject.brief)}</li></ul>`,
+    '</section>',
+    '<h2>見る物</h2>',
+    '<ul>',
+    ...asks.map(r => `<li>頼み #${r.n}: ${link(r.url)}${r.focus === undefined ? '' : `（見てほしい所: ${e(r.focus)}）`}</li>`),
+    '</ul>',
+    '</body></html>',
+  ].join('\n');
+}
+
+/** レビューの頼みから依頼書のページを作って置き、頼みに依頼書の URL を書く。URL を返す。 */
+function putStaffBrief(ctx: Context, subject: RoleRecord, asks: Review[]): string {
+  const { url } = putPage(ctx, { text: staffBriefPage(subject, asks) }, 'brief', subject.key);
+  for (const r of asks) patchReview(ctx, r.n, { brief: url });
+  return url;
+}
+
 /**
  * 課題を担当に振る。同じ Key の担当が動いていれば、その担当に【brief】で新しい依頼書を送る（背景を知っているため）。
  * いなければ（居場所が消えていても）起こし、名乗るまで待つ。
  * Staff Engineer 担当（--role staff-engineer）は、課題の担当と並べるために、名簿の Key を `<課題の Key>.staff` にして起こす（subjectKey は、どの役割でも課題の Key）。
+ * その依頼書は、課題の担当のレビューの頼み（tpm ask review）から命令が作る（--brief は受けない）。
  */
 export function assign(ctx: Context, subjectKey: string, options: AssignOptions): string[] {
   assertKey(subjectKey);
@@ -193,12 +224,19 @@ export function assign(ctx: Context, subjectKey: string, options: AssignOptions)
   // 名簿の Key。Staff Engineer 担当の席だけ、課題の Key と違う。
   const key = subject === undefined ? subjectKey : staffKey(subjectKey);
   const existing = readRole(ctx, key);
+  const alive = existing?.address !== undefined && ctx.transport.seats().some(s => s.address === existing.address);
+  // Staff に渡す頼み: まだ依頼書にしていない物。席が無ければ、依頼書にしたが返っていない物も（席が消えたら、起こし直して渡し直す）。
+  const asks = subject === undefined ? [] : openReviews(ctx, subjectKey).filter(r => r.brief === undefined || !alive);
+  if (subject !== undefined) {
+    if (options.brief !== undefined) throw new TpmError('Staff Engineer 担当への依頼書は、レビューの頼み（tpm ask review）から命令が作ります。--brief は書かないでください');
+    if (asks.length === 0) throw new TpmError(`${subjectKey} に、まだ依頼書にしていないレビューの頼みがありません。頼むのは課題の担当（tpm ask review）。今の頼みは tpm review list --key ${subjectKey}`);
+  }
   // 名簿にある担当（前の決まりの長い Key を含む）は、そのまま動き続けられるよう形を問わない。
   if (existing === undefined && subject === undefined && key.startsWith('t-') && !LOCAL_KEY.test(key)) {
     throw new TpmError(`課題管理の課題が無いときの Key は、t- と英小文字・数字 4 文字にしてください（tpm key で作る）: ${key}`);
   }
-  if (existing?.address !== undefined && ctx.transport.seats().some(s => s.address === existing.address)) {
-    if (options.brief === undefined) throw new TpmError(`${key} の担当はもう動いています（${existing.address}）。新しい依頼書を --brief で渡してください`);
+  if (existing !== undefined && alive) {
+    if (options.brief === undefined && subject === undefined) throw new TpmError(`${key} の担当はもう動いています（${existing.address}）。新しい依頼書を --brief で渡してください`);
     if (options.supersede === true && options.after === true) throw new TpmError('--supersede と --after は、どちらか 1 つにしてください');
     // 写しを置く前に、送る前の検査を通す（止まった回に写しだけが増えないように）。
     assertRead(ctx, `${existing.key} の担当`, existing.title);
@@ -206,7 +244,9 @@ export function assign(ctx: Context, subjectKey: string, options: AssignOptions)
     const settled = assertSettled(ctx, existing, 'assign', choice);
     // 続きのときも写しを作り直す（コメントが増えているため）。
     Object.assign(existing, issueCopy(ctx, existing.issue ?? subjectKey, subjectKey, options.noIssueCopy));
-    return brief(ctx, existing, options.brief, options.note, settled === undefined || choice === undefined ? undefined : { text: settled, choice });
+    // 送る前の検査を通ってから、頼みを依頼書にする（止まった回に、渡した事にしない）。
+    const url = subject === undefined ? options.brief ?? '' : putStaffBrief(ctx, subject, asks);
+    return brief(ctx, existing, url, options.note, settled === undefined || choice === undefined ? undefined : { text: settled, choice });
   }
   if (options.issue !== undefined && !ctx.tracker.owns(options.issue)) {
     throw new TpmError(`${options.issue} に記録を書く課題管理が、どの設定にもありません（読んだ設定: ${describeTrackers(ctx.config.sources)}）。記録するなら、その課題を扱う repo の .claude/roles/config.jsonc に "tracker"（jira・github）を書いてください`);
@@ -222,6 +262,7 @@ export function assign(ctx: Context, subjectKey: string, options: AssignOptions)
   // 居場所を作る前に読む（読めなければ、担当を起こさずに止まる）。
   const copy = issueCopy(ctx, issue ?? subjectKey, subjectKey, options.noIssueCopy);
   const def = ROLES[options.role];
+  const briefUrl = subject === undefined ? options.brief : putStaffBrief(ctx, subject, asks);
   const record: RoleRecord = {
     key,
     ...(subject === undefined ? {} : { subject: subjectKey }),
@@ -230,7 +271,7 @@ export function assign(ctx: Context, subjectKey: string, options: AssignOptions)
     cwd,
     addDirs: ['core', ...ctx.skillSets].map(s => skillSetDir(ctx.root, s)),
     ...settings,
-    ...(options.brief === undefined ? {} : { brief: options.brief, firstBrief: options.brief }),
+    ...(briefUrl === undefined ? {} : { brief: briefUrl, firstBrief: briefUrl }),
     ...(issue === undefined ? {} : { issue }),
     ...copy,
   };
