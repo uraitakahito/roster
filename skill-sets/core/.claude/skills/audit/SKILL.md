@@ -1,6 +1,7 @@
 ---
 name: audit
 description: Auditor（監査の担当）として、担当の仕組み（tpm・skill・担当のあいだの決まり・ページの置き場）を証拠で調べ、指摘と勧告を Product Manager へじかに報告する。Product Manager が `tpm audit start` で起こした Audit の席で、Product Manager が `/audit`（定期の監査）か `/audit <件の番号…>`（臨時の監査）で呼ぶ。見て勧めるだけで、直さない・決めない。
+argument-hint: "[件の番号…]"
 disable-model-invocation: true
 ---
 

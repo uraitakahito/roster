@@ -69,8 +69,9 @@ Dependabot の PR の判定の道具は `cli/src/release-age.ts`（`node cli/src
 - 担当の skill（`tpm start` や `tpm assign` が最初の入力で呼ぶ物・Product Manager が打つ物）は `disable-model-invocation: true` にする。一覧に載らず、model が自分で呼ばない。`when_to_use` は書かない（書いても効かない）。
 - model に呼ばせる skill（今は `/dependabot-triage` だけ）は、`description` に何をするかを、`when_to_use` に呼ぶ場面（言い方の例）と呼ばない場面（どの担当の居場所で呼ばないか）を書く。2 つは一覧で続けて載り、合わせて 1,536 字で切られる。
 - 引用符の無い値に「`: `」を書くと YAML として読めない。全角の「：」にするか、言い換える。
+- 引数を取る skill（本文で `$ARGUMENTS` などを使う物。今は `/audit` と `/dependabot-triage`）は、`argument-hint` に打てる物を書く（例 `"[dry-run] [max=<n>]"`）。/ を打つと、命令の名の後ろに出る。`[` で始まる値は `"…"` で囲む（囲まないと YAML の配列か誤りになる）。引数を取らない skill には書かない。
 
-`pnpm run check` の `docs-site/scripts/check-skills.mjs` が、欄の名・`name` と folder の揃い・`when_to_use` と `disable-model-invocation` の組・字数を見る。
+`pnpm run check` の `docs-site/scripts/check-skills.mjs` が、欄の名・`name` と folder の揃い・`when_to_use` と `disable-model-invocation` の組・字数・`argument-hint` と本文の引数の組を見る。
 
 ## この docs
 

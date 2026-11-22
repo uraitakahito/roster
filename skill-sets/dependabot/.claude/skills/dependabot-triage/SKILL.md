@@ -2,6 +2,7 @@
 name: dependabot-triage
 description: Dependabot の PR を集め、依存の version の公開から 72 時間を判定し、対象の PR ごとに Sustaining Engineer 担当（/sustaining-engineer）を起こす。merge と居場所を閉じるのも TPM 担当。引数 `dry-run` なら判定の表を出すだけで誰も起こさない。設定は使う側の .claude/dependabot/ から読む。
 when_to_use: TPM 担当（/tpm）の居場所で、Product Manager が Dependabot の PR を見る・振り分ける・まとめて片付けると言ったときに呼ぶ（例「Dependabot の PR を見て」「依存の更新の PR を振り分けて」「Dependabot を dry-run で」）。呼ばないのは、/tpm の起動のとき、Software Engineer・DevOps Engineer・Sustaining Engineer 担当の居場所（PR 1 本の直しは /sustaining-engineer の仕事）、Dependabot の設定や仕組みを聞かれただけのとき。
+argument-hint: "[dry-run] [max=<n>]"
 ---
 
 # Dependabot の PR の振り分け（TPM 担当が呼ぶ）

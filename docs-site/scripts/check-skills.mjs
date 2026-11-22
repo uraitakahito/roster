@@ -11,6 +11,13 @@
 // 4. disable-model-invocation: true でない skill が、when_to_use を持たないか、その中に「呼ばない」場面を書かない
 // 5. disable-model-invocation: true の skill が when_to_use を持つ（一覧に載らず、効かない）
 // 6. description と when_to_use を合わせて 1,536 字を超える（一覧で切られる）
+//
+// argument-hint は、/ を打つと命令の名の後ろに出る、渡せる物の手がかり。次も止める（2026-11-22 t-5kex）:
+//
+// 7. 本文が引数の置き場（$ARGUMENTS・$0〜$9・arguments の欄の $名）を使うのに argument-hint が無い
+//    （/ を打つ人に、渡せる物が見えない）
+// 8. 本文が引数の置き場を使わないのに argument-hint がある（渡しても効かない物を示す）
+// 9. argument-hint が空でない字でない（引用符で囲まない [x] は YAML の配列になり、[ ] が消える）
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -41,6 +48,22 @@ const FIELDS = new Set([
   "license",
   "compatibility",
 ]);
+
+/** 本文が Claude Code の引数の置き場を使うか（前に \ がある $ は置き換わらないので数えない） */
+function usesArguments(body, fm) {
+  if (/(?<!\\)\$(ARGUMENTS\b|\d)/.test(body)) return true;
+  const names =
+    typeof fm.arguments === "string"
+      ? fm.arguments.split(/\s+/)
+      : Array.isArray(fm.arguments)
+        ? fm.arguments.map(String)
+        : [];
+  return names.some((name) => {
+    if (name === "") return false;
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(?<!\\\\)\\$${escaped}(?![\\w-])`).test(body);
+  });
+}
 
 /** 1 つの SKILL.md の字を見て、違反の文を返す */
 export function checkSkill(file, text) {
@@ -88,6 +111,20 @@ export function checkSkill(file, text) {
     errors.push(
       `${file}: description と when_to_use で ${length} 字（${MAX} 字を超えた分は一覧で切られる）`,
     );
+
+  const hint = fm["argument-hint"];
+  if (hint !== undefined && (typeof hint !== "string" || hint.trim() === ""))
+    errors.push(
+      `${file}: argument-hint が字でない（"[…]" のように引用符で囲む）`,
+    );
+  if (usesArguments(text.slice(m[0].length), fm)) {
+    if (hint === undefined)
+      errors.push(
+        `${file}: 本文が引数を使うのに argument-hint が無い（渡せる物を書く）`,
+      );
+  } else if (hint !== undefined) {
+    errors.push(`${file}: 本文が引数を使わないのに argument-hint がある`);
+  }
   return errors;
 }
 
