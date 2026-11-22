@@ -148,6 +148,7 @@ export const ASK_REVIEW_WAIT = 90;
  * 課題の担当が、計画・提案のページか PR のレビューを頼む（【ask-review】）。TPM 担当を通らない。
  * 頼みを記録（reviews.ts）に書き、頼みから依頼書を作って置く。Staff Engineer 担当の席が無ければ（落ちていても）起こして依頼書を名簿の行で渡し、
  * 居れば【ask-review】（頭が依頼書の URL）を席へじかに送って、席の題と説明を替える。前の頼みがまだ返っていなければ、その後ろに積む（席は積まれた順にこなす）。
+ * まだ席に渡していない前の頼み（前の流れで TPM 担当に送られたままの物）があれば、同じ依頼書で一緒に渡す。
  * 状態を `回答待ち(レビュー)` にする。判定は、席から【review】でじかに届く。レビューは助言で、頼んだ担当を縛らない。
  * wait は、起こした席の名乗りを待つ秒（0 なら待たない）。
  */
@@ -161,45 +162,56 @@ export function askReview(ctx: Context, options: { url: string, focus?: string, 
   const seat = readRole(ctx, staffKey(self.key));
   const alive = seat?.address !== undefined && ctx.transport.seats().some(s => s.address === seat.address);
   const focus = options.focus?.trim() || undefined;
-  // 前の頼みで、席に渡したがまだ返っていない物（席が居る時は、その後ろに積む）。
-  const before = openReviews(ctx, self.key).filter(r => r.brief !== undefined);
+  // 前の頼みで、席に渡したがまだ返っていない物（席が居る時は、その後ろに積む）と、まだ席に渡していない物（前の流れで TPM 担当に送られたまま、振られていない頼み。一緒に渡す）。
+  const open = openReviews(ctx, self.key);
+  const before = open.filter(r => r.brief !== undefined);
+  const loose = open.filter(r => r.brief === undefined);
   const review = addReview(ctx, { key: self.key, url: options.url, ...(focus === undefined ? {} : { focus }), by: self.title });
+  const asks = [...loose, review];
   let out: string[];
   if (seat !== undefined && alive) {
+    let url: string;
+    let sent: string;
     try {
-      const url = putStaffBrief(ctx, subject, [review]);
+      url = putStaffBrief(ctx, subject, asks);
       const body = [
         url,
-        `頼み: #${review.n} ${options.url}`,
+        `頼み: ${asks.map(r => `#${r.n}`).join(' ')} ${options.url}`,
         ...(focus === undefined ? [] : [`見てほしい所: ${focus}`]),
         ...(before.length === 0 ? [] : [`${before.map(r => `#${r.n}`).join('・')}を済ませてから、これをする`]),
       ].join(' ');
-      const sent = toPeer(ctx, self, seat, 'ask-review', body);
-      markBriefed(ctx, [review], url);
-      seat.brief = url;
-      writeRole(ctx, seat);
-      out = [sent, ...relabelStaff(ctx, seat, self.key, [review])];
+      sent = toPeer(ctx, self, seat, 'ask-review', body);
     }
     catch (e) {
-      // 送れなかった頼みを残すと、打ち直しが「もう頼んであります」で止まる。
+      // 送る前に止まった頼みを残すと、打ち直しが「もう頼んであります」で止まる。送った後の失敗では消さない（席にはもう届いている）。
       removeReview(ctx, review.n);
       throw e;
     }
+    markBriefed(ctx, asks, url);
+    seat.brief = url;
+    writeRole(ctx, seat);
+    // 席の題は、返っていない頼みをみな数える（新しい頼みと +<残りの数>）。
+    out = [sent, ...relabelStaff(ctx, seat, self.key, [...before, ...asks])];
   }
   else {
     try {
       // 席が無い・落ちた: 返っていない前の頼み（渡したが返っていない物も、渡せていなかった物も）を、新しい依頼書で渡し直す。
-      out = launchStaff(ctx, subject, openReviews(ctx, self.key), {
+      out = launchStaff(ctx, subject, [...open, review], {
         wait: options.wait ?? ASK_REVIEW_WAIT,
         again: seat !== undefined,
         castlistHint: ['この 1 行は自分で打たない。tpm ask tpm で、castlist が止まっていることを TPM 担当に知らせ、起きた後にもう 1 度 tpm ask review を打ってください。'],
       });
     }
     catch (e) {
-      // 居場所を作った後に名乗らなかった回は、頼みを残す（依頼書は渡してある）。その前に止まった回は、頼みを取り消す（打ち直せる）。
-      if (e instanceof NotStartedError) throw new TpmError(`${e.message}\n頼み #${review.n} は残してあります。Staff Engineer 担当の席が名乗らないことを、tpm ask tpm で TPM 担当に知らせてください。`);
-      removeReview(ctx, review.n);
-      throw e;
+      // 居場所を作った後の失敗（名乗らなかった など）は、頼みを残す（依頼書は名簿の行で渡してある）。その前に止まった回は、頼みを取り消す（打ち直せる）。
+      const made = readRole(ctx, staffKey(self.key))?.address;
+      const spawned = made !== undefined && made !== seat?.address;
+      if (!(e instanceof NotStartedError) && !spawned) {
+        removeReview(ctx, review.n);
+        throw e;
+      }
+      const message = e instanceof Error ? e.message : String(e);
+      throw new TpmError(`${message}\n頼み #${review.n} は残してあります。Staff Engineer 担当の席が名乗らないことを、tpm ask tpm で TPM 担当に知らせてください（TPM 担当が、残った居場所を tpm close ${staffKey(self.key)} で閉じてから起こし直す）。`);
     }
   }
   // じかのメッセージは TPM 担当の命令を通らないので、届いた時刻をここで写す。

@@ -8,7 +8,7 @@ import type { Context } from '../context.ts';
 import { recordGateStop, recordWait } from '../evidence.ts';
 import { addIncident, foldIntoIncident, incidentLine, incidentType, INCIDENT_TYPES, readIncidents, tagLines } from '../incidents.ts';
 import { message, ROLES, TPM_TITLE, WAIT, WAIT_CLOSE, WAIT_NEXT_BRIEF, type HeadingId, type WaitKind } from '../protocol.ts';
-import { readRole, requireRole, requireSelf, requireTpm, requireTpmSide, subjectOf, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
+import { readRole, requireRole, requireSelf, requireTpm, requireTpmSide, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
 import { patchReview, readReviews, VERDICTS } from '../reviews.ts';
 import { TpmError } from '../skill-sets.ts';
 import { MAX_POINTS, type Note, type NoteKind, type NoteLink } from '../tracker/types.ts';
@@ -35,6 +35,8 @@ interface Sent {
    * 前の版が書いた行には無いので、本文の「取り消す: 」で読む（openBriefs）。
    */
   settle?: SettleChoice | 'none'
+  /** 担当から担当へじかに送った行（レビューの頼みと判定）。前の版が TPM 担当へ送った【ask-review】【review】の行には無い。 */
+  peer?: true
 }
 
 /** 同じメッセージの 2 度送りとみなす間（秒）。 */
@@ -58,7 +60,7 @@ function assertNotRepeat(ctx: Context, id: HeadingId, from: string, to: string, 
 const notRepeatToTpm = (ctx: Context, self: RoleRecord, id: HeadingId, body: string): void => assertNotRepeat(ctx, id, self.title, requireTpm(ctx).address, body);
 
 /** メッセージを送り、送った記録を log.jsonl に足す。extra は記録の行に足す欄。 */
-function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: string, body: string, replyTo?: string, extra: Pick<Sent, 'settle'> = {}): string {
+function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: string, body: string, replyTo?: string, extra: Pick<Sent, 'settle' | 'peer'> = {}): string {
   assertNotRepeat(ctx, id, from, to, body, replyTo);
   const text = message(id, body);
   const d = ctx.transport.send(to, from, text, replyTo);
@@ -96,7 +98,7 @@ function peerSeat(ctx: Context, peer: RoleRecord): string {
 
 /** 担当から担当へ、じかに（レビューの頼みと判定だけ）。送り手の名は名簿の題。相手の居場所が無ければ止まる。 */
 export function toPeer(ctx: Context, self: RoleRecord, peer: RoleRecord, id: HeadingId, body: string): string {
-  return deliver(ctx, id, self.key, self.title, peerSeat(ctx, peer), body);
+  return deliver(ctx, id, self.key, self.title, peerSeat(ctx, peer), body, undefined, { peer: true });
 }
 
 /** 担当が担当へじかに送る物の 2 度送りを見る（課題に記録を書く前に呼ぶ。相手の宛先で数える）。 */
@@ -256,7 +258,7 @@ function openBriefs(ctx: Context, role: RoleRecord, address: string, log: Sent[]
   let open: OpenBrief[] = first === undefined ? [] : [{ url: first, ...(role.helloAt === undefined ? {} : { seen: role.helloAt }) }];
   for (const l of log) {
     // 課題の担当がじかに送ったレビューの頼み（【ask-review】。記録の Key は送った課題の担当）も、Staff Engineer 担当の席の依頼書に積む。
-    if (l.heading === 'ask-review' && l.to === address && l.key === subjectOf(role) && role.subject !== undefined) {
+    if (l.peer === true && l.heading === 'ask-review' && l.to === address) {
       const at = seen(l);
       open.push({ url: l.text.slice('【ask-review】'.length).split(' ')[0] ?? '', id: l.id, ...(at === undefined ? {} : { seen: at }) });
       continue;
@@ -456,8 +458,11 @@ export function askTpm(ctx: Context, options: { text: string, waitingFor: string
   const review = readReviews(ctx).find(r => r.n === options.review);
   if (review === undefined || review.key !== self.key) throw new TpmError(`--review は、自分の課題（${self.key}）のレビューの頼みの番号にしてください（tpm review list --key ${self.key} で見る）`);
   if (review.verdict === undefined || review.page === undefined) throw new TpmError(`レビュー #${review.n} は、まだ判定が返っていません。送っていません`);
+  // 上げるのは「直すべき」を受けない時だけ（ほかの判定は、受けるか・直すかを課題の担当が決めて進む）。
+  if (review.verdict !== 'reject') throw new TpmError(`レビュー #${review.n} の判定は「${VERDICTS[review.verdict]}」です。--review で上げるのは「${VERDICTS.reject}」を受けない時だけです（ほかの判定は、指摘ごとに自分で決めて進む）。送っていません`);
   const sent = toTpm(ctx, self, 'ask-tpm', `レビュー #${review.n}（判定: ${VERDICTS[review.verdict]}。${review.page}）を受けない: ${options.text}`, options.replyTo);
-  patchReview(ctx, review.n, { escalatedAt: ctx.now().toISOString() });
+  // 2 度目に上げても、最初に上げた時刻を残す。
+  if (review.escalatedAt === undefined) patchReview(ctx, review.n, { escalatedAt: ctx.now().toISOString() });
   return [sent, ...wait(ctx, 'tpm', options.waitingFor)];
 }
 

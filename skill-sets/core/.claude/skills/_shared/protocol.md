@@ -135,12 +135,12 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 | 見られなかった（`not-assessed`） | 材料が足りない・読めない | 足りない物を足して、頼み直す |
 
 - **レビューは助言で、課題の担当を縛らない。** 受けるか・直すかは課題の担当が決める。
-- **意見がぶつかった時だけ、TPM 担当に上げる。** 課題の担当が「直すべき」を受けない時は、自分で決めず、`tpm ask tpm "<受けない訳・案とお勧め>" --waiting-for "<何を>" --review <頼みの番号>` で上げる（TPM 担当は判定を受け取っていないので、命令がレビューのページの URL を本文に足し、上げたことを頼みの記録に残す）。決まるまで、その PR は merge しない。TPM 担当は、依頼書と Product Manager の言葉で決まる物は自分で決め、範囲・優先・設計の好みは Product Manager に聞く。レビューの担当に伝えることがあれば、TPM 担当が `tpm notify <課題の Key>.staff` で伝える。
+- **意見がぶつかった時だけ、TPM 担当に上げる。** 課題の担当が「直すべき」を受けない時は、自分で決めず、`tpm ask tpm "<受けない訳・案とお勧め>" --waiting-for "<何を>" --review <頼みの番号>` で上げる（TPM 担当は判定を受け取っていないので、命令がレビューのページの URL を本文に足し、上げたことを頼みの記録に残す。`--review` が受けるのは、自分の課題の、判定が「直すべき」の頼みだけ）。決まるまで、その PR は merge しない。TPM 担当は、依頼書と Product Manager の言葉で決まる物は自分で決め、範囲・優先・設計の好みは Product Manager に聞く。レビューの担当に伝えることがあれば、TPM 担当が `tpm notify <課題の Key>.staff` で伝える。
 - **Staff Engineer 担当は、直さない・決めない。** repo・PR・ページを変えず、merge もしない（書き込みと `git`・`gh` の変える命令は guard が止める）。merge するのは、今までどおり課題の担当。**じかに届くのは、頼みと判定だけ。**そのほかのこと（見る物が読めない・依頼書が足りない）を、課題の担当にじかに聞く道は無い: 判定「見られなかった」で返すか、`tpm ask tpm` で TPM 担当に送る。
 - **いつ頼むか**: 計画・提案を置く前と、PR を merge する前に、課題の担当が要ると見たら頼む（設計の判断がある・戻しにくい・広く触る、など）。**依頼書に「レビューを受ける」とあれば、計画と PR を必ず頼む。**文書の食い違いだけを直す PR は、頼まなくてよい。
 - **残す**: 課題の担当は、成果のページ（計画・結果）に「レビュー: 誰が・判定・どう扱ったか」を必ず書く（レビューのページの URL を添える）。頼まなかった時は「レビュー: 無し」と書く。TPM 担当と Product Manager は、メッセージを受けなくても、この行・課題の記録・置き場のレビューのページ・`tpm review list` でレビューを見られる。
 - 頼んだ回数・判定・TPM 担当に上げた数は、命令が記録する。`tpm review list [--key <Key>]` で読める（この記録も、tpm を動かす機械の外に写さない）。
-- **席を起こす・閉じる**: 起こすのは `tpm ask review`（課題の担当の命令）。席の model と effort は、設定（`.claude/roles/config.jsonc` の `staff-engineer`）で決まる。起こした席が名乗らない時は、課題の担当が `tpm ask tpm` で知らせる。返っていない頼みがあるのに席が落ちた時は、次の `tpm ask review` が起こし直す（TPM 担当が `tpm assign <課題の Key> --role staff-engineer` で起こし直すこともできる）。席は、TPM 担当が課題の担当の席を `tpm close` で閉じる時に、一緒に閉じる（先に閉じるなら、TPM 担当が `tpm close <課題の Key>.staff`。課題の担当は `tpm ask tpm` で頼む）。Staff Engineer 担当に【dismiss】は送らず、Staff Engineer 担当は【end】を返さない。
+- **席を起こす・閉じる**: 起こすのは `tpm ask review`（課題の担当の命令）。席の model と effort は、設定（`.claude/roles/config.jsonc` の `staff-engineer`）で決まる。起こした席が名乗らない時は、課題の担当が `tpm ask tpm` で知らせる。返っていない頼みがあるのに席が落ちた時は、次の `tpm ask review` が起こし直す（TPM 担当も起こし直せる: 居場所が残っていれば `tpm close <課題の Key>.staff` で閉じてから、`tpm assign <課題の Key> --role staff-engineer`）。席は、TPM 担当が課題の担当の席を `tpm close` で閉じる時に、一緒に閉じる（先に閉じるなら、TPM 担当が `tpm close <課題の Key>.staff`。課題の担当は `tpm ask tpm` で頼む）。Staff Engineer 担当に【dismiss】は送らず、Staff Engineer 担当は【end】を返さない。
 
 ## 連携の 3 つの形
 
