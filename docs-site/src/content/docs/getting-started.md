@@ -11,8 +11,10 @@ Node の version は repo の一番上の `.node-version` で決める（GitHub 
 cd </foo/bar/roster> # rosterの置き場所
 nodenv install       # .node-version の version を入れる（入っていれば何もしない）
 npm install -g corepack && corepack enable && nodenv rehash   # pnpm を出す（Node 25 から corepack は Node に入っていない）
-pnpm -v              # packageManager（package.json）の版が出る
+(cd cli && pnpm -v) # cli/package.json の packageManager の版が出る
 ```
+
+corepack は、`pnpm` を打った folder から上へ `package.json` を探し、その `packageManager` で pnpm の版を決める。`--dir`（`-C`）の先は見ない。roster の一番上には `package.json` が無いので、`pnpm` は `cli/`（docs なら `docs-site/`）に入ってから打つ。一番上で打つと、corepack が前に使った版か最新の版を出し、それが `packageManager` と合わなければ止まる。
 
 pnpm は Node の version ごとに入る。`.node-version` を上げたら、新しい version でもう 1 度 corepack を入れる。合わない Node で `pnpm install` を打つと、`engines.node` の誤りで止まる（`pnpm-workspace.yaml` の `engineStrict`）。
 
@@ -22,7 +24,7 @@ pnpm は Node の version ごとに入る。`.node-version` を上げたら、�
 
 ```sh
 cd </foo/bar/roster> # rosterの置き場所
-pnpm --dir cli install --frozen-lockfile   # build は無い（tpm は src/ を node で直に動かす）
+cd cli && pnpm install --frozen-lockfile   # build は無い（tpm は src/ を node で直に動かす）
 cd </your/workspace> # あなたが作業する場所
 /foo/bar/roster/cli/bin/tpm start --verbose             # 今いる folder で TPM 担当を起こす 1 行を出す
 /foo/bar/roster/cli/bin/tpm start --verbose <folder>    # その folder で起こす 1 行を出す

@@ -67,11 +67,12 @@ Dependabot の PR の判定の道具は `cli/src/release-age.ts`（`node cli/src
 原稿は `docs-site/src/content/docs/` の Markdown（Astro + Starlight）。`docs-site/` は `cli/` と別の pnpm の project で、依存と lockfile を自分で持つ。
 
 ```sh
-pnpm --dir docs-site install --frozen-lockfile
-pnpm --dir docs-site run dev            # 手元で見る（http://localhost:4321/roster/）
-pnpm --dir docs-site run check          # build と、原稿と repo の食い違いの検査
-pnpm --dir docs-site run format         # code（astro.config.ts・src/ の .ts・scripts/）を Prettier で整える
-pnpm --dir docs-site run format:check   # 整っているかと、md の中の JSON の塊と *.jsonc を見る（site.yml が流す）
+cd docs-site                  # docs-site/ で打つ（corepack は docs-site/package.json の packageManager で pnpm の版を決める）
+pnpm install --frozen-lockfile
+pnpm run dev                  # 手元で見る（http://localhost:4321/roster/）
+pnpm run check                # build と、原稿と repo の食い違いの検査
+pnpm run format               # code（astro.config.ts・src/ の .ts・scripts/）を Prettier で整える
+pnpm run format:check         # 整っているかと、md の中の JSON の塊と *.jsonc を見る（site.yml が流す）
 ```
 
 Prettier は既定の設定のまま使い、設定のファイルは置かない。原稿の `.md` は Prettier に掛けない（表や日本語の折り返しを崩させないため）。その代わり、`format:check` は `docs-site/scripts/check-md-json.mjs` で repo の `.md`（skill・原稿・README など、git が追跡する物と add 前の新しい物）の中の ` ```json `・` ```jsonc ` の塊だけを取り出し、読めることと、Prettier（`--parser json`・`--parser jsonc`）で整えた形と同じことを見る。repo の `*.jsonc` の file（`.claude/roles/config.jsonc` など）も、file 全体を ` ```jsonc ` の塊と同じに見る。` ```jsonc ` の塊と `*.jsonc` の file は、`tpm` が `config.jsonc` を読むのと同じ `cli/src/jsonc.ts` で読む。`<id>` などの置き字は、文字列の中に書けば読める。落ちたら、塊を `prettier --parser json`（`jsonc`）に通した形に書き換える。`cli/` の整形は Prettier でなく ESLint（`@stylistic`）が見る。
@@ -98,4 +99,4 @@ flowchart LR
 
 `deploy-pages` は、上げた直後の artifact を「0 個」と見て落ちることがある（上げた物が一覧に出るまでの遅れ）。`docs.yml` は落ちても job を止めず、30 秒おいて同じ回の中で 1 度だけやり直す。それでも落ちたら job は赤になる。そのときは `gh workflow run docs.yml --ref main` で新しい回を流す。落ちた回の `gh run rerun` は、前の試みの artifact が残って同じ名の物が 2 つになり、また落ちる。merge した担当は main の回が通ったかを見て、落ちていれば【merged】に書く（`/software-engineer` の 2）。
 
-Pages の deploy を main だけに絞っているのは、`github-pages` の environment の branch の決まりだけ。この決まりは environment を書いた job にしか効かないので、書かない job が `pages: write`・`id-token: write` で `actions/deploy-pages` を流すと、PR の branch からでも本物の site に出る（repo の設定に、Pages の deploy に environment を求める欄は無い）。そこで `check` は `docs-site/scripts/check-workflows.mjs` で、workflow の頭の `permissions` に `pages`・`id-token` の write（と `write-all`）が無いこと、それを持つ job と `actions/deploy-pages` を使う job が `environment: github-pages` を書いていることを見る。PR の検査で落ちても、その PR の workflow はもう走っているので、workflow を足す・変えるときは push の前に手元で `pnpm --dir docs-site run check` を流す。確かめ用の workflow で `deploy-pages` を流す形もこの検査で落ちる。落ちるのを承知で流すなら、`pages`・`id-token` の権限を渡さない。
+Pages の deploy を main だけに絞っているのは、`github-pages` の environment の branch の決まりだけ。この決まりは environment を書いた job にしか効かないので、書かない job が `pages: write`・`id-token: write` で `actions/deploy-pages` を流すと、PR の branch からでも本物の site に出る（repo の設定に、Pages の deploy に environment を求める欄は無い）。そこで `check` は `docs-site/scripts/check-workflows.mjs` で、workflow の頭の `permissions` に `pages`・`id-token` の write（と `write-all`）が無いこと、それを持つ job と `actions/deploy-pages` を使う job が `environment: github-pages` を書いていることを見る。PR の検査で落ちても、その PR の workflow はもう走っているので、workflow を足す・変えるときは push の前に手元で `docs-site/` の `pnpm run check` を流す。確かめ用の workflow で `deploy-pages` を流す形もこの検査で落ちる。落ちるのを承知で流すなら、`pages`・`id-token` の権限を渡さない。

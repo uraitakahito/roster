@@ -7,7 +7,7 @@
 set -eu
 cli=$(CDPATH='' cd -- "$(dirname -- "$(readlink -f -- "$0")")/.." && pwd)
 if [ ! -d "$cli/node_modules" ]; then
-  echo "tpm: $cli/node_modules がありません。先に pnpm --dir $cli install --frozen-lockfile を打ってください" >&2
+  echo "tpm: $cli/node_modules がありません。先に cd $cli && pnpm install --frozen-lockfile を打ってください" >&2
   exit 1
 fi
 # cmux の通知の hook のように、PATH が macOS の既定（/usr/bin:/bin:/usr/sbin:/sbin）だけで呼ばれた時のため、

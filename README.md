@@ -13,7 +13,7 @@ https://uraitakahito.github.io/roster/
 Node は `.node-version` の version を nodenv で入れ、pnpm は corepack で出す（[はじめる](https://uraitakahito.github.io/roster/getting-started/)）。
 
 ```sh
-cd <roster の置き場所> && pnpm --dir cli install --frozen-lockfile
+cd <roster の置き場所>/cli && pnpm install --frozen-lockfile   # cli/ で打つ（corepack は cli/package.json の packageManager で pnpm の版を決める）
 <roster の置き場所>/cli/bin/tpm start <作業する folder>   # 出た 1 行を写して打つ
 ```
 
