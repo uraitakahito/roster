@@ -158,9 +158,10 @@ Auditor が、件の記録に残っている物（Key・役割・時刻）で ca
 | Auditor | Olive（#4A5C18） |
 
 - 色は、選んだ居場所の地の青と紛れない物から選ぶ（Blue・Navy・Indigo・Aqua・Teal・Charcoal は使わない）。どれも暗い画面の地より明るく、互いの色相も離す。課題ごとに色を替えない（同じ課題の席は、題の Key で分かる）。
-- 起こされる席（`tpm assign`・`tpm ask review`・`tpm audit start`）は、宛先を名簿に書いた後に、起こす命令が連携の口の `setColor` で付ける。TPM 担当の居場所は利用者が作るので、`tpm hello` で名乗る時に自分に付ける。Auditor も、名乗る時に題と一緒に付け直す（Product Manager が手で起こした席のため）。
+- 色相のいちばん近い組は Orange と Amber（24°）、Amber と Olive（28°）。どれも 1 席だけの役割（DevOps・TPM 担当・Audit）で、題も短く違うので、そのままにしている。
+- どの席も、`tpm hello` で名乗る時に自分の居場所に付ける（TPM 担当の居場所は利用者が作り、Auditor の席は Product Manager が手で起こすこともあるため）。起こされる席（`tpm assign`・`tpm ask review`・`tpm audit start`）は、名乗る前から帯が出るように、宛先を名簿に書いた後に起こす命令も連携の口の `setColor` で付ける。TPM 担当の居場所に利用者が手で付けた色は、名乗るたびに Amber に戻る。
 - 色は飾りなので、付けられなくても止めずに 1 行で知らせる。
-- 色は起こす時・名乗る時に付くので、前から居る席には付かない。起こし直すか、TPM 担当なら `tpm hello` を打ち直すと付く。
+- 色は起こす時・名乗る時に付くので、前から居る席には、次に `tpm hello` を打つ（起こし直す）まで付かない。
 
 ## 見出しの流れ
 
@@ -249,7 +250,7 @@ Auditor（役割 `auditor`。題は `Audit`、課題の Key は `audit`。skill 
 | 命令 | 打つ人 | すること |
 |---|---|---|
 | `tpm audit start` | Product Manager | 名簿に Auditor の行を書き、居場所を作って、名乗るまで待つ（`--model`・`--effort`・`--permission-mode`・`--wait`）。席は project に 1 つで、もうあれば断る。居場所が消えていれば起こし直す。skill `/audit` が無ければ断る |
-| `tpm hello` | Auditor | 居場所の題を `Audit` にし、色（Olive）を付け、状態を出し、監査の規程・手順の path と、前の監査・答えの出ていない報告を返す。TPM 担当が起きていなくても名乗れる |
+| `tpm hello` | Auditor | 居場所の題を `Audit` にし、色（Olive）を付け直し、状態を出し、監査の規程・手順の path と、前の監査・答えの出ていない報告を返す。TPM 担当が起きていなくても名乗れる |
 | `tpm audit begin [番号…]` | Auditor | 監査を始める（番号があれば、その件の臨時の監査）。**前の報告の後に新しい文脈になっていなければ、始めずに止まる**（`gate.jsonl` に `stale-context`）。通れば、監査の材料（規程・手順・前の監査・答えの出ていない報告・台帳の件数）を返す |
 | `tpm audit fresh` | Auditor の席の hook | 席を起こした時（`startup`）と `/clear` の時（`clear`）に、新しい文脈の印を書く。続きから開いた時（`resume`）と文脈を要約した時（`compact`）は書かない |
 | `tpm report audit` | Auditor | 監査のページを Product Manager へじかに報告した、と記録する。TPM 担当に写し（【audit】）を送り、状態を `回答待ち(PM): 監査の報告` にする（その回の終わりに通知のバナーが出る）。TPM 担当が起きていなければ、写しは送らずに記録だけ書く |

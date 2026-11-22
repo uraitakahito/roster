@@ -61,6 +61,15 @@ describe('居場所の色', () => {
     expect(['file:1', 'file:2', 'file:3'].map(a => w.wire.look(a)?.color)).toEqual(['Green', 'Orange', 'Magenta']);
   });
 
+  test('担当も、名乗る時に自分の居場所に役割の色を付け直す（起こす時に付けられなかった席・前から居る席）', () => {
+    const w = world();
+    hello(w.tpm);
+    assign(w.tpm, 't-x7k2', SE);
+    w.wire.setColor('file:1', 'Red');
+    hello(w.role('t-x7k2', 'file:1'));
+    expect(w.wire.look('file:1')?.color).toBe('Green');
+  });
+
   test('TPM 担当は、名乗る時に自分の居場所に色を付ける。付けられなくても名乗りは止めず、1 行で知らせる', () => {
     const w = world();
     const painted: string[][] = [];
