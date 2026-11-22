@@ -20,7 +20,6 @@
 // そのため Node の組み込みだけを import し、消せる型だけを書く（tsconfig.json の erasableSyntaxOnly）。
 
 import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 
 /** 上げる依存 1 つ。version は新しく入る version。source は差分のどこから取ったか（commit の本文から取ったときは無い）。 */
 export interface Dependency {
@@ -278,7 +277,9 @@ async function main(argv: string[]): Promise<number> {
   return exitCodeOf(result);
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+// 直に起動されたときだけ main を動かす（試験の import では動かさない）。argv[1] と import.meta.url を比べると、
+// symlink を通した path で打ったとき Node が import.meta.url を本当の在り処にするので食い違い、何も出さずに 0 で終わっていた。
+if (import.meta.main) {
   main(process.argv.slice(2)).then(
     code => process.exit(code),
     (err: unknown) => {

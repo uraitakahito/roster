@@ -1,4 +1,9 @@
-import { expect, test } from 'vitest';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { afterAll, expect, test } from 'vitest';
 import { parseUpdatedDependencies, ecosystemFromBranch, depsFromCommits, versionsFromDiff, judge, exitCodeOf, EXIT } from '../src/release-age.ts';
 
 // group の PR が作り直された実例の差分の抜き書き。commit の本文は starlight 0.42.11 だが、差分は 0.43.1。
@@ -196,4 +201,24 @@ test('hours を替えると eligibleAt も替わる', async () => {
 test('依存が 0 なら 判定できない', async () => {
   const r = await judge({ deps: [], ecosystem: 'npm', now: T0, lookup: fixed({}) });
   expect(r.eligible).toBe('undetermined');
+});
+
+// 直に起動されたかの見分け。引数が無ければ、どの path で打っても使い方を出して 1（道具の誤り）で終わる。
+// symlink を通すと前は何も出さずに 0（対象）で終わり、判定していないのに通ったように見えた。
+const script = fileURLToPath(new URL('../src/release-age.ts', import.meta.url));
+const links = mkdtempSync(join(tmpdir(), 'release-age-'));
+afterAll(() => {
+  rmSync(links, { recursive: true, force: true });
+});
+symlinkSync(script, join(links, 'release-age.ts'));
+symlinkSync(dirname(script), join(links, 'src'));
+
+test.each([
+  ['直の path', script],
+  ['file の symlink', join(links, 'release-age.ts')],
+  ['folder の symlink', join(links, 'src', 'release-age.ts')],
+])('%s で打っても、引数が無ければ使い方を出して 1 で終わる', (_, path) => {
+  const r = spawnSync(process.execPath, [path], { encoding: 'utf8' });
+  expect(r.stderr).toContain('使い方: release-age.ts');
+  expect(r.status).toBe(EXIT.error);
 });
