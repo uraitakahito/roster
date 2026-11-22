@@ -46,7 +46,7 @@ tpm hello
 
 ## 3. 成果を出す
 
-- 提案・計画・報告は HTML の file に書き、`tpm page put <file> --kind <proposal|plan|result>` で置く（protocol.md の「ページ」）。図があった方がわかりやすい所は図を入れる。
+- 提案・計画・報告は HTML の file に書き、`tpm page put <file> --kind <proposal|plan|result>` で置く（protocol.md の「ページ」）。図は protocol.md の「ページ」の図の項に従い、ひな形 `${CLAUDE_SKILL_DIR}/../_shared/figures.md` を写して描く。
 - 画面の写しや PDF をページに付けるときは `tpm file put <file> --reviewed` で上げ、ページから相対で参照する（protocol.md の「ページ」）。画像や PDF を上げる前に Read で見て、秘密が写っていないか確かめる。
 - 直した PR（文書の食い違いを含む）は、成果のページに一覧で載せる。
 - 成果に Product Manager に決めてほしいことがあれば、ページに書くだけで済ませない。protocol.md の「Product Manager に確かめる」で `tpm ask pm` も送る。

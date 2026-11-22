@@ -68,7 +68,7 @@ Auditor（`/audit`）が、監査のたびに読む手順。何のために・�
 
 ## 監査のページの書き方
 
-HTML の file を一時の folder に書き、`tpm page put <file> --kind audit` で置く。Product Manager が読んで分かるように、比べる物は表か図にする。
+HTML の file を一時の folder に書き、`tpm page put <file> --kind audit` で置く。Product Manager が読んで分かるように、指摘の数の推移と、勧告ごとの比べは図にする（protocol.md の「ページ」の図の項。ひな形は `_shared/figures.md`）。
 
 | 節 | 中身 |
 |---|---|
