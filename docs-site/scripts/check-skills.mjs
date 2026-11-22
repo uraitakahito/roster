@@ -23,6 +23,12 @@
 //
 // 10. allowed-tools の欄がある（担当は bypassPermissions で起きるので効かず、bypass をやめても
 //     呼んだ turn だけしか効かない。許可を渡すなら担当を起こす旗か settings の allow で）
+//
+// model・effort は、skill を呼んだ turn の残りだけ model と effort を替える欄（fork なら fork の中だけ）。
+// 次も止める（2026-11-22 t-4zk5）:
+//
+// 11. context: fork でない skill が model か effort の欄を持つ（呼んだ turn だけ効き、次の入力で
+//     戻る。担当の model・effort は config.jsonc か tpm assign の旗で決める）
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -133,6 +139,11 @@ export function checkSkill(file, text) {
   if (Object.hasOwn(fm, "allowed-tools"))
     errors.push(
       `${file}: allowed-tools がある（担当は bypassPermissions で起き効かない。効いても呼んだ turn だけ。書かない）`,
+    );
+  const turnOnly = ["model", "effort"].filter((key) => Object.hasOwn(fm, key));
+  if (turnOnly.length > 0 && fm.context !== "fork")
+    errors.push(
+      `${file}: ${turnOnly.join("・")} は context: fork の skill にだけ書く（呼んだ turn だけ効き、次の入力で戻る。担当の model は config.jsonc か tpm assign --model で）`,
     );
   return errors;
 }
