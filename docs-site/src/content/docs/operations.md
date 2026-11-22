@@ -1,6 +1,6 @@
 ---
 title: 運用
-description: この repo を別の folder へ移す手順、Node の version の上げ方、アクターの台帳（castlist）が止まった時、ページの置き場（pagetray）の起こし方と保ち方、レビュー（Staff Engineer 担当の席）と監査（Auditor の席）の運び
+description: この repo を別の folder へ移す手順、Node の version の上げ方、アクターの台帳（castlist）が止まった時、ページの置き場（pagetray）の起こし方と保ち方、レビュー（Staff Engineer 担当の席）と監査（Auditor の席）の運び、担当が落ちた後の調べ方
 ---
 
 ## 移す手順
@@ -164,3 +164,82 @@ pagetray の新しい版が出て、この repo の `.pagetray-version` が上�
 ### ほかの project で使う
 
 置き場は tpm を動かす機械に 1 つで、どの project の担当も同じ置き場を使う（一覧の UI では project で絞れる）。ほかの project で TPM 担当を起こすときも、その project の `.claude/roles/config.jsonc` に、この repo と同じ `infra.pagetray` の宣言を写す（写さないと、その project の担当は止める命令を断りなく打てる。[設定](/configuration/#環境の手続き)）。
+
+## 担当が落ちた後の調べ方
+
+担当の Claude Code の session・cmux・container が思わず止まった時に、何が・いつ・どの process の合図で止まったかを、後から引く手順。2026-11-23 の朝（05:33:17 JST）に、担当の session が打った `pkill -f "castlist-server" -n` が、command line に `-n` を含む process すべてに SIGTERM を送り、担当の session 3 つ・cmux-cua の helper・container がいっせいに止まった件（台帳 #89）は、この 3 つの手で元まで追えた。見張りは置いていないので、記録は macOS と Claude Code が元から残す物だけ。
+
+- 打つのは読むだけの命令に限る。process を止める・合図を送る命令は、確かめのためにも打たない。
+- 分かった事実は `tpm report incident` で台帳に書く（[担当のあいだの決まり](/protocol/#台帳)）。原因を調べ、扱いを決めるのは Auditor。
+- 下の命令の日時は、今朝の件の値。落ちた時刻に替えて打つ。
+
+### 先に、刈られる前に残す
+
+macOS の記録（unified log）は、OS が古い物から自分で刈る（目安は約 3 週間）。Claude Code の transcript も、既定では 30 日で消える。落ちたと気づいたら、日を置かずに 1 と 3 の行を file に書き出しておく（`… > ~/crash-20261123.log`。tpm を動かす機械の中に置き、外に写さない）。
+
+記録がいつの分から残っているかは、`/usr/bin/log stats | sed -n '/== archive/,/^end:/p'` の `start:` で見る（2 分ほどかかる）。
+
+### 1. macOS の記録から、終わり方と合図の送り手を引く
+
+```sh
+/usr/bin/log show --start "2026-11-23 05:33:00" --end "2026-11-23 05:35:00" --style compact \
+  --predicate 'process == "launchd" AND eventMessage CONTAINS "exited due to"' \
+  | grep -v mdworker
+```
+
+今朝の件では、こう出た（抜き書き）。
+
+```text
+05:33:17.661 … [gui/501/application.com.cmuxterm.cua.… [96743]:] exited due to SIGTERM | sent by pkill[89723], ran for …
+05:33:17.788 … [gui/501/com.apple.container.container-network-vmnet.default [31628]:] exited due to SIGTERM | sent by pkill[89723], ran for …
+05:34:13.587 … [gui/501/com.apple.container.container-runtime-linux.pagetray [37192]:] exited due to SIGTERM | sent by launchd[1], ran for …
+```
+
+- zsh では `log` が shell の組み込みの命令で、`log show …` は `too many arguments` で止まる。`/usr/bin/log` と path で書く。
+- 時刻は tpm を動かす機械の時間帯で書き、そのまま出る。
+- `exited due to` の後ろが終わり方（SIGTERM・SIGKILL など）、`sent by` の後ろが合図を送った process と pid。`sent by launchd[1]` は launchd が止めた（上の行の daemon が止まった後の片付けなど）。今朝は、`pkill[89723]` が先に container の network の daemon を止め、約 1 分後に launchd が container の runtime を止めた。
+- 出るのは launchd の job だけ（cmux の helper `application.com.cmuxterm.…`、container の daemon `com.apple.container.…`、container ごとの runtime `com.apple.container.container-runtime-linux.<container の名>`）。Claude Code の session は launchd の job でないので出ない。session は 2 で見る。
+- `mdworker`（Spotlight）が `sent by mds` で止まる行は、いつも多く出るので grep で外す。job の名（`[gui/501/…]` の所）は `--predicate` の `eventMessage` に入らないので、名で絞るのも grep でする。
+- 送り手の pid（`pkill[89723]`）からは、打った session は分からない。2 で、その時刻の少し前に打たれた命令を探す。
+
+### 2. transcript から、最後の時刻と打った命令を引く
+
+transcript は `<Claude Code の設定の folder>/projects/<起こした folder の path の / を - にした名>/<session の id>.jsonl`（設定の folder は `CLAUDE_CONFIG_DIR`、無ければ `~/.claude`）。中の時刻は UTC（`Z`）。
+
+落ちた頃に書くのが止まった transcript ごとに、最後の時刻・file・最後に打った命令を出す。落ちた session はその後に書き足されないので、file の更新の時刻が落ちた頃に入る（`-newermt` の日時は tpm を動かす機械の時間帯）。
+
+```sh
+cd "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects"
+find . -name '*.jsonl' -newermt '2026-11-23 05:30' ! -newermt '2026-11-23 05:40' | while read -r f; do
+  printf '%s\t%s\t%s\n' \
+    "$(jq -r 'select(.timestamp) | .timestamp' "$f" | tail -1)" "$f" \
+    "$(jq -r 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use") | (.input.command // .name) | .[0:120]' "$f" | tail -1)"
+done | sort
+```
+
+合図を送った命令は、1 の `sent by` の時刻の前の数分に、どこかの session が打った `kill`・`pkill`・`killall` を探す（時刻は UTC で書く。05:33 JST は前の日の 20:33Z）。
+
+```sh
+find . -name '*.jsonl' -newermt '2026-11-23 05:20' | while read -r f; do
+  jq -r --arg f "$f" 'select(.type=="assistant" and .timestamp >= "2026-11-22T20:28" and .timestamp <= "2026-11-22T20:34")
+    | .timestamp as $t | .message.content[]? | select(.type=="tool_use") | (.input.command? // "")
+    | select(test("\\b(pkill|killall|kill)\\b")) | "\($t)\t\($f)\t\(.[0:160])"' "$f"
+done
+```
+
+- 今朝の件では、1 つ目で 20:28Z〜20:33Z に書くのが止まった transcript が 4 本並び、2 つ目で 20:33:15.193Z（05:33:15 JST）に castlist の folder の session が `pkill -f "castlist-server" -n` を打っていたのが出た。`sent by pkill` の 2 秒前。
+- folder の名は `-` で始まる（`-Users-me-work`）。`./` を付けずに `jq … -Users-me-work/….jsonl` と書くと、jq が option と読んで止まる。`find .` の出力は `./` で始まるので、そのまま渡せる。
+- file の名が session の id。どの担当の session かは、Auditor が `tpm castlist` で引く（[アクターの台帳](#アクターの台帳castlist)）。
+
+### 3. container の起動の時刻を見る
+
+```sh
+container list --all
+/usr/bin/log show --start "2026-11-23 05:33:00" --end "2026-11-23 06:10:00" --style compact \
+  --predicate 'process == "launchd" AND (eventMessage CONTAINS "exited due to" OR eventMessage CONTAINS "Successfully spawned")' \
+  | grep 'container-runtime-linux\.\(pagetray\|castlist\)'
+```
+
+- `container list --all` の `STARTED` は、最後に起きた時刻（UTC）だけ。その後にもう 1 度起こし直すと書き替わる（今朝の castlist.box は 05:36:49 に起き直したが、06:05 に版を上げて起こし直したので、`STARTED` は 06:05 の物になっていた）。
+- 止まった時刻と、それまでの起き直しの時刻は、2 つ目の命令の行（launchd の `exited due to` と `Successfully spawned`）に残る。今朝は、pagetray・castlist.box とも 05:34:13 に止まり、05:36:49（castlist.box）と 05:39:05（pagetray）に起き直していた。
+- container の exit code と、起こし直す前の `container logs` は残らない（container の CLI の上流の issue #2402）。container の中の process がきれいに止まったのか、VM ごと切られたのかは、ここからは分からない。
