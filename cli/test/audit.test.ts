@@ -116,6 +116,13 @@ describe('Auditor の tpm hello', () => {
     expect(w.wire.status('file:1')).toEqual({ model: 'Fable 5.2 · high', wait: '回答待ち(PM): /audit' });
   });
 
+  test('Product Manager が手で起こした席でも、名乗る時に題と色を付ける', () => {
+    const w = seated();
+    w.auditor.transport.setColor('file:1', 'Red');
+    hello(w.auditor);
+    expect(w.wire.look('file:1')).toEqual({ title: 'Audit', color: 'Olive' });
+  });
+
   test('TPM 担当が起きていなくても名乗れる', () => {
     const w = seated(false);
     expect(hello(w.auditor)).toContain('TPM 担当の宛先: 無い（TPM 担当が起きていない）');

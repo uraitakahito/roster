@@ -6,7 +6,7 @@ import { requireUp, sessionRef } from '../castlist.ts';
 import { describeTrackers, OWN_LABEL, sourceLabel, type ConfigSource } from '../config.ts';
 import type { Context } from '../context.ts';
 import { syncDeliveries } from '../evidence.ts';
-import { AUDIT_KEY, modelStatus, ROLES, TPM_TITLE, WAIT, type RoleName } from '../protocol.ts';
+import { AUDIT_KEY, modelStatus, ROLES, TPM_COLOR, TPM_TITLE, WAIT, type RoleName } from '../protocol.ts';
 import { lastAuditLine } from '../audits.ts';
 import { openLine } from '../incidents.ts';
 import { openReviews } from '../reviews.ts';
@@ -16,7 +16,7 @@ import { readSkillSets, skillSetDir, TpmError } from '../skill-sets.ts';
 import { route } from '../tracker/routed.ts';
 import { findHook, staleHook } from './banner.ts';
 import { castlistHello, closeLaunch, sweep } from './castlist.ts';
-import { issueCopy, launch, roleDefaults } from './launch.ts';
+import { issueCopy, launch, paint, roleDefaults } from './launch.ts';
 import { assertRead, assertSettled, brief } from './messages.ts';
 import { pageFolder } from './page.ts';
 import { launchStaff, markBriefed, putStaffBrief, relabelStaff, STAFF, staffSubject } from './staff.ts';
@@ -31,12 +31,14 @@ export function tpmHello(ctx: Context, options: { model?: string, effort?: strin
   const actor = castlistHello(ctx);
   const address = ctx.transport.whoami();
   ctx.transport.setTitle(TPM_TITLE);
+  // TPM 担当の居場所は利用者が作るので、色は名乗る時に自分で付ける。
+  const painted = paint(ctx, address, TPM_COLOR);
   ctx.transport.setStatus('model', modelStatus(settings.model, settings.effort));
   ctx.transport.setStatus('wait', WAIT.work('起動'));
   ctx.state.write('tpm.jsonc', { address } satisfies TpmRecord);
   // 連携の道具が古いメッセージを捨てる前に、届いた時刻を写す。
   syncDeliveries(ctx);
-  return [...actor, `TPM 担当の宛先: ${address}`, ...configLines(ctx), ...bannerHint(ctx), ...roles(ctx)];
+  return [...actor, `TPM 担当の宛先: ${address}`, ...painted, ...configLines(ctx), ...bannerHint(ctx), ...roles(ctx)];
 }
 
 /** 既定で埋めた値には「（既定）」を付ける（設定に書いた値と見分けるため）。 */

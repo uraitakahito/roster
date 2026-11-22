@@ -6,6 +6,7 @@ import { auditorHello } from './audit.ts';
 import { castlistHello, sweep } from './castlist.ts';
 import { TpmError } from '../skill-sets.ts';
 import { issueTracker } from './issue.ts';
+import { paint } from './launch.ts';
 import { issueCopyLine, markShown } from './messages.ts';
 import { recordingTo, tpmHello } from './tpm-side.ts';
 
@@ -25,6 +26,8 @@ export function hello(ctx: Context, options: { model?: string, effort?: string }
   if (tpm === undefined) return [...actor, ...auditorHello(ctx, record)];
   record.address = ctx.transport.whoami();
   record.helloAt = ctx.now().toISOString();
+  // 起こす時の塗り（launch）が落ちた席・前から居る席も、名乗れば役割の色になる。
+  const painted = paint(ctx, record.address, ROLES[record.role].color);
   ctx.transport.setStatus('model', modelStatus(record.model, record.effort));
   ctx.transport.setStatus('wait', WAIT.work('依頼書を読む'));
   writeRole(ctx, record);
@@ -35,6 +38,7 @@ export function hello(ctx: Context, options: { model?: string, effort?: string }
     ...actor,
     `役割: ${ROLES[record.role].label}`,
     `課題の Key: ${subject}`,
+    ...painted,
     // Staff Engineer 担当の席は、課題の担当と並ぶ別の名簿の行（TPM 担当は、この Key で名指す）。
     ...(record.subject === undefined ? [] : [`名簿の Key: ${record.key}`]),
     `依頼書: ${record.brief ?? '無し（【brief】を待つ）'}`,

@@ -63,9 +63,9 @@ describe('tpm assign --role staff-engineer', () => {
     // 課題の担当の行は変わらない
     expect(requireRole(w.tpm, 'AI-8')).toMatchObject({ role: 'software-engineer', address: 'file:1' });
     expect(roles(w.tpm).filter(l => l.startsWith('- ')).map(l => l.split('  ').slice(0, 2).join('  '))).toEqual(['- AI-8  SWE AI-8: 計画と実装', '- AI-8.staff  レビュー AI-8: 計画 plan-1']);
-    // Staff の席だけが色（紫の帯）を持つ。見てほしい所の無い頼みは、説明を付けない
+    // Staff の席は紫の帯、課題の担当は緑の帯。見てほしい所の無い頼みは、説明を付けない
     expect(w.wire.look('file:2')).toEqual({ title: 'レビュー AI-8: 計画 plan-1', color: 'Purple' });
-    expect(w.wire.look('file:1')).toEqual({ title: 'SWE AI-8: 計画と実装' });
+    expect(w.wire.look('file:1')).toEqual({ title: 'SWE AI-8: 計画と実装', color: 'Green' });
   });
 
   test('色を付けられなくても止めない。宛先は名簿に書き、1 行で知らせる', () => {

@@ -95,11 +95,17 @@ export interface RoleDef {
   defaults: RoleSettings
   /** 居場所の題（メッセージの差出人にも使う）。担当の名は略す（記録には label を書く）。TPM 担当は同じ Key の担当をこの題でも見分けられる。 */
   title: (key: string, short: string) => string
-  /** 居場所の色（cmux の色の名。サイドバーの左の端の帯）。無ければ付けない。 */
-  color?: string
+  /**
+   * 居場所の色（cmux の色の名。サイドバーの左の端の帯）。役割ごとに 1 色で、帯の色で役割が分かる。
+   * 選んだ居場所の地の青と紛れない色（青・紺・藍・水色・青緑・灰は使わない）で、暗い画面で地から浮く色。
+   */
+  color: string
   /** 【dismiss】を待たずに【end】を送ってよいか（PR 1 本を受け持つ担当は、merge のメッセージで終える）。 */
   endsWithoutDismiss: boolean
 }
+
+/** TPM 担当の居場所の色（RoleDef の color と同じ決め）。名乗る時に自分に付ける。 */
+export const TPM_COLOR = 'Amber';
 
 /** tpm start が起こす TPM 担当の model など。 */
 export const TPM_SETTINGS: RoleSettings = { model: 'claude-opus-5-5', effort: 'medium', permissionMode: 'bypassPermissions' };
@@ -115,6 +121,7 @@ export const ROLES = {
     defaults: { model: 'claude-opus-5-5', effort: 'medium', permissionMode: 'bypassPermissions' },
     /** 居場所の題（`SWE <Key>: <短い題>`）。サイドバーで短い題が切れないよう、担当の名を略す。 */
     title: (key, short) => `SWE ${key}: ${short}`,
+    color: 'Green',
     endsWithoutDismiss: false,
   },
   'devops-engineer': {
@@ -123,6 +130,7 @@ export const ROLES = {
     defaults: { model: 'claude-opus-5-5', effort: 'low', permissionMode: 'bypassPermissions' },
     /** 居場所の題（`DevOps`）。DevOps Engineer 担当は 1 人だけなので、Key を付けない。 */
     title: () => 'DevOps',
+    color: 'Orange',
     endsWithoutDismiss: false,
   },
   'sustaining-engineer': {
@@ -131,6 +139,7 @@ export const ROLES = {
     defaults: { model: 'claude-opus-5-5', effort: 'medium', permissionMode: 'bypassPermissions' },
     /** 居場所の題（`Sustaining <Key>`）。 */
     title: key => `Sustaining ${key}`,
+    color: 'Magenta',
     endsWithoutDismiss: true,
   },
   'staff-engineer': {
@@ -140,7 +149,6 @@ export const ROLES = {
     defaults: { model: 'claude-opus-5-5', effort: 'high', permissionMode: 'bypassPermissions' },
     /** 居場所の題（`レビュー <課題の Key>: <見る物>`）。見る物は頼みから命令が作り（reviews.ts の reviewLabel）、頼みのたびに替える。課題の担当の隣に、課題ごとに立つ。 */
     title: (key, target) => `レビュー ${key}: ${target}`,
-    /** ほかの担当の席は色を持たないので、帯の有る無しでレビューの席と分かる。選んだ席の地の青と紛れない色。 */
     color: 'Purple',
     endsWithoutDismiss: false,
   },
@@ -151,6 +159,7 @@ export const ROLES = {
     defaults: { model: 'claude-fable-5-2', effort: 'high', permissionMode: 'bypassPermissions' },
     /** 居場所の題（`Audit`）。Auditor の席は 1 つだけなので、Key を付けない。 */
     title: () => 'Audit',
+    color: 'Olive',
     endsWithoutDismiss: false,
   },
 } as const satisfies Record<string, RoleDef>;

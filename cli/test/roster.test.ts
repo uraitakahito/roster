@@ -4,9 +4,9 @@ import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { hello, inbox } from '../src/commands/role-side.ts';
 import { assign, close, configLines, newKey, recordingTo, roles } from '../src/commands/tpm-side.ts';
-import { createContext } from '../src/context.ts';
+import { createContext, type Context } from '../src/context.ts';
 import { buildCommand } from '../src/command.ts';
-import { modelLabel, modelStatus, ROLES } from '../src/protocol.ts';
+import { modelLabel, modelStatus, ROLES, TPM_COLOR } from '../src/protocol.ts';
 import { readRole, requireRole, writeRole } from '../src/roster.ts';
 import { claudeArgs, roleEnv } from '../src/run-role.ts';
 import { TpmError } from '../src/skill-sets.ts';
@@ -37,6 +37,49 @@ describe('hello（TPM 担当）', () => {
     expect(w.wire.status('file:tpm')?.model).toBe('Fable 5.2 · low');
     hello(w.tpm, { model: 'claude-opus-5-5', effort: 'max' });
     expect(w.wire.status('file:tpm')?.model).toBe('Opus 5.5 · max');
+  });
+});
+
+/** setColor を差し替えた TPM 担当（自分の居場所は一覧に載らないので、file の連携では色を読めない）。 */
+function painting(tpm: Context, setColor: (address: string, color: string) => void): Context {
+  return { ...tpm, transport: Object.assign(Object.create(tpm.transport) as Context['transport'], { setColor }) };
+}
+
+describe('居場所の色', () => {
+  test('どの役割も色を持ち、TPM 担当とも互いとも違う。選んだ居場所の地の青と紛れる色は使わない', () => {
+    const colors = [TPM_COLOR, ...Object.values(ROLES).map(r => r.color)];
+    expect(colors).toEqual(['Amber', 'Green', 'Orange', 'Magenta', 'Purple', 'Olive']);
+    expect(new Set(colors).size).toBe(colors.length);
+    for (const blue of ['Blue', 'Navy', 'Indigo', 'Aqua', 'Teal', 'Charcoal']) expect(colors).not.toContain(blue);
+  });
+
+  test('tpm assign は、起こした席に役割の色を付ける', () => {
+    const w = world();
+    assign(w.tpm, 't-x7k2', SE);
+    assign(w.tpm, 'devops', { role: 'devops-engineer', wait: 0 });
+    assign(w.tpm, 'gh#1', { role: 'sustaining-engineer', wait: 0 });
+    expect(['file:1', 'file:2', 'file:3'].map(a => w.wire.look(a)?.color)).toEqual(['Green', 'Orange', 'Magenta']);
+  });
+
+  test('担当も、名乗る時に自分の居場所に役割の色を付け直す（起こす時に付けられなかった席・前から居る席）', () => {
+    const w = world();
+    hello(w.tpm);
+    assign(w.tpm, 't-x7k2', SE);
+    w.wire.setColor('file:1', 'Red');
+    hello(w.role('t-x7k2', 'file:1'));
+    expect(w.wire.look('file:1')?.color).toBe('Green');
+  });
+
+  test('TPM 担当は、名乗る時に自分の居場所に色を付ける。付けられなくても名乗りは止めず、1 行で知らせる', () => {
+    const w = world();
+    const painted: string[][] = [];
+    hello(painting(w.tpm, (address, color) => painted.push([address, color])));
+    expect(painted).toEqual([['file:tpm', 'Amber']]);
+    const out = hello(painting(w.tpm, () => {
+      throw new Error('unknown color');
+    }));
+    expect(out).toContain('居場所の色（Amber）を付けられなかった: unknown color');
+    expect(w.tpm.state.read('tpm.jsonc')).toEqual({ address: 'file:tpm' });
   });
 });
 

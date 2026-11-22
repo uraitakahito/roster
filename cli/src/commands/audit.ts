@@ -14,7 +14,7 @@ import { resolveSettings } from '../settings.ts';
 import { skillSetDir, TpmError } from '../skill-sets.ts';
 import { numberOf } from './incident.ts';
 import { roleOf } from './infra.ts';
-import { launch } from './launch.ts';
+import { launch, paint } from './launch.ts';
 import { PM_REF, requireUp } from '../castlist.ts';
 
 /** core の skill セットの中の file（skill と、監査の手順・規程）。 */
@@ -86,14 +86,16 @@ function materials(ctx: Context, events: AuditEvent[]): string[] {
 export function auditorHello(ctx: Context, record: RoleRecord): string[] {
   record.address = ctx.transport.whoami();
   record.helloAt = ctx.now().toISOString();
-  // Product Manager が手で起こした居場所でも、バナーの hook が名簿と突き合わせられるように、題をここで付ける。
+  // Product Manager が手で起こした居場所でも、バナーの hook が名簿と突き合わせられるように、題をここで付ける（色も同じく付け直す）。
   ctx.transport.setTitle(record.title);
+  const painted = paint(ctx, record.address, ROLES[record.role].color);
   ctx.transport.setStatus('model', modelStatus(record.model, record.effort));
   ctx.transport.setStatus('wait', WAIT.pm('/audit'));
   writeRole(ctx, record);
   return [
     `役割: ${ROLES[record.role].label}`,
     `課題の Key: ${record.key}`,
+    ...painted,
     ...materials(ctx, readAudits(ctx)),
     `TPM 担当の宛先: ${ctx.state.read<TpmRecord>('tpm.jsonc')?.address ?? '無い（TPM 担当が起きていない）'}`,
     `自分の宛先: ${record.address}`,
