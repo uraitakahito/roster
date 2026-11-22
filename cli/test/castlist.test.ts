@@ -7,11 +7,11 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { castlistIssuer, CASTLIST_VERSION, seatPrefix } from '../src/castlist.ts';
 import { auditStart } from '../src/commands/audit.ts';
-import { sessionEnd, sessionStart } from '../src/commands/castlist.ts';
+import { readSession, sessionEnd, sessionStart } from '../src/commands/castlist.ts';
 import { guard } from '../src/commands/infra.ts';
 import { hello } from '../src/commands/role-side.ts';
 import { askReview } from '../src/commands/staff.ts';
-import { assign, close } from '../src/commands/tpm-side.ts';
+import { assign, close, roles } from '../src/commands/tpm-side.ts';
 import { startTpm } from '../src/command.ts';
 import type { Context } from '../src/context.ts';
 import { guardSettings } from '../src/guard.ts';
@@ -602,5 +602,168 @@ describe('担当を起こす環境変数', () => {
     startTpm(w.tpm);
     auditStart(w.tpm, { wait: 0 });
     expect(requireRole(w.tpm, 'audit')).toMatchObject({ launchedBy: 'tpm.person:product-manager' });
+  });
+});
+
+describe('落ちた session の突き合わせ（推しの幕引き）', () => {
+  /** cmux の中の周り: 自分の居場所（ref と uuid）と、cmux の居場所の一覧（uuid → ref）。一覧が誤りなら seats は throw する。 */
+  function inCmux(ctx: Context, me: { ref: string, uuid: string }, seats: () => Record<string, string>): Context {
+    const transport = Object.create(ctx.transport) as Context['transport'];
+    transport.seatsById = () => new Map(Object.entries(seats()).map(([uuid, ref]) => [uuid, { address: ref, title: '' }]));
+    const exec: Context['exec'] = (cmd, args, options) =>
+      cmd === 'cmux' && args.join(' ') === '--json identify'
+        ? { status: 0, stdout: JSON.stringify({ caller: { workspace_ref: me.ref } }), stderr: '' }
+        : ctx.exec(cmd, args, options);
+    return { ...ctx, exec, transport, config: { ...ctx.config, transport: 'cmux' }, env: { ...ctx.env, CMUX_WORKSPACE_ID: me.uuid } };
+  }
+
+  const TPM_AT = { ref: 'workspace:1', uuid: 'U-TPM' };
+  const SE_AT = { ref: 'workspace:2', uuid: 'U-SE' };
+  const inferredCloses = (requests: CastlistRequest[]) => writes(requests).filter(r => r.body?.type === 'closed' && (r.body.detail as { inferred?: unknown } | undefined)?.inferred === true);
+
+  /** 担当 1 人（SID）が SE_AT で登場した世界。seats は TPM 担当が見る cmux の一覧（試験の中で替える）。 */
+  function world2(): { w: World, se: Context, tpmIn: (seats: Record<string, string>, me?: { ref: string, uuid: string }) => Context } {
+    const { w, tpm } = launched();
+    const se = inCmux(seat(w, 't-x7k2', SID), SE_AT, () => ({ [TPM_AT.uuid]: TPM_AT.ref, [SE_AT.uuid]: SE_AT.ref }));
+    sessionStart(se, startInput('startup', SID));
+    const tpmIn = (seats: Record<string, string>, me = TPM_AT): Context => inCmux(tpm, me, () => seats);
+    return { w, se, tpmIn };
+  }
+
+  test('登録で、控えに居場所（ref と uuid）を書く', () => {
+    const { w } = world2();
+    expect(readSession(w.tpm, SID)?.workspace).toEqual(SE_AT);
+  });
+
+  test('居場所の uuid が一覧に無い「居る」session に、推しの幕引き（workspace_gone）を番号つきの id で送り、控えを居ないにする', () => {
+    const { w, tpmIn } = world2();
+    const got = mark();
+    const lines = roles(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref }));
+    const closes = inferredCloses(got());
+    expect(closes.map(r => r.body)).toEqual([expect.objectContaining({ by: `claude.session:${SID}`, type: 'closed', detail: { inferred: true, reason: 'workspace_gone' } })]);
+    expect(closes[0]?.path).toMatch(new RegExp(`-${SID}-closed-1$`));
+    expect(readSession(w.tpm, SID)).toMatchObject({ present: false, endedBy: 'inferred' });
+    expect(lines.join('\n')).toContain('t-x7k2-swe.1');
+    // 2 度目は何も送らない。
+    const again = mark();
+    roles(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref }));
+    expect(inferredCloses(again())).toEqual([]);
+  });
+
+  test('uuid が残り ref が替わり、今の組に後から別の session が登録していれば、古い方に推しの幕引き（superseded）', () => {
+    const { w, tpmIn } = world2();
+    const restored = { ref: 'workspace:12', uuid: SE_AT.uuid };
+    sessionStart(inCmux(seat(w, 't-x7k2', SID2), restored, () => ({})), startInput('startup', SID2));
+    const got = mark();
+    roles(tpmIn({ 'U-TPM2': 'workspace:11', [SE_AT.uuid]: restored.ref }, { ref: 'workspace:11', uuid: 'U-TPM2' }));
+    expect(inferredCloses(got()).map(r => r.body)).toEqual([expect.objectContaining({ by: `claude.session:${SID}`, detail: { inferred: true, reason: 'superseded' } })]);
+    expect(readSession(w.tpm, SID2)?.present).toBe(true);
+  });
+
+  test('自分（TPM 担当）が、復元された居場所に後から入ったのでも superseded', () => {
+    const { tpmIn } = world2();
+    const got = mark();
+    roles(tpmIn({ [SE_AT.uuid]: 'workspace:11' }, { ref: 'workspace:11', uuid: SE_AT.uuid }));
+    expect(inferredCloses(got()).map(r => r.body)).toEqual([expect.objectContaining({ by: `claude.session:${SID}`, detail: { inferred: true, reason: 'superseded' } })]);
+  });
+
+  test('uuid が残り ref が替わっただけ（cmux が session を続けたかもしれない）なら、送らない', () => {
+    const { w, tpmIn } = world2();
+    const got = mark();
+    roles(tpmIn({ 'U-TPM2': 'workspace:11', [SE_AT.uuid]: 'workspace:12' }, { ref: 'workspace:11', uuid: 'U-TPM2' }));
+    expect(inferredCloses(got())).toEqual([]);
+    expect(readSession(w.tpm, SID)?.present).toBe(true);
+  });
+
+  test('同じ組（ref も同じ）に別の session が居ても、後先を決められないので送らない', () => {
+    const { w, tpmIn } = world2();
+    sessionStart(inCmux(seat(w, 't-x7k2', SID2), SE_AT, () => ({})), startInput('startup', SID2));
+    const got = mark();
+    roles(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref, [SE_AT.uuid]: SE_AT.ref }));
+    expect(inferredCloses(got())).toEqual([]);
+  });
+
+  test('組がそのまま一覧にある session と、自分の session には送らない', () => {
+    const { w, tpmIn } = world2();
+    const got = mark();
+    roles(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref, [SE_AT.uuid]: SE_AT.ref }));
+    expect(inferredCloses(got())).toEqual([]);
+    // 自分の居場所が一覧に無くても、自分は閉じない（その時は突き合わせごと止める）。
+    expect(readSession(w.tpm, TPM_SID)?.present).toBe(true);
+  });
+
+  test('一覧に自分の組が無い・一覧が空・一覧が誤りなら、何も送らず、命令は続ける', () => {
+    const { tpmIn } = world2();
+    const got = mark();
+    expect(roles(tpmIn({})).join('\n')).toContain('名簿');
+    roles(tpmIn({ [TPM_AT.uuid]: 'workspace:99' }));
+    const broken = inCmux(tpmIn({}), TPM_AT, () => {
+      throw new Error('cmux が答えない');
+    });
+    expect(roles(broken).join('\n')).toContain('名簿');
+    expect(inferredCloses(got())).toEqual([]);
+  });
+
+  test('控えに居場所の無い session は、castlist の付随する id（種類ごとに最新）から引いて突き合わせる', () => {
+    const { w, tpmIn } = world2();
+    const record = readSession(w.tpm, SID);
+    if (record === undefined) throw new Error('控えが無い');
+    delete record.workspace;
+    w.tpm.state.write(`sessions/${SID}.jsonc`, record);
+    const got = mark();
+    roles(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref }));
+    expect(inferredCloses(got()).map(r => r.body)).toEqual([expect.objectContaining({ by: `claude.session:${SID}`, detail: { inferred: true, reason: 'workspace_gone' } })]);
+    expect(readSession(w.tpm, SID)?.workspace).toEqual(SE_AT);
+  });
+
+  test('assign と担当の hello も突き合わせる', () => {
+    const { tpmIn } = world2();
+    const got = mark();
+    assign(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref }), 't-q9zz', SE);
+    expect(inferredCloses(got())).toHaveLength(1);
+    const { w } = world2();
+    const other = inCmux(seat(w, 't-x7k2', SID3), { ref: 'workspace:3', uuid: 'U-3' }, () => ({ 'U-3': 'workspace:3' }));
+    const got2 = mark();
+    hello(other);
+    expect(inferredCloses(got2())).toHaveLength(1);
+  });
+
+  test('推しで閉じた session が Bash を打てば、今の居場所で登録し直し、番号つきの再登場を送り、もう閉じない', () => {
+    const { w, se, tpmIn } = world2();
+    roles(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref }));
+    const moved = { ref: 'workspace:12', uuid: SE_AT.uuid };
+    const back = inCmux(se, moved, () => ({}));
+    const got = mark();
+    expect(guard(back, bashInput(SID)).allow).toBe(true);
+    const sent = writes(got());
+    expect(sent.find(r => r.path === '/v1/actors')?.body).toMatchObject({ bindings: expect.arrayContaining([{ type: 'cmux.workspace.ref', value: moved.ref }]) });
+    const re = sent.find(r => r.body?.type === 'reentered');
+    expect(re?.body).toMatchObject({ by: `claude.session:${SID}`, detail: { source: 'guard' } });
+    expect(re?.path).toMatch(new RegExp(`-${SID}-reentered-1$`));
+    expect(readSession(w.tpm, SID)).toMatchObject({ present: true, workspace: moved });
+    expect(readSession(w.tpm, SID)?.endedBy).toBeUndefined();
+    const after = mark();
+    roles(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref, [moved.uuid]: moved.ref }));
+    expect(inferredCloses(after())).toEqual([]);
+  });
+
+  test('退場・交代・tpm close の後の session が Bash を打っても、再登場を送らない', () => {
+    const { w, se } = world2();
+    sessionEnd(se, endInput('other', SID));
+    const got = mark();
+    guard(se, bashInput(SID));
+    expect(writes(got()).filter(r => r.body?.type === 'reentered' || r.path === '/v1/actors')).toEqual([]);
+    expect(readSession(w.tpm, SID)?.present).toBe(false);
+  });
+
+  test('推しで閉じて戻った session も、tpm close の幕引きは castlist に残る（推しの id と別）', () => {
+    const { se, tpmIn } = world2();
+    roles(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref }));
+    guard(inCmux(se, { ref: 'workspace:12', uuid: SE_AT.uuid }, () => ({})), bashInput(SID));
+    const got = mark();
+    close(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref, [SE_AT.uuid]: 'workspace:12' }), 't-x7k2');
+    const closes = writes(got()).filter(r => r.body?.type === 'closed');
+    expect(closes.map(r => r.body?.detail)).toEqual([{}]);
+    expect(closes[0]?.path).toMatch(new RegExp(`-${SID}-closed$`));
   });
 });

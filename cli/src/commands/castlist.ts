@@ -26,6 +26,10 @@ export interface SessionRecord {
   observed?: { model: string, effort: string }
   /** model を読めなかったことを送ったか（session に 1 度だけ送る）。 */
   modelUnreadable?: boolean
+  /** 登録した時の cmux の居場所（ref は起こし直しで替わり、uuid は復元で残る）。 */
+  workspace?: { ref?: string, uuid?: string }
+  /** 推しの幕引き（tpm が、落ちたと推して送った幕引き）で居ないにした。guard が、その session の Bash で再登場を送る印。 */
+  endedBy?: 'inferred'
 }
 
 /** 起こし 1 回の控え（`launches/<起こしの id>.jsonc`）。 */
