@@ -14,7 +14,7 @@ import { resolveSettings } from '../settings.ts';
 import { skillSetDir, TpmError } from '../skill-sets.ts';
 import { numberOf } from './incident.ts';
 import { roleOf } from './infra.ts';
-import { launch } from './tpm-side.ts';
+import { launch } from './launch.ts';
 import { PM_REF, requireUp } from '../castlist.ts';
 
 /** core の skill セットの中の file（skill と、監査の手順・規程）。 */

@@ -576,3 +576,49 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
     expect(dismiss(w.tpm, 't-x7k2', { handover: false })[0]).toMatch(/^送った: 【dismiss】/);
   });
 });
+
+describe('入口の検査: TPM 担当だけの命令は、担当の session から打てない', () => {
+  test('担当が notify・answer・dismiss・assign・close を打つと断り、何も送らず・書かない', () => {
+    const w = started({ tracker: 'github' }, 'gh-12');
+    assign(w.tpm, 't-b2c3', { role: 'software-engineer', title: '別の課題', brief: BRIEF, wait: 0 });
+    hello(w.role('t-b2c3', 'file:2'));
+    const state = (): unknown => ({
+      sent: texts(w, 'file:2'),
+      comments: w.calls.filter(c => c.args[1] === 'comment').length,
+      seats: w.wire.seats().length,
+      role: requireRole(w.tpm, 't-b2c3'),
+      pages: w.store.pages.size,
+    });
+    const before = state();
+    for (const [command, send] of [
+      ['tpm notify', () => notify(w.se, 't-b2c3', { text: 'TPM 担当の名で届く字' })],
+      ['tpm answer', () => answer(w.se, 't-b2c3', { text: '案 A' })],
+      ['tpm dismiss', () => dismiss(w.se, 't-b2c3', { handover: false })],
+      ['tpm assign', () => assign(w.se, 't-b2c3', { role: 'software-engineer', brief: BRIEF, wait: 0 })],
+      ['tpm close', () => close(w.se, 't-b2c3')],
+    ] as const) {
+      expect(send).toThrow(`${command} は TPM 担当の命令です。担当の session（t-x7k2）からは打てません。TPM 担当に頼むことは、tpm ask tpm で送ってください`);
+      expect(state()).toEqual(before);
+    }
+    // 止めた回は、入口の検査の記録に残る
+    expect(w.tpm.state.lines<{ gate: string, by: string, detail: string }>('gate.jsonl').filter(l => l.gate === 'tpm-only').map(l => `${l.by} ${l.detail}`)).toEqual(['t-x7k2 tpm notify', 't-x7k2 tpm answer', 't-x7k2 tpm dismiss', 't-x7k2 tpm assign', 't-x7k2 tpm close']);
+  });
+});
+
+describe('入口の検査: 自分が送った物は、未読に数えない（台帳 #97・#100）', () => {
+  // 連携の道具（cmux）は、自分の受信箱の「まだ届いていない物」に、自分が送ってまだ届いていない物も返す。
+  test('担当: 自分が送ってまだ届いていない物では止まらない。相手からの未読では、今のとおり止まる', () => {
+    const w = started();
+    w.wire.hold('file:tpm');
+    askTpm(w.se, { text: '1 通目', waitingFor: 'a' });
+    const mine = w.wire.inbox('file:tpm').map(m => ({ id: m.id, from: m.from, text: m.text }));
+    expect(mine).toHaveLength(1);
+    const real = w.se.transport.pending.bind(w.se.transport);
+    w.se.transport.pending = () => [...mine, ...real()];
+    expect(reportMerged(w.se, { pr: PR, note: '入れた' })[0]).toMatch(/^送った: 【merged】/);
+    w.wire.release('file:tpm');
+    w.wire.hold('file:1');
+    notify(w.tpm, 't-x7k2', { text: '待つこと' });
+    expect(() => askTpm(w.se, { text: '2 通目', waitingFor: 'a' })).toThrow(/まだ読んでいないメッセージが 1 件あります[\s\S]*【notify】待つこと/);
+  });
+});

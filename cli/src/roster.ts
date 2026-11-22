@@ -1,6 +1,7 @@
 // 名簿: 課題の Key → 担当（どの役割で・どこで動き・どの依頼書を受けているか）。状態の folder の roles/ に 1 人 1 ファイル。
 // 名簿は「Key → 宛先」を覚えるだけで、動いているかは毎回、連携の道具に聞く（名簿だけを信じない）。
 import type { Context } from './context.ts';
+import { recordGateStop } from './evidence.ts';
 import type { RoleName, RoleSettings } from './protocol.ts';
 import { TpmError } from './skill-sets.ts';
 
@@ -91,6 +92,17 @@ export function requireTpm(ctx: Context): TpmRecord {
   const tpm = ctx.state.read<TpmRecord>('tpm.jsonc');
   if (tpm === undefined) throw new TpmError('TPM 担当の宛先がありません（TPM 担当が tpm hello を打つ）');
   return tpm;
+}
+
+/**
+ * TPM 担当だけが打つ命令（担当に送る・担当を起こす・閉じる）を、担当の session（$TPM_KEY がある）から打ったら止める。
+ * 送り手の名は命令が付けるので、担当が打つと TPM 担当の名で相手に届いてしまう（台帳 #117）。止めた回は入口の検査の記録に残す。
+ */
+export function requireTpmSide(ctx: Context, command: string): void {
+  const key = ctx.env.TPM_KEY;
+  if (!key) return;
+  recordGateStop(ctx, 'tpm-only', command);
+  throw new TpmError(`${command} は TPM 担当の命令です。担当の session（${key}）からは打てません。TPM 担当に頼むことは、tpm ask tpm で送ってください`);
 }
 
 /** 自分の名簿の行。担当は起こされるときに $TPM_KEY を渡される。 */
