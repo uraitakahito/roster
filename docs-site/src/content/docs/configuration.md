@@ -173,7 +173,7 @@ tpm banner setup   # ~/.config/cmux/cmux.json に足す 1 行と手順を出す
 tpm banner check   # 設定と hook を確かめる
 ```
 
-`tpm banner setup` が出す欄を、`~/.config/cmux/cmux.json` の `notifications.hooks` に Product Manager が足す（tpm は cmux.json を書き替えない）。hook は cmux の app から動き、shell の PATH を受け継がないので、命令の頭に今の Node と cmux の folder を書いてある。Node を上げたら打ち直す（[運用](/operations/#node-の-version-を上げる)）。hook が動けないと、cmux はいつものバナーに加えて「Notification Hook Failed」を出す（黙ってバナーが消えはしない）。
+`tpm banner setup` が出す欄を、`~/.config/cmux/cmux.json` の `notifications.hooks` に Product Manager が足す（tpm は cmux.json を書き替えない）。hook は cmux の app から動き、shell の PATH を受け継がない（PATH は macOS の既定の `/usr/bin:/bin:/usr/sbin:/sbin` だけ）。そのため `cli/bin/tpm` は、PATH に `node` が無ければ nodenv の shim（`${NODENV_ROOT:-~/.nodenv}/shims`）を、`cmux` が無ければ cmux の app の中の folder を自分で足す。命令は `"$HOME/…/cli/bin/tpm" banner hook` のように入口を呼ぶだけで、Node と cmux の path を書かないので、Node を上げても替えなくてよい。repo を移したときは打ち直す（[運用](/operations/#移す手順)）。古い形の命令（頭に `PATH=…` を書いた物）が残っていると、`tpm banner check` と TPM 担当の `tpm hello` が知らせる。hook が動けないと、cmux はいつものバナーに加えて「Notification Hook Failed」を出す（黙ってバナーが消えはしない）。
 
 ### `~/.config/tpm/banner.jsonc`（任意）
 
