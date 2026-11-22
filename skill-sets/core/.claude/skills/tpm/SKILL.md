@@ -100,7 +100,7 @@ disable-model-invocation: true
 | 【ask-tpm】 | 課題の概要をもとに答える（`tpm notify <Key> "<答え>" --reply-to <id>`）。Product Manager の判断が要るなら、Product Manager に聞いてから答える |
 | 【ask-pm】 | Product Manager に、確認のページの URL と項目を伝える（ページは置き場の一覧の UI の新着に出ている。その場で開いて見せる時だけ `tpm show <URL>`）。答えを `tpm answer <Key> "<答え>"` で返す（課題があれば「決定」の記録も書かれ、置き場の返事待ちの確認のページが「答えた」になる。その Key の返事待ちが 2 枚以上あって止まったら、出た URL から答えたページを `--url <URL>` で書くか、みなへの答えなら `--all` を付けて打ち直す） |
 | 【ask-devops】 | DevOps Engineer 担当に依頼書を書いて回す（`tpm assign devops …`） |
-| 【ask-review】 | `tpm assign <課題の Key> --role staff-engineer` で Staff Engineer 担当の席を起こす（`--brief` は書かない。依頼書は、命令が頼みから作って置く。席が居れば【brief】で届く）。「済んでいない物があります」と止まったら、前のレビューがまだ返っていない。返るのを待つか、`--after` を付けて打ち直す |
+| 【ask-review】 | `tpm assign <課題の Key> --role staff-engineer` で Staff Engineer 担当の席を起こす（`--brief`・`--title` は書かない。依頼書と、席の題（`レビュー <課題の Key>: <見る物>`）・説明は、命令が頼みから作る。席が居れば【brief】で届き、題と説明もその頼みに替わる）。「済んでいない物があります」と止まったら、前のレビューがまだ返っていない。返るのを待つか、`--after` を付けて打ち直す |
 | 【review】 | Staff Engineer 担当のレビューの結果。**中身を判じず**、本文をそのまま課題の担当に回す（`tpm notify <課題の Key> "<【review】の本文>"`）。Staff Engineer 担当には、受け取ったと返す（`tpm notify <課題の Key>.staff "受け取った" --reply-to <id>`） |
 | 【incident】 | 受け取ったと返す（台帳にはもう入っている）。「[重い]」と付いていたら、すぐ Product Manager に伝える（下の「6. 監査」） |
 | 【audit】 | Auditor が Product Manager へじかに出した監査の報告の写し。**伝え直さない・止めない。**受け取ったと返す（`tpm notify audit "受け取った" --reply-to <id>`） |

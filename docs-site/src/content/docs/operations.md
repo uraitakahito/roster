@@ -24,7 +24,7 @@ description: この repo を別の folder へ移す手順、Node の version の
 計画・提案・PR を、書いた者から離れた目で見るのは Staff Engineer 担当。席は、課題の担当がレビューを頼んだ時に、TPM 担当がその課題の隣に起こす（決まりは `skill-sets/core/.claude/skills/_shared/protocol.md` の「レビュー」）。Product Manager の手は、ふだんは無い。
 
 - **必ずレビューを受けさせたい課題**は、TPM 担当に頼む時にそう言う（「この課題はレビューを受けさせて」）。TPM 担当が依頼書に「レビューを受ける」と書き、担当は計画と PR を必ず頼む。言わなければ、担当が要ると見た時だけ頼む。
-- 頼まれると、cmux に `Staff <課題の Key>` の居場所ができる。Staff Engineer 担当は見る物と依頼書を読み、レビューのページ（置き場の一覧の UI で、役割 `staff-engineer`・種類 `review`）を置いて返す。課題管理の課題には「レビュー」の記録が付く。
+- 頼まれると、cmux に `レビュー <課題の Key>: <見る物>`（`レビュー t-uepv: PR #180` など）の居場所ができる。題の下に見てほしい所が出て、左の端に紫の帯が付くので、サイドバーでほかの担当の席と分かる。同じ席に次のレビューが届くと、題と説明はその頼みに替わる。Staff Engineer 担当は見る物と依頼書を読み、レビューのページ（置き場の一覧の UI で、役割 `staff-engineer`・種類 `review`）を置いて返す。課題管理の課題には「レビュー」の記録が付く。
 - レビューは助言で、受けるかは課題の担当が決める。担当が「直すべき」を受けない時だけ TPM 担当に上がり、範囲・優先・設計の好みに関わる物は、TPM 担当が Product Manager に聞く。
 - 席は、課題の担当の席と一緒に TPM 担当が閉じる。
 - model などを替えるなら、TPM 担当に言う（`tpm assign --model`・`--effort`）か、`.claude/roles/config.jsonc` の `staff-engineer` に書く（[設定](/configuration/)）。既定は Opus 5.5・high。
