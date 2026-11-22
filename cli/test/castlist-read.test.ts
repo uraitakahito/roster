@@ -127,10 +127,10 @@ describe('tpm castlist find', () => {
     expect(rows[0]).toMatch(new RegExp(`^${a.name.replaceAll('.', '\\.')}\\b`));
     expect(rows[0]?.endsWith(page(`/actors/${a.id}`))).toBe(true);
     expect(rows[1]?.endsWith(page(`/actors/${b.id}`))).toBe(true);
-    // 居るか・退き方・model と effort も 1 行に出る
-    expect(rows[0]).toContain('居ない');
+    // 状態（稼働中・停止。castlist の画面と同じ字）・退き方・model と effort も 1 行に出る
+    expect(rows[0]).toContain('停止');
     expect(rows[0]).toContain('exited');
-    expect(rows[1]).toContain('居る');
+    expect(rows[1]).toContain('稼働中');
     expect(rows[1]).toContain('claude-opus-5-5');
     expect(rows[1]).toContain('high');
   });
@@ -240,7 +240,7 @@ describe('tpm castlist show', () => {
     expect(text).toContain('tpm.role=software-engineer');
     expect(text).toContain(`claude.session:${se.sid}`);
     expect(text).toContain('cmux.workspace.ref:workspace:3');
-    expect(text).toContain('居ない');
+    expect(text).toContain('停止');
     expect(text).toContain('exited');
     expect(text).toContain('claude-sonnet-5');
     expect(text).toContain('max');
