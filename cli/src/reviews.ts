@@ -1,5 +1,5 @@
-// レビューの頼みと判定の記録（状態の folder の reviews/ に、頼み 1 件 1 file）。課題の担当の tpm ask review が頼みを、TPM 担当の tpm assign --role staff-engineer が
-// 依頼書を、Staff Engineer 担当の tpm report review が判定を足す。どれだけ頼まれ、どう判じられ、どれだけ待ったかを、後から数で言うための物。
+// レビューの頼みと判定の記録（状態の folder の reviews/ に、頼み 1 件 1 file）。課題の担当の tpm ask review が頼みと依頼書を（席を起こし直す時は TPM 担当の
+// tpm assign --role staff-engineer も依頼書を）、Staff Engineer 担当の tpm report review が判定を足す。どれだけ頼まれ、どう判じられ、どれだけ待ったかを、後から数で言うための物。
 // 台帳と同じく、メッセージの字を持つので、tpm を動かす機械の外には写さない。
 import type { Context } from './context.ts';
 
@@ -26,7 +26,7 @@ export interface Review {
   /** 頼んだ担当の居場所の題。 */
   by: string
   askedAt: string
-  /** Staff Engineer 担当に渡した依頼書の URL（tpm assign が、頼みから作って置く）。 */
+  /** Staff Engineer 担当に渡した依頼書の URL（tpm ask review が、頼みから作って置く）。 */
   brief?: string
   verdict?: Verdict
   /** レビューのページの URL。 */
@@ -34,6 +34,8 @@ export interface Review {
   /** 判定に添えた一言。 */
   summary?: string
   reviewedAt?: string
+  /** 課題の担当が、判定を受けずに TPM 担当に上げた時刻（tpm ask tpm --review）。 */
+  escalatedAt?: string
 }
 
 /** 頼み 1 件の file（状態の folder の `reviews/<番号>.jsonc`）。 */

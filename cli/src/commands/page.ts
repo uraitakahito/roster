@@ -66,11 +66,11 @@ export function pagePut(ctx: Context, file: string, options: { kind: string, key
 
 /**
  * 置く前の検査。送る命令の検査（assertRead）と同じく、まだ見せていない未読があれば出して 1 度止まり、打ち直せば置く。
- * 担当は TPM 担当からの物を見る。TPM 担当は、--key の担当から来た物だけを見る（名簿に無い Key なら見ない）。
+ * 担当は、自分宛ての物（TPM 担当と、レビューの相手から）を見る。TPM 担当は、--key の担当から来た物だけを見る（名簿に無い Key なら見ない）。
  */
 function assertReadBeforePut(ctx: Context, keyOption?: string): void {
   if (ctx.env.TPM_KEY) {
-    assertRead(ctx, 'TPM 担当', undefined, 'put');
+    assertRead(ctx, '相手', undefined, 'put');
     return;
   }
   const role = keyOption === undefined ? undefined : readRole(ctx, keyOption);

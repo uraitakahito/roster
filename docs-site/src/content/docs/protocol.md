@@ -40,7 +40,7 @@ flowchart TB
 |---|---|
 | `tpm.jsonc` | TPM 担当の宛先。担当はメッセージを送るたびに読むので、TPM 担当を起こし直しても担当に知らせ直さなくてよい |
 | `roles/<Key>.jsonc` | 名簿。課題の Key → 役割・居場所の宛先・依頼書・課題管理の課題。Staff Engineer 担当の席は、課題の担当と並べるために名簿の Key を `<課題の Key>.staff` にし、見ている課題の Key を `subject` に持つ |
-| `reviews/<番号>.jsonc` | レビューの頼み 1 件（下の「Staff Engineer 担当の席」）。課題の Key・見る物・頼んだ担当と時刻・渡した依頼書・判定・レビューのページ・返った時刻。レビューを 1 度も頼んでいない project には無い |
+| `reviews/<番号>.jsonc` | レビューの頼み 1 件（下の「Staff Engineer 担当の席」）。課題の Key・見る物・頼んだ担当と時刻・渡した依頼書・判定・レビューのページ・返った時刻・TPM 担当に上げた時刻。レビューを 1 度も頼んでいない project には無い |
 | `approvals/<環境>.jsonc` | Product Manager の承認と期限 |
 | `log.jsonl`・`infra.jsonl` | 送ったメッセージ（時刻・Key・見出し・本文・送った時に届いたか・返事の先）と、`tpm infra run` で打った命令の記録 |
 | `deliveries.jsonl` | メッセージの送った・届いた・読んだ時刻（連携の道具が覚えている物の写し）。cmux は新しい 1,000 件より古い物を捨てるので、`tpm close` で居場所を閉じる前と、TPM 担当が `tpm hello` を打った時に写す。変わった時だけ 1 行足すので、同じ id の行は後ろが新しい |
@@ -181,32 +181,37 @@ sequenceDiagram
 
 ## Staff Engineer 担当の席
 
-Staff Engineer 担当（役割 `staff-engineer`。題は `レビュー <課題の Key>: <見る物>`、名簿の Key は `<課題の Key>.staff`。skill は `/staff-engineer`）は、課題の担当が頼んだ計画・提案・PR を見て助言する担当。席は課題ごとに、課題の担当の隣に立つ。やりとりは、ほかと同じく TPM 担当を通る（担当から担当への道は無い）。いつ頼むか・判定の意味・助言で縛らないことは、決まり（`skill-sets/core/.claude/skills/_shared/protocol.md` の「レビュー」）。コードは `cli/src/reviews.ts`・`cli/src/commands/review.ts` と、`cli/src/commands/messages.ts` の `askReview`・`reportReview`、`cli/src/commands/tpm-side.ts` の `assign`。
+Staff Engineer 担当（役割 `staff-engineer`。題は `レビュー <課題の Key>: <見る物>`、名簿の Key は `<課題の Key>.staff`。skill は `/staff-engineer`）は、課題の担当が頼んだ計画・提案・PR を見て助言する担当。席は課題ごとに、課題の担当の隣に立つ。**頼み（【ask-review】）と判定（【review】）は、TPM 担当を通らず、課題の担当と席の間をじかに届く**（担当から担当への道は、この 2 通だけ。見出しの表（`cli/src/protocol.ts` の `HEADINGS`）の `peer` の印）。席は、頼みの命令が起こす。課題の担当が判定を受けない時だけ、`tpm ask tpm --review <番号>` で TPM 担当に上がる。いつ頼むか・判定の意味・助言で縛らないことは、決まり（`skill-sets/core/.claude/skills/_shared/protocol.md` の「レビュー」と「連携の 3 つの形」）。コードは `cli/src/reviews.ts`・`cli/src/commands/review.ts` と、`cli/src/commands/staff.ts` の `askReview`・`reportReview`・`launchStaff`、`cli/src/commands/messages.ts` の `toPeer`。
 
-席の題・説明・色は、`tpm assign` が頼みから作る（`cli/src/reviews.ts` の `reviewLabel`）。見る物は、PR なら `PR #<番号>`、置き場のページなら種類の名と file の名（`計画 plan-2`・`提案 proposal-1`・`結果 result-3`、ほかの種類は file の名だけ）。依頼書の頼みが 2 つ以上なら、番号の新しい頼みに `+<残りの数>` を付ける。説明は新しい頼みの見てほしい所（24 字で切る。無ければ付けない）。色は役割の表（`cli/src/protocol.ts` の `ROLES` の `color`）の Purple で、Staff の席だけが持つ（cmux では左の端の帯）。色は宛先を名簿に書いた後に連携の口の `setColor` で付け、付けられなくても止めずに 1 行で知らせる。居る席に【brief】を送る時は、連携の口の `relabel` で題と説明を替え、名簿の題も同じ字にする（通知のバナーの hook は、居場所の題と名簿の題が同じかで席を探す）。替えられなければ名簿は替えず、`tpm assign` が 1 行で知らせる。Staff の席に `--title` を書くと、`tpm assign` は止まる。
+席の題・説明・色は、席を起こす命令（`tpm ask review`。起こし直しは `tpm assign`）が頼みから作る（`cli/src/reviews.ts` の `reviewLabel`）。見る物は、PR なら `PR #<番号>`、置き場のページなら種類の名と file の名（`計画 plan-2`・`提案 proposal-1`・`結果 result-3`、ほかの種類は file の名だけ）。依頼書の頼みが 2 つ以上なら、番号の新しい頼みに `+<残りの数>` を付ける。説明は新しい頼みの見てほしい所（24 字で切る。無ければ付けない）。色は役割の表（`cli/src/protocol.ts` の `ROLES` の `color`）の Purple で、Staff の席だけが持つ（cmux では左の端の帯）。色は宛先を名簿に書いた後に連携の口の `setColor` で付け、付けられなくても止めずに 1 行で知らせる。居る席に頼み（【ask-review】。TPM 担当の起こし直しでは【brief】）を送る時は、連携の口の `relabel` で題と説明を替え、名簿の題も同じ字にする（通知のバナーの hook は、居場所の題と名簿の題が同じかで席を探す）。替えられなければ名簿は替えず、命令が 1 行で知らせる。Staff の席に `--title` を書くと、`tpm assign` は止まる。
 
 ```mermaid
 sequenceDiagram
   participant SE as 課題の担当
-  participant TPM as TPM 担当
   participant ST as Staff Engineer 担当
-  SE->>TPM: 【ask-review】（tpm ask review）
-  TPM->>ST: tpm assign --role staff-engineer（起こす。居れば【brief】）
-  ST->>TPM: 【review】（tpm report review。レビューのページと判定）
-  TPM->>SE: 【notify】（結果を回す）
+  participant TPM as TPM 担当
+  SE->>ST: tpm ask review（席が無ければ起こす。居れば【ask-review】）
+  ST->>SE: 【review】（tpm report review。レビューのページと判定）
   SE->>SE: 指摘を確かめて扱う
+  opt 「直すべき」を受けない時だけ
+    SE->>TPM: 【ask-tpm】（tpm ask tpm --review <番号>）
+    TPM->>SE: 決めて返す（要れば Product Manager に聞く）
+  end
 ```
 
 | 命令 | 打つ人 | すること |
 |---|---|---|
-| `tpm ask review --url <見る物> [--focus <見てほしい所>]` | 課題の担当 | 頼みを書き（番号は「在れば失敗」で取る）、TPM 担当に【ask-review】を送り、状態を `回答待ち(TPM): レビュー` にする。見る物は、置き場のページか PR の URL。同じ物の頼みがまだ返っていなければ、2 度目は断る。送れなかった回は、頼みを残さない |
-| `tpm assign <課題の Key> --role staff-engineer` | TPM 担当 | まだ依頼書にしていない頼みから、依頼書のページ（見る物・見てほしい所・課題の担当の依頼書）を作って置き、席を起こす。席が居れば【brief】で送る。`--brief` は受けない。頼みが無い・課題の担当が名簿に居ない・skill が無ければ止まる。席が消えていれば、返っていない頼みを渡し直す。`--supersede` は、取り消す依頼書の頼みを新しい依頼書に入れ直す |
-| `tpm report review --url <レビューのページ> --verdict <判定> --summary <一言>` | Staff Engineer 担当 | いちばん古い依頼書の頼みに判定を書き、課題に「レビュー」の記録を書き、TPM 担当に【review】を送り、状態を `回答待ち(TPM): 次のレビュー` にする。判定は `approve`・`concerns`・`reject`・`not-assessed`。ページは、その課題の `review` のページだけを受ける |
-| `tpm review list [--key <Key>]` | 誰でも（読むだけ） | 頼みごとの行と、判定ごとの数。初めての頼みより後に結果の【done】を出した課題のうち、レビューを頼んでいない課題の数 |
+| `tpm ask review --url <見る物> [--focus <見てほしい所>]` | 課題の担当 | 頼みを書き（番号は「在れば失敗」で取る）、頼みから依頼書のページ（見る物・見てほしい所・課題の担当の依頼書）を作って置く。席が無ければ（落ちていても）起こして依頼書を名簿の行で渡し（返っていない前の頼みも渡し直す。名乗りを 90 秒まで待つ）、居れば【ask-review】（頭が依頼書の URL）を席へじかに送る。前の頼みが返っていなければ、後ろに積む（席の題は、新しい頼みと `+<返っていない残りの数>`）。まだ席に渡していない前の頼み（前の流れで TPM 担当に送られたままの物）があれば、同じ依頼書で一緒に渡す。状態を `回答待ち(レビュー): <見る物>` にする。見る物は、置き場のページか PR の URL。同じ物の頼みがまだ返っていなければ、2 度目は断る。送る前・居場所を作る前に止まった回は、頼みを残さない（送った後・居場所を作った後の失敗では、席に渡してあるので残す）。席の model などは設定の `staff-engineer` の欄で決まる（旗は無い） |
+| `tpm report review --url <レビューのページ> --verdict <判定> --summary <一言>` | Staff Engineer 担当 | いちばん古い依頼書の頼みに判定を書き、課題に「レビュー」の記録を書き、頼んだ課題の担当へじかに【review】を送り、状態を `回答待ち(レビュー): 次の頼み` にする。判定は `approve`・`concerns`・`reject`・`not-assessed`。ページは、その課題の `review` のページだけを受ける。課題の担当の居場所が無ければ、送らず・記録も書かずに止まる |
+| `tpm ask tpm "<訳と案>" --waiting-for <何を> --review <番号>` | 課題の担当 | 判定を受けずに TPM 担当に上げる。本文の頭にレビューの番号・判定・レビューのページの URL を足し、頼みの記録に上げた時刻を書く。自分の課題の、判定が「直すべき」の頼みだけを受ける。2 度上げても、最初に上げた時刻を残す |
+| `tpm assign <課題の Key> --role staff-engineer` | TPM 担当 | 席の起こし直し（返っていない頼みがあるのに席が落ちた・名乗らない時。居場所が残っていれば、先に `tpm close <課題の Key>.staff` で閉じる）。返っていない頼みから依頼書を作って置き、席を起こす。席が居て、まだ依頼書にしていない頼みがあれば【brief】で送る。`--brief`・`--title` は受けない。頼みが無い・課題の担当が名簿に居ない・skill が無ければ止まる。`--supersede` は、じかに届いた頼みも含めて取り消し、新しい依頼書に入れ直す |
+| `tpm review list [--key <Key>]` | 誰でも（読むだけ） | 頼みごとの行と、判定ごとの数・TPM 担当に上げた数。初めての頼みより後に結果の【done】を出した課題のうち、レビューを頼んでいない課題の数 |
 
+- **守り**: じかの 2 通も、送る前の検査（読んでいないメッセージ・同じメッセージの 2 度送り）を通る（2 度送りは、相手の宛先で数える）。届いた時刻は、`tpm ask review` と `tpm report review` が `deliveries.jsonl` に写す（TPM 担当の命令を通らないため）。じかに送った行は、送った記録（`log.jsonl`）に `peer` の印が付く。時系列のページの行き違いの印は、この印のある行では、課題の担当と席の間の逆向きのじかの物だけを相手に数える（`cli/src/commands/timeline.ts`。印の無い、前の流れの【ask-review】【review】は、今までどおり「同じ Key で向きが逆」で数える）。席の「済んでいない依頼書」には、じかに届いた【ask-review】も数える（`openBriefs`）。
+- **見え方**: TPM 担当は【ask-review】【review】を受け取らない。課題の「レビュー」の記録・置き場のレビューのページ・`tpm review list`・名簿（`tpm roles`）・成果のページの「レビュー」の行で見える。席を起こした者（castlist の起こした線）は、課題の担当の session になる。
 - 席に掛かる守りは Auditor と同じ（下の「guard」）: project・状態・ページの控えの folder への書き込みと、`git`・`gh` の変える命令（`gh pr review`・`gh pr comment` も）を止める。レビューは、PR のコメントでなく、置き場のページで返す。
 - Staff Engineer 担当からの `tpm report done`・`end`・`merged`・`doc-fix`・`tpm ask pm`・`tpm ask review` は断る（【end】を打てると、レビューが済んだだけで課題が済みになる）。`tpm ask tpm`・`tpm report incident` は打てる。
-- TPM 担当は、席を名簿の Key（`<課題の Key>.staff`）で名指す（`tpm notify`・`tpm close`）。`tpm dismiss` は断る（片付ける worktree が無い）。課題の担当の席を `tpm close` で閉じると、Staff の席も一緒に閉じる。
+- TPM 担当は、席を名簿の Key（`<課題の Key>.staff`）で名指す（`tpm notify`・`tpm close`。どちらも、担当の session からは断る）。`tpm dismiss` は断る（片付ける worktree が無い）。課題の担当の席を `tpm close` で閉じると、Staff の席も一緒に閉じる。
 - `tpm hello` は、課題の Key と名簿の Key の両方を返す。`tpm page put` は、課題の Key の folder に置く。`tpm incident timeline <課題の Key>` は、Staff の席の行も集める。
 - 考えは、[Claude-Code-Game-Studios](https://github.com/Donchitos/Claude-Code-Game-Studios) の連携の決まり（横の相談は相手を縛らない・食い違いは上に上げる）と、レビューの形（書いた文脈から切り離す・判定を決まった語で返す・見られなかった時を「よい」と分ける）から借りた。字は写していない。
 

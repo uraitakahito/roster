@@ -4,13 +4,14 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { seatOf, seatPrefix } from '../src/castlist.ts';
-import { askPm, askReview, askTpm, dismiss, notify, reportDocFix, reportDone, reportEnd, reportIncident, reportMerged } from '../src/commands/messages.ts';
+import { askPm, askTpm, dismiss, notify, reportDocFix, reportDone, reportEnd, reportIncident, reportMerged } from '../src/commands/messages.ts';
 import { pagePut } from '../src/commands/page.ts';
 import { hello } from '../src/commands/role-side.ts';
 import { collect } from '../src/commands/timeline.ts';
 import { assign, close, roles } from '../src/commands/tpm-side.ts';
 import type { Context } from '../src/context.ts';
 import { ROLES } from '../src/protocol.ts';
+import { addReview } from '../src/reviews.ts';
 import { requireRole, staffKey, subjectOf } from '../src/roster.ts';
 import { claudeArgs } from '../src/run-role.ts';
 import { BRIEF, staffRoot, world, type World } from './helpers.ts';
@@ -30,9 +31,8 @@ function started(config: Record<string, unknown> = {}, issue?: string): World & 
   assign(tpm, 'AI-8', { ...SE, ...(issue === undefined ? {} : { issue }) });
   const se = w.role('AI-8', 'file:1');
   hello(se);
-  // 課題の担当がレビューを頼んである（Staff の席は、頼みから起こす）。
-  askReview(se, { url: PLAN });
-  w.wire.inbox('file:tpm');
+  // 返っていないレビューの頼みが 1 つある（席はまだ無い。TPM 担当の tpm assign --role staff-engineer は、この形の席を起こす）。
+  addReview(tpm, { key: 'AI-8', url: PLAN, by: 'SWE AI-8: 計画と実装' });
   return { ...w, tpm, se };
 }
 

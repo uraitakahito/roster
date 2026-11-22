@@ -160,10 +160,14 @@ export type RoleName = keyof typeof ROLES;
 /** 担当の種類の名前の一覧。 */
 export const ROLE_NAMES = Object.keys(ROLES) as RoleName[];
 
-/** 見出し 1 つ。from は送る側、record は課題に書く記録の種類（書かなければ無し）。 */
+/**
+ * 見出し 1 つ。from は送る側、record は課題に書く記録の種類（書かなければ無し）。
+ * peer は、担当から TPM 担当へでなく、担当から担当へじかに届く見出し（レビューの頼みと判定。課題の担当と、その課題の Staff Engineer 担当の席の間だけ）。
+ */
 export interface Heading {
   from: 'role' | 'tpm'
   record?: NoteKind
+  peer?: true
 }
 
 /** 見出しの表。鍵は見出しの名（【ask-tpm】など）で、命令の中での呼び名と同じ。 */
@@ -171,8 +175,8 @@ export const HEADINGS = {
   'ask-tpm': { from: 'role' },
   'ask-pm': { from: 'role', record: '確認' },
   'ask-devops': { from: 'role' },
-  // 課題の担当が、計画や PR のレビューを頼む。TPM 担当が Staff Engineer 担当の席を起こす。
-  'ask-review': { from: 'role' },
+  // 課題の担当が、計画や PR のレビューを頼む。Staff Engineer 担当の席へじかに届く（席が無ければ、命令が起こして依頼書で渡す）。
+  'ask-review': { from: 'role', peer: true },
   'doc-fix': { from: 'role', record: '文書の修正' },
   'merged': { from: 'role' },
   'done': { from: 'role' },
@@ -182,8 +186,8 @@ export const HEADINGS = {
   // Auditor だけが送る。audit は Product Manager へじかに出した報告の写し、decided は Product Manager の決定。
   'audit': { from: 'role' },
   'decided': { from: 'role' },
-  // Staff Engineer 担当だけが送る。レビューのページと判定。TPM 担当が、頼んだ担当に回す。
-  'review': { from: 'role', record: 'レビュー' },
+  // Staff Engineer 担当だけが送る。レビューのページと判定。頼んだ課題の担当へじかに届く。
+  'review': { from: 'role', record: 'レビュー', peer: true },
   'merge-request': { from: 'role' },
   'not-yet': { from: 'role' },
   'recreated': { from: 'role' },
@@ -207,6 +211,8 @@ export const WAIT = {
   pm: (what: string) => `回答待ち(PM): ${what}`,
   /** TPM 担当の答えを待つ。 */
   tpm: (what: string) => `回答待ち(TPM): ${what}`,
+  /** レビューの相手を待つ（課題の担当は判定を、Staff Engineer 担当は次の頼みを）。 */
+  review: (what: string) => `回答待ち(レビュー): ${what}`,
 } as const;
 /** 待ちの種類（`tpm wait` の kind）。 */
 export type WaitKind = keyof typeof WAIT;

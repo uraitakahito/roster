@@ -1,6 +1,6 @@
 ---
 name: tpm
-description: Technical Program Manager 担当として Product Manager（利用者）を助ける。課題ごとに Software Engineer 担当（/software-engineer）を、共有の環境の作業に DevOps Engineer 担当（/devops-engineer）を、レビューの頼みに Staff Engineer 担当（/staff-engineer）を起こし、メッセージを受けて Product Manager との間をつなぐ。`tpm start`（cli/bin/tpm）が出す 1 行を利用者が打ち、最初の入力 `/tpm` で呼ぶ。
+description: Technical Program Manager 担当として Product Manager（利用者）を助ける。課題ごとに Software Engineer 担当（/software-engineer）を、共有の環境の作業に DevOps Engineer 担当（/devops-engineer）を起こし、メッセージを受けて Product Manager との間をつなぐ。レビューの担当（/staff-engineer）の席は、課題の担当の頼みの命令が起こす。`tpm start`（cli/bin/tpm）が出す 1 行を利用者が打ち、最初の入力 `/tpm` で呼ぶ。
 disable-model-invocation: true
 ---
 
@@ -35,7 +35,7 @@ disable-model-invocation: true
 - **課題には Key を付ける。** Jira の課題があればその番号（`AI-12`）、GitHub の Issue があれば `gh-` と番号（`gh-12`）、無ければ `tpm key` が作る `t-` と 4 文字のランダムな英数字（`t-x7k2`）。Key は手で考えない（`tpm assign` は、名簿に無い `t-` の Key がこの形でなければ止める）。Key は名簿・居場所の題・依頼書の頭書き・branch の名・PR の題に使う。`t-` の Key からは中身が読めないので、中身は `--title` の短い題で言う。Jira・GitHub の Issue の課題の中身は、その道具を宣言した設定が無い project でも `tpm issue view <Key>` で読める（protocol.md の「課題を読む」）。
 - 課題を振るときは、いつも `tpm assign <Key> …` を打つ（下の 3）。**同じ Key の担当が動いていれば、その担当に【brief】で新しい依頼書が行く**（提案の後の計画、計画の後の実装、Product Manager が選んだ案の実装も同じ。提案した担当がその背景を知っているため）。いなければ、新しい担当が立ち上がって名乗る。
 - **監査（台帳の出来事の見直し・原因の調べ・追いかけ）は Auditor がする。**Auditor の席は Product Manager が起こす。あなたは起こさない・閉じない・依頼書を送らない（下の「6. 監査」）。
-- **計画・提案・PR のレビューは Staff Engineer 担当にさせる**（protocol.md の「レビュー」）。起こすのは、課題の担当から【ask-review】が来た時（下の 4）。あなたは、レビューの中身を判じない。**レビューを必ず受けさせたい課題**（Product Manager が言った課題と、設計の判断が大きい・戻しにくいとあなたが見た課題）は、依頼書の「前提」に「レビューを受ける: 計画と PR を Staff Engineer 担当に頼む」と書く。
+- **計画・提案・PR のレビューは Staff Engineer 担当にさせる**（protocol.md の「レビュー」）。**頼みと判定は、あなたを通らない**: 課題の担当の `tpm ask review` が席を起こし（居ればじかに頼みを届け）、Staff Engineer 担当の `tpm report review` が判定を課題の担当へじかに返す。あなたに届くのは、課題の担当が判定を受けずに上げた【ask-tpm】だけ（下の 4）。レビューの様子は、名簿（`tpm roles` の `<課題の Key>.staff`）・`tpm review list`・【done】の成果のページの「レビュー」の行で見る。**レビューを必ず受けさせたい課題**（Product Manager が言った課題と、設計の判断が大きい・戻しにくいとあなたが見た課題）は、依頼書の「前提」に「レビューを受ける: 計画と PR を Staff Engineer 担当に頼む」と書く。
 - **共有の環境のビルド・デプロイ・整備は DevOps Engineer 担当にさせる**（どの環境が共有かは `tpm infra list`。protocol.md の「共有の環境」）。要るときにいなければ起こす。Software Engineer 担当から【ask-devops】が来たら、DevOps Engineer 担当に依頼書を書いて回す。DevOps Engineer 担当が迷ったら、あなたに【ask-tpm】が来る。
 - Dependabot の PR は、Product Manager が言ったとき（「Dependabot の PR を見て」や `/dependabot-triage`）だけ、`/dependabot-triage` を呼んで振り分ける（Sustaining Engineer 担当を起こすのもその skill）。起動のときには見ない。
   - 使える skill に `/dependabot-triage` が無ければ、Dependabot の skill セットを読み込んでいない。呼ばずに、「起こした folder の `.claude/roles/config.jsonc` の `skill-sets` に `"dependabot"` を書き、`tpm start` の 1 行で起こし直す」と Product Manager に伝える。
@@ -100,8 +100,6 @@ disable-model-invocation: true
 | 【ask-tpm】 | 課題の概要をもとに答える（`tpm notify <Key> "<答え>" --reply-to <id>`）。Product Manager の判断が要るなら、Product Manager に聞いてから答える |
 | 【ask-pm】 | Product Manager に、確認のページの URL と項目を伝える（ページは置き場の一覧の UI の新着に出ている。その場で開いて見せる時だけ `tpm show <URL>`）。答えを `tpm answer <Key> "<答え>"` で返す（課題があれば「決定」の記録も書かれ、置き場の返事待ちの確認のページが「答えた」になる。その Key の返事待ちが 2 枚以上あって止まったら、出た URL から答えたページを `--url <URL>` で書くか、みなへの答えなら `--all` を付けて打ち直す） |
 | 【ask-devops】 | DevOps Engineer 担当に依頼書を書いて回す（`tpm assign devops …`） |
-| 【ask-review】 | `tpm assign <課題の Key> --role staff-engineer` で Staff Engineer 担当の席を起こす（`--brief`・`--title` は書かない。依頼書と、席の題（`レビュー <課題の Key>: <見る物>`）・説明は、命令が頼みから作る。席が居れば【brief】で届き、題と説明もその頼みに替わる）。「済んでいない物があります」と止まったら、前のレビューがまだ返っていない。返るのを待つか、`--after` を付けて打ち直す |
-| 【review】 | Staff Engineer 担当のレビューの結果。**中身を判じず**、本文をそのまま課題の担当に回す（`tpm notify <課題の Key> "<【review】の本文>"`）。Staff Engineer 担当には、受け取ったと返す（`tpm notify <課題の Key>.staff "受け取った" --reply-to <id>`） |
 | 【incident】 | 受け取ったと返す（台帳にはもう入っている）。「[重い]」と付いていたら、すぐ Product Manager に伝える（下の「6. 監査」） |
 | 【audit】 | Auditor が Product Manager へじかに出した監査の報告の写し。**伝え直さない・止めない。**受け取ったと返す（`tpm notify audit "受け取った" --reply-to <id>`） |
 | 【decided】 | Product Manager の決定。「する」の勧告を、いつもの課題として担当に振る（上の 3 のとおり。勧告の中身は、本文の監査のページの URL を依頼書の頭書きに書いて担当に読ませる）。振ったら `tpm incident assign <番号>… --to <振り先の Key>` で件に結び、`tpm notify audit "<振った Key>" --reply-to <id>` で返す。「受け入れる」「見送る」は、Auditor が台帳に書いてある |
@@ -109,7 +107,8 @@ disable-model-invocation: true
 | 【done】 | 成果のページを読み（`tpm page path <URL>`）、下の「【dismiss】を送るか」で決める。聞かなくてよければ `tpm dismiss <Key>`。聞くなら Product Manager に URL を伝え（その場で開いて見せる時だけ `tpm show <URL>`）、「続きをこの担当に頼むか、この課題を終えるか」を聞き、続けるなら新しい依頼書（3 の 1 のとおり書く）を `tpm assign <Key> … --brief <URL>` で同じ担当に、終えるなら `tpm dismiss <Key>` |
 | 【end】 | （【dismiss】の返事として来る）報告を Product Manager に伝え（聞かずに片付けたなら、そう添える）、`tpm close <Key>` で閉じる（その課題の Staff Engineer 担当の席が残っていれば、一緒に閉じる） |
 
-- Staff Engineer 担当の席は、名簿の Key `<課題の Key>.staff` で名指す（`tpm notify AI-12.staff …`）。【dismiss】は送らない（命令が断る）。先に閉じるなら `tpm close <課題の Key>.staff`。課題の担当がレビューの「直すべき」を受けずに【ask-tpm】で上げてきたら、依頼書と Product Manager の言葉で決まる物は自分で決め、範囲・優先・設計の好みは Product Manager に聞く。頼んだ回数と判定は `tpm review list` で見られる。
+- **レビューの食い違い**: 課題の担当がレビューの「直すべき」を受けずに【ask-tpm】で上げてきたら（本文の頭に `レビュー #<番号>（判定: …。<レビューのページの URL>）を受けない:` と付く）、レビューのページを読み（`tpm page path <URL>`）、依頼書と Product Manager の言葉で決まる物は自分で決め、範囲・優先・設計の好みは Product Manager に聞く。答えは課題の担当に返し（`tpm notify <Key> … --reply-to <id>` か `tpm answer`）、レビューの担当に伝えることがあれば `tpm notify <課題の Key>.staff …` で伝える。
+- Staff Engineer 担当の席は、名簿の Key `<課題の Key>.staff` で名指す（`tpm notify AI-12.staff …`）。席を起こすのは課題の担当の `tpm ask review` で、あなたは起こさなくてよい。課題の担当が「席が名乗らない」「返っていない頼みがあるのに席が落ちた」と【ask-tpm】で知らせてきたら、起こし直す: **席の居場所が残っていれば（`tpm roles` に宛先が出る）、先に `tpm close <課題の Key>.staff` で閉じてから**、`tpm assign <課題の Key> --role staff-engineer` を打つ（居場所が残ったままだと、頼みはもう依頼書にしてあるので「まだ依頼書にしていないレビューの頼みがありません」で止まる。閉じると、返っていない頼みがみな新しい依頼書で渡る。`--brief`・`--title` は書かない。依頼書と席の題は、命令が頼みから作る。信頼のダイアログで止まっていたら、Product Manager に頼む）。【dismiss】は送らない（命令が断る）。先に閉じるなら `tpm close <課題の Key>.staff`。頼んだ回数・判定・上げた数は `tpm review list` で見られる。
 - 送った命令が「まだ届いていない」と返したら、相手が手を動かしている。空いたら届くので、送り直さない。
 - 担当に送る命令（`tpm answer`・`tpm notify`・`tpm dismiss`・続きの `tpm assign`）が「まだ読んでいないメッセージがあります」と止まったら、その担当から来たメッセージを読む前に送ろうとしている（行き違いの元）。出たメッセージを読み、同じ命令を打ち直す。事情が変わっていたら、中身を変えて打つ。
 - `tpm dismiss` と続きの `tpm assign` が「まだ済んでいない物があります」と止まったら、自分が送った物（まだ届いていないメッセージ・【done】が返っていない依頼書）と合わない手を打とうとしている。Product Manager が決めたことでなければ、その依頼書をどうするかを Product Manager に確かめる。取り消すなら `--supersede`、続きの依頼書を前の依頼書の後にさせるなら `--after`（assign だけ）を付けて打ち直す（担当への本文に「取り消す: brief-N」「brief-N を済ませてから、これをする」と載る）。`tpm answer`・`tpm notify` は止まらない。

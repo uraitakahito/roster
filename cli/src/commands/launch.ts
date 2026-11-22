@@ -29,6 +29,9 @@ function paint(ctx: Context, role: RoleName, address: string): string[] {
   return [];
 }
 
+/** 起こした担当が、待った間に名乗らなかった（居場所は作った後。信頼のダイアログなどで閉じたこともある）。 */
+export class NotStartedError extends TpmError {}
+
 /**
  * 名簿の行の担当を起こす: 名簿に書き、居場所を作って tpm run-role を動かし、名乗るまで wait 秒待つ（0 なら待たない）。
  * again は起こし直しか（出す字が変わる）。more は、起こした行と folder の行の後に出す行。tpm assign と tpm audit start が使う。
@@ -51,7 +54,7 @@ export function launch(ctx: Context, record: RoleRecord, again: boolean, wait: n
     ctx.sleep(HELLO_INTERVAL_MS);
   }
   if (readRole(ctx, record.key)?.helloAt !== undefined) return [...head, '名乗った（tpm hello が来た）'];
-  throw new TpmError(notStarted(ctx, record, wait));
+  throw new NotStartedError(notStarted(ctx, record, wait));
 }
 
 /**

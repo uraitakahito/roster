@@ -59,6 +59,9 @@ export const staffKey = (subject: string): string => `${subject}${STAFF_SUFFIX}`
 /** 名簿の Key が、Staff Engineer 担当の席の形か。 */
 export const isStaffKey = (key: string): boolean => key.endsWith(STAFF_SUFFIX);
 
+/** Staff Engineer 担当の席の名簿の Key から、見ている課題の Key（staffKey の逆）。 */
+export const subjectOfStaffKey = (key: string): string => key.slice(0, -STAFF_SUFFIX.length);
+
 /** 名簿の行の、課題の Key（Staff Engineer 担当の席は見ている課題、ほかは名簿の Key）。ページの folder と、名乗りに出す Key に使う。 */
 export const subjectOf = (record: Pick<RoleRecord, 'key' | 'subject'>): string => record.subject ?? record.key;
 
