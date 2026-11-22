@@ -27,9 +27,9 @@ export function recordGuardStop(ctx: Context, command: string, reason: string): 
 
 /**
  * 入口の検査の種類: 読んでいないメッセージ・merge していない PR・状態を読めない PR・同じメッセージの 2 度送り・TPM 担当が送って済んでいない物・
- * 前の監査の文脈が残ったまま始めようとした監査。
+ * 前の監査の文脈が残ったまま始めようとした監査・担当の session から打った TPM 担当だけの命令。
  */
-export type GateKind = 'unread' | 'not-merged' | 'pr-unreadable' | 'repeat' | 'unsettled' | 'stale-context';
+export type GateKind = 'unread' | 'not-merged' | 'pr-unreadable' | 'repeat' | 'unsettled' | 'stale-context' | 'tpm-only';
 
 /** 入口の検査が送るのを止めた 1 件（gate.jsonl）。 */
 export interface GateStop {
@@ -37,7 +37,7 @@ export interface GateStop {
   by: string
   role: string
   gate: GateKind
-  /** 読んでいなかったメッセージの id、PR の URL と state、先に送った同じメッセージの id、前の監査の報告の URL。 */
+  /** 読んでいなかったメッセージの id、PR の URL と state、先に送った同じメッセージの id、前の監査の報告の URL、断った命令の名。 */
   detail: string
 }
 

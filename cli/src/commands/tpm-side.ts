@@ -1,29 +1,25 @@
 // TPM 担当が打つ命令: 名乗る（tpmHello。tpm hello から呼ばれる）・名簿を見る（roles）・Key を作る（newKey）・課題を担当に振る（assign）・閉じる（close）。
-import { randomInt, randomUUID } from 'node:crypto';
+import { randomInt } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
 import { assertSummary } from '../brief.ts';
-import { shellQuote } from '../shell.ts';
-import { castlistUrl, requireUp, sessionRef } from '../castlist.ts';
-import { describeTrackers, OWN_LABEL, readRolesConfig, rolesConfigFile, sourceLabel, type ConfigSource } from '../config.ts';
+import { requireUp, sessionRef } from '../castlist.ts';
+import { describeTrackers, OWN_LABEL, sourceLabel, type ConfigSource } from '../config.ts';
 import type { Context } from '../context.ts';
 import { syncDeliveries } from '../evidence.ts';
-import { AUDIT_KEY, modelStatus, ROLES, TPM_TITLE, WAIT, type RoleDef, type RoleName } from '../protocol.ts';
+import { AUDIT_KEY, modelStatus, ROLES, TPM_TITLE, WAIT, type RoleName } from '../protocol.ts';
 import { lastAuditLine } from '../audits.ts';
 import { openLine } from '../incidents.ts';
-import { openReviews, patchReview, reviewLabel, type Review } from '../reviews.ts';
+import { openReviews, reviewLabel } from '../reviews.ts';
 import { resolveSettings } from '../settings.ts';
-import { allRoles, assertKey, isStaffKey, LOCAL_KEY, readRole, removeRole, staffKey, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
+import { allRoles, assertKey, isStaffKey, LOCAL_KEY, readRole, removeRole, requireTpmSide, staffKey, type RoleRecord, type TpmRecord } from '../roster.ts';
 import { readSkillSets, skillSetDir, TpmError } from '../skill-sets.ts';
 import { route } from '../tracker/routed.ts';
 import { findHook, staleHook } from './banner.ts';
 import { castlistHello, closeLaunch } from './castlist.ts';
-import { copyIssue, issueTracker } from './issue.ts';
+import { issueCopy, launch, roleDefaults } from './launch.ts';
 import { assertRead, assertSettled, brief } from './messages.ts';
-import { pageFolder, putPage } from './page.ts';
-
-/** 名乗ったかを見る間（ミリ秒）。 */
-const HELLO_INTERVAL_MS = 2000;
+import { pageFolder } from './page.ts';
+import { markBriefed, putStaffBrief, relabelStaff, STAFF, staffSubject } from './staff.ts';
 
 /**
  * TPM 担当が名乗る（$TPM_KEY の無い tpm hello）: 居場所の題と状態を出し、自分の宛先を状態に書く。続けて名簿を出す。
@@ -164,70 +160,6 @@ export interface AssignOptions {
   wait: number
 }
 
-/** Staff Engineer 担当の役割の名。 */
-const STAFF: RoleName = 'staff-engineer';
-
-/**
- * Staff Engineer 担当を起こす前の確かめ。課題の担当が名簿に居ること（Staff は、その隣に起こす）と、skill が在ること
- * （無いまま起こすと、最初の入力が Unknown command になる）。課題の担当の名簿の行を返す。
- */
-function staffSubject(ctx: Context, key: string): RoleRecord {
-  const subject = readRole(ctx, key);
-  if (subject === undefined) throw new TpmError(`${key} の担当が名簿にいません。Staff Engineer 担当は、課題の担当の隣に起こします（tpm roles で名簿を見る）`);
-  const skill = join(skillSetDir(ctx.root, 'core'), '.claude', 'skills', 'staff-engineer', 'SKILL.md');
-  if (!existsSync(skill)) throw new TpmError(`skill /staff-engineer がまだありません（${skill}）。roster の repo を新しくしてから打ってください`);
-  return subject;
-}
-
-/** HTML に入れる字の escape。 */
-const escapeHtml = (text: string): string => text.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' })[c] ?? c);
-
-/** Staff Engineer 担当への依頼書（レビューの頼みから作る）。課題の概要の節を持つ。 */
-function staffBriefPage(subject: RoleRecord, asks: Review[]): string {
-  const e = escapeHtml;
-  const link = (url: string): string => `<a href="${e(url)}">${e(url)}</a>`;
-  return [
-    `<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>${e(subject.key)} レビューの依頼書</title></head><body>`,
-    `<h1>${e(subject.key)}: レビューの依頼書</h1>`,
-    '<section id="summary"><h2>課題の概要</h2>',
-    `<p>課題 ${e(subject.key)} の担当（${e(subject.title)}）が、下の物のレビューを頼んだ。見る物を読み、課題の担当の依頼書と照らして、レビューのページを置き、tpm report review で返す。直さない・決めない（レビューは助言）。</p>`,
-    `<ul><li>課題の担当の依頼書: ${subject.brief === undefined ? '無し' : link(subject.brief)}</li></ul>`,
-    '</section>',
-    '<h2>見る物</h2>',
-    '<ul>',
-    ...asks.map(r => `<li>頼み #${r.n}: ${link(r.url)}${r.focus === undefined ? '' : `（見てほしい所: ${e(r.focus)}）`}</li>`),
-    '</ul>',
-    '</body></html>',
-  ].join('\n');
-}
-
-/** レビューの頼みから依頼書のページを作って置き、URL を返す。 */
-const putStaffBrief = (ctx: Context, subject: RoleRecord, asks: Review[]): string => putPage(ctx, { text: staffBriefPage(subject, asks) }, 'brief', subject.key).url;
-
-/** 頼みに、渡した依頼書の URL を書く（渡した後に呼ぶ。渡せなかった回に、依頼書にした事にしない）。 */
-function markBriefed(ctx: Context, asks: Review[], url: string): void {
-  for (const r of asks) patchReview(ctx, r.n, { brief: url });
-}
-
-/**
- * 起きている Staff Engineer 担当の席の題と説明を、新しい依頼書の頼みに替え、名簿の題も同じ字にする（通知のバナーは、居場所の題と名簿の題で席を探す）。
- * 替えられなければ名簿は替えずに、そのことを 1 行返す（依頼書はもう渡してあるので、止めない）。
- * 送る前の検査（assertRead）と通知のバナーは、相手を題で見分ける。この関数より前に Staff の席が前の題で送ったメッセージは、後の検査で拾われない（1 回の assign の中の短い間だけ）。
- */
-function relabelStaff(ctx: Context, seat: RoleRecord, subjectKey: string, asks: Review[]): string[] {
-  const { target, description } = reviewLabel(asks);
-  const title = ROLES[STAFF].title(subjectKey, target);
-  try {
-    ctx.transport.relabel(seat.address ?? '', { title, ...(description === undefined ? {} : { description }) });
-  }
-  catch (e) {
-    return [`居場所の題を替えられなかった（名簿の題は ${seat.title} のまま）: ${e instanceof Error ? e.message : String(e)}`];
-  }
-  seat.title = title;
-  writeRole(ctx, seat);
-  return [];
-}
-
 /**
  * 課題を担当に振る。同じ Key の担当が動いていれば、その担当に【brief】で新しい依頼書を送る（背景を知っているため）。
  * いなければ（居場所が消えていても）起こし、名乗るまで待つ。
@@ -235,6 +167,7 @@ function relabelStaff(ctx: Context, seat: RoleRecord, subjectKey: string, asks: 
  * その依頼書は、課題の担当のレビューの頼み（tpm ask review）から命令が作る（--brief は受けない）。
  */
 export function assign(ctx: Context, subjectKey: string, options: AssignOptions): string[] {
+  requireTpmSide(ctx, 'tpm assign');
   assertKey(subjectKey);
   if (!Number.isFinite(options.wait) || options.wait < 0) throw new TpmError('--wait は 0 以上の数にしてください（0 なら待たない）');
   // Auditor は TPM 担当の回し方も見るので、TPM 担当の手では起こさない・依頼書も送らない。
@@ -308,92 +241,9 @@ export function assign(ctx: Context, subjectKey: string, options: AssignOptions)
   return launch(ctx, record, existing !== undefined, options.wait, more, sid ? sessionRef(sid) : undefined, label?.description);
 }
 
-/**
- * 起こした居場所に、役割の色を付ける。色は飾りなので、付けられなくても止めずに 1 行で知らせる（居場所はもう動いていて、宛先も名簿に書いてある）。
- */
-function paint(ctx: Context, role: RoleName, address: string): string[] {
-  const { color }: RoleDef = ROLES[role];
-  if (color === undefined) return [];
-  try {
-    ctx.transport.setColor(address, color);
-  }
-  catch (e) {
-    return [`居場所の色（${color}）を付けられなかった: ${e instanceof Error ? e.message : String(e)}`];
-  }
-  return [];
-}
-
-/**
- * 名簿の行の担当を起こす: 名簿に書き、居場所を作って tpm run-role を動かし、名乗るまで wait 秒待つ（0 なら待たない）。
- * again は起こし直しか（出す字が変わる）。more は、起こした行と folder の行の後に出す行。tpm assign と tpm audit start が使う。
- * castlist を設定していれば、起こしの id と、起こした者（launchedBy。castlist の付随する id）を名簿に書く（tpm run-role が担当の環境変数にする）。
- * description は題の下に出す説明。色は役割の表（ROLES の color）から、宛先を名簿に書いた後に付ける（paint）。
- */
-export function launch(ctx: Context, record: RoleRecord, again: boolean, wait: number, more: string[] = [], launchedBy?: string, description?: string): string[] {
-  if (castlistUrl(ctx) !== undefined) {
-    record.launch = randomUUID();
-    if (launchedBy !== undefined) record.launchedBy = launchedBy;
-  }
-  writeRole(ctx, record);
-  const command = [join(ctx.root, 'cli', 'bin', 'tpm'), 'run-role', record.key, '--project', ctx.project, '--state', ctx.state.dir].map(shellQuote).join(' ');
-  record.address = ctx.transport.spawn({ title: record.title, cwd: record.cwd, command, ...(description === undefined ? {} : { description }) });
-  writeRole(ctx, record);
-  const head = [`${again ? '起こし直した' : '起こした'}: ${record.title}（${record.address}・${modelStatus(record.model, record.effort)}）`, `folder: ${record.cwd}`, ...more, ...paint(ctx, record.role, record.address)];
-  if (wait === 0) return [...head, '名乗り（tpm hello）は待っていない'];
-  for (let waited = 0; waited < wait * 1000; waited += HELLO_INTERVAL_MS) {
-    if (readRole(ctx, record.key)?.helloAt !== undefined) return [...head, '名乗った（tpm hello が来た）'];
-    ctx.sleep(HELLO_INTERVAL_MS);
-  }
-  if (readRole(ctx, record.key)?.helloAt !== undefined) return [...head, '名乗った（tpm hello が来た）'];
-  throw new TpmError(notStarted(ctx, record, wait));
-}
-
-/**
- * 設定に書いた担当の既定。欄ごとに、担当を起こす folder（--cwd）の設定が先、次に project の folder の設定。
- * 直下の folder の設定どうしは合わせない（担当は 1 人で値は 1 つなので、起こす folder で決める）。
- */
-function roleDefaults(ctx: Context, role: RoleName, cwd: string): Partial<Record<'model' | 'effort' | 'permissionMode', string>> {
-  const dir = resolve(cwd);
-  const here = dir === ctx.project ? {} : readRolesConfig(rolesConfigFile(dir)).roles[role];
-  return { ...ctx.config.roles[role], ...here };
-}
-
-/**
- * 課題の写し（名簿に書く欄）。読める形の Key なら写しを置いて URL を、--no-issue-copy ならその訳を返す。読める形でなければ空。
- * 前の写しの欄は、どちらかに上書きするため両方を返す（undefined は消す）。
- */
-function issueCopy(ctx: Context, issueKey: string, roleKey: string, skip: string | undefined): Pick<RoleRecord, 'issuePage' | 'issueCopySkipped'> {
-  if (issueTracker(ctx, issueKey) === undefined) return {};
-  if (skip !== undefined) {
-    if (skip.trim() === '') throw new TpmError('--no-issue-copy には、写しを作らずに振る訳を書いてください');
-    return { issuePage: undefined, issueCopySkipped: skip };
-  }
-  return { issuePage: copyIssue(ctx, issueKey, roleKey), issueCopySkipped: undefined };
-}
-
-/** 名乗らなかった訳を画面から読む。信頼のダイアログと命令の誤りは、居場所を閉じてから知らせる。 */
-function notStarted(ctx: Context, record: RoleRecord, waited: number): string {
-  const address = record.address ?? '';
-  const screen = ctx.transport.screen(address);
-  const head = `${record.title}（${address}）が ${waited} 秒たっても名乗りません。`;
-  const closeSeat = (): void => {
-    ctx.transport.close(address);
-    delete record.address;
-    writeRole(ctx, record);
-  };
-  if (/Adding a new directory|trust/i.test(screen)) {
-    closeSeat();
-    return `${head}信頼のダイアログで止まっていたので、Yes は押さずに閉じました。${record.cwd} と ${ctx.root} で 1 度 Claude Code を対話で起こして信頼するよう、Product Manager に頼んでください。`;
-  }
-  if (/Unknown command/i.test(screen)) {
-    closeSeat();
-    return `${head}最初の入力 ${ROLES[record.role].prompt} が Unknown command でした（skill セットの folder の誤り）。閉じました。`;
-  }
-  return `${head}居場所は残してあります。画面の終わり:\n${screen.trimEnd().split('\n').slice(-12).join('\n')}`;
-}
-
 /** 担当の居場所を閉じ、名簿から消す。課題の担当を閉じる時は、その課題の Staff Engineer 担当の席が残っていれば、一緒に閉じる。 */
 export function close(ctx: Context, key: string): string[] {
+  requireTpmSide(ctx, 'tpm close');
   const record = readRole(ctx, key);
   if (record === undefined) throw new TpmError(`名簿に担当がいません: ${key}`);
   if (record.role === 'auditor') throw new TpmError('Auditor の席は、Product Manager が起こし、閉じます。tpm close では閉じられません（居場所が消えていたら、Product Manager が tpm audit start で起こし直す）');

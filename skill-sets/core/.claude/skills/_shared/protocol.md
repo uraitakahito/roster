@@ -50,6 +50,8 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 | 【notify】 | 知っておくこと・受け取ったという返事。返事は要らない | `tpm notify <Key> "<本文>"` |
 | 【dismiss】 | この課題に続きは無い（Product Manager が決めたか、TPM 担当が聞かなくてよいと決めた）。worktree を片付けて【end】を返す。担当の交代のためなら、そう書いてある。「取り消す: brief-N」とあれば brief-N の作業もやめる | `tpm dismiss <Key> [--handover] [--supersede]` |
 
+この表の命令と `tpm close` は、担当の session から打つと断られる（送り手の名は命令が付けるので、担当が打つと TPM 担当の名で届いてしまう）。TPM 担当に頼むことは `tpm ask tpm` で送る。
+
 ## 状態
 
 - 出すのは **`model` と `wait` の 2 つだけ**。`model` は名乗ったとき（`tpm hello`）に出る。

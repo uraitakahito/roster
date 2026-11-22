@@ -4,6 +4,7 @@ import type { Context } from '../context.ts';
 import { recordGuardStop } from '../evidence.ts';
 import { commandOf, judge, judgeEnv, judgeWrite, readApprovals, removeApproval, writeApproval, writeOf, type Verdict } from '../guard.ts';
 import { ROLE_NAMES, type RoleName } from '../protocol.ts';
+import { requireTpmSide } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
 import { castlistGuard } from './castlist.ts';
 import { pagesDir } from './store.ts';
@@ -22,9 +23,7 @@ function requireEnv(ctx: Context, name: string) {
 }
 
 /** 承認を書いてよいのは TPM 担当だけ（Product Manager が決めた後に書く）。 */
-function requireTpmSide(ctx: Context): void {
-  if (ctx.env.TPM_KEY) throw new TpmError('承認を書くのは TPM 担当です（Product Manager が決めた後）。担当は tpm ask pm で頼んでください');
-}
+const requireApprover = (ctx: Context, command: string): void => requireTpmSide(ctx, command, '承認を書くのは TPM 担当です（Product Manager が決めた後）。担当は tpm ask pm で頼んでください');
 
 /** 設定にある環境と手続き、「PM の承認」の環境なら今の承認を並べる（`tpm infra list`）。 */
 export function infraList(ctx: Context): string[] {
@@ -44,7 +43,7 @@ export function infraList(ctx: Context): string[] {
 
 /** 「PM の承認」の環境に、minutes 分だけ効く承認を書く（`tpm infra approve`）。TPM 担当だけが打てる。 */
 export function infraApprove(ctx: Context, name: string, options: { minutes: number, note?: string }): string[] {
-  requireTpmSide(ctx);
+  requireApprover(ctx, 'tpm infra approve');
   const guardOf = requireEnv(ctx, name).guard;
   if (guardOf === 'pm-only') throw new TpmError(`環境 ${name} の手は Product Manager だけのものなので、承認を書いても担当は打てません（Product Manager が自分の terminal で直に打つ）`);
   if (guardOf !== 'pm') throw new TpmError(`環境 ${name} の手続きは「PM の承認」ではないので、承認は要りません`);
@@ -56,7 +55,7 @@ export function infraApprove(ctx: Context, name: string, options: { minutes: num
 
 /** 環境の承認を、切れる前に消す（`tpm infra revoke`）。TPM 担当だけが打てる。 */
 export function infraRevoke(ctx: Context, name: string): string[] {
-  requireTpmSide(ctx);
+  requireApprover(ctx, 'tpm infra revoke');
   requireEnv(ctx, name);
   removeApproval(ctx.state, name);
   return [`承認を消した: ${name}`];

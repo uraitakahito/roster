@@ -8,7 +8,7 @@ import type { Context } from '../context.ts';
 import { recordGateStop, recordWait } from '../evidence.ts';
 import { addIncident, foldIntoIncident, incidentLine, incidentType, INCIDENT_TYPES, readIncidents, tagLines } from '../incidents.ts';
 import { message, ROLES, TPM_TITLE, WAIT, WAIT_CLOSE, WAIT_NEXT_BRIEF, type HeadingId, type WaitKind } from '../protocol.ts';
-import { readRole, requireRole, requireSelf, requireTpm, subjectOf, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
+import { readRole, requireRole, requireSelf, requireTpm, requireTpmSide, subjectOf, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
 import { addReview, openReviews, patchReview, removeReview, VERDICTS, type Verdict } from '../reviews.ts';
 import { TpmError } from '../skill-sets.ts';
 import { MAX_POINTS, type Note, type NoteKind, type NoteLink } from '../tracker/types.ts';
@@ -133,11 +133,21 @@ const READ_STOP = {
  * 送る前の検査。自分宛てでまだ届いていないメッセージのうち、まだ見せていない物があれば、それを出して 1 度だけ止まる（行き違いを減らす）。
  * from は相手の題（TPM 担当が担当に送るとき。ほかの担当からのメッセージでは止まらない）。担当は TPM 担当からしか受けないので、付けない。
  * 見せた物は覚えるので、同じ命令を打ち直せば送る。action は止まった時の字（put は tpm page put が置く前に呼ぶとき）。
+ * 自分が送った物は数えない: cmux は、自分の受信箱の「まだ届いていない物」に、自分が送ってまだ相手に届いていない物も返す
+ * （送った直後の次の命令が、自分のメッセージを未読として出して止まった。台帳 #97・#100）。送った記録（log.jsonl）の、送り手が自分の行の id を除く。
+ * 送り手は、担当なら「Key が自分で、TPM 担当の名でない行」、TPM 担当なら「TPM 担当の名の行」で見る（宛先では見ない。返事の形（--reply-to）は、
+ * 記録の宛先と本当の受け手がずれることがある。題でも見ない。居場所の題は替わることがある）。
  */
 export function assertRead(ctx: Context, who: string, from?: string, action: keyof typeof READ_STOP = 'send'): void {
-  const pending = ctx.transport.pending().filter(m => from === undefined || m.from === from);
+  const incoming = ctx.transport.pending().filter(m => from === undefined || m.from === from);
+  if (incoming.length === 0) return;
+  const self = ctx.transport.whoami();
+  const key = ctx.env.TPM_KEY;
+  const mine = (l: Sent): boolean => key ? l.key === key && l.from !== TPM_TITLE : l.from === TPM_TITLE;
+  const sent = new Set(ctx.state.lines<Sent>('log.jsonl').filter(mine).map(l => l.id));
+  const pending = incoming.filter(m => !sent.has(m.id));
   if (pending.length === 0) return;
-  const shown = new Set(readShown(ctx, ctx.transport.whoami()).map(e => e.id));
+  const shown = new Set(readShown(ctx, self).map(e => e.id));
   const unread = pending.filter(m => !shown.has(m.id));
   if (unread.length === 0) return;
   markShown(ctx, unread);
@@ -788,6 +798,7 @@ function answeredPages(ctx: Context, key: string, options: AnswerOptions): strin
 
 /** Product Manager の答えを返す。課題があれば、返す前に「決定」の記録を書く。返した後、置き場の返事待ちのページを答えたにする。 */
 export function answer(ctx: Context, key: string, options: AnswerOptions): string[] {
+  requireTpmSide(ctx, 'tpm answer');
   const role = receiver(ctx, key);
   if (role.address !== undefined) assertNotRepeat(ctx, 'answer', TPM_TITLE, role.address, options.text, options.replyTo);
   const pages = answeredPages(ctx, key, options);
@@ -798,11 +809,13 @@ export function answer(ctx: Context, key: string, options: AnswerOptions): strin
 
 /** 担当に、返事の要らないメッセージを送る（【notify】）。 */
 export function notify(ctx: Context, key: string, options: { text: string, replyTo?: string }): string[] {
+  requireTpmSide(ctx, 'tpm notify');
   return [toRole(ctx, receiver(ctx, key), 'notify', options.text, options.replyTo)];
 }
 
 /** この課題に続きは無い、と知らせる。handover は担当の交代（課題は続くので、担当は課題を閉じない）。 */
 export function dismiss(ctx: Context, key: string, options: { handover: boolean, supersede?: boolean }): string[] {
+  requireTpmSide(ctx, 'tpm dismiss');
   if (readRole(ctx, key)?.role === 'auditor') throw new TpmError('Auditor の席に【dismiss】は送れません（Auditor の席は、Product Manager が起こし、閉じる）');
   // Staff Engineer 担当は worktree も PR も持たないので、片付けのやりとり（【dismiss】と【end】）は要らない。
   if (readRole(ctx, key)?.role === 'staff-engineer') throw new TpmError(`Staff Engineer 担当の席に【dismiss】は送りません。tpm close ${key} で閉じます（課題の席を tpm close で閉じる時にも、一緒に閉じる）`);

@@ -7,15 +7,13 @@ import { createContext, type Context } from '../context.ts';
 import { actor } from '../evidence.ts';
 import { addIncident, assertTags, incidentLine, incidentType, INCIDENT_TYPES, readIncidents, requireIncident, STATUS_LABEL, tagLines, writeIncident, type Incident, type IncidentStatus } from '../incidents.ts';
 import { TPM_TITLE } from '../protocol.ts';
-import { assertKey, readRole } from '../roster.ts';
+import { assertKey, readRole, requireTpmSide } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
 import { roleOf } from './infra.ts';
 import { DEFAULT_MINUTES, incidentTimeline } from './timeline.ts';
 
 /** 台帳に tpm incident add で書くのは TPM 担当だけ（担当と Auditor は【incident】で書く）。 */
-function requireTpmSide(ctx: Context): void {
-  if (ctx.env.TPM_KEY) throw new TpmError('tpm incident add で書くのは TPM 担当です。担当は tpm report incident "<起きた事実>" --type <種類> で書いてください');
-}
+const requireAdder = (ctx: Context): void => requireTpmSide(ctx, 'tpm incident add', 'tpm incident add で書くのは TPM 担当です。担当は tpm report incident "<起きた事実>" --type <種類> で書いてください');
 
 /** 台帳を見直す・扱いを決める・追いかけるのは、TPM 担当と Auditor（ほかの担当は書くだけ）。 */
 function requireLedgerSide(ctx: Context): void {
@@ -42,7 +40,7 @@ export interface AddOptions {
 
 /** TPM 担当が、気づいた出来事を台帳に書く。tag があれば、同じ tag の前の件数を返す。 */
 export function incidentAdd(ctx: Context, key: string, options: AddOptions): string[] {
-  requireTpmSide(ctx);
+  requireAdder(ctx);
   assertKey(key);
   const incident = addIncident(ctx, { key, source: 'add', text: options.text, type: incidentType(options.type), tags: options.tags, severe: options.severe, ...(options.msg === undefined ? {} : { msg: options.msg }) });
   return [`台帳に書いた: ${incidentLine(incident)}`, ...tagLines(ctx, incident), ...(incident.severe ? ['重い件: すぐ Product Manager に伝える（監査を呼ぶなら、Audit の席で /audit <番号>）'] : [])];
