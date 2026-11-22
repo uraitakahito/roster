@@ -1,6 +1,7 @@
 // 見出しの付いたメッセージを送る命令。送る・届いたかを見る・課題に記録を書く・状態を替える、を 1 度にする。
 // 担当が打つ物（ask・report・wait）と、TPM 担当が打つ物（answer・notify・dismiss・show）。brief は命令でなく、assign の中で使う。
 // Auditor は、成果を tpm report audit（Product Manager へじかに出した報告の写し）と tpm report decided（Product Manager の決定）で出す。
+import { basename } from 'node:path';
 import { appendAudit } from '../audits.ts';
 import type { Context } from '../context.ts';
 import { recordGateStop, recordWait } from '../evidence.ts';
@@ -10,7 +11,7 @@ import { readRole, requireRole, requireSelf, requireTpm, writeRole, type RoleRec
 import { TpmError } from '../skill-sets.ts';
 import { MAX_POINTS, type Note, type NoteKind, type NoteLink } from '../tracker/types.ts';
 import type { Incoming } from '../transport/types.ts';
-import { isStorePage, replyLine, waitingUrls } from './reply.ts';
+import { isStorePage, pageOwner, replyLine, samePage, waitingUrls } from './reply.ts';
 import { isPageUrl } from './store.ts';
 
 /** 記録の 1 行目の一言に使う長さの上限（メッセージの本文から作るとき）。 */
@@ -408,23 +409,64 @@ export function askTpm(ctx: Context, options: { text: string, waitingFor: string
   return [toTpm(ctx, self, 'ask-tpm', options.text, options.replyTo), ...wait(ctx, 'tpm', options.waitingFor)];
 }
 
-/** Product Manager に決めてほしいことを書いた確認のページを、TPM 担当に送る。ページは開かない（Product Manager は置き場の一覧の UI で見る）。 */
-export function askPm(ctx: Context, options: { url: string, items: string[], waitingFor: string }): string[] {
+/**
+ * --supersede で名指した古い確認を、送る前に確かめる。受けるのは、自分の Key の、今返事待ちの確認だけ。
+ * 置き場に聞けない時（止まっている）は、返事待ちかを確かめずに通す（送った後に印を外せず、直し方の行が出る）。
+ */
+function assertSupersede(ctx: Context, self: RoleRecord, url: string, supersede: string[]): void {
+  for (const old of supersede) {
+    const owner = pageOwner(ctx, old);
+    if (owner === undefined) throw new TpmError(`--supersede は、置き場の確認のページの URL にしてください: ${old}`);
+    if (owner.project !== basename(ctx.state.dir) || owner.key !== self.key) {
+      throw new TpmError(`--supersede: ${self.key} の確認だけを置き換えられます（別の project・Key のページ）: ${old}`);
+    }
+    if (samePage(ctx, old, url)) throw new TpmError(`--supersede に、送る確認そのものは書けません: ${old}`);
+  }
+  if (supersede.length === 0) return;
+  const waiting = waitingUrls(ctx, self.key);
+  if (waiting === undefined) return;
+  const notWaiting = supersede.filter(old => !waiting.some(w => samePage(ctx, w, old)));
+  if (notWaiting.length > 0) {
+    throw new TpmError([
+      `--supersede: 返事待ちではありません（答え済みか、tpm ask pm で送っていない）。何も送っていません:`,
+      ...notWaiting,
+      `今の ${self.key} の返事待ち: ${waiting.length === 0 ? '無し' : waiting.join(' ')}`,
+    ].join('\n'));
+  }
+}
+
+/**
+ * Product Manager に決めてほしいことを書いた確認のページを、TPM 担当に送る。ページは開かない（Product Manager は置き場の一覧の UI で見る）。
+ * supersede は、この確認で置き換える古い確認。送った後、その返事待ちの印を外す（答える要が無くなったため）。
+ */
+export function askPm(ctx: Context, options: { url: string, items: string[], waitingFor: string, supersede?: string[] }): string[] {
   const self = sender(ctx);
   notAuditor(self, 'tpm ask pm');
   if (options.items.length === 0) throw new TpmError('--item で、決めてほしい項目の題を 1 つ以上書いてください');
-  const body = `${options.url} 項目: ${options.items.map((item, i) => `(${i + 1}) ${item}`).join(' ')}`;
+  const supersede = options.supersede ?? [];
+  const body = [
+    `${options.url} 項目: ${options.items.map((item, i) => `(${i + 1}) ${item}`).join(' ')}`,
+    ...(supersede.length === 0 ? [] : [`置き換える確認: ${supersede.join(' ')}`]),
+  ].join(' ');
   notRepeatToTpm(ctx, self, 'ask-pm', body);
+  assertSupersede(ctx, self, options.url, supersede);
   const recorded = record(ctx, self, {
     kind: '確認',
     role: ROLES[self.role].label,
     summary: `Product Manager に確かめる（${options.items.length} 項）`,
-    links: [{ label: '確認', url: options.url }],
+    links: [{ label: '確認', url: options.url }, ...supersede.map(url => ({ label: '置き換えた確認', url }))],
     points: options.items,
   });
   const sent = toTpm(ctx, self, 'ask-pm', body);
   // 置き場の確認のページを返事待ちにする（Product Manager が、一覧の UI の印と件数で気づく）。書けなくても、送った事は変わらない。
-  return [...recorded, sent, ...replyLine(ctx, options.url, 'waiting'), ...wait(ctx, 'pm', options.waitingFor)];
+  // 置き換えた古い確認は、返事待ちから外す（残すと、答える要の無いページが「返事待ち」に出続ける）。
+  return [
+    ...recorded,
+    sent,
+    ...replyLine(ctx, options.url, 'waiting'),
+    ...supersede.flatMap(old => replyLine(ctx, old, 'answered', '置き換えたので返事待ちを外した')),
+    ...wait(ctx, 'pm', options.waitingFor),
+  ];
 }
 
 /** 共有の環境で DevOps Engineer 担当の手が要ることを、TPM 担当に送る（【ask-devops】）。 */

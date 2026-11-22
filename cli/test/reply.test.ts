@@ -168,3 +168,57 @@ describe('tpm page reply と tpm dismiss', () => {
     ]);
   });
 });
+
+describe('tpm ask pm --supersede: 置き換えた古い確認の印を外す', () => {
+  test('新しい確認を返事待ちにし、名指した古い確認を答えたにする。置き換えはメッセージ（log）にも載る', () => {
+    const s = started();
+    const old = s.confirm('plan-9 で進むか');
+    const other = s.confirm('名の言葉づかい');
+    const next = s.confirm('plan-10 で進むか');
+    askPm(s.se, { url: old, items: ['plan-9 で進むか'], waitingFor: 'a' });
+    askPm(s.se, { url: other, items: ['名'], waitingFor: 'b' });
+
+    expect(askPm(s.se, { url: next, items: ['plan-10 で進むか'], waitingFor: '進むか', supersede: [old] })).toEqual([
+      '送った: 【ask-pm】→ file:tpm（届いた）',
+      `置き場の印: 返事待ちにした ${next}`,
+      `置き場の印: 置き換えたので返事待ちを外した ${old}`,
+      '状態: 回答待ち(PM): 進むか',
+    ]);
+    // 名指さなかった確認は、同じ Key でも返事待ちのまま。
+    expect([s.state(1), s.state(2), s.state(3)]).toEqual(['answered', 'waiting', 'waiting']);
+    expect(s.texts('file:tpm').at(-1)).toBe(`【ask-pm】${next} 項目: (1) plan-10 で進むか 置き換える確認: ${old}`);
+    const logged = s.w.tpm.state.lines<{ heading: string, text: string }>('log.jsonl').findLast(l => l.heading === 'ask-pm');
+    expect(logged?.text).toContain(`置き換える確認: ${old}`);
+  });
+
+  test('別の Key・答え済み・返事を求めていない・置き場の外・送る確認そのものは、送る前に断る', () => {
+    const s = started();
+    const old = s.confirm('古い');
+    const notAsked = s.confirm('送っていない');
+    const next = s.confirm('新しい');
+    askPm(s.se, { url: old, items: ['a'], waitingFor: 'a' });
+    answer(s.tpm, 't-x7k2', { text: '答え' });
+    const sent = s.texts('file:tpm').length;
+    const ask = (supersede: string[]) => () => askPm(s.se, { url: next, items: ['b'], waitingFor: 'b', supersede });
+
+    expect(ask([`${BASE}/${s.project}/t-other/confirm-1.html`])).toThrow(/t-x7k2 の確認だけを置き換えられます[\s\S]*t-other/);
+    expect(ask([old])).toThrow(/返事待ちではありません[\s\S]*confirm-1\.html/);
+    expect(ask([notAsked])).toThrow(/返事待ちではありません[\s\S]*confirm-2\.html/);
+    expect(ask(['https://example.com/x.html'])).toThrow(/置き場の確認のページの URL/);
+    expect(ask([next])).toThrow(/送る確認そのもの/);
+    // どれも送っていない・印も変えていない。
+    expect(s.texts('file:tpm')).toHaveLength(sent);
+    expect([s.state(1), s.state(2), s.state(3)]).toEqual(['answered', 'none', 'none']);
+  });
+
+  test('止まっている置き場では、返事待ちかを確かめられないので断らず、外せなかったことと直し方を出す', () => {
+    const s = started();
+    const old = s.confirm('古い');
+    const next = s.confirm('新しい');
+    askPm(s.se, { url: old, items: ['a'], waitingFor: 'a' });
+    s.w.store.down = true;
+    const out = askPm(s.se, { url: next, items: ['b'], waitingFor: 'b', supersede: [old] });
+    expect(out[0]).toBe('送った: 【ask-pm】→ file:tpm（届いた）');
+    expect(out[2]).toMatch(new RegExp(`^置き場の印: 付けていない（置き場が応えない。[\\s\\S]*tpm page reply ${old} --answered`));
+  });
+});

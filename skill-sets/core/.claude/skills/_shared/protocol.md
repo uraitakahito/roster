@@ -22,7 +22,7 @@ TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・De
 | 見出し | いつ | 命令 |
 |---|---|---|
 | 【ask-tpm】 | TPM 担当に決めてほしいことがある | `tpm ask tpm "<困っていること・試したこと・案とお勧め>" --waiting-for "<何を>"` |
-| 【ask-pm】 | Product Manager に決めてほしいこと・頼むことを確認のページに書いて置いた（下の「Product Manager に確かめる」） | `tpm ask pm --url <URL> --item "<項目の題>" … --waiting-for "<何を>"` |
+| 【ask-pm】 | Product Manager に決めてほしいこと・頼むことを確認のページに書いて置いた（下の「Product Manager に確かめる」） | `tpm ask pm --url <URL> --item "<項目の題>" … --waiting-for "<何を>" [--supersede <置き換える古い確認の URL>…]` |
 | 【ask-devops】 | 共有の環境で DevOps Engineer 担当の手が要る（下の「共有の環境」） | `tpm ask devops --what "<何を>" --why "<なぜ>" [--urgent]` |
 | 【doc-fix】 | 文書やコメントの食い違いを直した PR を merge した | `tpm report doc-fix --pr <URL> --note "<一言>" [--unchecked "<訳>"]` |
 | 【incident】 | 思わぬ出来事（信頼性・安全性・効率性が落ちた）に気づいた（下の「思わぬ出来事」） | `tpm report incident "<起きた事実>" --type <reliability\|safety\|efficiency> [--tag <tag>] [--severe]` |
@@ -139,6 +139,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 - 開く: ページは自動では開かない（`tpm ask pm`・`tpm report done` も開かない）。Product Manager は、置き場の一覧の UI（`http://127.0.0.1:8801/`）を 1 つ開いておき、新着の印で気づいて読む。その場で開いて人に見せる時だけ `tpm show <URL>`。
 - 返事の状態: Product Manager の返事が要るページ（確認のページ）には、置き場が「返事待ち」「答えた」の状態を持つ（pagetray 0.5.0 から）。**担当は手で書かない。**`tpm ask pm` が、送った確認のページを返事待ちにし、TPM 担当の `tpm answer` が答えたにする。Product Manager は、置き場の一覧の UI の「返事待ち N 件」と行の印で、返事が要るページを見分ける。
   - 置いただけの確認のページには印が付かない。`tpm ask pm` で送って初めて返事待ちになる。
+  - 前の確認を置き換える確認（計画を直して「進むか」を聞き直すなど）は、`tpm ask pm --supersede <古い確認の URL>` で送る。送った後、古い確認の返事待ちが外れる（同じ Key の返事待ちの確認だけを受け、別の Key・答え済み・送っていない確認は送る前に断る）。
   - `tpm answer` は、その Key の返事待ちのページが 1 枚なら、それを答えたにする。2 枚以上ある時は、送る前に止まって URL を並べるので、どのページへの答えかを `--url <確認の URL>`（何度でも）で書くか、みなへの答えなら `--all` を付けて打ち直す。
   - 置き場が応えない・版が古い（0.5.0 より前）時は、印は付かないが、メッセージは送られる（`置き場の印: 付けていない` と出る）。
   - 手で直すのは TPM 担当だけ: `tpm page reply <URL>… --waiting|--answered`。`tpm answer` を通らずに済んだ確認（取り下げた・次の依頼書で答えた）を答えたにする時と、置き場が応えない間に送った確認を返事待ちにする時に使う。`tpm dismiss` は、その Key に返事待ちのページが残っていれば URL を出す。担当は `tpm ask tpm` で頼む。
@@ -170,7 +171,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 
 1. 確認のページを HTML の file に書く。項目ごとに、背景・選択肢・お勧めとその訳を書き、選択肢を表と図にする（図は上の「ページ」の図の項）。
 2. `tpm page put <file> --kind confirm` で置く（上の「ページ」）。
-3. 出た URL で `tpm ask pm --url <URL> --item "<項目の題>" … --waiting-for "<何を>"` を打つ。TPM 担当に【ask-pm】が行き、状態が `回答待ち(PM): <何を>` になり、置き場の確認のページが返事待ちになる（上の「ページ」の返事の状態）。
+3. 出た URL で `tpm ask pm --url <URL> --item "<項目の題>" … --waiting-for "<何を>"` を打つ。TPM 担当に【ask-pm】が行き、状態が `回答待ち(PM): <何を>` になり、置き場の確認のページが返事待ちになる（上の「ページ」の返事の状態）。**前の確認（まだ返事待ちの物）を置き換えるなら、必ず `--supersede <古い確認の URL>` で名指す**（何度でも）。名指した確認の返事待ちが外れる。名指さないと、答える要の無い確認が Product Manager の画面の「返事待ち」に残り続ける（2026-11-22 の t-23zs の confirm-14）。
 4. 答えは【answer】で来る。
 
 ## 文書の食い違い

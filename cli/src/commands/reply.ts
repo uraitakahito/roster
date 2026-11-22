@@ -19,6 +19,18 @@ const PAGE_PATH = /^([^/]+)\/([^/]+)\/([a-z][a-z0-9-]{0,31})-([1-9]\d*)\.html$/;
 /** URL が、置き場のページ（file や一覧でなく）を指しているか。 */
 export const isStorePage = (ctx: Context, url: string): boolean => PAGE_PATH.test(inStore(ctx.env, url) ?? '');
 
+/** 置き場のページの URL の、project と Key。置き場のページでなければ undefined。 */
+export function pageOwner(ctx: Context, url: string): { project: string, key: string } | undefined {
+  const at = PAGE_PATH.exec(inStore(ctx.env, url) ?? '');
+  return at === null ? undefined : { project: at[1] ?? '', key: at[2] ?? '' };
+}
+
+/** 置き場の中の同じページか（前の置き場の URL で書かれていても、同じ path なら同じ）。 */
+export const samePage = (ctx: Context, a: string, b: string): boolean => {
+  const pa = inStore(ctx.env, a);
+  return pa !== undefined && pa === inStore(ctx.env, b);
+};
+
 /**
  * 状態を書いた結果。done は書けた。old は置き場の版が古く（0.5.0 より前）その道が無い。down は置き場が応えない。
  * missing はそのページが無い（消した物も）。foreign は置き場のページの URL でない（何もしていない）。
@@ -56,11 +68,13 @@ export function waitingUrls(ctx: Context, key: string): string[] | undefined {
   return (JSON.parse(r.body) as { pages: PageRecord[] }).pages.filter(p => inState(p, 'waiting')).map(p => `${pagesUrl(ctx.env)}${p.path}`);
 }
 
-/** メッセージを送る命令（ask pm・answer）が、状態を書いた結果を 1 行で出す。書けなくても止まらない。 */
-export function replyLine(ctx: Context, url: string, state: ReplyState): string[] {
-  const label = REPLY_LABEL[state];
+/**
+ * メッセージを送る命令（ask pm・answer）が、状態を書いた結果を 1 行で出す。書けなくても止まらない。
+ * done は、書けた時の行（既定は「（状態の名）にした」）。
+ */
+export function replyLine(ctx: Context, url: string, state: ReplyState, done = `${REPLY_LABEL[state]}にした`): string[] {
   switch (setReply(ctx, url, state)) {
-    case 'done': return [`置き場の印: ${label}にした ${url}`];
+    case 'done': return [`置き場の印: ${done} ${url}`];
     case 'old': return [`置き場の印: 付けていない（置き場の版が古く、返事の状態を持てない。メッセージは送った。置き場の版を上げるのは tpm ask devops）`];
     case 'down': return [`置き場の印: 付けていない（置き場が応えない。メッセージは送った。後で TPM 担当が tpm page reply ${url} --${state} で直せる）`];
     case 'missing': return [`置き場の印: 付けていない（そのページは置き場に無い: ${url}）`];
