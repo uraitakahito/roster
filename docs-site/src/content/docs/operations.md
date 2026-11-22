@@ -243,3 +243,4 @@ container list --all
 - `container list --all` の `STARTED` は、最後に起きた時刻（UTC）だけ。その後にもう 1 度起こし直すと書き替わる（今朝の castlist.box は 05:36:49 に起き直したが、06:05 に版を上げて起こし直したので、`STARTED` は 06:05 の物になっていた）。
 - 止まった時刻と、それまでの起き直しの時刻は、2 つ目の命令の行（launchd の `exited due to` と `Successfully spawned`）に残る。今朝は、pagetray・castlist.box とも 05:34:13 に止まり、05:36:49（castlist.box）と 05:39:05（pagetray）に起き直していた。
 - container の exit code と、起こし直す前の `container logs` は残らない（container の CLI の上流の issue #2402）。container の中の process がきれいに止まったのか、VM ごと切られたのかは、ここからは分からない。
+- それは、道具が自分で残す記録で分かる（pagetray は 0.7.0 から、castlist は 0.3.0 から）。`curl -s http://127.0.0.1:8801/api/logs`（castlist は `curl -s http://127.0.0.1:8802/v1/logs`）が、終わり方の印と、起こし直す前の時刻つきの行を返す。起きるたびに出る `previous: …` の行が、前回の終わり方（きれいに止まった・panic・誤りで終わった・停止の印なし）。読み方は pagetray の docs の「[落ちた後に調べる](https://uraitakahito.github.io/pagetray/run.html)」と、castlist の docs の「[落ちた後に調べる](https://uraitakahito.github.io/castlist/run.html)」。
