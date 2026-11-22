@@ -11,7 +11,7 @@ Product Manager が TPM 担当を起こし、TPM 担当が課題ごとにほか�
 
 ```mermaid
 flowchart LR
-  PM["Product Manager（人）"] -->|"/tpm"| TPM["Technical Program Manager"]
+  PM["Product Manager（人）"] -->|"tpm start の 1 行 → /tpm"| TPM["Technical Program Manager"]
   TPM -->|"tpm assign → /software-engineer"| SE["Software Engineer"]
   TPM -->|"tpm assign → /devops-engineer"| DE["DevOps Engineer"]
   TPM -->|"/dependabot-triage → /sustaining-engineer"| SU["Sustaining Engineer"]
