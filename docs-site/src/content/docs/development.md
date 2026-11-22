@@ -33,13 +33,14 @@ build は無い。`cli/bin/tpm` は `cli/src/cli.ts` を node で直に動かす
 |---|---|
 | `cli/src/program.ts` | 命令の木（`tpm --help`）。`cli/src/cli.ts` が動かす |
 | `cli/src/protocol.ts` | 担当の種類・見出しの表・状態の字の形・命令の一覧 |
-| `cli/src/commands/` | 決まりの命令（`tpm-side.ts`・`role-side.ts`・`messages.ts`・`infra.ts`・`page.ts`・`issue.ts`） |
+| `cli/src/commands/` | 決まりの命令（`tpm-side.ts`・`role-side.ts`・`messages.ts`・`infra.ts`・`page.ts`・`issue.ts`・`review.ts`） |
 | `cli/src/roster.ts`・`cli/src/state.ts` | 名簿と、状態の folder |
 | `cli/src/transport/` | 連携の口（`types.ts`）と adapter（`cmux.ts`・`file.ts`） |
 | `cli/src/tracker/` | 課題管理の口（`types.ts`）と adapter（`jira.ts`・`github.ts`）、課題の Key の形で adapter を選ぶ `routed.ts` |
 | `cli/src/guard.ts` | guard |
 | `cli/src/run-role.ts` | 連携の道具が担当の居場所で動かす `tpm run-role`（名簿を読んで claude を起こす） |
 
+- **担当の種類を足す**: `cli/src/protocol.ts` の `ROLES` に足し、名の略（`cli/src/castlist.ts`）を書く（書き忘れは型の検査で落ちる）。設定で既定を替えられるようにするなら `cli/src/config.ts`、読むだけの担当なら `cli/src/guard.ts` の読むだけの担当の表にも足す。skill は `skill-sets/<名前>/.claude/skills/<役割>/SKILL.md`。
 - **見出しを足す・変える**: `cli/src/protocol.ts` の `HEADINGS` と、`skill-sets/core/.claude/skills/_shared/protocol.md` の表を合わせる（`check` が揃いを見る）。
 - **命令を足す**: `cli/src/program.ts`（か `cli/src/commands/register.ts`）に足し、`cli/src/protocol.ts` の `COMMANDS` にも書く（試験が命令の木との揃いを、`check` が skill と docs の `tpm <命令>` が在るかを見る）。
 - **道具を足す**: `transport/` か `tracker/` に口を満たす adapter を書き、`cli/src/config.ts` の選択肢と `cli/src/context.ts`（課題管理は `cli/src/tracker/routed.ts`）に足す。上の層は変えない。

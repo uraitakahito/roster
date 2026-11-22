@@ -1,6 +1,6 @@
 # roster
 
-Product Manager（人）を、TPM・Software Engineer・DevOps Engineer・Sustaining Engineer・Auditor の
+Product Manager（人）を、TPM・Software Engineer・DevOps Engineer・Staff Engineer・Sustaining Engineer・Auditor の
 各担当（Claude Code）が助けるための skill の一式と、担当のあいだの決まりを受け持つ `tpm` の CLI。
 課題管理（Jira・GitHub の Issue）と担当どうしの連携（cmux）は、project ごとに設定で選ぶ。
 

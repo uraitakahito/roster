@@ -1,11 +1,11 @@
 ---
 title: 運用
-description: この repo を別の folder へ移す手順、Node の version の上げ方、アクターの台帳（castlist）が止まった時、ページの置き場（pagetray）の起こし方と保ち方、監査（Auditor の席）の運び
+description: この repo を別の folder へ移す手順、Node の version の上げ方、アクターの台帳（castlist）が止まった時、ページの置き場（pagetray）の起こし方と保ち方、レビュー（Staff Engineer 担当の席）と監査（Auditor の席）の運び
 ---
 
 ## 移す手順
 
-1. TPM 担当のほかに動いている担当（Software Engineer・DevOps Engineer・Sustaining Engineer・Auditor）が 0 のときに行う。
+1. TPM 担当のほかに動いている担当（Software Engineer・DevOps Engineer・Staff Engineer・Sustaining Engineer・Auditor）が 0 のときに行う。
 2. `mv <今の folder> <新しい folder>`（git の履歴ごと移る）。
 3. 新しい folder で 1 度 Claude Code を対話で起こして信頼する（[信頼のダイアログ](/getting-started/#信頼のダイアログ)。信頼は path に付くので、移すたびに要る）。
 4. 新しい folder の `cli/` で `pnpm install --frozen-lockfile` を打つ（`cd <新しい folder>/cli && pnpm install --frozen-lockfile`）。`~/.local/bin/tpm` の symlink を張っていれば張り直す（`ln -sf <新しい folder>/cli/bin/tpm ~/.local/bin/tpm`）。通知のバナーの hook（[設定](/configuration/#cmuxjson-に-hook-を足す)）を使っていれば、`tpm banner setup` を打ち直して `~/.config/cmux/cmux.json` の命令を替え、`tpm banner check` で確かめる（命令は repo の在り処を書いている）。
@@ -18,6 +18,24 @@ description: この repo を別の folder へ移す手順、Node の version の
 1. repo の一番上の `.node-version` を新しい version（`26.14.0` のように patch まで）に書き替える。nodenv は `26` のような頭だけの version を受けない。GitHub Actions の 3 つの workflow も `node-version-file` でこのファイルを読むので、ほかは書き替えない。
 2. 手元で `nodenv install` と、corepack の入れ直し（[Node と pnpm を入れる](/getting-started/#node-と-pnpm-を入れる)）。
 3. 新しい version で試験と docs の検査を流してから PR にする（[開発](/development/)）。major を上げるときは `cli/package.json` と `docs-site/package.json` の `engines.node` と、`@types/node` も合わせる。
+
+## レビュー（Staff Engineer 担当の席）
+
+計画・提案・PR を、書いた者から離れた目で見るのは Staff Engineer 担当。席は、課題の担当がレビューを頼んだ時に、TPM 担当がその課題の隣に起こす（決まりは `skill-sets/core/.claude/skills/_shared/protocol.md` の「レビュー」）。Product Manager の手は、ふだんは無い。
+
+- **必ずレビューを受けさせたい課題**は、TPM 担当に頼む時にそう言う（「この課題はレビューを受けさせて」）。TPM 担当が依頼書に「レビューを受ける」と書き、担当は計画と PR を必ず頼む。言わなければ、担当が要ると見た時だけ頼む。
+- 頼まれると、cmux に `Staff <課題の Key>` の居場所ができる。Staff Engineer 担当は見る物と依頼書を読み、レビューのページ（置き場の一覧の UI で、役割 `staff-engineer`・種類 `review`）を置いて返す。課題管理の課題には「レビュー」の記録が付く。
+- レビューは助言で、受けるかは課題の担当が決める。担当が「直すべき」を受けない時だけ TPM 担当に上がり、範囲・優先・設計の好みに関わる物は、TPM 担当が Product Manager に聞く。
+- 席は、課題の担当の席と一緒に TPM 担当が閉じる。
+- model などを替えるなら、TPM 担当に言う（`tpm assign --model`・`--effort`）か、`.claude/roles/config.jsonc` の `staff-engineer` に書く（[設定](/configuration/)）。既定は Opus 5.5・high。
+- どれだけ頼まれ、どう判じられたかは、`tpm review list` で読める（TPM 担当に聞けばよい）。
+
+```sh
+tpm review list            # 頼みごとの行と、判定ごとの数・レビューを頼んでいない課題の数
+tpm review list --key AI-12
+```
+
+出る行は「番号・課題の Key・判定（まだなら、席に渡していない・席が見ている・渡したが席がもう無い）・見る物・頼んだ時刻と返るまでの分・レビューのページ」。終わりの行の「レビューを頼んでいない課題」は、初めての頼みより後に結果の【done】を出した課題のうち、1 度も頼まなかった課題。頼む時を「いつも必ず」に上げるかを決める材料になる。
 
 ## 監査（Auditor の席）
 
