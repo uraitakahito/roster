@@ -156,6 +156,7 @@ pagetray の新しい版が出て、この repo の `.pagetray-version` が上�
 4. `tpm page` が「API の版が違う」と言って止まる時は、置き場の版とこの repo の版（`.pagetray-version`）が合っていない。どちらかが古いので、合わせる。`tpm file` が「置き場（pagetray）の版が古く」と言って止まる時は、置き場が 0.4.0 より前。`tpm ask pm`・`tpm answer` が「置き場の印: 付けていない（置き場の版が古く…）」と出す時と、`tpm page reply` が「版が古く」と言って止まる時は、置き場が 0.5.0 より前（返事の状態を持てない）。`.pagetray-version` の版に上げる。
 5. **0.5.0 に上げる時**: 移行の SQL が足される版なので、上げた後の DB では 0.4.2 までの版は起きない。戻す道は、3 で取った DB の写しだけ（写しの後に置かれたページと file は、`tpm page import` で控えから入れ直す）。上げた直後は、返事待ちは 0 件（前からあるページには印が付かない）。
 6. **0.6.0 に上げる時**: これも移行の SQL が足される版で、上げた後の DB では 0.5.0 までの版は起きない（戻す道は 3 の写しだけ）。作り直す `container run` に、上の「起こす」の `-e PAGETRAY_CASTLIST_URL=http://castlist.box:8080` を足す。前からあるページと file には、送り手は付かない。0.6.0 より前の置き場は、`tpm` が付けた送り手を読まずに置く（記録に残らないだけで、止まらない）。
+7. **0.7.0 に上げる時**: 移行の SQL は足されない（0.6.0 へそのまま戻せる）。`container run` の 1 行は 0.6.0 と同じ。上げた後は、`container logs pagetray` のどの行にも頭に時刻が付き、初めの行が前回の終わり方（`previous: …`）になる。初めて上げた時は `previous: none (first start)`。記録は volume の `/data/logs/` に、合わせて 4 MiB と 64 KiB まで残り、`curl -s http://127.0.0.1:8801/api/logs` で読める。
 
 ### 秘密を上げてしまった時
 
@@ -243,3 +244,4 @@ container list --all
 - `container list --all` の `STARTED` は、最後に起きた時刻（UTC）だけ。その後にもう 1 度起こし直すと書き替わる（今朝の castlist.box は 05:36:49 に起き直したが、06:05 に版を上げて起こし直したので、`STARTED` は 06:05 の物になっていた）。
 - 止まった時刻と、それまでの起き直しの時刻は、2 つ目の命令の行（launchd の `exited due to` と `Successfully spawned`）に残る。今朝は、pagetray・castlist.box とも 05:34:13 に止まり、05:36:49（castlist.box）と 05:39:05（pagetray）に起き直していた。
 - container の exit code と、起こし直す前の `container logs` は残らない（container の CLI の上流の issue #2402）。container の中の process がきれいに止まったのか、VM ごと切られたのかは、ここからは分からない。
+- それは、道具が自分で残す記録で分かる（pagetray は 0.7.0 から、castlist は 0.3.0 から）。`curl -s http://127.0.0.1:8801/api/logs`（castlist は `curl -s http://127.0.0.1:8802/v1/logs`）が、終わり方の印と、起こし直す前の時刻つきの行を返す。起きるたびに出る `previous: …` の行が、前回の終わり方（きれいに止まった・panic・誤りで終わった・停止の印なし）。「停止の印なし」は、合図も来ずに切られたことまでで、VM ごと切られた・SIGKILL・メモリ不足のどれかは見分けない（誰が止めたかも、道具からは見えない。上の機械の側の記録を合わせて読む）。読み方は pagetray の docs の「[落ちた後に調べる](https://uraitakahito.github.io/pagetray/run.html)」と、castlist の docs の「[落ちた後に調べる](https://uraitakahito.github.io/castlist/run.html)」。
