@@ -180,7 +180,9 @@ sequenceDiagram
 
 ## Staff Engineer 担当の席
 
-Staff Engineer 担当（役割 `staff-engineer`。題は `Staff <課題の Key>`、名簿の Key は `<課題の Key>.staff`。skill は `/staff-engineer`）は、課題の担当が頼んだ計画・提案・PR を見て助言する担当。席は課題ごとに、課題の担当の隣に立つ。やりとりは、ほかと同じく TPM 担当を通る（担当から担当への道は無い）。いつ頼むか・判定の意味・助言で縛らないことは、決まり（`skill-sets/core/.claude/skills/_shared/protocol.md` の「レビュー」）。コードは `cli/src/reviews.ts`・`cli/src/commands/review.ts` と、`cli/src/commands/messages.ts` の `askReview`・`reportReview`、`cli/src/commands/tpm-side.ts` の `assign`。
+Staff Engineer 担当（役割 `staff-engineer`。題は `レビュー <課題の Key>: <見る物>`、名簿の Key は `<課題の Key>.staff`。skill は `/staff-engineer`）は、課題の担当が頼んだ計画・提案・PR を見て助言する担当。席は課題ごとに、課題の担当の隣に立つ。やりとりは、ほかと同じく TPM 担当を通る（担当から担当への道は無い）。いつ頼むか・判定の意味・助言で縛らないことは、決まり（`skill-sets/core/.claude/skills/_shared/protocol.md` の「レビュー」）。コードは `cli/src/reviews.ts`・`cli/src/commands/review.ts` と、`cli/src/commands/messages.ts` の `askReview`・`reportReview`、`cli/src/commands/tpm-side.ts` の `assign`。
+
+席の題・説明・色は、`tpm assign` が頼みから作る（`cli/src/reviews.ts` の `reviewLabel`）。見る物は、PR なら `PR #<番号>`、置き場のページなら種類の名と file の名（`計画 plan-2`・`提案 proposal-1`・`結果 result-3`、ほかの種類は file の名だけ）。依頼書の頼みが 2 つ以上なら、番号の新しい頼みに `+<残りの数>` を付ける。説明は新しい頼みの見てほしい所（24 字で切る。無ければ付けない）。色は役割の表（`cli/src/protocol.ts` の `ROLES` の `color`）の Purple で、Staff の席だけが持つ（cmux では左の端の帯）。色は宛先を名簿に書いた後に連携の口の `setColor` で付け、付けられなくても止めずに 1 行で知らせる。居る席に【brief】を送る時は、連携の口の `relabel` で題と説明を替え、名簿の題も同じ字にする（通知のバナーの hook は、居場所の題と名簿の題が同じかで席を探す）。替えられなければ名簿は替えず、`tpm assign` が 1 行で知らせる。Staff の席に `--title` を書くと、`tpm assign` は止まる。
 
 ```mermaid
 sequenceDiagram
