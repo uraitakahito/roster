@@ -461,7 +461,7 @@ describe('guard と castlist', () => {
     expect(guard(down, bashInput(SID, { transcript_path: path, effort: { level: 'high' } }))).toEqual({ allow: true });
     const verdict = guard(down, bashInput(SID, { transcript_path: path, effort: { level: 'max' } }));
     expect(verdict.allow).toBe(false);
-    expect(verdict.allow ? '' : verdict.reason).toMatch(/^container start castlist$/m);
+    expect(verdict.allow ? '' : verdict.reason).toMatch(/^container start castlist\.box$/m);
   });
 });
 
