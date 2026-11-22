@@ -50,7 +50,7 @@ tpm hello
 | 段 | すること | 主な命令 |
 |---|---|---|
 | 見直す | 未決の出来事を並べ、調べる・調べない・まとめる、を決める | `tpm incident review`・`tpm incident tag`・`tpm incident drop` |
-| 調べる | 証拠で事実を確かめ、原因（仕組みのどこが許したか）と勧告を出す | `tpm incident timeline`・`tpm page list`・`tpm page path` |
+| 調べる | 件ごとに証拠を集めさせ、指摘に使う証拠を自分で開いて確かめ、原因（仕組みのどこが許したか）と勧告を出す | Skill tool で `audit-evidence <件の番号>`・`tpm incident timeline`・`tpm page list`・`tpm page path` |
 | 追いかける | 振ったまま・済みの後の再発・古い残り・TPM 担当の決め・前の勧告が入ったか、を見る | `tpm incident follow`・`tpm incident close` |
 | 報告する | 下の 4 | `tpm page put`・`tpm report audit` |
 

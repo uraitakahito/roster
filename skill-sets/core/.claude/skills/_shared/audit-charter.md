@@ -1,6 +1,6 @@
 # 監査の規程
 
-承認: 2026-11-22（Product Manager。t-8cv5 の confirm-6）。この文を変えるには、Product Manager の承認が要る（下の 8）。
+承認: 2026-11-22（Product Manager。t-8cv5 の confirm-6。8 に `audit-evidence` を足したのは t-hf43 の confirm-2）。この文を変えるには、Product Manager の承認が要る（下の 8）。
 
 Auditor（`/audit`）は、監査のたびにこの規程を読む。
 
@@ -38,4 +38,4 @@ protocol.md・skill の文・承認された計画・この規程。基準その
 
 ## 8. 規程を変える
 
-Product Manager の承認が要る。Auditor は監査のたびに、この規程・`/audit`・guard の変更（git の記録）を、承認の記録と突き合わせる。
+Product Manager の承認が要る。Auditor は監査のたびに、この規程・`/audit`・`audit-evidence`・guard の変更（git の記録）を、承認の記録と突き合わせる。
