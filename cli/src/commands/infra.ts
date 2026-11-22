@@ -7,7 +7,7 @@ import { ROLE_NAMES, type RoleName } from '../protocol.ts';
 import { TpmError } from '../skill-sets.ts';
 import { pagesDir } from './store.ts';
 
-const GUARD_LABEL = { free: '自由', tpm: 'TPM に相談（DevOps Engineer 担当だけ）', pm: 'PM の承認（DevOps Engineer 担当だけ）' } as const;
+const GUARD_LABEL = { 'free': '自由', 'tpm': 'TPM に相談（DevOps Engineer 担当だけ）', 'pm': 'PM の承認（DevOps Engineer 担当だけ）', 'pm-only': 'PM だけ（どの担当も打てない）' } as const;
 
 /** 打った担当。$TPM_ROLE が無ければ、TPM 担当か、tpm が起こしていない session。 */
 export function roleOf(env: NodeJS.ProcessEnv): RoleName | undefined {
@@ -44,7 +44,9 @@ export function infraList(ctx: Context): string[] {
 /** 「PM の承認」の環境に、minutes 分だけ効く承認を書く（`tpm infra approve`）。TPM 担当だけが打てる。 */
 export function infraApprove(ctx: Context, name: string, options: { minutes: number, note?: string }): string[] {
   requireTpmSide(ctx);
-  if (requireEnv(ctx, name).guard !== 'pm') throw new TpmError(`環境 ${name} の手続きは「PM の承認」ではないので、承認は要りません`);
+  const guardOf = requireEnv(ctx, name).guard;
+  if (guardOf === 'pm-only') throw new TpmError(`環境 ${name} の手は Product Manager だけのものなので、承認を書いても担当は打てません（Product Manager が自分の terminal で直に打つ）`);
+  if (guardOf !== 'pm') throw new TpmError(`環境 ${name} の手続きは「PM の承認」ではないので、承認は要りません`);
   if (!Number.isFinite(options.minutes) || options.minutes <= 0) throw new TpmError('--minutes は 1 以上の数にしてください');
   const until = new Date(ctx.now().getTime() + options.minutes * 60_000).toISOString();
   writeApproval(ctx.state, name, { until, ...(options.note === undefined ? {} : { note: options.note }) });

@@ -20,9 +20,11 @@ export type Transport = typeof TRANSPORTS[number];
 /**
  * 環境の手続き（変える前に要ること）。触ると誰が困るかで決める。
  * free: 自分だけ（どの担当も断りなく）／tpm: 並べて動く担当（DevOps Engineer 担当だけ・TPM に相談）／
- * pm: ほかの人（DevOps Engineer 担当だけ・Product Manager の承認が要る）。
+ * pm: ほかの人（DevOps Engineer 担当だけ・Product Manager の承認が要る）／
+ * pm-only: Product Manager だけ（どの担当も、承認があっても打てない。Product Manager が自分の terminal で直に打つ）。
+ * 並びは緩い順で、設定を合わせる時は後ろ（厳しい方）を取る。
  */
-export const GUARDS = ['free', 'tpm', 'pm'] as const;
+export const GUARDS = ['free', 'tpm', 'pm', 'pm-only'] as const;
 /** 環境の手続きの名前。 */
 export type Guard = typeof GUARDS[number];
 

@@ -180,6 +180,14 @@ describe('composeRolesConfig', () => {
     expect(Object.entries(infra).map(([name, env]) => envLabel(name, env))).toEqual(['store（この folder・a・b の設定）', 'own', 'b-only（b の設定）']);
   });
 
+  test('PM だけ（pm-only）は、いちばん厳しい手続きとして合わせる', () => {
+    const { infra } = composeRolesConfig(tree({
+      '': { infra: { castlist: { guard: 'pm', match: ['container stop castlist'] } } },
+      'castlist': { infra: { castlist: { guard: 'pm-only', match: ['container rm castlist'] } } },
+    }));
+    expect(infra.castlist?.guard).toBe('pm-only');
+  });
+
   test('連携と担当の既定は、project の folder の設定だけ（直下の folder の値は読まない）', () => {
     const config = composeRolesConfig(tree({
       '': { 'transport': 'file', 'software-engineer': { effort: 'high' } },

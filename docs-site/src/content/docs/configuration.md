@@ -70,7 +70,7 @@ ai/                               ← ここで tpm start（設定は任意）
 | 欄 | 合わせ方 |
 |---|---|
 | `tracker` | 道具ごとに、宣言した設定を覚える（`none` は足さない）。記録を書く先は、課題の Key の形で選ぶ（下の「[課題の Key](#課題の-key)」）。`gh-12` の記録は、`github` を宣言した folder の repo の Issue に書く（`gh` をその folder で打つ）。`github` を宣言した設定が 2 つ以上あると、`gh-` の Key がどの repo の Issue かが決まらないので止まる（`folders` で 1 つに絞る） |
-| `infra` | 環境の名前ごとに合わせる。同じ名前がいくつもの設定にあれば、`match` は足し、`guard` は厳しい方（`pm` > `tpm` > `free`）にする。どこで打った命令にも効く。`tpm infra list` と guard が止めた文に、宣言した設定が出る |
+| `infra` | 環境の名前ごとに合わせる。同じ名前がいくつもの設定にあれば、`match` は足し、`guard` は厳しい方（`pm-only` > `pm` > `tpm` > `free`）にする。どこで打った命令にも効く。`tpm infra list` と guard が止めた文に、宣言した設定が出る |
 | `skill-sets` | 全部を足す（project の folder が先、次に直下の folder を名前の順。重なりは除く）。TPM 担当（`tpm start`）にも、起こす担当にも効く |
 | `software-engineer`・`devops-engineer`・`auditor` | 合わせない。**担当を起こす folder**（`tpm assign --cwd`）の設定 > project の folder の設定 の順に、欄ごとに先に値がある物を使う。Auditor は project の folder で起きるので、project の folder の設定だけ |
 | `transport` | project の folder の設定だけ（直下の folder の値は読まない） |
@@ -122,6 +122,7 @@ infra: pagetray（roster）（手続きは tpm infra list）
 | `free` | 自分だけ | どの担当も | 無し |
 | `tpm` | 並べて動いているほかの担当 | DevOps Engineer 担当だけ | TPM 担当に相談 |
 | `pm` | ほかの人・ほかのチーム | DevOps Engineer 担当だけ | Product Manager の承認（TPM 担当が `tpm infra approve <環境> --minutes <分>` で承認を書く） |
+| `pm-only` | Product Manager が自分の手に取っておく物（起こす・止める・data を消すなど） | どの担当も打てない（TPM 担当・DevOps Engineer 担当・Auditor も。`tpm infra run` も止まり、`tpm infra approve` も書けない） | Product Manager が自分の terminal で直に打つ。担当は、打ってほしい 1 行を確認のページに書いて `tpm ask pm` で送る |
 
 `match` は命令の字との一致で見る。広すぎると読むだけの命令も止まり、狭すぎるとすり抜けるので、その環境を変える命令の頭（`aws `・`ssh staging` など）を書く。
 
