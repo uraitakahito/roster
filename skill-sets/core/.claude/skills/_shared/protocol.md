@@ -1,6 +1,6 @@
 # 担当のあいだの決まり（どの担当も読む）
 
-TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・DevOps Engineer 担当（`/devops-engineer`）・Sustaining Engineer 担当（`/sustaining-engineer`）・Auditor（`/audit`）が共通に従う決まり。依頼主は Product Manager（利用者）。返答と報告は日本語で書く。
+TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・DevOps Engineer 担当（`/devops-engineer`）・Staff Engineer 担当（`/staff-engineer`）・Sustaining Engineer 担当（`/sustaining-engineer`）・Auditor（`/audit`）が共通に従う決まり。依頼主は Product Manager（利用者）。返答と報告は日本語で書く。
 
 担当どうしのやりとりは、すべて `tpm` の命令でする。`tpm` が、メッセージを送る・届いたかを見る・課題に記録を書く・状態を出す、を 1 度にする。連携の道具（cmux など）の命令と、課題管理の道具（Jira・GitHub の Issue）で記録を書く・状態を進める命令は直に打たない（直に打つと記録と状態が抜けるので、guard が止める）。課題管理の課題を読む命令は止めないが、読むときも `tpm issue view` を使う（下の「課題を読む」）。どの道具を使うかは、TPM 担当を起こした folder と、その直下の folder の `.claude/roles/config.jsonc` を合わせた設定で決まる（下の repo をいくつも触る課題のため。課題の記録の先は、課題の Key の形で決まる）。
 
@@ -8,7 +8,7 @@ TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・De
 
 - メッセージは、下の「見出し」の表の命令で送る。命令は「届いた」か「まだ届いていない」を返す。相手が手を動かしている間は届かず、空いたら届くので、送り直さない。
 - メッセージは、手が空いた時に画面に届く。段の区切り（PR を出す前・merge を頼む前）と、戻せない手（tag を打つ・release を出す・消す）の前には `tpm inbox` で、まだ届いていない自分宛てのメッセージを見る。
-- メッセージを送る命令は、送る前に受信箱を見る。送る相手から来て、まだ読んでいないメッセージがあれば、それを出して 1 度止まる（送っていない。課題の記録も書いていない）。読んで、同じ命令を打ち直す。届いたメッセージで事情が変わっていたら、中身を変えて打つ。`tpm page put` も、確認・提案・計画・結果のページ（`--kind confirm|proposal|plan|result`）は、置く前に同じように見て 1 度止まる（置いていない）。事情が変わっていたら、ページを書き直して置く。
+- メッセージを送る命令は、送る前に受信箱を見る。送る相手から来て、まだ読んでいないメッセージがあれば、それを出して 1 度止まる（送っていない。課題の記録も書いていない）。読んで、同じ命令を打ち直す。届いたメッセージで事情が変わっていたら、中身を変えて打つ。`tpm page put` も、確認・提案・計画・結果・レビューのページ（`--kind confirm|proposal|plan|result|review`）は、置く前に同じように見て 1 度止まる（置いていない）。事情が変わっていたら、ページを書き直して置く。
 - **打ち直しは、止まったのを見てから別の回に打つ。**`;` や `||` で 1 行に続けて書かない（止まらなかった時にも 2 度目が動く）。同じメッセージを 30 秒の内に 2 度送ろうとすると、命令は 2 度目を送らずに止まる。
 - 届いたメッセージには id が付いている。そのメッセージへの返事は `--reply-to <id>` を付けて送る。
 - 宛先は書かない。担当のメッセージは TPM 担当へ行き、TPM 担当は課題の Key で担当を名指す。
@@ -24,6 +24,7 @@ TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・De
 | 【ask-tpm】 | TPM 担当に決めてほしいことがある | `tpm ask tpm "<困っていること・試したこと・案とお勧め>" --waiting-for "<何を>"` |
 | 【ask-pm】 | Product Manager に決めてほしいこと・頼むことを確認のページに書いて置いた（下の「Product Manager に確かめる」） | `tpm ask pm --url <URL> --item "<項目の題>" … --waiting-for "<何を>" [--supersede <置き換える古い確認の URL>…]` |
 | 【ask-devops】 | 共有の環境で DevOps Engineer 担当の手が要る（下の「共有の環境」） | `tpm ask devops --what "<何を>" --why "<なぜ>" [--urgent]` |
+| 【ask-review】 | 計画・提案のページか PR を、Staff Engineer 担当に見てほしい（下の「レビュー」） | `tpm ask review --url <見る物の URL> [--focus "<見てほしい所>"]` |
 | 【doc-fix】 | 文書やコメントの食い違いを直した PR を merge した | `tpm report doc-fix --pr <URL> --note "<一言>" [--unchecked "<訳>"]` |
 | 【incident】 | 思わぬ出来事（信頼性・安全性・効率性が落ちた）に気づいた（下の「思わぬ出来事」） | `tpm report incident "<起きた事実>" --type <reliability\|safety\|efficiency> [--tag <tag>] [--severe]` |
 | 【merged】 | 自分の PR を 1 本 merge した | `tpm report merged --pr <URL> --note "<一言>" [--unchecked "<訳>"]` |
@@ -36,13 +37,15 @@ TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・De
 
 Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【recreated】）は `/sustaining-engineer` と `/dependabot-triage` に書いてある。
 
+Staff Engineer 担当だけが使う見出しは【review】（`tpm report review --url <レビューのページの URL> --verdict <判定> --summary "<一言>"`。レビューのページと判定。下の「レビュー」）。Staff Engineer 担当は、【done】【end】【merged】【doc-fix】【ask-pm】【ask-review】を送らない（命令が断る）。
+
 Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけが使う見出しは 2 つ。【audit】は、Product Manager へじかに出した監査の報告の写し（`tpm report audit`）。【decided】は、Product Manager の決定（`tpm report decided`）。Auditor は、【done】【end】【merged】【doc-fix】【ask-pm】を送らない（下の「監査」）。
 
 ### TPM 担当から
 
 | 見出し | 中身 | 命令（TPM 担当が打つ） |
 |---|---|---|
-| 【brief】 | 新しい依頼書の URL。下の「ページ」のとおり読み、それに従う。「取り消す: brief-N」とあれば brief-N の作業をやめてこちらに従い、「brief-N を済ませてから、これをする」とあれば brief-N の【done】の後に始める | `tpm assign <Key> --role <役割> --brief <URL> [--supersede\|--after]` |
+| 【brief】 | 新しい依頼書の URL（Staff Engineer 担当への依頼書は、レビューの頼みから命令が作る）。下の「ページ」のとおり読み、それに従う。「取り消す: brief-N」とあれば brief-N の作業をやめてこちらに従い、「brief-N を済ませてから、これをする」とあれば brief-N の【done】の後に始める | `tpm assign <Key> --role <役割> --brief <URL> [--supersede\|--after]` |
 | 【answer】 | Product Manager の答え。待ちの表示を作業中に戻して続ける | `tpm answer <Key> "<答え>" [--url <確認の URL>…\|--all]` |
 | 【notify】 | 知っておくこと・受け取ったという返事。返事は要らない | `tpm notify <Key> "<本文>"` |
 | 【dismiss】 | この課題に続きは無い（Product Manager が決めたか、TPM 担当が聞かなくてよいと決めた）。worktree を片付けて【end】を返す。担当の交代のためなら、そう書いてある。「取り消す: brief-N」とあれば brief-N の作業もやめる | `tpm dismiss <Key> [--handover] [--supersede]` |
@@ -67,6 +70,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 |---|---|
 | `tpm report done --kind <種類>` | `提案`・`計画`・`結果`・`監査`（`--kind` の `proposal`・`plan`・`result`・`audit`）。成果の URL と、`--point` の要点（3 つまで） |
 | `tpm report doc-fix` | `文書の修正`。PR の URL |
+| `tpm report review` | `レビュー`。レビューのページの URL と、判定 |
 | `tpm ask pm` | `確認`。確認のページの URL と、項目の題 |
 | `tpm answer`（TPM 担当） | `決定`。【answer】を返す前に書かれる |
 | `tpm report end` | `結果`。続けて課題を済みにする（担当の交代の【dismiss】のときは済みにしない） |
@@ -104,6 +108,30 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 - **Auditor は直さない・決めない。** repo・設定・環境を変えず、PR を出さず、課題を振らず、課題管理に書かない（書き込みと `git`・`gh` の変える命令は guard が止める）。どの改善をするか・受け入れるかは Product Manager が決める。
 - Auditor の席に、依頼書・【dismiss】・【end】は無い。席は Product Manager が閉じる。
 
+## レビュー
+
+計画・提案・PR を、書いた者から離れた目で見るのは、Staff Engineer 担当。課題ごとに、課題の担当の隣に席が立つ（名簿の Key は `<課題の Key>.staff`、居場所の題は `Staff <課題の Key>`）。やりとりは、ほかと同じく、すべて TPM 担当を通る。
+
+1. **頼む**（課題の担当）: `tpm ask review --url <見る物の URL> [--focus "<見てほしい所>"]`。見る物は、置き場のページ（計画・提案）か PR の URL。TPM 担当に【ask-review】が行き、状態が `回答待ち(TPM): レビュー` になる。待つ間、レビューに依らない作業は続けてよい。
+2. **起こす**（TPM 担当）: `tpm assign <課題の Key> --role staff-engineer`。命令が、頼みから Staff Engineer 担当への依頼書を作って置き、席を起こす（席が居れば【brief】で送る。見直しは、前の指摘を知る同じ席がする）。
+3. **見て返す**（Staff Engineer 担当）: レビューのページを置き（`tpm page put <file> --kind review`。課題の Key の folder に入る）、`tpm report review` で返す。TPM 担当に【review】が行く。
+4. **回す**（TPM 担当）: 【review】の本文を、中身を判じずに `tpm notify <課題の Key>` で課題の担当に回す。
+5. **扱う**（課題の担当）: レビューのページを読み、指摘を自分で確かめてから扱う。
+
+| 判定 | 意味 | 課題の担当のすること |
+|---|---|---|
+| よい（`approve`） | このまま進めてよい | 進む |
+| 気になる所あり（`concerns`） | 直した方がよい所がある | 指摘ごとに、直す・直さない（訳）を決めて進む |
+| 直すべき（`reject`） | このまま進めると害がある | 直して、見直しを頼む（もう 1 度 `tpm ask review`）。受けないなら、訳を付けて `tpm ask tpm` で上げる |
+| 見られなかった（`not-assessed`） | 材料が足りない・読めない | 足りない物を足して、頼み直す |
+
+- **レビューは助言で、課題の担当を縛らない。** 受けるか・直すかは課題の担当が決める。「直すべき」を受けない時だけ、自分で決めず、TPM 担当に上げる（TPM 担当は、依頼書と Product Manager の言葉で決まる物は自分で決め、範囲・優先・設計の好みは Product Manager に聞く）。
+- **Staff Engineer 担当は、直さない・決めない。** repo・PR・ページを変えず、merge もしない（書き込みと `git`・`gh` の変える命令は guard が止める）。merge するのは、今までどおり課題の担当。
+- **いつ頼むか**: 計画・提案を置く前と、PR を merge する前に、課題の担当が要ると見たら頼む（設計の判断がある・戻しにくい・広く触る、など）。**依頼書に「レビューを受ける」とあれば、計画と PR を必ず頼む。**文書の食い違いだけを直す PR は、頼まなくてよい。
+- **残す**: 課題の担当は、成果のページ（計画・結果）に「レビュー: 誰が・判定・どう扱ったか」を必ず書く（レビューのページの URL を添える）。頼まなかった時は「レビュー: 無し」と書く。
+- 頼んだ回数と判定は、命令が記録する。`tpm review list [--key <Key>]` で読める（この記録も、tpm を動かす機械の外に写さない）。
+- 席は、課題の担当の席を `tpm close` で閉じる時に、一緒に閉じる。Staff Engineer 担当に【dismiss】は送らず、Staff Engineer 担当は【end】を返さない。
+
 ## 課題を読む
 
 課題の Key が Jira（`AI-12`）か GitHub の Issue（`gh-12`）の形なら、課題の題・状態・本文・コメントを `tpm issue view <Key>` で読む。
@@ -132,7 +160,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 
 依頼書・確認・提案・計画・結果・監査は、HTML の file に書いて、tpm を動かす機械の置き場（`127.0.0.1` の pagetray。ページを DB に持つサーバーで、起こすのは DevOps Engineer 担当）に置く。置いた物を「ページ」と言う。Artifact tool（publish・read・open）は、依頼書と成果には使わない。
 
-- 置く: `tpm page put <file> --kind <brief|confirm|proposal|plan|result|audit|issue>`。担当の Key は今の課題の Key。TPM 担当は `--key <Key>` を付ける。出た `URL:` を、`tpm assign --brief`・`tpm ask pm --url`・`tpm report done --url` に書く。番号は置き場が決める。同じ種類を置き直すと次の番号になり、前の版は残る。置いた担当の役割と居場所の宛先も、置き場が覚える。
+- 置く: `tpm page put <file> --kind <brief|confirm|proposal|plan|result|review|audit|issue>`（`review` は Staff Engineer 担当のレビューのページ）。担当の Key は今の課題の Key。TPM 担当は `--key <Key>` を付ける。出た `URL:` を、`tpm assign --brief`・`tpm ask pm --url`・`tpm report done --url` に書く。番号は置き場が決める。同じ種類を置き直すと次の番号になり、前の版は残る。置いた担当の役割と居場所の宛先も、置き場が覚える。
 - 読む: `tpm page path <URL>` で file の path にして Read tool で読む（tpm を動かす機械の控えの path。控えに無ければ置き場から取る。前の置き場の `8800` の URL も読める）。
 - 時系列のページ（種類は `timeline`）は、`tpm incident timeline` が state の記録から作って置く（下の「思わぬ出来事」）。手では置かない。
 - 探す: `tpm page list`（今の project の新しい順）。`--key <Key>`・`--role <役割>`・`--workspace <宛先>`・`--kind <種類>`・`--q <語>`・`--reply <waiting|answered>`（返事の状態）で絞り、`--json` で記録を出す。Product Manager は、置き場の一覧の UI（`http://127.0.0.1:8801/`）で同じように絞って見る。
@@ -184,6 +212,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 | 担当 | すること |
 |---|---|
 | TPM 担当 | 自分で直さず、課題として Software Engineer 担当に回す（`/tpm` の 2） |
+| Staff Engineer 担当 | **直さない。**レビューのページの指摘に挙げる。直すのは、課題の担当 |
 | Software Engineer 担当・DevOps Engineer 担当・Sustaining Engineer 担当 | お勧めの直し方で直し、PR を merge まで自分で進める（Product Manager の確認は要らない）。worktree で作業し、PR の題か本文に課題の Key を入れる。merge したら【doc-fix】で知らせ、成果のページにも一覧で載せる |
 | Auditor | **直さない。**監査のページの「見つけた食い違い」に、file・今の文・コードの実際・お勧めの直し方を挙げる。Product Manager が通せば、TPM 担当が課題にして振る |
 
@@ -217,4 +246,5 @@ project の設定に castlist（アクターの台帳）の URL があれば、`
 - Software Engineer 担当と DevOps Engineer 担当は、依頼書 1 つが済むごとに【done】を送り、次の【brief】を待つ。同じ課題の続きは同じ担当が受ける。【dismiss】が来るまで自分から終えない（`tpm report end` は【dismiss】の前には送れない）。
 - 自分の居場所（workspace）は自分で閉じない。【end】を送った後、TPM 担当が報告を受けてから閉じる。
 - 自分で作った worktree と branch は、merge の後に消す（`git worktree list` に本体だけが残ること）。
+- Staff Engineer 担当は、レビューを【review】で返し、次の【brief】を待つ。【done】も【end】も送らない。席は、TPM 担当が課題の担当の席と一緒に閉じる（上の「レビュー」）。
 - Auditor の席は、Product Manager が起こし、閉じる。【done】も【end】も送らず、報告と決定の後は次の `/audit` を待つ。
