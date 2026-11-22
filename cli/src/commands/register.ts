@@ -27,7 +27,8 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
     .requiredOption('--url <URL>', '確認のページ（tpm page put で置いた URL）')
     .requiredOption('--item <題>', '決めてほしい項目の題（繰り返せる）', collect, [] as string[])
     .requiredOption('--waiting-for <何を>', '状態に出す、待っている物')
-    .action((options: { url: string, item: string[], waitingFor: string }) => print(askPm(createContext(), { url: options.url, items: options.item, waitingFor: options.waitingFor })));
+    .option('--supersede <URL>', 'この確認で置き換える古い確認（同じ Key の返事待ち。繰り返せる）。送った後、その返事待ちの印を外す', collect, [] as string[])
+    .action((options: { url: string, item: string[], waitingFor: string, supersede: string[] }) => print(askPm(createContext(), { url: options.url, items: options.item, waitingFor: options.waitingFor, supersede: options.supersede })));
   ask.command('devops').description('【ask-devops】共有の環境で DevOps Engineer 担当の手が要る')
     .requiredOption('--what <何を>').requiredOption('--why <なぜ>').option('--urgent', '急ぎ', false)
     .action((options: { what: string, why: string, urgent: boolean }) => print(askDevops(createContext(), options)));

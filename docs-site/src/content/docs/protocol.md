@@ -67,6 +67,7 @@ flowchart TB
 - `tpm page list` が、置き場のページを絞って探す（`--key`・`--role`・`--workspace`・`--kind`・`--q`・`--reply`。`--json` は記録の配列）。既定は今の project の新しい順 50 件で、`--all-projects` でほかの project も出す。
 - **返事の状態**（pagetray 0.5.0 から）: 置き場は、Product Manager の返事が要るページに「返事待ち」「答えた」の状態を持ち、一覧の UI は、操作の帯の「返事待ち N 件」・行の印・絞り込みの「返事」で出す。書くのは `tpm` の命令で、担当は手で書かない。
   - `tpm ask pm --url <確認の URL>` が、【ask-pm】を送った後に、そのページを返事待ちにする（置いただけの確認には印が付かない）。
+  - `tpm ask pm --supersede <古い確認の URL>`（何度でも）が、この確認で置き換える古い確認の返事待ちを外す。受けるのは同じ Key の返事待ちの確認だけで、別の project・Key・答え済み・送っていない確認・送る確認そのものは、送る前に断る。【ask-pm】の本文に「置き換える確認:」と URL が載る（log に残る）。置き場が応えない時は確かめずに送り、外せなかったことと `tpm page reply <URL> --answered` の直し方を出す。
   - `tpm answer <Key> "<答え>"` が、【answer】を返した後に、その Key の返事待ちのページを答えたにする。返事待ちが 2 枚以上ある時は、送る前に止まって URL を並べる（別の確認まで答えたにしないため）。どのページへの答えかを `--url <確認の URL>`（何度でも）で書くか、みなへの答えなら `--all` を付ける。
   - `tpm page reply <URL>… --waiting|--answered` が、状態を手で直す（TPM 担当だけ）。`tpm answer` を通らずに済んだ確認と、置き場が応えない間に送った確認に使う。`tpm page list --reply waiting` が、今の返事待ちを並べる。`tpm dismiss` は、その Key に返事待ちのページが残っていれば URL を出す（止めない）。
   - 状態を持てない置き場（止まっている・0.5.0 より前）でも、`tpm ask pm`・`tpm answer`・`tpm dismiss` はメッセージを送り、`置き場の印: 付けていない` と訳を出す。`tpm page reply` だけは誤りで止まる。
