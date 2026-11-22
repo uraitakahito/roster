@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { seatOf, seatPrefix } from '../src/castlist.ts';
-import { askPm, askTpm, dismiss, notify, reportDocFix, reportDone, reportEnd, reportIncident, reportMerged } from '../src/commands/messages.ts';
+import { askPm, askReview, askTpm, dismiss, notify, reportDocFix, reportDone, reportEnd, reportIncident, reportMerged } from '../src/commands/messages.ts';
 import { pagePut } from '../src/commands/page.ts';
 import { hello } from '../src/commands/role-side.ts';
 import { collect } from '../src/commands/timeline.ts';
@@ -17,7 +17,9 @@ import { BRIEF, staffRoot, world, type World } from './helpers.ts';
 
 const TPM = { model: 'claude-opus-5-5', effort: 'medium' };
 const SE = { role: 'software-engineer', title: '計画と実装', brief: BRIEF, wait: 0 } as const;
-const STAFF = { role: 'staff-engineer', brief: BRIEF, wait: 0 } as const;
+const STAFF = { role: 'staff-engineer', wait: 0 } as const;
+/** 見てもらう物（課題の担当が置いた計画のページ）。 */
+const PLAN = 'http://127.0.0.1:8801/p/AI-8/plan-1.html';
 const PR = 'https://github.com/o/r/pull/7';
 
 /** TPM 担当と AI-8 の Software Engineer 担当（file:1）が名乗った世界。tpm は、Staff Engineer 担当の skill が在る root の TPM 担当。 */
@@ -28,6 +30,9 @@ function started(config: Record<string, unknown> = {}, issue?: string): World & 
   assign(tpm, 'AI-8', { ...SE, ...(issue === undefined ? {} : { issue }) });
   const se = w.role('AI-8', 'file:1');
   hello(se);
+  // 課題の担当がレビューを頼んである（Staff の席は、頼みから起こす）。
+  askReview(se, { url: PLAN });
+  w.wire.inbox('file:tpm');
   return { ...w, tpm, se };
 }
 
@@ -103,7 +108,7 @@ describe('Staff の席の名乗り', () => {
     expect(out).toContain('役割: Staff Engineer');
     expect(out).toContain('課題の Key: AI-8');
     expect(out).toContain('名簿の Key: AI-8.staff');
-    expect(out).toContain(`依頼書: ${BRIEF}`);
+    expect(out.find(l => l.startsWith('依頼書: '))).toMatch(/\/AI-8\/brief-1\.html$/);
     // 課題の担当の名乗りには、名簿の Key の行は出ない
     expect(hello(w.se).some(l => l.startsWith('名簿の Key'))).toBe(false);
   });
@@ -126,7 +131,7 @@ describe('Staff が打たない命令', () => {
   test('【done】【end】【merged】【doc-fix】【ask-pm】は断る。課題も閉じない', () => {
     const w = reviewed({ tracker: 'jira' }, 'AI-8');
     const before = w.calls.length;
-    const no = /Staff Engineer 担当は tpm .+ を打ちません。レビューの結果は、レビューのページで返します/;
+    const no = /Staff Engineer 担当は tpm .+ を打ちません。レビューの結果は tpm report review で返してください/;
     expect(() => reportDone(w.staff, { kind: 'result', summary: 'x', remaining: 'なし', decisions: 'なし', points: [] })).toThrow(no);
     expect(() => reportEnd(w.staff, { prs: [], removed: [], left: 'なし' })).toThrow(no);
     expect(() => reportMerged(w.staff, { pr: PR, note: 'x' })).toThrow(no);
@@ -177,7 +182,7 @@ describe('時系列のページ', () => {
     askTpm(w.se, { text: '案で迷う', waitingFor: '案' });
     askTpm(w.staff, { text: '見る物が読めない', waitingFor: '見る物' });
     const whats = (key: string): string[] => collect(w.tpm, key).filter(e => e.kind === 'メッセージ').map(e => `${e.who}: ${e.what.split('（id')[0] ?? ''}（席 ${e.seat ?? ''}）`);
-    expect(whats('AI-8')).toEqual(['SWE AI-8: 計画と実装: 【ask-tpm】案で迷う（席 AI-8）', 'Staff AI-8: 【ask-tpm】見る物が読めない（席 AI-8.staff）']);
+    expect(whats('AI-8').filter(l => !l.includes('【ask-review】') && !l.includes('【brief】'))).toEqual(['SWE AI-8: 計画と実装: 【ask-tpm】案で迷う（席 AI-8）', 'Staff AI-8: 【ask-tpm】見る物が読めない（席 AI-8.staff）']);
     expect(whats('AI-8.staff')).toEqual(['Staff AI-8: 【ask-tpm】見る物が読めない（席 AI-8.staff）']);
   });
 });
