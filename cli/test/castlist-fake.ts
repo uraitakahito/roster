@@ -309,7 +309,7 @@ const server = createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');
     const parts = url.pathname.split('/').map(decodeURIComponent);
     try {
-      if (req.method === 'GET' && url.pathname === '/healthz') return answer(200, { status: 'ok', version: '0.2.0', now });
+      if (req.method === 'GET' && url.pathname === '/healthz') return answer(200, { status: 'ok', version: '0.3.0', now });
       if (req.method === 'GET' && url.pathname === '/v1/actors') return answer(200, searchActors(url, now));
       if (req.method === 'GET' && url.pathname === '/v1/settings') return answer(200, searchSettings(url, now));
       if (req.method === 'GET' && url.pathname === '/v1/events') return answer(200, searchEvents(url, now));
