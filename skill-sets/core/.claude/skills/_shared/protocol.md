@@ -232,6 +232,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 - 自分が変えてよくない環境は、自分では変えず【ask-devops】で TPM 担当に送る。
 - 手続きを踏んでいない命令は、guard が実行の前に止める。止まったら、出た文のとおりに頼む（別の書き方で通そうとしない）。
 - 設定に書かれていない環境で、並べて動いている担当やほかの人が困りそうな物を変えるときも、先に【ask-tpm】を送る。
+- 手元で image を build する builder（環境 `builder`。container の名は `buildkit`）は、どの担当も使う。`container build` はそのまま打つ（builder が止まっていれば build が起こす）。build に `-c`・`-m`・`--ssh`・`--dns…` を付けない（動いている builder を作り直し、ほかの担当の build が落ちる。guard はこれを止められない）。要るなら【ask-devops】。
 
 ## アクターの台帳（castlist）
 

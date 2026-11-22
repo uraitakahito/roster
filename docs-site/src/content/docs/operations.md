@@ -1,6 +1,6 @@
 ---
 title: 運用
-description: この repo を別の folder へ移す手順、Node の version の上げ方、アクターの台帳（castlist）が止まった時、ページの置き場（pagetray）の起こし方と保ち方、レビュー（Staff Engineer 担当の席）と監査（Auditor の席）の運び、担当が落ちた後の調べ方
+description: この repo を別の folder へ移す手順、Node の version の上げ方、アクターの台帳（castlist）が止まった時、ページの置き場（pagetray）の起こし方と保ち方、手元の builder（buildkit）の守り、レビュー（Staff Engineer 担当の席）と監査（Auditor の席）の運び、担当が落ちた後の調べ方
 ---
 
 ## 移す手順
@@ -165,6 +165,19 @@ pagetray の新しい版が出て、この repo の `.pagetray-version` が上�
 ### ほかの project で使う
 
 置き場は tpm を動かす機械に 1 つで、どの project の担当も同じ置き場を使う（一覧の UI では project で絞れる）。ほかの project で TPM 担当を起こすときも、その project の `.claude/roles/config.jsonc` に、この repo と同じ `infra.pagetray` の宣言を写す（写さないと、その project の担当は止める命令を断りなく打てる。[設定](/configuration/#環境の手続き)）。
+
+## 手元の builder（buildkit）
+
+担当が手元で image を build する時に、Apple Container の `container build` が使う container（名は `buildkit`）。tpm を動かす機械に 1 つで、並べて動いている担当がみな同じ物を使う。止める・消す・作り直すと、ほかの担当の build が途中で落ちる。この repo の `.claude/roles/config.jsonc` が、環境 `builder` を「TPM に相談」の手続きで宣言している（変えてよいのは DevOps Engineer 担当だけ）。
+
+| 命令 | guard |
+|---|---|
+| `container build …`・`container builder status`・`container logs buildkit` | 止めない（どの担当も打つ） |
+| `container builder start`・`stop`・`delete`・`rm`、container の名を名指す `container stop`・`kill`・`delete`・`rm buildkit`、`--name buildkit` | DevOps Engineer 担当だけ。`tpm infra run builder -- <命令>` で打つ |
+
+- `container build` は、builder が止まっていれば自分で起こす（Apple Container 1.7.1）。だから担当は `container builder start` を打たない。tpm を動かす機械を起こし直した後も、初めの build が起こす。
+- **担当は `container build` に `-c`（`--cpus`）・`-m`（`--memory`）・`--ssh`・`--dns`・`--dns-domain`・`--dns-search`・`--dns-option` を付けない。**build も `container builder start` も、動いている builder の CPU・メモリ・DNS・ssh の転送が頼んだ物と違うと、builder を止めて消し、作り直す（ほかの担当の build が落ちる）。guard は字 1 つの含みで見るので、この旗の付いた build は止められない。builder の大きさや DNS を変える要があれば、`tpm ask devops` で頼む。今の builder は既定の CPU 2・メモリ 2048 MB。
+- 起こし直す（中から名前が引けないなど）のは DevOps Engineer 担当で、先に【ask-tpm】で何が止まるか（その間の build）を送る。`tpm infra run builder -- container builder stop` の後に `tpm infra run builder -- container builder start`。旗を付けずに起こすと既定の大きさになる。
 
 ## 担当が落ちた後の調べ方
 

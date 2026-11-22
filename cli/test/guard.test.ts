@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { guard, infraApprove, infraList, infraRevoke, infraRun } from '../src/commands/infra.ts';
-import type { ConfigSource, InfraEnv } from '../src/config.ts';
+import { readRolesConfig, type ConfigSource, type InfraEnv } from '../src/config.ts';
 import { commandOf, guardSettings, judge, judgeWrite, touched, writeOf, type Approval } from '../src/guard.ts';
 import type { RoleName } from '../src/protocol.ts';
 import { splitCommands } from '../src/shell.ts';
@@ -504,5 +504,47 @@ describe('直下の folder の設定の infra', () => {
     const se = (w: ReturnType<typeof world>) => ({ ...w.role('t-x7k2', 'file:1'), env: { TPM_KEY: 't-x7k2', TPM_ROLE: 'software-engineer' } });
     expect(guard(se(world({}, {}, { web: { tracker: 'github' } })), hook('gh issue close 12')).allow).toBe(false);
     expect(guard(se(world({}, {}, { skills: { tracker: 'jira' } })), hook('gh issue close 12')).allow).toBe(true);
+  });
+});
+
+describe('この repo の設定の builder（手元で image を build する buildkit の container）', () => {
+  const own = readRolesConfig(join(import.meta.dirname, '..', '..', '.claude', 'roles', 'config.jsonc')).infra;
+  const judgeOwn = (command: string, role: RoleName | undefined) =>
+    judge({ command, role, config: { infra: own, trackers: { jira: [], github: [] } }, approvals: {}, now }).allow;
+  const stops = [
+    'container builder start',
+    'container builder start -c 4 -m 4G',
+    'container builder stop',
+    'container builder delete',
+    'container builder delete --force',
+    'container builder rm',
+    'container stop buildkit',
+    'container kill buildkit',
+    'container delete buildkit',
+    'container rm buildkit',
+    'container run -d --name buildkit x',
+  ];
+
+  test('手続きは TPM に相談（DevOps Engineer 担当だけ）', () => {
+    expect(own.builder?.guard).toBe('tpm');
+  });
+
+  test.each(stops)('%s を、DevOps Engineer 担当のほかは止める', (command) => {
+    expect(judgeOwn(command, 'software-engineer')).toBe(false);
+    expect(judgeOwn(command, 'sustaining-engineer')).toBe(false);
+    expect(judgeOwn(command, undefined)).toBe(false);
+    expect(judgeOwn(command, 'devops-engineer')).toBe(true);
+  });
+
+  test.each([
+    'container build -t x .',
+    'container build --no-cache -f Containerfile -t ghcr.io/u/x:1 .',
+    'cd /w && container build .',
+    'container builder status',
+    'container logs buildkit',
+    'container ls -a',
+  ])('%s は、どの担当も通す', (command) => {
+    expect(judgeOwn(command, 'software-engineer')).toBe(true);
+    expect(judgeOwn(command, undefined)).toBe(true);
   });
 });
