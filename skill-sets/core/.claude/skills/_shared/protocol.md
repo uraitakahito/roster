@@ -28,7 +28,7 @@ TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・De
 | 【doc-fix】 | 文書やコメントの食い違いを直した PR を merge した | `tpm report doc-fix --pr <URL> --note "<一言>" [--unchecked "<訳>"]` |
 | 【incident】 | 思わぬ出来事（信頼性・安全性・効率性が落ちた）に気づいた（下の「思わぬ出来事」） | `tpm report incident "<起きた事実>" --type <reliability\|safety\|efficiency> [--tag <tag>] [--severe]` |
 | 【merged】 | 自分の PR を 1 本 merge した | `tpm report merged --pr <URL> --note "<一言>" [--unchecked "<訳>"]` |
-| 【done】 | 依頼書の成果（提案・計画・結果・監査のページ）を置いた | `tpm report done --url <URL> --kind <proposal\|plan\|result\|audit> --summary "<要点>" --remaining "<残り>" --decisions "<決めてほしいこと>"` |
+| 【done】 | 依頼書の成果（提案・計画・結果・監査のページ）を置いた（1 通で依頼書いくつかを済ませたら、`--briefs` でみな名指す） | `tpm report done --url <URL> --kind <proposal\|plan\|result\|audit> --summary "<要点>" --remaining "<残り>" --decisions "<決めてほしいこと>" [--briefs <brief-2,brief-3>]` |
 | 【end】 | 【dismiss】を受けて片付けた（Sustaining Engineer 担当は PR を merge した後） | `tpm report end --url <URL> --pr <URL> … --removed <worktree> … --left "<残っている物>"` |
 | 【returned】 | 新しい session の始まりに、前の session 宛てのメッセージが届いた（下の「連絡の仕方」の「届け違い」）。**命令でなく hook が送る** | （`tpm returned check`。SessionStart の hook） |
 

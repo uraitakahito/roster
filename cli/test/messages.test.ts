@@ -3,6 +3,7 @@ import { answer, askDevops, askPm, askTpm, dismiss, doneKind, notify, reportDepe
 import { hello, inbox } from '../src/commands/role-side.ts';
 import { assign, close, roles } from '../src/commands/tpm-side.ts';
 import { requireRole } from '../src/roster.ts';
+import { TpmError } from '../src/skill-sets.ts';
 import { BRIEF, finish, world, type World } from './helpers.ts';
 
 const OUT = 'https://claude.ai/artifact/o1';
@@ -514,6 +515,71 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
     expect(() => dismiss(w.tpm, 't-x7k2', { handover: false })).toThrow(`--- 【done】が返っていない依頼書: brief-4（${B4}）\n`);
     reportDone(w.se, { kind: 'result', summary: 'brief-4', remaining: 'なし', decisions: 'なし', points: [] });
     expect(dismiss(w.tpm, 't-x7k2', { handover: false })[0]).toMatch(/^送った: 【dismiss】/);
+  });
+
+  test('#110 の形: 1 通の【done】で --briefs に名指した依頼書は、みな済む（名指さなければ今までどおり古い 1 つ）', () => {
+    const B2 = B4.replace('brief-4', 'brief-2');
+    const B3 = B4.replace('brief-4', 'brief-3');
+    const build = (): World & { se: ReturnType<World['role']> } => {
+      const w = started();
+      assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B2, wait: 0, after: true });
+      assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B3, wait: 0, after: true });
+      return w;
+    };
+    const w = build();
+    // 名でも URL でも名指せる
+    const out = reportDone(w.se, { kind: 'result', summary: '1〜3 を済ませた', remaining: 'なし', decisions: 'なし', points: [], briefs: ['brief-1', B2, 'brief-3'] });
+    expect(out).toContain('送った: 【done】→ file:tpm（届いた）');
+    expect(texts(w, 'file:tpm').at(-1)).toBe('【done】要点: 1〜3 を済ませた／残り: なし／決めてほしいこと: なし／済ませた依頼書: brief-1・brief-2・brief-3');
+    expect(w.tpm.state.lines<{ heading: string, briefs?: string[] }>('log.jsonl').findLast(l => l.heading === 'done')?.briefs).toEqual([BRIEF, B2, B3]);
+    expect(dismiss(w.tpm, 't-x7k2', { handover: false })[0]).toMatch(/^送った: 【dismiss】/);
+    // 名指さなければ、brief-1 だけが済み、まだ見て済んでいない依頼書があることを 1 行で知らせる
+    const v = build();
+    expect(reportDone(v.se, { kind: 'result', summary: '1〜3 を済ませた', remaining: 'なし', decisions: 'なし', points: [] })).toContain(
+      '済ませた依頼書がいくつもあれば --briefs で名指す（今は brief-1 だけを済ませた。済んでいない: brief-2・brief-3）',
+    );
+    expect(() => dismiss(v.tpm, 't-x7k2', { handover: false })).toThrow(`--- 【done】が返っていない依頼書: brief-2（${B2}）・brief-3（${B3}）\n`);
+  });
+
+  test('--briefs: 渡していない・済んだ依頼書を名指すと、送らずに止まる。名が 2 つ当たれば URL を求める', () => {
+    const w = started();
+    const B2 = B4.replace('brief-4', 'brief-2');
+    const done = (briefs: string[]) => (): string[] => reportDone(w.se, { kind: 'result', summary: 'x', remaining: 'なし', decisions: 'なし', points: [], briefs });
+    expect(done(['brief-9'])).toThrow([
+      '--briefs の brief-9 は、渡されていて済んでいない依頼書にありません。送っていません。',
+      `済んでいない依頼書: brief-1（${BRIEF}）`,
+    ].join('\n'));
+    done(['brief-1'])();
+    expect(done(['brief-1'])).toThrow(/^--briefs の brief-1 は、渡されていて済んでいない依頼書にありません。送っていません。\n済んでいない依頼書: 無し$/);
+    // 別の Key の folder の同じ名の依頼書も渡されていれば、名では決めない
+    assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B2, wait: 0 });
+    assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B2.replace('/t-x7k2/', '/t-other/'), wait: 0, after: true });
+    expect(done(['brief-2'])).toThrow(/^--briefs の brief-2 に当たる依頼書が 2 つあります。URL で名指してください。送っていません。/);
+    expect(texts(w, 'file:tpm').filter(t => t.startsWith('【done】'))).toHaveLength(1);
+    // URL なら通り、名が 2 つに当たる依頼書は本文に URL を添える。名と URL で同じ物を 2 度名指しても 1 つ
+    done([B2])();
+    expect(texts(w, 'file:tpm').at(-1)).toBe(`【done】要点: x／残り: なし／決めてほしいこと: なし／済ませた依頼書: brief-2（${B2}）`);
+  });
+
+  test('--briefs: 名と URL で同じ依頼書を名指しても 1 つ。同じ依頼書を送り直していても、URL で名指せばみな済む', () => {
+    const w = started();
+    const B2 = B4.replace('brief-4', 'brief-2');
+    assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B2, wait: 0, after: true });
+    assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B2, wait: 0, after: true });
+    reportDone(w.se, { kind: 'result', summary: 'x', remaining: 'なし', decisions: 'なし', points: [], briefs: ['brief-1', BRIEF, 'brief-2'] });
+    expect(texts(w, 'file:tpm').at(-1)).toBe('【done】要点: x／残り: なし／決めてほしいこと: なし／済ませた依頼書: brief-1・brief-2');
+    expect(w.tpm.state.lines<{ heading: string, briefs?: string[] }>('log.jsonl').findLast(l => l.heading === 'done')?.briefs).toEqual([BRIEF, B2]);
+    expect(dismiss(w.tpm, 't-x7k2', { handover: false })[0]).toMatch(/^送った: 【dismiss】/);
+  });
+
+  test('--briefs が無い【done】は、連携の道具が受信箱を読めなくても送る（案内の数えだけを飛ばす）', () => {
+    const w = started();
+    const queued = w.se.transport.queued.bind(w.se.transport);
+    w.se.transport.queued = () => {
+      throw new TpmError('cmux agent inbox が失敗しました');
+    };
+    expect(reportDone(w.se, { kind: 'result', summary: 'x', remaining: 'なし', decisions: 'なし', points: [] })).toContain('送った: 【done】→ file:tpm（届いた）');
+    w.se.transport.queued = queued;
   });
 
   test('答えが届く前に続きの assign を打っても止まらない（答え → すぐ続きの依頼書）', () => {

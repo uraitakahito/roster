@@ -53,7 +53,7 @@ tpm infra list
 
 ## 2. 終わり
 
-依頼 1 つが済んだら、`tpm report done` で、したこと・確かめた結果・「残り」・「決めてほしいこと」（無ければ「なし」）を送る（Product Manager に決めてほしいことがあれば、protocol.md の「Product Manager に確かめる」で `tpm ask pm` も）。成果のページが無ければ `--url` は付けない:
+依頼 1 つが済んだら、`tpm report done` で、したこと・確かめた結果・「残り」・「決めてほしいこと」（無ければ「なし」）を送る（Product Manager に決めてほしいことがあれば、protocol.md の「Product Manager に確かめる」で `tpm ask pm` も）。成果のページが無ければ `--url` は付けない。1 通で依頼いくつかを済ませたら、`--briefs brief-2,brief-3` でみな名指す（名指さないと、いちばん古い 1 つだけが済む）:
 
 ```sh
 tpm report done --kind result --summary "<したこと・確かめた結果>" --remaining "<残り>" --decisions "<決めてほしいこと>"

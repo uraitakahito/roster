@@ -105,7 +105,7 @@ disable-model-invocation: true
 | 【audit】 | Auditor が Product Manager へじかに出した監査の報告の写し。**伝え直さない・止めない。**受け取ったと返す（`tpm notify audit "受け取った" --reply-to <id>`） |
 | 【decided】 | Product Manager の決定。「する」の勧告を、いつもの課題として担当に振る（上の 3 のとおり。勧告の中身は、本文の監査のページの URL を依頼書の頭書きに書いて担当に読ませる）。振ったら `tpm incident assign <番号>… --to <振り先の Key>` で件に結び、`tpm notify audit "<振った Key>" --reply-to <id>` で返す。「受け入れる」「見送る」は、Auditor が台帳に書いてある |
 | 【doc-fix】【merged】 | 受け取ったと返す（`tpm notify <Key> "受け取った" --reply-to <id>`）。PR が merge 済みかは、担当の命令が送る前に見ている。「merge は確かめていない: <訳>」と付いていたら、Product Manager に伝える前に自分で確かめる |
-| 【done】 | 成果のページを読み（`tpm page path <URL>`）、下の「【dismiss】を送るか」で決める。聞かなくてよければ `tpm dismiss <Key>`。聞くなら Product Manager に URL を伝え（その場で開いて見せる時だけ `tpm show <URL>`）、「続きをこの担当に頼むか、この課題を終えるか」を聞き、続けるなら新しい依頼書（3 の 1 のとおり書く）を `tpm assign <Key> … --brief <URL>` で同じ担当に、終えるなら `tpm dismiss <Key>` |
+| 【done】 | 成果のページを読み（`tpm page path <URL>`。本文の「済ませた依頼書: brief-2・brief-3」は、担当が `--briefs` で名指して 1 通で済ませた依頼書）、下の「【dismiss】を送るか」で決める。聞かなくてよければ `tpm dismiss <Key>`。聞くなら Product Manager に URL を伝え（その場で開いて見せる時だけ `tpm show <URL>`）、「続きをこの担当に頼むか、この課題を終えるか」を聞き、続けるなら新しい依頼書（3 の 1 のとおり書く）を `tpm assign <Key> … --brief <URL>` で同じ担当に、終えるなら `tpm dismiss <Key>` |
 | 【end】 | （【dismiss】の返事として来る）報告を Product Manager に伝え（聞かずに片付けたなら、そう添える）、`tpm close <Key>` で閉じる（その課題の Staff Engineer 担当の席が残っていれば、一緒に閉じる） |
 
 - **レビューの食い違い**: 課題の担当がレビューの「直すべき」を受けずに【ask-tpm】で上げてきたら（本文の頭に `レビュー #<番号>（判定: …。<レビューのページの URL>）を受けない:` と付く）、レビューのページを読み（`tpm page path <URL>`）、依頼書と Product Manager の言葉で決まる物は自分で決め、範囲・優先・設計の好みは Product Manager に聞く。答えは課題の担当に返し（`tpm notify <Key> … --reply-to <id>` か `tpm answer`）、レビューの担当に伝えることがあれば `tpm notify <課題の Key>.staff …` で伝える。
