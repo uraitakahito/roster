@@ -14,6 +14,7 @@
 // 9. skill（skill-sets/ の *.md）に、連携と課題管理の道具の命令（cmux …・acli …）が直に書かれていない
 // 10. skill・原稿・README が書いた tpm <命令> が、cli/src/protocol.ts の COMMANDS に在る
 // 11. skill が書いた見出し（【done】など）が cli/src/protocol.ts の HEADINGS に在り、HEADINGS の見出しがどれかの skill に在る
+// 12. 本文の [x](/page/#見出し)・[x](#見出し) の見出しが、build した先のページ（dist/）に在る
 //
 // 7 が要るのは、skill が自分の folder からの相対パスで repo の中の物を読むため。folder を移して
 // ../ の数がずれたときに、skill の読む先が無くなるのを止める。
@@ -24,6 +25,10 @@
 // 9〜11 が要るのは、担当のあいだの決まりを文（skill）とコード（cli/src）に分けて持つため。skill は tpm の命令だけを書き、
 // 道具の命令はコードの adapter が打つ。文に道具の命令が戻ったり、文とコードで命令や見出しの名がずれたりするのを止める。
 // cli の依存（node_modules）を入れずに動くように、命令の木ではなく protocol.ts（Node の組み込みだけで読める）を読む。
+//
+// 12 が要るのは、1 がページしか見ないため。無い見出しへの link も build と 1 を通り、開くとページの頭に落ちる
+// （2026-11-23 t-nxek の PR #182 で、docs の protocol に無い #思わぬ出来事 を書いて通った）。見出しの id は
+// Starlight が見出しの字から作るので、作り方を真似ずに build の出力の id を読む。だから pnpm run check の build の後に流す。
 //
 // 4 と 5 が要るのは、skill が Pages ではなく原稿の Markdown を読むため。原稿の見出しや表を
 // 直したときに、skill の読む先が無くなるのを止める。
@@ -300,6 +305,78 @@ for (const name of headingNames)
     errors.push(
       `cli/src/protocol.ts: HEADINGS の【${name}】を書いた skill が無い`,
     );
+
+// 12. link の見出し（# の後ろ）
+/** build した HTML の id をすべて返す */
+function htmlIds(html) {
+  return new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
+}
+/** 本文の link の見出しが、先のページの id に無ければ、誤りの文を返す。slug は本文のページ、idsOf(slug) は先のページの id（無いページは undefined） */
+function anchorErrors(slug, text, idsOf) {
+  const out = [];
+  for (const m of prose(text).matchAll(/\]\(((?:\/[^)\s#]*)?)#([^)\s]+)\)/g)) {
+    const target =
+      m[1] === "" ? slug : m[1].split("?")[0].replace(/^\/|\/$/g, "");
+    const ids = idsOf(target);
+    if (!ids) continue; // 先のページが無いのは 1 が出す
+    let id = m[2];
+    try {
+      id = decodeURIComponent(id);
+    } catch {
+      // % の形が崩れていれば、そのままの字で探す（無いので当たる）
+    }
+    if (!ids.has(id)) out.push(`リンク先の見出しが無い: ${m[1]}#${m[2]}`);
+  }
+  return out;
+}
+
+// 見張りが本当に当てるか・当ててはいけない物を当てないかを、毎回先に確かめる（check-wording.mjs と同じ形）
+const FIXTURE = new Map([
+  [
+    "protocol",
+    htmlIds('<h2 id="台帳">台帳</h2><h2 id="アクターの台帳castlist">'),
+  ],
+  ["operations", htmlIds('<h2 id="担当が落ちた後の調べ方">')],
+]);
+const ANCHOR_MUST_HIT = [
+  "[担当のあいだの決まり](/protocol/#思わぬ出来事)",
+  "[下](#無い見出し)",
+];
+const ANCHOR_MUST_PASS = [
+  "[担当のあいだの決まり](/protocol/#台帳)",
+  "[担当のあいだの決まり](/protocol/#%E5%8F%B0%E5%B8%B3)",
+  "[アクターの台帳](/protocol/#アクターの台帳castlist)",
+  "[下](#担当が落ちた後の調べ方)",
+  "[担当のあいだの決まり](/protocol/)",
+  "```md\n[x](/protocol/#無い見出し)\n```",
+];
+for (const s of ANCHOR_MUST_HIT)
+  if (anchorErrors("operations", s, (slug) => FIXTURE.get(slug)).length === 0)
+    throw new Error(`check-refs の見出しの見張りが当てない: ${s}`);
+for (const s of ANCHOR_MUST_PASS)
+  if (anchorErrors("operations", s, (slug) => FIXTURE.get(slug)).length > 0)
+    throw new Error(`check-refs の見出しの見張りが当ててしまう: ${s}`);
+
+const DIST = join(SITE_DIR, "dist");
+const distIds = new Map();
+const idsOf = (slug) => {
+  if (!distIds.has(slug)) {
+    const html = join(DIST, slug, "index.html");
+    distIds.set(
+      slug,
+      existsSync(html) ? htmlIds(readFileSync(html, "utf8")) : undefined,
+    );
+  }
+  return distIds.get(slug);
+};
+if (!existsSync(DIST))
+  errors.push(
+    "docs-site/dist: build の出力が無い（pnpm run check は astro build の後に流す）",
+  );
+else
+  for (const p of all)
+    for (const e of anchorErrors(p.slug, p.text, idsOf))
+      errors.push(`${relative(REPO, p.file)}: ${e}`);
 
 if (errors.length > 0) {
   for (const e of errors) console.error(`✗ ${e}`);
