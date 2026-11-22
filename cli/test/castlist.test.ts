@@ -235,7 +235,7 @@ describe('tpm start', () => {
     expect(requests[0]).toMatchObject({ method: 'GET', path: '/healthz', host: new URL(fake.url).host, origin: undefined });
     const posts = requests.filter(r => r.path === '/v1/actors');
     expect(posts).toHaveLength(2);
-    expect(posts[0]?.body).toMatchObject({ kind: 'human', name_prefix: 'product-manager', bindings: [{ type: 'tpm.person', value: 'product-manager' }], at: NOW });
+    expect(posts[0]?.body).toMatchObject({ kind: 'human', name_prefix: 'product-manager', bindings: [{ type: 'tpm.person', value: 'product-manager' }], sent_at: NOW });
     expect(posts[0]?.body?.issuer).toBe(castlistIssuer(w.tpm.state.dir));
     expect(posts.map(p => p.status)).toEqual([201, 200]);
     for (const part of ['TPM_LAUNCH="$(uuidgen)"', 'TPM_LAUNCHED_BY=tpm.person:product-manager', 'TPM_LAUNCH_MODEL=claude-opus-5-5', 'TPM_LAUNCH_EFFORT=medium', 'TPM_LAUNCH_FRESH=1']) expect(line).toContain(` ${part} `);
@@ -307,7 +307,7 @@ describe('session-start', () => {
       name_prefix: 't-x7k2-swe',
       labels: { 'tpm.project': w.project, 'tpm.launch': record.launch, 'tpm.key': 't-x7k2', 'tpm.role': 'software-engineer' },
       bindings: [{ type: 'claude.session', value: SID }, { type: 'cmux.workspace.ref', value: 'workspace:7' }, { type: 'cmux.workspace.uuid', value: 'FF00-UUID' }],
-      at: NOW,
+      sent_at: NOW,
       settings: { model: record.model, effort: record.effort },
     });
     expect(requests[1]?.body).toMatchObject({ by: `claude.session:${SID}`, type: 'entered', detail: {} });
@@ -418,7 +418,7 @@ describe('guard と castlist', () => {
     expect(guard(se, bashInput(SID, { transcript_path: path, effort: { level: 'high' } }))).toEqual({ allow: true });
     let puts = writes(got());
     expect(puts.map(r => [r.method, r.path.split('/').slice(0, 3).join('/')])).toEqual([['PUT', '/v1/settings']]);
-    expect(puts[0]?.body).toMatchObject({ by: `claude.session:${SID}`, model: 'claude-opus-5-5', effort: 'high', source: 'observed', at: NOW });
+    expect(puts[0]?.body).toMatchObject({ by: `claude.session:${SID}`, model: 'claude-opus-5-5', effort: 'high', source: 'observed', sent_at: NOW });
     // effort を替えた
     expect(guard(se, bashInput(SID, { transcript_path: path, effort: { level: 'low' } }))).toEqual({ allow: true });
     // model を替えた

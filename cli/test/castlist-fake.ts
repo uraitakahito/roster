@@ -1,6 +1,7 @@
 // 偽の castlist: 127.0.0.1 の空いた port で待つ node の http サーバー。tpm が curl で送る要求を記録し、本物（castlist の docs/src/api.md）の決まりの要る所だけで答える。
 // tpm の命令は同期（spawnSync で curl を待つ）なので、同じ thread のサーバーは答えられない。サーバーは worker の thread で動かす。
 // 記録は worker が file に 1 行ずつ足し、試験はそれを読む。castlist の時刻（/healthz の now と、書いた物の received_at）は、試験が書く file を worker が要求ごとに読む。
+// 書く 4 つの道は、送り手の時刻を 0.2.0 の名 sent_at で受け、前の名 at は断る（本物は移る間 at も受ける）。
 // 監査の検索（GET /v1/actors など）も、引数の名・1 つだけの引数の重なり・読めない時刻・limit の範囲を本物と同じ字で断る。頁の印（next）は本物と違う字（中は読まない決まりなので）。
 import { createServer } from 'node:net';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
@@ -36,6 +37,8 @@ const ENTER = ['entered', 'reentered', 'forked'];
 const EXIT = ['cleared', 'exited', 'closed'];
 const EVENT_TYPES = ['entered', 'reentered', 'forked', 'compacted', 'cleared', 'exited', 'closed', 'reported_in', 'model_unreadable', 'retracted'];
 const ACTOR_PARAMS = ['label', 'binding', 'at', 'active_from', 'active_to', 'kind', 'model', 'effort', 'active', 'launched_by', 'skewed', 'sort', 'order', 'limit', 'after'];
+// 送り手の時刻は sent_at（castlist 0.2.0）。本物は移る間 0.1.x の名 at も受けるが、偽物は断る（tpm が前の名に戻ったら試験で分かるように）。
+const OLD_AT = 'at は 0.1.x の名。送り手の時刻は sent_at で送る（偽の castlist は前の名を受けない）';
 const refOk = (issuer, ref) => typeof ref === 'string' && keys.has(issuer + ' ' + ref);
 const bad = (error) => { throw { status: 400, error }; };
 const without = (row, ...names) => Object.fromEntries(Object.entries(row).filter(([k]) => !names.includes(k)));
@@ -128,7 +131,7 @@ function detail(a, asOf) {
     current_bindings: types.map(t => without(bs.filter(b => b.type === t).at(-1), 'seq', 'actor_id')),
     events: events.filter(e => e.actor_id === a.id).map(e => without(e, 'seq')),
     settings: settings.filter(s => s.actor_id === a.id).map(s => without(s, 'seq')),
-    current_settings: cur === undefined ? null : { model: cur.model, effort: cur.effort, source: cur.source, at: cur.at, received_at: cur.received_at },
+    current_settings: cur === undefined ? null : { model: cur.model, effort: cur.effort, source: cur.source, sent_at: cur.sent_at, received_at: cur.received_at },
     links_in: links.filter(l => l.to === a.id).map(l => without(l, 'seq')),
     links_out: links.filter(l => l.from === a.id).map(l => without(l, 'seq')),
     state: { presence: pr.latest?.type ?? null, present: pr.present, entered_at: pr.first?.received_at ?? null, exited_at: pr.exit?.received_at ?? null },
@@ -274,21 +277,21 @@ function searchEvents(url, now) {
 }
 
 /** 付随する id を足す（鍵でない物は、同じ種類の最新と違う時だけ）。 */
-function bind(id, issuer, list, at, now, fresh) {
+function bind(id, issuer, list, sentAt, now, fresh) {
   list.forEach((b, i) => {
     if (!fresh && i === 0) return;
     const latest = bindings.filter(x => x.actor_id === id && x.type === b.type).at(-1);
     if (!fresh && latest !== undefined && latest.value === b.value) return;
-    bindings.push({ seq: ++seq, actor_id: id, issuer, type: b.type, value: b.value, is_key: fresh && i === 0, at, received_at: now });
+    bindings.push({ seq: ++seq, actor_id: id, issuer, type: b.type, value: b.value, is_key: fresh && i === 0, sent_at: sentAt, received_at: now });
   });
 }
 
 /** 頼んだ model と effort（最新と違う時だけ足す）。 */
-function ask(id, wanted, at, now) {
+function ask(id, wanted, sentAt, now) {
   if (wanted === undefined) return;
   const cur = current(id);
   if (cur !== undefined && cur.model === wanted.model && cur.effort === wanted.effort) return;
-  settings.push({ seq: ++seq, id: null, actor_id: id, model: wanted.model, effort: wanted.effort, source: 'requested', at, received_at: now, clock_skew: false });
+  settings.push({ seq: ++seq, id: null, actor_id: id, model: wanted.model, effort: wanted.effort, source: 'requested', sent_at: sentAt, received_at: now, clock_skew: false });
 }
 
 const server = createServer((req, res) => {
@@ -306,7 +309,7 @@ const server = createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');
     const parts = url.pathname.split('/').map(decodeURIComponent);
     try {
-      if (req.method === 'GET' && url.pathname === '/healthz') return answer(200, { status: 'ok', version: '0.1.0', now });
+      if (req.method === 'GET' && url.pathname === '/healthz') return answer(200, { status: 'ok', version: '0.2.0', now });
       if (req.method === 'GET' && url.pathname === '/v1/actors') return answer(200, searchActors(url, now));
       if (req.method === 'GET' && url.pathname === '/v1/settings') return answer(200, searchSettings(url, now));
       if (req.method === 'GET' && url.pathname === '/v1/events') return answer(200, searchEvents(url, now));
@@ -325,24 +328,25 @@ const server = createServer((req, res) => {
       if (e && e.status === 400) return answer(400, { error: e.error });
       throw e;
     }
+    if (['POST', 'PUT'].includes(req.method) && (body ?? {}).at !== undefined) return answer(422, { error: OLD_AT });
     if (req.method === 'POST' && url.pathname === '/v1/actors') {
       const b = body ?? {};
       if (!/^[a-z0-9.-]{1,64}$/.test(b.issuer ?? '') || !/^[a-z0-9-]{1,32}$/.test(b.name_prefix ?? '') || !['ai', 'human'].includes(b.kind) || !Array.isArray(b.bindings) || b.bindings.length === 0) return answer(422, { error: '形が違う' });
       const key = b.issuer + ' ' + b.bindings[0].type + ':' + b.bindings[0].value;
       const had = keys.get(key);
       if (had !== undefined) {
-        bind(had, b.issuer, b.bindings, b.at, now, false);
-        ask(had, b.settings, b.at, now);
+        bind(had, b.issuer, b.bindings, b.sent_at, now, false);
+        ask(had, b.settings, b.sent_at, now);
         const a = actors.get(had);
         return answer(200, { id: a.id, name: a.name, kind: a.kind, created: false });
       }
       const n = (counts.get(b.issuer + ' ' + b.name_prefix) ?? 0) + 1;
       counts.set(b.issuer + ' ' + b.name_prefix, n);
       const id = 'act-' + (actors.size + 1);
-      actors.set(id, { seq: ++seq, id, name: b.name_prefix + '.' + n, kind: b.kind, issuer: b.issuer, at: b.at, received_at: now, clock_skew: false, labels: b.labels ?? {} });
+      actors.set(id, { seq: ++seq, id, name: b.name_prefix + '.' + n, kind: b.kind, issuer: b.issuer, sent_at: b.sent_at, received_at: now, clock_skew: false, labels: b.labels ?? {} });
       keys.set(key, id);
-      bind(id, b.issuer, b.bindings, b.at, now, true);
-      ask(id, b.settings, b.at, now);
+      bind(id, b.issuer, b.bindings, b.sent_at, now, true);
+      ask(id, b.settings, b.sent_at, now);
       return answer(201, { id, name: b.name_prefix + '.' + n, kind: b.kind, created: true });
     }
     const put = /^\\/v1\\/(events|links|settings)\\/(.+)$/.exec(url.pathname);
@@ -355,7 +359,7 @@ const server = createServer((req, res) => {
       const had = puts.get(id);
       if (had !== undefined) return answer(had === data ? 200 : 409, { id: put[2] });
       const actorOf = (ref) => keys.get(b.issuer + ' ' + ref);
-      const row = { seq: ++seq, id: put[2], at: b.at, received_at: now, clock_skew: false };
+      const row = { seq: ++seq, id: put[2], sent_at: b.sent_at, received_at: now, clock_skew: false };
       if (put[1] === 'events') events.push({ ...row, actor_id: actorOf(b.by), type: b.type, detail: b.detail ?? {} });
       if (put[1] === 'links') links.push({ ...row, type: b.type, from: actorOf(b.from), to: actorOf(b.to) });
       if (put[1] === 'settings') {
