@@ -330,6 +330,12 @@ describe('Auditor は repo を変えない', () => {
     ['gh api --method=PUT repos/o/r/pages', false],
     ['gh api repos/o/r/labels -f name=x', false],
     ['TPM_RAW=1 git push', false],
+    // castlist を読むだけの命令（監査の検索）は通す
+    ['tpm castlist find --label tpm.key:t-23zs --active-from 2026-11-22T11:00:00+09:00', true],
+    ['tpm castlist show t-23zs-swe.1', true],
+    ['tpm castlist lineage 019a0000-0000-7000-8000-000000000000 --direction up', true],
+    ['tpm castlist events --type exited --type cleared', true],
+    ['tpm castlist settings --mismatch', true],
   ])('%s', (command, allow) => {
     expect(ask(command, 'auditor').allow).toBe(allow);
   });

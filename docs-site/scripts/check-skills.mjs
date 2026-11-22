@@ -59,6 +59,11 @@ const FORK_COMMANDS = [
   "incident timeline",
   "roles",
   "infra list",
+  "castlist find",
+  "castlist show",
+  "castlist lineage",
+  "castlist events",
+  "castlist settings",
 ];
 // protocol.ts は型の import だけなので、Node がそのまま読める（check-refs.mjs の 10 と同じ）
 const { COMMANDS } = await import(join(REPO, "cli", "src", "protocol.ts"));

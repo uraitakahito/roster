@@ -48,6 +48,7 @@ Auditor（`/audit`）が、監査のたびに読む手順。何のために・�
 | 依頼書・成果のページ | `tpm page list`（`--key`・`--kind`・`--role` で絞る）と `tpm page path <URL>` |
 | コードと skill の文 | repo（読むだけ）。変わった所は git の記録（`git log`・`git diff`） |
 | 課題 | `tpm issue view <Key>` |
+| アクター（誰が・誰に起こされ・どの model と effort で） | castlist（アクターの台帳）のプロフィールの画面の URL（`<castlist>/actors/<id>`）。`tpm castlist find --label tpm.key:<Key>`・`tpm castlist show <名か id>`・`tpm castlist lineage <名か id>`・`tpm castlist settings --actor <名か id> --at <時刻>`・`tpm castlist events`（どれも読むだけ。castlist を設定した project だけ） |
 
 ### 3. 追いかける
 

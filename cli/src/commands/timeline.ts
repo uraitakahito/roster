@@ -1,5 +1,7 @@
 // tpm incident timeline <番号|Key>: 件の前後に起きたことを、state の記録から時刻の順に 1 枚のページにして置く。
 // TPM 担当は読まずに、監査の依頼書に URL を貼る（原因を調べるのは担当）。メッセージの本文が入るので、この Mac の外に写さない。
+// castlist を設定していれば、行ごとに、その時刻にその席に居たアクターを castlist に聞いて欄に出す（聞けなければ、そう書いてページは置く）。
+import { castlistUrl } from '../castlist.ts';
 import type { Context } from '../context.ts';
 import { syncDeliveries, type GateStop, type GuardStop, type WaitChange } from '../evidence.ts';
 import { incidentLine, readIncidents, requireIncident, writeIncident, type Incident } from '../incidents.ts';
@@ -7,6 +9,7 @@ import { HEADINGS, type HeadingId } from '../protocol.ts';
 import { TpmError } from '../skill-sets.ts';
 import type { TrackerWrite } from '../tracker/recorded.ts';
 import type { MessageTrace } from '../transport/types.ts';
+import { profileUrl, seatActorsAt } from './castlist-read.ts';
 import { putPage } from './page.ts';
 
 /** 件の前後を拾う分の既定。 */
@@ -49,6 +52,8 @@ export interface TimelineEvent {
   notes: string[]
   /** 件の引き金のメッセージか。 */
   trigger?: boolean
+  /** その行の手の席（担当は課題の Key、TPM 担当は tpm）。castlist のアクターを引く。分からない行は undefined。 */
+  seat?: string
 }
 
 const hms = (iso: string): string => iso.slice(11, 19);
@@ -77,25 +82,27 @@ export function collect(ctx: Context, key: string, window?: { from: string, to: 
       const crossed = messages.filter(o => direction(o.heading) !== undefined && direction(o.heading) !== direction(m.heading) && o.at > m.at && o.at < arrived);
       if (crossed.length > 0) notes.push(`行き違い: これが届く前に、相手が ${crossed.length} 件送った（${crossed.map(o => `【${o.heading}】${hms(o.at)}`).join('・')}）`);
     }
-    return { at: m.at, kind: 'メッセージ', who: m.from, what: `${cut(m.text)}（id ${m.id}）`, notes, ...(m.id === triggerId ? { trigger: true } : {}) };
+    const from = direction(m.heading);
+    const seat = from === 'role' ? m.key : from === 'tpm' ? 'tpm' : undefined;
+    return { at: m.at, kind: 'メッセージ', who: m.from, what: `${cut(m.text)}（id ${m.id}）`, notes, ...(m.id === triggerId ? { trigger: true } : {}), ...(seat === undefined ? {} : { seat }) };
   });
   for (const w of ctx.state.lines<TrackerWrite>('tracker.jsonl').filter(l => l.issue === key || l.by === key)) {
-    events.push({ at: w.at, kind: '課題管理', who: w.by, what: `${w.issue} に${w.op === 'close' ? '「済み」' : `コメント【${w.kind ?? ''}】`}${w.ok ? '' : `（失敗: ${w.error ?? ''}）`}`, notes: [] });
+    events.push({ at: w.at, kind: '課題管理', who: w.by, what: `${w.issue} に${w.op === 'close' ? '「済み」' : `コメント【${w.kind ?? ''}】`}${w.ok ? '' : `（失敗: ${w.error ?? ''}）`}`, notes: [], seat: w.by });
   }
   for (const g of ctx.state.lines<GuardStop>('guard.jsonl').filter(l => l.by === key)) {
-    events.push({ at: g.at, kind: 'guard', who: g.by, what: `止めた: ${g.command}`, notes: [g.reason] });
+    events.push({ at: g.at, kind: 'guard', who: g.by, what: `止めた: ${g.command}`, notes: [g.reason], seat: g.by });
   }
   for (const g of ctx.state.lines<GateStop>('gate.jsonl').filter(l => l.by === key)) {
-    events.push({ at: g.at, kind: '入口の検査', who: g.by, what: `送るのを止めた（${g.gate}）`, notes: [g.detail] });
+    events.push({ at: g.at, kind: '入口の検査', who: g.by, what: `送るのを止めた（${g.gate}）`, notes: [g.detail], seat: g.by });
   }
   for (const w of ctx.state.lines<WaitChange>('waits.jsonl').filter(l => l.by === key)) {
-    events.push({ at: w.at, kind: 'wait', who: w.by, what: w.text, notes: [] });
+    events.push({ at: w.at, kind: 'wait', who: w.by, what: w.text, notes: [], seat: w.by });
   }
   for (const r of ctx.state.lines<InfraRun>('infra.jsonl').filter(l => l.key === key)) {
-    events.push({ at: r.at, kind: 'infra', who: key, what: `${r.env}: ${r.command.join(' ')}`, notes: [`exit ${r.status}`] });
+    events.push({ at: r.at, kind: 'infra', who: key, what: `${r.env}: ${r.command.join(' ')}`, notes: [`exit ${r.status}`], seat: key });
   }
   for (const i of readIncidents(ctx).filter(i => i.key === key)) {
-    events.push({ at: i.at, kind: '台帳', who: i.by, what: incidentLine(i), notes: [] });
+    events.push({ at: i.at, kind: '台帳', who: i.by, what: incidentLine(i), notes: [], seat: i.by });
   }
   return events
     .filter(e => window === undefined || (e.at >= window.from && e.at <= window.to))
@@ -104,9 +111,39 @@ export function collect(ctx: Context, key: string, window?: { from: string, to: 
 
 const esc = (text: string): string => text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 
-/** 時系列のページの HTML。 */
-export function render(title: string, lead: string[], events: TimelineEvent[]): string {
-  const rows = events.map(e => `<tr${e.trigger === true ? ' class="trigger"' : ''}><td class="t">${esc(e.at.slice(0, 10))}<br>${esc(hms(e.at))}</td><td>${esc(e.kind)}</td><td>${esc(e.who)}</td><td>${esc(e.what)}${e.notes.map(n => `<br><span class="${n.startsWith('行き違い') ? 'cross' : 'note'}">${esc(n)}</span>`).join('')}</td></tr>`);
+/**
+ * 行ごとのアクターの欄（HTML）。席の分かる行は、その時刻にその席に居た castlist のアクターを、プロフィールの画面への link で出す。
+ * castlist が止まっていれば、その後の行には聞かずに「castlist に聞けない」と書く（ページは置く）。聞けなかった訳は、初めの 1 つを返す。
+ */
+function actorCells(ctx: Context, url: string, events: TimelineEvent[]): { cells: string[], failed?: string } {
+  const asked = new Map<string, string>();
+  let down = false;
+  let failed: string | undefined;
+  const cells = events.map((e) => {
+    if (e.seat === undefined) return '-';
+    if (down) return 'castlist に聞けない';
+    const key = `${e.seat} ${e.at}`;
+    const had = asked.get(key);
+    if (had !== undefined) return had;
+    const answer = seatActorsAt(ctx, url, e.seat, e.at);
+    let cell: string;
+    if (answer.kind === 'failed') {
+      failed ??= answer.reason;
+      down = answer.down;
+      cell = esc(answer.down ? 'castlist に聞けない' : `castlist に聞けない（${answer.reason}）`);
+    }
+    else {
+      cell = answer.body.actors.length === 0 ? 'castlist に無い' : answer.body.actors.map(a => `<a href="${esc(profileUrl(url, a.id))}">${esc(a.name)}</a>`).join('・');
+    }
+    asked.set(key, cell);
+    return cell;
+  });
+  return failed === undefined ? { cells } : { cells, failed };
+}
+
+/** 時系列のページの HTML。actors は行ごとのアクターの欄（HTML。castlist を設定していなければ無く、欄も出さない）。 */
+export function render(title: string, lead: string[], events: TimelineEvent[], actors?: string[]): string {
+  const rows = events.map((e, i) => `<tr${e.trigger === true ? ' class="trigger"' : ''}><td class="t">${esc(e.at.slice(0, 10))}<br>${esc(hms(e.at))}</td><td>${esc(e.kind)}</td><td>${esc(e.who)}</td>${actors === undefined ? '' : `<td>${actors[i] ?? '-'}</td>`}<td>${esc(e.what)}${e.notes.map(n => `<br><span class="${n.startsWith('行き違い') ? 'cross' : 'note'}">${esc(n)}</span>`).join('')}</td></tr>`);
   return `<!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>
 <style>
@@ -121,7 +158,7 @@ td.t{white-space:nowrap;font-variant-numeric:tabular-nums}.note{color:var(--mute
 ${lead.map(l => `<p>${esc(l)}</p>`).join('\n')}
 <p class="note">時刻は UTC（日本の時刻は +9 時間）。tpm が state に残した記録から作った。メッセージの本文が入るので、この Mac の外に写さない。色の付いた行は、件の引き金のメッセージ。</p>
 <div class="scroll"><table>
-<tr><th>時刻</th><th>記録</th><th>誰が</th><th>何を</th></tr>
+<tr><th>時刻</th><th>記録</th><th>誰が</th>${actors === undefined ? '' : '<th>アクター</th>'}<th>何を</th></tr>
 ${rows.join('\n')}
 </table></div>
 </body></html>
@@ -166,7 +203,13 @@ export function incidentTimeline(ctx: Context, target: string, options: { minute
     ];
   }
   if (events.length === 0) throw new TpmError(`${key} の記録がありません（Key を確かめる。記録は state の log.jsonl など）`);
-  const { url } = putPage(ctx, { text: render(title, lead, events) }, 'timeline', key);
+  const castlist = castlistUrl(ctx);
+  const actors = castlist === undefined ? undefined : actorCells(ctx, castlist, events);
+  if (castlist !== undefined) {
+    const failed = actors?.failed === undefined ? '' : `聞けなかった行がある: ${actors.failed}`;
+    lead.push(`アクターの欄は、castlist（${castlist}）に、その時刻にその席（担当は課題の Key、TPM 担当は tpm）に居たアクターを聞いた答え（名はプロフィールの画面への link）。${failed}`);
+  }
+  const { url } = putPage(ctx, { text: render(title, lead, events, actors?.cells) }, 'timeline', key);
   if (incident !== undefined) writeIncident(ctx, { ...incident, timeline: url });
   return [`時系列を置いた（${events.length} 行）: ${url}`, ...(incident === undefined ? [] : [`件に結んだ: #${incident.n}`])];
 }
