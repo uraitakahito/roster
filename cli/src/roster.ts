@@ -26,6 +26,10 @@ export interface RoleRecord extends RoleSettings {
   address?: string
   /** 担当が名乗った時刻。 */
   helloAt?: string
+  /** 起こしの id（castlist を設定した時に、tpm assign・tpm audit start が起こすたびに作る UUID。tpm run-role が $TPM_LAUNCH にする）。 */
+  launch?: string
+  /** 起こした者の、castlist の鍵の付随する id（tpm assign は打った TPM 担当の `claude.session:…`、tpm audit start は Product Manager）。 */
+  launchedBy?: string
   /** 【dismiss】を送ったか。handover は担当の交代（課題は閉じない）。 */
   dismissed?: 'done' | 'handover'
 }

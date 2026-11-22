@@ -62,6 +62,8 @@ export const COMMANDS = [
   'file list',
   'file delete',
   'guard',
+  'castlist session-start',
+  'castlist session-end',
   'run-role',
   'banner hook',
   'banner setup',

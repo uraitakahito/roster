@@ -248,6 +248,7 @@ export function judgeWrite(call: WriteCall, role: RoleName | undefined, roots: P
 /**
  * 担当の claude に渡す settings（--settings）。道具の前に tpm guard を呼ぶ hook。hook の命令は shell が読むので、path を引用する。
  * 見る道具は Bash。Auditor の席だけ、file を書き替える道具（WRITE_TOOLS）も見る（ほかの担当では、書くたびに hook を動かさない）。
+ * どの席にも、session の始まりと終わりに castlist に送る hook（tpm castlist session-start・session-end）を付ける。castlist を設定していなければ、その命令は何もしない。
  * Auditor の席には、session の始まりに tpm audit fresh を呼ぶ hook も付ける。
  */
 export function guardSettings(tpmBin: string, role?: RoleName): string {
@@ -257,7 +258,8 @@ export function guardSettings(tpmBin: string, role?: RoleName): string {
     hooks: {
       PreToolUse: [{ matcher, hooks: [hook('guard')] }],
       // Auditor の席は、席を起こした時と /clear の時に印を書く（前の監査の文脈が残ったまま、次の監査を始めないため）。
-      ...(role === READ_ONLY_ROLE ? { SessionStart: [{ hooks: [hook('audit fresh')] }] } : {}),
+      SessionStart: [{ hooks: [...(role === READ_ONLY_ROLE ? [hook('audit fresh')] : []), hook('castlist session-start')] }],
+      SessionEnd: [{ hooks: [hook('castlist session-end')] }],
     },
   });
 }

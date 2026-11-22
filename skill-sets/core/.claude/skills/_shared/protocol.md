@@ -201,6 +201,14 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 - 手続きを踏んでいない命令は、guard が実行の前に止める。止まったら、出た文のとおりに頼む（別の書き方で通そうとしない）。
 - 設定に書かれていない環境で、並べて動いている担当やほかの人が困りそうな物を変えるときも、先に【ask-tpm】を送る。
 
+## アクターの台帳（castlist）
+
+project の設定に castlist（アクターの台帳）の URL があれば、`tpm` が、自分の session の始まり・終わり・名乗り・model と effort を castlist に送る（hook と命令が送るので、担当は何も打たない）。
+
+- `tpm hello` の出力の頭に `アクター: <名>`（`t-23zs-swe.1` など）が出る。結果のページや報告で自分を名指す時は、この名を使ってよい。
+- castlist が止まっていると、`tpm hello` は名乗らずに止まり、guard は Bash を止める。どちらも、Product Manager が自分の terminal で打つ 1 行（`container start castlist` か `container run …`）を出す。その 1 行は自分で打たない（castlist を起こすのは Product Manager だけ。guard も止める）。Bash が止まると `tpm` の命令も打てないので、TPM 担当はその 1 行を返答に書いて Product Manager に頼み（打てれば `tpm wait pm "castlist を起こす" --hand`）、担当はその 1 行を返答に書いて止まる（TPM 担当の Bash も同じく止まるので、Product Manager が起こした後に、TPM 担当が `tpm notify` で打ち直すよう伝える）。起きたら、止まった命令を打ち直す。
+- castlist の時計がずれていると 1 行出る（止まらない）。出たら `tpm report incident` で台帳に挙げる。
+
 ## 終わり方
 
 - Software Engineer 担当と DevOps Engineer 担当は、依頼書 1 つが済むごとに【done】を送り、次の【brief】を待つ。同じ課題の続きは同じ担当が受ける。【dismiss】が来るまで自分から終えない（`tpm report end` は【dismiss】の前には送れない）。

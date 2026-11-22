@@ -1,9 +1,10 @@
 // TPM 担当が打つ命令: 名乗る（tpmHello。tpm hello から呼ばれる）・名簿を見る（roles）・Key を作る（newKey）・課題を担当に振る（assign）・閉じる（close）。
-import { randomInt } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { assertSummary } from '../brief.ts';
 import { shellQuote } from '../shell.ts';
+import { castlistUrl, requireUp } from '../castlist.ts';
 import { describeTrackers, OWN_LABEL, readRolesConfig, rolesConfigFile, sourceLabel, type ConfigSource } from '../config.ts';
 import type { Context } from '../context.ts';
 import { syncDeliveries } from '../evidence.ts';
@@ -15,6 +16,7 @@ import { allRoles, assertKey, LOCAL_KEY, readRole, removeRole, writeRole, type R
 import { readSkillSets, skillSetDir, TpmError } from '../skill-sets.ts';
 import { route } from '../tracker/routed.ts';
 import { findHook, staleHook } from './banner.ts';
+import { castlistHello, closeLaunch } from './castlist.ts';
 import { copyIssue, issueTracker } from './issue.ts';
 import { assertRead, assertSettled, brief } from './messages.ts';
 import { pageFolder } from './page.ts';
@@ -25,17 +27,19 @@ const HELLO_INTERVAL_MS = 2000;
 /**
  * TPM 担当が名乗る（$TPM_KEY の無い tpm hello）: 居場所の題と状態を出し、自分の宛先を状態に書く。続けて名簿を出す。
  * 状態の model は、旗が無ければ起こす 1 行と同じ決め方（resolveSettings）。effort は、旗が無ければ Claude Code が入れる $CLAUDE_EFFORT（実際の effort）を旗と同じに扱う。
+ * castlist を設定していれば、名乗りを送り、`アクター: <名>` の行を頭に出す（castlist が止まっていれば、名乗らずに止まる）。
  */
 export function tpmHello(ctx: Context, options: { model?: string, effort?: string } = {}): string[] {
+  const settings = resolveSettings('tpm', { flags: { model: options.model, effort: options.effort ?? ctx.env.CLAUDE_EFFORT }, env: ctx.env });
+  const actor = castlistHello(ctx);
   const address = ctx.transport.whoami();
   ctx.transport.setTitle(TPM_TITLE);
-  const settings = resolveSettings('tpm', { flags: { model: options.model, effort: options.effort ?? ctx.env.CLAUDE_EFFORT }, env: ctx.env });
   ctx.transport.setStatus('model', modelStatus(settings.model, settings.effort));
   ctx.transport.setStatus('wait', WAIT.work('起動'));
   ctx.state.write('tpm.jsonc', { address } satisfies TpmRecord);
   // 連携の道具が古いメッセージを捨てる前に、届いた時刻を写す。
   syncDeliveries(ctx);
-  return [`TPM 担当の宛先: ${address}`, ...configLines(ctx), ...bannerHint(ctx), ...roles(ctx)];
+  return [...actor, `TPM 担当の宛先: ${address}`, ...configLines(ctx), ...bannerHint(ctx), ...roles(ctx)];
 }
 
 /** 既定で埋めた値には「（既定）」を付ける（設定に書いた値と見分けるため）。 */
@@ -189,11 +193,13 @@ export function assign(ctx: Context, key: string, options: AssignOptions): strin
   }
   // 新しい担当（交代を含む）は背景を知らないので、依頼書に課題の概要の節を求める。続きの【brief】には求めない。
   if (options.brief !== undefined) assertSummary(ctx, key, options.brief);
+  const cwd = options.cwd ?? ctx.project;
+  const settings = resolveSettings(options.role, { flags: options, config: roleDefaults(ctx, options.role, cwd), env: ctx.env });
+  // castlist を設定していれば、起きているかを、写しを置く前に見る（止まっていれば、担当を起こさずに止まる）。
+  const skew = requireUp(ctx, '担当は起こしていません。', [`この 1 行を Product Manager に頼み、tpm wait pm "castlist を起こす" --hand で待ってから、もう 1 度 tpm assign を打ってください。`]);
   // 居場所を作る前に読む（読めなければ、担当を起こさずに止まる）。
   const copy = issueCopy(ctx, options.issue ?? key, key, options.noIssueCopy);
   const def = ROLES[options.role];
-  const cwd = options.cwd ?? ctx.project;
-  const settings = resolveSettings(options.role, { flags: options, config: roleDefaults(ctx, options.role, cwd), env: ctx.env });
   const record: RoleRecord = {
     key,
     role: options.role,
@@ -206,14 +212,21 @@ export function assign(ctx: Context, key: string, options: AssignOptions): strin
     ...copy,
   };
   // 担当を起こした folder と、記録の先を出す（上の folder から振ると、どちらも 1 つに決まっていないため）。
-  return launch(ctx, record, existing !== undefined, options.wait, options.issue === undefined ? [] : [`課題の記録: ${recordingTo(ctx, options.issue)}`]);
+  const sid = ctx.env.CLAUDE_CODE_SESSION_ID;
+  const more = [...(options.issue === undefined ? [] : [`課題の記録: ${recordingTo(ctx, options.issue)}`]), ...skew];
+  return launch(ctx, record, existing !== undefined, options.wait, more, sid ? `claude.session:${sid}` : undefined);
 }
 
 /**
  * 名簿の行の担当を起こす: 名簿に書き、居場所を作って tpm run-role を動かし、名乗るまで wait 秒待つ（0 なら待たない）。
  * again は起こし直しか（出す字が変わる）。more は、起こした行と folder の行の後に出す行。tpm assign と tpm audit start が使う。
+ * castlist を設定していれば、起こしの id と、起こした者（launchedBy。castlist の付随する id）を名簿に書く（tpm run-role が担当の環境変数にする）。
  */
-export function launch(ctx: Context, record: RoleRecord, again: boolean, wait: number, more: string[] = []): string[] {
+export function launch(ctx: Context, record: RoleRecord, again: boolean, wait: number, more: string[] = [], launchedBy?: string): string[] {
+  if (castlistUrl(ctx) !== undefined) {
+    record.launch = randomUUID();
+    if (launchedBy !== undefined) record.launchedBy = launchedBy;
+  }
   writeRole(ctx, record);
   const command = [join(ctx.root, 'cli', 'bin', 'tpm'), 'run-role', record.key, '--project', ctx.project, '--state', ctx.state.dir].map(shellQuote).join(' ');
   record.address = ctx.transport.spawn({ title: record.title, cwd: record.cwd, command });
@@ -280,7 +293,9 @@ export function close(ctx: Context, key: string): string[] {
   const alive = record.address !== undefined && ctx.transport.seats().some(s => s.address === record.address);
   // 閉じる前に、この担当とのメッセージの届いた時刻を写す。
   syncDeliveries(ctx);
+  // 居場所を閉じる前に、castlist に幕引きを送る（閉じた後の SessionEnd の hook が届くかは、閉じ方による）。
+  const castlist = closeLaunch(ctx, record);
   if (alive && record.address !== undefined) ctx.transport.close(record.address);
   removeRole(ctx, key);
-  return [`閉じた: ${record.title}${alive ? `（${record.address}）` : '（居場所はもう無かった）'}`];
+  return [`閉じた: ${record.title}${alive ? `（${record.address}）` : '（居場所はもう無かった）'}`, ...castlist];
 }

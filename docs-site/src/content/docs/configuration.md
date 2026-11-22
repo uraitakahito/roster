@@ -1,6 +1,6 @@
 ---
 title: 設定
-description: 使う側の project に置く .claude/roles/config.jsonc（課題管理・連携・インフラの環境・担当の既定。直下の folder の設定も合わせる）、model などの既定を人ごとに決める環境変数、ページの置き場の環境変数、Dependabot の skill の設定
+description: 使う側の project に置く .claude/roles/config.jsonc（課題管理・連携・インフラの環境・担当の既定・アクターの台帳。直下の folder の設定も合わせる）、model などの既定を人ごとに決める環境変数、ページの置き場の環境変数、Dependabot の skill の設定
 ---
 
 ## `.claude/roles/config.jsonc`（任意）
@@ -16,6 +16,7 @@ TPM 担当を起こした folder（project）に置くと、道具の選び方�
 | `infra` | インフラの環境の宣言。環境の名前（英小文字・数字・`-`）ごとに `guard`（手続き）と `match`（その環境に触る命令が含む字の配列） | 宣言なし（guard は環境を見ない） |
 | `skill-sets` | core のほかに加える、追加の skill セットの名前の配列 | core だけ |
 | `folders` | 設定を集める folder（project の folder からの path）の配列。書くと、直下を探さずに書いた folder だけを集める。`[]` なら集めない | 直下の folder のうち、設定がある物を全部集める |
+| `castlist` | アクターの台帳（castlist）の URL（`http://127.0.0.1:<port>` か `http://localhost:<port>`）。project の folder の設定だけが効く（下の「[アクターの台帳（castlist）](#アクターの台帳castlist任意)」） | castlist に何も送らない |
 | `software-engineer`・`devops-engineer`・`auditor` | 起こす担当の `model`・`effort`・`permissionMode` | [環境変数](#model-などの既定の環境変数任意)、それも無ければ既定（Software Engineer 担当は Opus 5.5・medium、DevOps Engineer 担当は Opus 5.5・low、Auditor は Fable 5.2・high、どれも `bypassPermissions`） |
 
 ```jsonc
@@ -151,6 +152,7 @@ export TPM_MODEL=claude-fable-5-2
 export TPM_EFFORT=medium
 ```
 
+- model は、どこに書いても `claude-` で始まる id（`claude-opus-5-5` など）にする。`opus`・`sonnet`・`haiku`・`opus[1m]` などの別名は、`tpm start`・`tpm assign`・`tpm audit start`・`tpm hello` が、どこから来た値か（`--model`・`config.jsonc の <役割>.model`・`$TPM_MODEL`）を添えて断る（起こした model を castlist に残す時、別名では何の model か決まらないため）。
 - `tpm start` は環境変数を読んで 1 行の `--model`・`--effort`・`--permission-mode` に入れる。TPM 担当が名乗る `tpm hello` も同じ値を状態の `model` に出す（effort は、Claude Code が入れる `$CLAUDE_EFFORT` があればそれ）。
 - `tpm start` は、書いてある環境変数を 1 行の頭（`PATH=…` の隣）にも写す。`tpm assign` は TPM 担当の居場所で動き、TPM 担当の Claude Code の環境変数を読むので、profile で export した値も、`TPM_MODEL=… tpm start` のように 1 行を出すときだけ付けた値も、TPM 担当と担当の両方に効く。
 
@@ -162,6 +164,18 @@ export TPM_EFFORT=medium
 |---|---|---|
 | `TPM_PAGES_DIR` | 控えの folder（置いた・読んだページと file をこの Mac に写す所。前の置き場の folder と同じ） | `$XDG_DATA_HOME/tpm/pages`（`$XDG_DATA_HOME` も無ければ `~/.local/share/tpm/pages`） |
 | `TPM_PAGES_URL` | 置き場の URL（container の port の publish と同じにする） | `http://127.0.0.1:8801` |
+
+## アクターの台帳（castlist）（任意）
+
+アクターの台帳（別の repo の [castlist](https://uraitakahito.github.io/castlist/)）は、Claude Code の session 1 つ（TPM 担当・担当・Auditor）と人の Product Manager を、それぞれアクターとして残す、この Mac だけのサーバー。誰が誰を起こしたか・どの model と effort で動いたかを、Auditor が後から引く。`tpm` が何をいつ送るかは [担当のあいだの決まり](/protocol/#アクターの台帳castlist)。
+
+- project の folder の `.claude/roles/config.jsonc` に `"castlist": "http://127.0.0.1:8802"` を書くと、`tpm` が castlist に送る。直下の folder の設定に書いた値は読まない（連携と同じ）。
+- 書かなければ、`tpm` は castlist に何も送らない。hook の命令（`tpm castlist session-start`・`tpm castlist session-end`）はどの席にも付くが、何もしない。
+- 環境変数 `TPM_CASTLIST_URL` があれば、設定の値より先に使う（試験と、port を替えた時のため）。
+
+| 環境変数 | 決める物 | 無いとき |
+|---|---|---|
+| `TPM_CASTLIST_URL` | castlist の URL（`http://127.0.0.1:<port>` か `http://localhost:<port>`） | 設定の `castlist`。それも無ければ、castlist に何も送らない |
 
 ## Mac のバナー（任意）
 

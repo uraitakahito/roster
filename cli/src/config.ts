@@ -43,6 +43,8 @@ export interface FileConfig {
   infra: Record<string, InfraEnv>
   /** 起こす担当ごとの model・effort・permissionMode（書いた欄だけ。無い欄は既定）。 */
   roles: Partial<Record<RoleName, Partial<RoleSettings>>>
+  /** アクターの台帳（castlist）の URL。書かなければ castlist に何も送らない。 */
+  castlist?: string
 }
 
 /** 集めた設定の file 1 つ。 */
@@ -65,7 +67,7 @@ export type RecordingTracker = Exclude<Tracker, 'none'>;
 /**
  * project の folder とその直下の folder の設定を合わせた物。TPM 担当も、起こした担当も、guard もこれを使う。
  * 課題管理は道具ごとに宣言した設定を持ち（記録の先は課題の Key の形で選ぶ。tracker/routed.ts）、infra は環境の名前ごとに合わせ、
- * 連携と担当の既定は project の folder の設定だけを使う。
+ * 連携と担当の既定と castlist は project の folder の設定だけを使う。
  */
 export interface RolesConfig {
   transport: Transport
@@ -74,6 +76,8 @@ export interface RolesConfig {
   infra: Record<string, InfraEnv>
   /** 起こす担当ごとの model・effort・permissionMode（project の folder の設定に書いた欄だけ）。 */
   roles: Partial<Record<RoleName, Partial<RoleSettings>>>
+  /** アクターの台帳（castlist）の URL（project の folder の設定だけ。$TPM_CASTLIST_URL が勝つ。castlist.ts の castlistUrl）。 */
+  castlist?: string
   /** 集めた設定（project の folder 自身が先頭、次に直下の folder を名前の順）。 */
   sources: ConfigSource[]
 }
@@ -117,7 +121,17 @@ function fileConfig(config: Record<string, unknown>, configFile: string): FileCo
     transport: oneOf(config.transport, TRANSPORTS, 'cmux', 'transport', configFile),
     infra: infraField(config.infra, configFile),
     roles: rolesField(config, configFile),
+    ...castlistField(config.castlist, configFile),
   };
+}
+
+/** castlist が受けるのは、この Mac の中からだけ（Host が 127.0.0.1 か localhost）。 */
+const CASTLIST_URL = /^http:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\/?$/;
+
+function castlistField(value: unknown, configFile: string): Pick<FileConfig, 'castlist'> {
+  if (value === undefined) return {};
+  if (typeof value !== 'string' || !CASTLIST_URL.test(value)) throw new TpmError(`${configFile} の castlist は http://127.0.0.1:<port> か http://localhost:<port> の形にしてください`);
+  return { castlist: value.replace(/\/+$/, '') };
 }
 
 function rolesField(config: Record<string, unknown>, configFile: string): RolesConfig['roles'] {
@@ -218,7 +232,7 @@ const strictest = (a: Guard, b: Guard): Guard => GUARDS.indexOf(a) >= GUARDS.ind
 /**
  * project の folder とその直下の folder の設定を合わせる。
  * 課題管理: 道具ごとに、宣言した設定を覚える（none は足さない）。infra: 環境の名前ごとに合わせ、同じ名前は match を足して厳しい方の手続きにする。
- * 連携・担当の既定: project の folder の設定だけ（直下の folder の値は読まない）。
+ * 連携・担当の既定・castlist: project の folder の設定だけ（直下の folder の値は読まない）。
  */
 export function composeRolesConfig(project: string): RolesConfig {
   const sources = readConfigSources(project);
@@ -234,7 +248,14 @@ export function composeRolesConfig(project: string): RolesConfig {
     }
   }
   const declared = (tool: RecordingTracker): ConfigSource[] => sources.filter(s => s.config.tracker === tool);
-  return { transport: own.config.transport, trackers: { jira: declared('jira'), github: declared('github') }, infra, roles: own.config.roles, sources };
+  return {
+    transport: own.config.transport,
+    trackers: { jira: declared('jira'), github: declared('github') },
+    infra,
+    roles: own.config.roles,
+    ...(own.config.castlist === undefined ? {} : { castlist: own.config.castlist }),
+    sources,
+  };
 }
 
 /** 読んだ設定と、それぞれの課題管理を 1 行に並べる（「この folder＝無い・roster＝jira」）。止まるときの文に添える。 */

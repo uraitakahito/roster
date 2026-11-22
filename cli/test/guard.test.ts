@@ -244,8 +244,8 @@ describe('hook の入力と settings', () => {
     expect(commandOf(JSON.stringify({ tool_name: 'Read', tool_input: { file_path: '/x' } }))).toBeUndefined();
   });
 
-  test('settings は Bash の前に tpm guard を呼ぶ hook', () => {
-    expect(JSON.parse(guardSettings('/r/cli/bin/tpm'))).toEqual({ hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: '/r/cli/bin/tpm guard' }] }] } });
+  test('settings は Bash の前に tpm guard を呼ぶ hook と、session の始まりと終わりに tpm castlist を呼ぶ hook', () => {
+    expect(JSON.parse(guardSettings('/r/cli/bin/tpm'))).toEqual({ hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: '/r/cli/bin/tpm guard' }] }], SessionStart: [{ hooks: [{ type: 'command', command: '/r/cli/bin/tpm castlist session-start' }] }], SessionEnd: [{ hooks: [{ type: 'command', command: '/r/cli/bin/tpm castlist session-end' }] }] } });
   });
 
   test('path に空白などがあれば、hook の命令の中で引用する', () => {

@@ -5,6 +5,7 @@ import { recordGuardStop } from '../evidence.ts';
 import { commandOf, judge, judgeEnv, judgeWrite, readApprovals, removeApproval, writeApproval, writeOf, type Verdict } from '../guard.ts';
 import { ROLE_NAMES, type RoleName } from '../protocol.ts';
 import { TpmError } from '../skill-sets.ts';
+import { castlistGuard } from './castlist.ts';
 import { pagesDir } from './store.ts';
 
 const GUARD_LABEL = { 'free': '自由', 'tpm': 'TPM に相談（DevOps Engineer 担当だけ）', 'pm': 'PM の承認（DevOps Engineer 担当だけ）', 'pm-only': 'PM だけ（どの担当も打てない）' } as const;
@@ -73,7 +74,10 @@ export function infraRun(ctx: Context, name: string, command: string[]): { lines
   return { lines: [r.stdout.trimEnd(), r.stderr.trimEnd()].filter(l => l !== ''), status: r.status };
 }
 
-/** hook の標準入力を読んで決める。Bash と、file を書き替える道具のほかは通す。止めた命令は guard.jsonl に残す。 */
+/**
+ * hook の標準入力を読んで決める。Bash と、file を書き替える道具のほかは通す。止めた命令は guard.jsonl に残す。
+ * Bash は、手続きと道具の直打ちを見て通す物を、続けて castlist の分（castlistGuard。設定が無ければ何もしない）で見る。
+ */
 export function guard(ctx: Context, stdin: string): Verdict {
   const write = writeOf(stdin);
   if (write !== undefined) {
@@ -88,6 +92,7 @@ export function guard(ctx: Context, stdin: string): Verdict {
   const command = commandOf(stdin);
   if (command === undefined) return { allow: true };
   const verdict = judge({ command, role: roleOf(ctx.env), config: ctx.config, approvals: readApprovals(ctx.state, ctx.config.infra), now: ctx.now() });
-  if (!verdict.allow) recordGuardStop(ctx, command, verdict.reason);
-  return verdict;
+  const castlist = verdict.allow ? castlistGuard(ctx, stdin) : verdict;
+  if (!castlist.allow) recordGuardStop(ctx, command, castlist.reason);
+  return castlist;
 }
