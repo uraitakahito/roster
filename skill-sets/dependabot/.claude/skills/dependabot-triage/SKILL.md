@@ -28,39 +28,26 @@ argument-hint: "[dry-run] [max=<n>]"
 - 届かない PR は、Sustaining Engineer 担当を起こさず、表に「いつ対象になるか」を出して次の回に回す。
 - merge は TPM 担当の権限で決める。居場所は、merge と【end】の報告を受け取った後に TPM 担当が閉じる。
 
-## 1. 集める
+## 1. 表を作る
 
-```sh
-args=()
-for r in <config.repos>; do args+=(--repo "<config.owner>/$r"); done
-gh search prs --author app/dependabot --state open "${args[@]}" --limit 100 \
-  --json repository,number,title,createdAt,url
-```
+Skill tool で `dependabot-scan` を呼ぶ（引数なし）。PR を集めて判定するのは、会話の外の助手（`context: fork`）で、この会話には表だけが返る（PR ごとの命令の出力で、この会話を埋めないため）。自分で `gh search` や `release-age.ts` を打たない。
 
-- 配列で組む（文字列にまとめると zsh が 1 語で渡し、`unknown flag` になる）。
-- 100 本返ったら、表の下に「上限の 100 本に届いた。残りは次の回」と書く。
+- 答えが `止まる: ` で始まったら、その訳を Product Manager に伝えて止まる。
+- 1 行目の本数と表の行の数が合わなければ、1 度だけ呼び直す。また合わなければ、そう Product Manager に伝えて止まる。
 
-## 2. 判定する
+## 2. 表を出す
 
-PR ごとに:
-
-```sh
-node "${CLAUDE_SKILL_DIR}/../../../../../cli/src/release-age.ts" <config.owner>/<repo> <PR> --hours <config.hours>
-```
-
-終了コード 0 = 対象・10 = まだ・20 = 判定できない・1 = 道具の誤り。CI は `gh pr checks <PR> --repo <config.owner>/<repo> --json name,bucket` で見て、`bucket` が `fail` の check の **名前** も拾う。
-
-表を出す。列は次のとおり（題は長いので出さない）:
+返った表を、そのまま Product Manager に出す（1 行目と注も）。列は次のとおりで、3 の並べ方が「CI」と「赤の check」を使う:
 
 | 列 | 中身 |
 |---|---|
 | repo#PR | |
 | 種類 | npm・github-actions・docker など |
-| 公開から | いちばん新しい version の公開から今までの時間（eligibleAt − `config.hours` から計算） |
-| eligibleAt | |
+| 公開から | いちばん新しい version の公開から今までの時間 |
+| eligibleAt | `config.hours` に届く時刻 |
 | CI | pass・fail・skipping の数 |
 | 赤の check | fail の check の名前（audit だけの赤か、試験や build の赤かを見分ける） |
-| 判定 | 対象・まだ・判定できない（null の依存の名前を添える）。`depsSource` が `commit-message` なら書き添える |
+| 判定 | 対象・まだ・判定できない |
 
 `dry-run` ならここで終わる。
 

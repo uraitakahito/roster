@@ -67,7 +67,7 @@ Dependabot の PR の判定の道具は `cli/src/release-age.ts`（`node cli/src
 `skill-sets/` の `SKILL.md` の frontmatter は、Claude Code に渡す設定。担当の居場所には、どの skill セットも `--add-dir` で全部渡る（`cli/src/run-role.ts`）ので、model が呼べる skill は、どの担当の居場所の一覧にも載る。
 
 - 担当の skill（`tpm start` や `tpm assign` が最初の入力で呼ぶ物・Product Manager が打つ物）は `disable-model-invocation: true` にする。一覧に載らず、model が自分で呼ばない。`when_to_use` は書かない（書いても効かない）。
-- model に呼ばせる skill（今は `/dependabot-triage` だけ）は、`description` に何をするかを、`when_to_use` に呼ぶ場面（言い方の例）と呼ばない場面（どの担当の居場所で呼ばないか）を書く。2 つは一覧で続けて載り、合わせて 1,536 字で切られる。
+- model に呼ばせる skill（今は `/dependabot-triage` と `dependabot-scan`）は、`description` に何をするかを、`when_to_use` に呼ぶ場面（言い方の例）と呼ばない場面（どの担当の居場所で呼ばないか）を書く。2 つは一覧で続けて載り、合わせて 1,536 字で切られる。
 - 引用符の無い値に「`: `」を書くと YAML として読めない。全角の「：」にするか、言い換える。
 - 引数を取る skill（本文で `$ARGUMENTS` などを使う物。今は `/audit` と `/dependabot-triage`）は、`argument-hint` に打てる物を書く（例 `"[dry-run] [max=<n>]"`）。/ を打つと、命令の名の後ろに出る。`[` で始まる値は `"…"` で囲む（囲まないと YAML の配列か誤りになる）。引数を取らない skill には書かない。
 - `allowed-tools` は書かない。担当はどれも `bypassPermissions` で起きる（[設定](/configuration/)）ので、許可を渡す欄は効かない。bypass をやめても、skill の `allowed-tools` が効くのは skill を呼んだ turn の間だけで、【brief】や【answer】が届いた後の turn には効かない（Claude Code の skills の文書「Pre-approve tools for a skill」）。担当の許可を変えるなら、skill でなく担当を起こす旗（`--permission-mode` など。`cli/src/run-role.ts`）か settings の allow で渡す（2026-11-22 t-qnfh）。道具を絞る `disallowed-tools` は、この決まりの外。
