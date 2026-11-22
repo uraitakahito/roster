@@ -213,7 +213,7 @@ export function buildProgram(): Command {
     .option('--at <時刻>', '--binding の時刻')
     .option('--active-from <時刻>', '居た間が、この時刻から後に掛かる')
     .option('--active-to <時刻>', '居た間が、この時刻までに掛かる')
-    .option('--active <true|false>', 'true で今居る者、false で今居ない者')
+    .option('--active <true|false>', 'true で今稼働中のアクター、false で停止したアクター')
     .option('--model <model>', 'その model で動いたことがある')
     .option('--effort <effort>', 'その effort で動いたことがある')
     .option('--launched-by <名か id>', 'その者が起こした')

@@ -171,11 +171,11 @@ const more = (next: unknown): string[] => typeof next === 'string' && next !== '
 /** 一覧の頭の 1 行。 */
 const head = (what: string, n: number, asOf: unknown): string => n === 0 ? `当たる${what}は無い（castlist の時刻 ${String(asOf)}）` : `${what} ${n}（castlist の時刻 ${String(asOf)}）`;
 
-/** アクター 1 行: 名・種類・居るか・登場と退場・最新の model と effort・ラベル・プロフィールの URL。 */
+/** アクター 1 行: 名・種類・状態（稼働中・停止。castlist の画面と同じ字）・登場と退場・最新の model と effort・ラベル・プロフィールの URL。 */
 function actorLine(url: string, a: ActorItem): string {
   const exited = a.last_exited_at === null ? '-' : `${a.last_exited_at}（${or(a.last_exit_type)}）`;
   const labels = Object.entries(a.labels ?? {}).map(([k, v]) => `${k}=${v}`).join('・') || '-';
-  return [a.name, a.kind, a.present ? '居る' : '居ない', `登場 ${or(a.first_entered_at)}`, `退場 ${exited}`, `${or(a.model)}・${or(a.effort)}`, labels, profileUrl(url, a.id)].join('  ');
+  return [a.name, a.kind, a.present ? '稼働中' : '停止', `登場 ${or(a.first_entered_at)}`, `退場 ${exited}`, `${or(a.model)}・${or(a.effort)}`, labels, profileUrl(url, a.id)].join('  ');
 }
 
 /** 線 1 本の行（名は点から引く）。 */
@@ -224,8 +224,8 @@ export function castlistShow(ctx: Context, target: string, options: JsonOption):
   const names = new Map(lineage.nodes.map(n => [n.id, n.name]));
   const s = a.state;
   const now = s.present
-    ? `居る（${or(s.presence)}・登場 ${or(s.entered_at)}）`
-    : `居ない（${s.presence ?? 'まだ登場が無い'}・登場 ${or(s.entered_at)}・最後の退場 ${or(s.exited_at)}）`;
+    ? `稼働中（${or(s.presence)}・登場 ${or(s.entered_at)}）`
+    : `停止（${s.presence ?? 'まだ登場が無い'}・登場 ${or(s.entered_at)}・最後の退場 ${or(s.exited_at)}）`;
   const c = a.current_settings;
   return [
     `${a.name}（${a.kind}・issuer ${a.issuer}）  ${profileUrl(url, a.id)}`,
