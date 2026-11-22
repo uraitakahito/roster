@@ -1,5 +1,7 @@
 // 試験用の adapter。メッセージ・居場所・状態を、状態の folder の下のファイルに書くだけ（命令は動かさない）。
 // cmux 無しで決まりの 1 周を試すためと、連携の口が cmux の形に寄りすぎていないかを確かめるためにある。
+import { existsSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import type { State } from '../state.ts';
 import type { Delivery, Incoming, MailboxEntry, MessageTrace, Seat, SeatLabel, SpawnOptions, StatusKey, Transport } from './types.ts';
 
@@ -18,6 +20,8 @@ export interface SeatLook extends SeatLabel {
 /** ファイルに書いたメッセージ 1 件。 */
 export interface FileMessage {
   id: string
+  /** 送った居場所。 */
+  sender?: string
   from: string
   text: string
   replyTo?: string
@@ -47,7 +51,7 @@ export class FileTransport implements Transport {
 
   send(to: string, from: string, text: string, replyTo?: string): Delivery {
     const id = `m${this.inbox(to).length + 1}-${fileName(to)}`;
-    const message: FileMessage = { id, from, text, ...(replyTo === undefined ? {} : { replyTo }) };
+    const message: FileMessage = { id, sender: this.self, from, text, ...(replyTo === undefined ? {} : { replyTo }) };
     this.state.append(`${DIR}/inbox/${fileName(to)}.jsonl`, message);
     return { id, delivered: this.heldFrom(to) === undefined };
   }
@@ -98,7 +102,12 @@ export class FileTransport implements Transport {
     }));
   }
 
+  /** cmux と同じく、その居場所が送ってまだ相手に届いていない物があれば、既読にしない。 */
   markQueuedRead(address: string): MailboxEntry[] {
+    const dir = join(this.state.dir, DIR, 'inbox');
+    const boxes = existsSync(dir) ? readdirSync(dir).filter(f => f.endsWith('.jsonl')).map(f => f.slice(0, -'.jsonl'.length)) : [];
+    const sentQueued = boxes.some(box => this.mailbox(box).some(m => m.state === 'queued' && this.inbox(box).find(x => x.id === m.id)?.sender === address));
+    if (sentQueued) return [];
     const queued = this.mailbox(address).filter(m => m.state === 'queued');
     for (const m of queued) this.mark(m.id, { state: 'read' });
     return queued;

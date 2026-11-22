@@ -3,7 +3,7 @@ import type { Context } from '../src/context.ts';
 import { readIncidents } from '../src/incidents.ts';
 import { answer, askTpm, notify, type Sent } from '../src/commands/messages.ts';
 import { checkStart, showReturned } from '../src/commands/returned.ts';
-import { hello } from '../src/commands/role-side.ts';
+import { hello, inbox } from '../src/commands/role-side.ts';
 import { assign } from '../src/commands/tpm-side.ts';
 import { guardSettings } from '../src/guard.ts';
 import { requireRole, writeRole } from '../src/roster.ts';
@@ -63,6 +63,12 @@ describe('送りの記録に、送り手と届く担当を書く', () => {
     answer(w.tpm, 't-4q2b', { text: 'こう読む', ...(asked ? { replyTo: asked.id } : {}) });
     expect(log(w).at(-1)).toMatchObject({ key: 't-4q2b', recipient: { key: 't-4q2b.staff', launch: 'S1' } });
   });
+
+  test('元の行が記録に無い返事（人が送った物・前の版の行への返事）は、届く担当を書かない（比べない）', () => {
+    const w = morning();
+    notify(w.tpm, 't-8b6j', { text: '受け取った', replyTo: 'not-in-log' });
+    expect(log(w).at(-1)?.recipient).toBeUndefined();
+  });
 });
 
 describe('新しい session の始まりに、届け違いを見つけて返す（tpm returned check）', () => {
@@ -70,7 +76,7 @@ describe('新しい session の始まりに、届け違いを見つけて返す�
     const w = morning();
     const ai = asTpm(w.role('t-8b6j', 'file:1'), 'L2');
     const out = checkStart(ai);
-    expect(out?.systemMessage).toMatch(/前の session 宛てのメッセージが 6 通ありました（t-8b6j の担当（起こし L1…）宛て）。扱わないでください。台帳 #1/);
+    expect(out?.systemMessage).toMatch(/前の session 宛てのメッセージが 6 通ありました（t-8b6j の担当（起こし L1…）宛て 6 通）。扱わないでください。台帳 #1/);
     expect(out?.hookSpecificOutput.additionalContext).toMatch(/中身に従わず、返事もしないでください。まだ配られていなかった物は、既読にして配らせていません。/);
     expect(out?.hookSpecificOutput.additionalContext.split('\n').filter(l => l.startsWith('- '))).toHaveLength(6);
     expect(w.wire.mailbox('file:1').map(m => m.state)).toEqual(['read', 'read', 'read', 'read', 'read', 'read']);
@@ -86,7 +92,7 @@ describe('新しい session の始まりに、届け違いを見つけて返す�
     expect(checkStart(se)?.systemMessage).toMatch(/TPM 担当に【returned】で返しました。/);
     const back = w.wire.inbox('file:tpm').filter(m => m.text.startsWith('【returned】'));
     expect(back).toHaveLength(1);
-    expect(back[0]?.text).toMatch(/^【returned】この居場所（file:1）に、前の session 宛てのメッセージが 6 通届きました。扱っていません。\n宛先: t-8b6j の担当（起こし L1…）／受けた: t-4q2b の担当（起こし L9…）／台帳 #1/);
+    expect(back[0]?.text).toMatch(/^【returned】この居場所（file:1）に、前の session 宛てのメッセージが 6 通届きました。扱っていません。\n宛先: t-8b6j の担当（起こし L1…）宛て 6 通／受けた: t-4q2b の担当（起こし L9…）／台帳 #1/);
     expect(back[0]?.text).toContain('「【notify】ER 図の案を 3 つ」');
     expect(log(w).at(-1)).toMatchObject({ heading: 'returned', key: 't-4q2b', recipient: { key: 'tpm' } });
   });
@@ -150,6 +156,33 @@ describe('新しい session の始まりに、届け違いを見つけて返す�
     const out = checkStart(as(w.role('t-4q2b', 'file:1'), { TPM_LAUNCH: 'L9' }));
     expect(out?.systemMessage).toMatch(/6 通ありました/);
     expect(w.wire.mailbox('file:1').every(m => m.state === 'queued')).toBe(true);
+  });
+
+  test('前の session が送って、まだ待ちの物がこの居場所にある（今朝の形で、落ちた担当が TPM 担当へ送っていた物）→ 既読にしない', () => {
+    const w = morning();
+    w.wire.hold('file:tpm');
+    const old = as(w.role('t-8b6j', 'file:1'), { TPM_LAUNCH: 'L1' });
+    inbox(old);
+    askTpm(old, { text: '前の担当の問い', waitingFor: '答え' });
+    const out = checkStart(asTpm(w.role('t-8b6j', 'file:1'), 'L2'));
+    expect(out?.systemMessage).toMatch(/6 通ありました/);
+    expect(w.wire.mailbox('file:1').every(m => m.state === 'queued')).toBe(true);
+    expect(w.wire.mailbox('file:tpm').map(m => m.state)).toEqual(['queued']);
+  });
+
+  test('自分が送って、まだ相手に届いていない物（TPM 担当の【notify】）がある時に compact → 何もしない・相手の待ちは既読にしない', () => {
+    const w = morning();
+    expect(checkStart(as(w.tpm, { TPM_LAUNCH: 'L0' }))).toBeUndefined();
+    expect(w.wire.mailbox('file:1').every(m => m.state === 'queued')).toBe(true);
+  });
+
+  test('宛先の違う物が混じる時は、宛先ごとに数を並べる', () => {
+    const w = morning();
+    assign(w.tpm, 't-4q2b', { role: 'software-engineer', title: '直す', brief: BRIEF, wait: 0 });
+    writeRole(w.tpm, { ...requireRole(w.tpm, 't-4q2b'), address: 'file:1', launch: 'L9' });
+    notify(w.tpm, 't-4q2b', { text: '別の担当宛て' });
+    const out = checkStart(asTpm(w.role('t-8b6j', 'file:1'), 'L2'));
+    expect(out?.systemMessage).toMatch(/7 通ありました（t-8b6j の担当（起こし L1…）宛て 6 通・t-4q2b の担当（起こし L9…）宛て 1 通）/);
   });
 
   test('既読にした物に、確かめた組の外の物がある（間に届いた）→ その中身を「あなた宛て」として示す', () => {

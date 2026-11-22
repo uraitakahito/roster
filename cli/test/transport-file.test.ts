@@ -18,8 +18,8 @@ describe('FileTransport', () => {
     at('file:1').send('file:tpm', 'SE t-x7k2', '【end】b', first.id);
     expect(first.delivered).toBe(true);
     expect(at('file:tpm').inbox('file:tpm')).toEqual([
-      { id: first.id, from: 'SE t-x7k2', text: '【done】a' },
-      { id: expect.any(String) as string, from: 'SE t-x7k2', text: '【end】b', replyTo: first.id },
+      { id: first.id, sender: 'file:1', from: 'SE t-x7k2', text: '【done】a' },
+      { id: expect.any(String) as string, sender: 'file:1', from: 'SE t-x7k2', text: '【end】b', replyTo: first.id },
     ]);
     expect(at('file:tpm').inbox('file:1')).toEqual([]);
   });
