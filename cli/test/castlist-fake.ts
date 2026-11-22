@@ -95,7 +95,8 @@ export async function startFakeCastlist(now = '2026-11-20T12:00:00.000Z'): Promi
   });
   return {
     url: `http://127.0.0.1:${port}`,
-    requests: () => readFileSync(log, 'utf8').split('\n').filter(l => l !== '').map(l => JSON.parse(l) as CastlistRequest),
+    // JSON の記録は undefined の欄を落とすので、Origin の無い要求も origin の欄を持つように戻す。
+    requests: () => readFileSync(log, 'utf8').split('\n').filter(l => l !== '').map(l => ({ origin: undefined, ...JSON.parse(l) as Omit<CastlistRequest, 'origin'> })),
     setNow: (iso) => {
       writeFileSync(control, JSON.stringify({ now: iso }));
     },
