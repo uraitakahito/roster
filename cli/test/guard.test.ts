@@ -36,6 +36,7 @@ const infra: Record<string, InfraEnv> = {
   'apple-container': { guard: 'free', match: ['container '] },
   'windmill': { guard: 'tpm', match: ['wmill '] },
   'aws-staging': { guard: 'pm', match: ['aws ', 'ssh staging'] },
+  'castlist': { guard: 'pm-only', match: ['container stop castlist'] },
 };
 const now = new Date('2026-11-20T12:00:00.000Z');
 const open: Approval = { until: '2026-11-20T12:30:00.000Z' };
@@ -43,7 +44,7 @@ const expired: Approval = { until: '2026-11-20T11:59:59.000Z' };
 /** github を宣言した設定（guard は、1 つでもあるかだけを見る）。 */
 const githubSource: ConfigSource = { name: 'web', dir: '/w/web', file: '/w/web/.claude/roles/config.jsonc', exists: true, written: ['tracker'], config: { tracker: 'github', transport: 'cmux', infra: {}, roles: {} } };
 const ask = (command: string, role?: RoleName, approval?: Approval, tracker: 'none' | 'github' = 'none') =>
-  judge({ command, role, config: { infra, trackers: { jira: [], github: tracker === 'github' ? [githubSource] : [] } }, approvals: { 'aws-staging': approval }, now });
+  judge({ command, role, config: { infra, trackers: { jira: [], github: tracker === 'github' ? [githubSource] : [] } }, approvals: { 'aws-staging': approval, 'castlist': approval }, now });
 
 describe('touched', () => {
   test('match のどれかを含む環境を返す', () => {
@@ -66,6 +67,11 @@ describe('環境の手続き', () => {
     ['PM の承認が切れた', 'aws ecs update-service', 'devops-engineer', expired, false],
     ['承認があっても、DevOps Engineer 担当でない', 'aws ecs update-service', 'software-engineer', open, false],
     ['2 つの環境に触るなら、どちらも満たす', 'container ls && aws s3 ls', 'devops-engineer', undefined, false],
+    ['PM だけを、Software Engineer 担当が打つ', 'container stop castlist', 'software-engineer', undefined, false],
+    ['PM だけを、TPM 担当が打つ', 'container stop castlist', undefined, undefined, false],
+    ['PM だけを、DevOps Engineer 担当が打つ', 'container stop castlist', 'devops-engineer', undefined, false],
+    ['PM だけは、承認があっても DevOps Engineer 担当が打てない', 'container stop castlist', 'devops-engineer', open, false],
+    ['PM だけを、Auditor が打つ', 'container stop castlist', 'auditor', undefined, false],
   ])('%s', (_, command, role, approval, allow) => {
     expect(ask(command, role, approval).allow).toBe(allow);
   });
@@ -74,6 +80,8 @@ describe('環境の手続き', () => {
     expect(ask('wmill sync push', 'software-engineer')).toEqual({ allow: false, reason: expect.stringContaining('tpm ask devops') as string });
     expect(ask('aws s3 rm x', 'devops-engineer')).toEqual({ allow: false, reason: expect.stringContaining('tpm infra approve aws-staging') as string });
     expect(ask('aws s3 rm x', 'devops-engineer', expired)).toEqual({ allow: false, reason: expect.stringContaining('承認は 2026-11-20T11:59:59.000Z で切れた') as string });
+    expect(ask('container stop castlist', 'devops-engineer')).toEqual({ allow: false, reason: expect.stringContaining('Product Manager が自分の terminal で') as string });
+    expect(ask('container stop castlist', 'devops-engineer')).toEqual({ allow: false, reason: expect.stringContaining('tpm ask pm') as string });
   });
 });
 
@@ -373,6 +381,7 @@ describe('tpm infra と tpm guard', () => {
       '- apple-container  自由  match: "container "',
       '- windmill  TPM に相談（DevOps Engineer 担当だけ）  match: "wmill "',
       '- aws-staging  PM の承認（DevOps Engineer 担当だけ）  承認あり（2026-11-20T12:30:00.000Z まで・deploy）  match: "aws " "ssh staging"',
+      '- castlist  PM だけ（どの担当も打てない）  match: "container stop castlist"',
     ]);
     infraRevoke(w.tpm, 'aws-staging');
     expect(guard(devops(w), hook('aws s3 ls')).allow).toBe(false);
@@ -385,6 +394,15 @@ describe('tpm infra と tpm guard', () => {
     expect(() => infraApprove(w.tpm, 'windmill', { minutes: 30 })).toThrow(/承認は要りません/);
     expect(() => infraApprove(w.tpm, 'nope', { minutes: 30 })).toThrow(/環境がありません: nope/);
     expect(() => infraApprove(w.tpm, 'aws-staging', { minutes: 0 })).toThrow(/--minutes/);
+    expect(() => infraApprove(w.tpm, 'castlist', { minutes: 30 })).toThrow(/Product Manager だけ/);
+  });
+
+  test('PM だけの環境は、infra run でも打てない（どの担当も）', () => {
+    const w = world({ infra });
+    expect(() => infraRun(devops(w), 'castlist', ['container', 'stop', 'castlist'])).toThrow(/Product Manager が自分の terminal で/);
+    expect(() => infraRun(w.tpm, 'castlist', ['container', 'stop', 'castlist'])).toThrow(/Product Manager が自分の terminal で/);
+    expect(w.calls).toEqual([]);
+    expect(w.tpm.state.lines('infra.jsonl')).toEqual([]);
   });
 
   test('infra run は手続きを見てから打ち、記録を残す', () => {
