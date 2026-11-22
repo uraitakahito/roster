@@ -85,9 +85,11 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
       .action((text: string, options: { title?: string }) => print(reportDependabot(createContext(), id, { text, ...options })));
   }
 
-  program.command('answer <key> <text>').description('TPM 担当が【answer】を返す（課題に「決定」の記録も書く）')
+  program.command('answer <key> <text>').description('TPM 担当が【answer】を返す（課題に「決定」の記録も書き、置き場の返事待ちのページを答えたにする）')
     .option('--reply-to <id>', '返事の先のメッセージの id')
-    .action((key: string, text: string, options: { replyTo?: string }) => print(answer(createContext(), key, { text, ...options })));
+    .option('--url <URL>', '答えた確認のページ（何度でも。その Key の返事待ちが 2 枚以上ある時に、どれへの答えかを書く）', collect, [] as string[])
+    .option('--all', 'その Key の返事待ちのページの、みなへの答え')
+    .action((key: string, text: string, options: { replyTo?: string, url: string[], all?: boolean }) => print(answer(createContext(), key, { text, urls: options.url, ...(options.replyTo === undefined ? {} : { replyTo: options.replyTo }), ...(options.all ? { all: true } : {}) })));
   program.command('notify <key> <text>').description('TPM 担当が【notify】を送る（返事は要らない）')
     .option('--reply-to <id>', '返事の先のメッセージの id')
     .action((key: string, text: string, options: { replyTo?: string }) => print(notify(createContext(), key, { text, ...options })));

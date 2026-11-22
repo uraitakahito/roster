@@ -11,6 +11,7 @@ import { readRole } from '../roster.ts';
 import { copyRefs, fileImport, findFiles, removeFiles } from './file.ts';
 import { roleOf } from './infra.ts';
 import { assertRead } from './messages.ts';
+import { inState, isStorePage, REPLY_LABEL, setReply, type ReplyState } from './reply.ts';
 import { call, compareStored, down, fetchTo, inStore, KEY, localPath, pagesDir, pagesUrl, PROJECT, reason, removeLocal, requireKey, selfAddress, writeCopy } from './store.ts';
 
 /** ページの種類。file の名の頭になる（`<種類>-<番号>.html`）。置き場は名の一覧を持たないので、種類を足すのはここだけ。 */
@@ -41,6 +42,10 @@ export interface PageRecord {
   size: number
   /** 置き場の中の path（`/<project>/<Key>/<種類>-<番号>.html`）。 */
   path: string
+  /** 返事待ちにした時刻（tpm ask pm）。返事を求めていないページと、0.5.0 より前の置き場の答えには無い。 */
+  asked_at?: string
+  /** 答えた時刻（tpm answer）。まだ答えていなければ無い。 */
+  answered_at?: string
 }
 
 /** 課題の Key のページの控えを置く folder（`<控えの folder>/<状態の folder の名>/<Key>`）。 */
@@ -153,7 +158,15 @@ export interface PageListOptions {
   oldest?: boolean
   /** ほかの project のページも出す。 */
   allProjects?: boolean
+  /** 返事の状態で絞る（waiting は返事待ち、answered は答えた物だけ）。 */
+  reply?: string
   json?: boolean
+}
+
+/** `--reply` の値を読む。 */
+function replyState(value: string): ReplyState {
+  if (value === 'waiting' || value === 'answered') return value;
+  throw new TpmError('--reply は waiting（返事待ち）か answered（答えた）にしてください');
 }
 
 /** 置き場のページを絞って探す。既定は、今の project の新しい順。--json は記録の配列（url を足した物）を出す。 */
@@ -165,13 +178,39 @@ export function pageList(ctx: Context, options: PageListOptions): string[] {
     if (value !== undefined) query.set(name, value);
   }
   if (options.oldest) query.set('sort', 'created_at');
+  const reply = options.reply === undefined ? undefined : replyState(options.reply);
+  if (reply !== undefined) query.set('reply', reply);
   const r = call(ctx, [`${pagesUrl(ctx.env)}/api/pages?${query.toString()}`]);
   if (r.code === '000') throw down(ctx, '');
   if (r.code !== '200') throw new TpmError(`置き場が一覧を返しませんでした（${r.code}）: ${reason(r.body)}`);
-  const pages = (JSON.parse(r.body) as { pages: PageRecord[] }).pages.map(p => ({ ...p, url: `${pagesUrl(ctx.env)}${p.path}` }));
+  const pages = (JSON.parse(r.body) as { pages: PageRecord[] }).pages
+    // 0.5.0 より前の置き場は reply の絞りを読まずにみな返すので、記録の欄でも絞る。
+    .filter(p => reply === undefined || inState(p, reply))
+    .map(p => ({ ...p, url: `${pagesUrl(ctx.env)}${p.path}` }));
   if (options.json) return [JSON.stringify(pages, null, 2)];
   if (pages.length === 0) return ['合うページは無い'];
   return pages.map(p => [p.created_at, p.key, `${p.kind}-${p.n}`, p.role, p.workspace === '' ? '-' : p.workspace, p.url, p.title].join('  '));
+}
+
+/**
+ * ページの返事の状態を、手で直す（TPM 担当だけ）。いつもは tpm ask pm が返事待ちに、tpm answer が答えたにする。
+ * 使うのは、tpm answer を通らずに済んだ確認（取り下げた・次の依頼書で答えた）と、置き場が応えない間に送った確認。
+ */
+export function pageReply(ctx: Context, urls: string[], options: { waiting?: boolean, answered?: boolean }): string[] {
+  if (roleOf(ctx.env) !== undefined) throw new TpmError('ページの返事の状態を手で直せるのは TPM 担当だけです。直すページの URL と訳を、tpm ask tpm で TPM 担当に送って頼んでください');
+  if (options.waiting === options.answered) throw new TpmError('--waiting（返事待ちにする）か --answered（答えたにする）の、どちらか 1 つを付けてください');
+  if (urls.length === 0) throw new TpmError('ページの URL を 1 つ以上書いてください');
+  const state: ReplyState = options.answered ? 'answered' : 'waiting';
+  // 書く前に、みな置き場のページの URL かを見る（途中まで書いて止まらないように）。
+  const foreign = urls.find(url => !isStorePage(ctx, url));
+  if (foreign !== undefined) throw new TpmError(`置き場（${pagesUrl(ctx.env)}）のページの URL ではありません: ${foreign}`);
+  return urls.map((url) => {
+    const result = setReply(ctx, url, state);
+    if (result === 'done') return `${REPLY_LABEL[state]}にした: ${url}`;
+    if (result === 'down') throw down(ctx, '返事の状態は書いていません。');
+    if (result === 'old') throw new TpmError('置き場（pagetray）の版が古く、返事の状態を持てません（0.5.0 から）。tpm ask devops で置き場の版を上げるよう頼んでください');
+    throw new TpmError(`そのページは置き場にありません: ${url}`);
+  });
 }
 
 /** 控えの folder にあるページ（`<project>/<Key>/<種類>-<番号>.html`）を並べる。 */

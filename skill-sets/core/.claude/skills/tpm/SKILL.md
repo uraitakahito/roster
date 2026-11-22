@@ -96,7 +96,7 @@ disable-model-invocation: true
 | 見出し | すること |
 |---|---|
 | 【ask-tpm】 | 課題の概要をもとに答える（`tpm notify <Key> "<答え>" --reply-to <id>`）。Product Manager の判断が要るなら、Product Manager に聞いてから答える |
-| 【ask-pm】 | Product Manager に、確認のページの URL と項目を伝える（ページは置き場の一覧の UI の新着に出ている。その場で開いて見せる時だけ `tpm show <URL>`）。答えを `tpm answer <Key> "<答え>"` で返す（課題があれば「決定」の記録も書かれる） |
+| 【ask-pm】 | Product Manager に、確認のページの URL と項目を伝える（ページは置き場の一覧の UI の新着に出ている。その場で開いて見せる時だけ `tpm show <URL>`）。答えを `tpm answer <Key> "<答え>"` で返す（課題があれば「決定」の記録も書かれ、置き場の返事待ちの確認のページが「答えた」になる。その Key の返事待ちが 2 枚以上あって止まったら、出た URL から答えたページを `--url <URL>` で書くか、みなへの答えなら `--all` を付けて打ち直す） |
 | 【ask-devops】 | DevOps Engineer 担当に依頼書を書いて回す（`tpm assign devops …`） |
 | 【incident】 | 受け取ったと返す（台帳にはもう入っている）。「[重い]」と付いていたら、すぐ Product Manager に伝える（下の「6. 監査」） |
 | 【audit】 | Auditor が Product Manager へじかに出した監査の報告の写し。**伝え直さない・止めない。**受け取ったと返す（`tpm notify audit "受け取った" --reply-to <id>`） |
@@ -110,6 +110,7 @@ disable-model-invocation: true
 - `tpm dismiss` と続きの `tpm assign` が「まだ済んでいない物があります」と止まったら、自分が送った物（まだ届いていないメッセージ・【done】が返っていない依頼書）と合わない手を打とうとしている。Product Manager が決めたことでなければ、その依頼書をどうするかを Product Manager に確かめる。取り消すなら `--supersede`、続きの依頼書を前の依頼書の後にさせるなら `--after`（assign だけ）を付けて打ち直す（担当への本文に「取り消す: brief-N」「brief-N を済ませてから、これをする」と載る）。`tpm answer`・`tpm notify` は止まらない。
 - **Product Manager の決定を書き写す時**（【answer】・`tpm incident drop --why` などの訳・依頼書）は、Product Manager の言葉を原文のまま「」で写し、あなたの言い替えはその後ろに書く（言い替えだけだと、Auditor が伝え方を確かめられない）。
 - Product Manager の答えを待つ間は `tpm wait pm "<何を>"`、答えが来たら `tpm wait work "<段>"` などに更新する。Product Manager に返して手を止める回は、毎回その回の最後に打つ（上の 1 の 3）。
+- Product Manager の答えは、次の依頼書に書くだけで済ませず、`tpm answer` でも返す（返さないと、置き場の確認のページが返事待ちのまま残り、Product Manager の画面の「返事待ち N 件」が減らない）。答えが要らなくなった確認（取り下げた・別の形で決まった）は、`tpm page reply <URL>… --answered` で印を外す。今の返事待ちは `tpm page list --reply waiting` で見る。`tpm dismiss` が「返事待ちのページが残っています」と出したら、同じように外す（protocol.md の「ページ」の返事の状態）。
 - ページを消してよいのは TPM 担当だけ（protocol.md の「ページ」）。担当が【ask-tpm】で「試しに置いた・置き間違えた」ページを送ってきたら、`tpm page delete <URL>…` で消す物を見て、`--yes` を付けて消す（戻せない）。置き間違えた project ごとなら `--project <名>`、Key ごとなら `--key <Key>`。Product Manager が消したいと言ったときも同じ。消したら `tpm notify <Key> "消した" --reply-to <id>` で返す。file（画像など）も同じで、`tpm file delete <URL>…` で消す物と参照しているページを見て、`--yes` を付けて消す。依頼書に画像や PDF を付ける時は、上げる前に Read で見て、秘密が写っていないか確かめる（`tpm file put <file> --reviewed --key <Key>`）。
 - Product Manager が共有の環境を変えることを承認したら、`tpm infra approve <環境> --minutes <分> --note "<何の承認か>"` で承認を書いてから【answer】を返す。済んだら `tpm infra revoke <環境>` で承認を消す。
 

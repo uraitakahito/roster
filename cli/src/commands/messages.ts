@@ -10,6 +10,7 @@ import { readRole, requireRole, requireSelf, requireTpm, writeRole, type RoleRec
 import { TpmError } from '../skill-sets.ts';
 import { MAX_POINTS, type Note, type NoteKind, type NoteLink } from '../tracker/types.ts';
 import type { Incoming } from '../transport/types.ts';
+import { isStorePage, replyLine, waitingUrls } from './reply.ts';
 import { isPageUrl } from './store.ts';
 
 /** 記録の 1 行目の一言に使う長さの上限（メッセージの本文から作るとき）。 */
@@ -421,7 +422,9 @@ export function askPm(ctx: Context, options: { url: string, items: string[], wai
     links: [{ label: '確認', url: options.url }],
     points: options.items,
   });
-  return [...recorded, toTpm(ctx, self, 'ask-pm', body), ...wait(ctx, 'pm', options.waitingFor)];
+  const sent = toTpm(ctx, self, 'ask-pm', body);
+  // 置き場の確認のページを返事待ちにする（Product Manager が、一覧の UI の印と件数で気づく）。書けなくても、送った事は変わらない。
+  return [...recorded, sent, ...replyLine(ctx, options.url, 'waiting'), ...wait(ctx, 'pm', options.waitingFor)];
 }
 
 /** 共有の環境で DevOps Engineer 担当の手が要ることを、TPM 担当に送る（【ask-devops】）。 */
@@ -629,12 +632,45 @@ export function issueCopyLine(role: RoleRecord): string | undefined {
   return undefined;
 }
 
-/** Product Manager の答えを返す。課題があれば、返す前に「決定」の記録を書く。 */
-export function answer(ctx: Context, key: string, options: { text: string, replyTo?: string }): string[] {
+/** `tpm answer` の旗。 */
+export interface AnswerOptions {
+  text: string
+  replyTo?: string
+  /** 答えた確認のページの URL。無ければ、その Key の返事待ちのページ（1 枚の時だけ）。 */
+  urls?: string[]
+  /** その Key の返事待ちのページの、みなへの答え。 */
+  all?: boolean
+}
+
+/**
+ * 答えたにする、置き場のページの URL。--url があればそれ。無ければ、その Key の返事待ちのページ。
+ * 返事待ちが 2 枚以上あって、どれへの答えかが書かれていなければ、送る前に止まる（別の確認まで「答えた」にしないため）。
+ * 置き場に聞けない時（止まっている）と、返事の状態を持てない前の置き場では空（印は付けないが、答えは返す）。
+ */
+function answeredPages(ctx: Context, key: string, options: AnswerOptions): string[] {
+  const urls = options.urls ?? [];
+  const foreign = urls.find(url => !isStorePage(ctx, url));
+  if (foreign !== undefined) throw new TpmError(`--url は、置き場の確認のページの URL にしてください: ${foreign}`);
+  if (urls.length > 0) return urls;
+  const waiting = waitingUrls(ctx, key) ?? [];
+  if (waiting.length > 1 && options.all !== true) {
+    throw new TpmError([
+      `${key} に、返事待ちのページが ${waiting.length} 枚あります。答えは送っていません・記録も書いていません。`,
+      ...waiting,
+      'どのページへの答えかを --url <URL>（何度でも）で書くか、みなへの答えなら --all を付けて、打ち直してください',
+    ].join('\n'));
+  }
+  return waiting;
+}
+
+/** Product Manager の答えを返す。課題があれば、返す前に「決定」の記録を書く。返した後、置き場の返事待ちのページを答えたにする。 */
+export function answer(ctx: Context, key: string, options: AnswerOptions): string[] {
   const role = receiver(ctx, key);
   if (role.address !== undefined) assertNotRepeat(ctx, 'answer', TPM_TITLE, role.address, options.text, options.replyTo);
+  const pages = answeredPages(ctx, key, options);
   const recorded = record(ctx, role, { kind: '決定', role: 'TPM', summary: oneLine(options.text), links: [], points: [] });
-  return [...recorded, toRole(ctx, role, 'answer', options.text, options.replyTo)];
+  const sent = toRole(ctx, role, 'answer', options.text, options.replyTo);
+  return [...recorded, sent, ...pages.flatMap(url => replyLine(ctx, url, 'answered'))];
 }
 
 /** 担当に、返事の要らないメッセージを送る（【notify】）。 */
@@ -653,7 +689,12 @@ export function dismiss(ctx: Context, key: string, options: { handover: boolean,
   const sent = toRole(ctx, role, 'dismiss', body);
   role.dismissed = options.handover ? 'handover' : 'done';
   writeRole(ctx, role);
-  return [sent];
+  // 答えが要らなくなった確認が、置き場で返事待ちのまま残らないように知らせる（止めない）。
+  const waiting = waitingUrls(ctx, key) ?? [];
+  const left = waiting.length === 0
+    ? []
+    : [`置き場に、${key} の返事待ちのページが ${waiting.length} 枚残っています:`, ...waiting, 'もう答えが要らなければ、tpm page reply <URL>… --answered で印を外す'];
+  return [sent, ...left];
 }
 
 /** URL を自分の居場所で開いて、人に見せる。 */

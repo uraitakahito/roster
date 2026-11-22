@@ -84,7 +84,7 @@ Sustaining Engineer 担当から届くメッセージ:
 |---|---|
 | 【merge-request】 | CI が緑か（`gh pr checks`）、`release-age.ts` がまだ 0 か、差分が依頼のとおりかを自分で見てから `gh pr merge <PR> --repo <config.owner>/<repo> --<config.mergeMethod>`（repo の作法が違えばそれに従う）。merge の commit を `tpm notify "<repo>#<PR>" "merge した: <commit>"` で返す。 |
 | 【ask-tpm】 | 答える（`tpm notify`）。Product Manager の判断が要るなら、Product Manager に聞いてから答える。 |
-| 【ask-pm】 | Product Manager に、確認のページの URL と項目を伝える（その場で開いて見せる時だけ `tpm show <URL>`）。答えを `tpm answer` で返す。 |
+| 【ask-pm】 | Product Manager に、確認のページの URL と項目を伝える（その場で開いて見せる時だけ `tpm show <URL>`）。答えを `tpm answer` で返す（置き場の返事待ちの確認のページが「答えた」になる）。 |
 | 【not-yet】 | 時間の【not-yet】なら表の「待ち」に戻し、その担当は 5 と同じに閉じる。`rebase に … 分応じない` の【not-yet】なら、もう一度待たせるか、worktree で `origin/main` を merge させるかを決めて返す。 |
 | 【recreated】 | group の PR が閉じて新しい番号で作り直された。表の行を新しい番号に替え、同じ Sustaining Engineer 担当に新しい番号で続けさせる（居場所の題は担当が替える。名簿の Key は元の `<repo>#<旧>` のまま）。判定は変わらない。 |
 | 【end】 | 5 へ。 |
