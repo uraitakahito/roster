@@ -18,6 +18,11 @@
 //    （/ を打つ人に、渡せる物が見えない）
 // 8. 本文が引数の置き場を使わないのに argument-hint がある（渡しても効かない物を示す）
 // 9. argument-hint が空でない字でない（引用符で囲まない [x] は YAML の配列になり、[ ] が消える）
+//
+// allowed-tools は、skill を呼んだ turn だけ道具の許可を渡す欄。次も止める（2026-11-22 t-qnfh）:
+//
+// 10. allowed-tools の欄がある（担当は bypassPermissions で起きるので効かず、bypass をやめても
+//     呼んだ turn だけしか効かない。許可を渡すなら担当を起こす旗か settings の allow で）
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -125,6 +130,10 @@ export function checkSkill(file, text) {
   } else if (hint !== undefined) {
     errors.push(`${file}: 本文が引数を使わないのに argument-hint がある`);
   }
+  if (Object.hasOwn(fm, "allowed-tools"))
+    errors.push(
+      `${file}: allowed-tools がある（担当は bypassPermissions で起き効かない。効いても呼んだ turn だけ。書かない）`,
+    );
   return errors;
 }
 

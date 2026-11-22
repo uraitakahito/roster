@@ -70,8 +70,9 @@ Dependabot の PR の判定の道具は `cli/src/release-age.ts`（`node cli/src
 - model に呼ばせる skill（今は `/dependabot-triage` だけ）は、`description` に何をするかを、`when_to_use` に呼ぶ場面（言い方の例）と呼ばない場面（どの担当の居場所で呼ばないか）を書く。2 つは一覧で続けて載り、合わせて 1,536 字で切られる。
 - 引用符の無い値に「`: `」を書くと YAML として読めない。全角の「：」にするか、言い換える。
 - 引数を取る skill（本文で `$ARGUMENTS` などを使う物。今は `/audit` と `/dependabot-triage`）は、`argument-hint` に打てる物を書く（例 `"[dry-run] [max=<n>]"`）。/ を打つと、命令の名の後ろに出る。`[` で始まる値は `"…"` で囲む（囲まないと YAML の配列か誤りになる）。引数を取らない skill には書かない。
+- `allowed-tools` は書かない。担当はどれも `bypassPermissions` で起きる（[設定](/configuration/)）ので、許可を渡す欄は効かない。bypass をやめても、skill の `allowed-tools` が効くのは skill を呼んだ turn の間だけで、【brief】や【answer】が届いた後の turn には効かない（Claude Code の skills の文書「Pre-approve tools for a skill」）。担当の許可を変えるなら、skill でなく担当を起こす旗（`--permission-mode` など。`cli/src/run-role.ts`）か settings の allow で渡す（2026-11-22 t-qnfh）。道具を絞る `disallowed-tools` は、この決まりの外。
 
-`pnpm run check` の `docs-site/scripts/check-skills.mjs` が、欄の名・`name` と folder の揃い・`when_to_use` と `disable-model-invocation` の組・字数・`argument-hint` と本文の引数の組を見る。
+`pnpm run check` の `docs-site/scripts/check-skills.mjs` が、欄の名・`name` と folder の揃い・`when_to_use` と `disable-model-invocation` の組・字数・`argument-hint` と本文の引数の組・`allowed-tools` が無いことを見る。
 
 ## この docs
 
