@@ -9,7 +9,7 @@ import { recordGateStop, recordWait } from '../evidence.ts';
 import { addIncident, foldIntoIncident, incidentLine, incidentType, INCIDENT_TYPES, readIncidents, tagLines } from '../incidents.ts';
 import { message, ROLES, TPM_TITLE, WAIT, WAIT_CLOSE, WAIT_NEXT_BRIEF, type HeadingId, type WaitKind } from '../protocol.ts';
 import { readRole, requireRole, requireSelf, requireTpm, subjectOf, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
-import { addReview, openReviews, patchReview, VERDICTS, type Verdict } from '../reviews.ts';
+import { addReview, openReviews, patchReview, removeReview, VERDICTS, type Verdict } from '../reviews.ts';
 import { TpmError } from '../skill-sets.ts';
 import { MAX_POINTS, type Note, type NoteKind, type NoteLink } from '../tracker/types.ts';
 import type { Incoming } from '../transport/types.ts';
@@ -616,7 +616,7 @@ const PR_URL = /^https:\/\/[^\s/]+\/[^\s/]+\/[^\s/]+\/pull\/\d+/;
 const REVIEW_PAGE = /\/review-[1-9]\d*\.html(?:[?#].*)?$/;
 
 /**
- * 課題の担当が、計画・提案のページか PR のレビューを頼む（【ask-review】）。頼みを reviews.jsonl に書き、状態を回答待ちにする。
+ * 課題の担当が、計画・提案のページか PR のレビューを頼む（【ask-review】）。頼みを記録（reviews.ts）に書き、状態を回答待ちにする。
  * TPM 担当が tpm assign <Key> --role staff-engineer で Staff Engineer 担当の席を起こし、結果を【notify】で回す。レビューは助言で、頼んだ担当を縛らない。
  */
 export function askReview(ctx: Context, options: { url: string, focus?: string }): string[] {
@@ -628,7 +628,16 @@ export function askReview(ctx: Context, options: { url: string, focus?: string }
   const focus = options.focus?.trim() || undefined;
   const review = addReview(ctx, { key: self.key, url: options.url, ...(focus === undefined ? {} : { focus }), by: self.title });
   const body = `#${review.n} ${options.url}${focus === undefined ? '' : ` 見てほしい所: ${focus}`}`;
-  return [toTpm(ctx, self, 'ask-review', body), ...wait(ctx, 'tpm', 'レビュー')];
+  let sent: string;
+  try {
+    sent = toTpm(ctx, self, 'ask-review', body);
+  }
+  catch (e) {
+    // 送れなかった頼みを残すと、TPM 担当が知らないまま、打ち直しが「もう頼んであります」で止まる。
+    removeReview(ctx, review.n);
+    throw e;
+  }
+  return [sent, ...wait(ctx, 'tpm', 'レビュー')];
 }
 
 /** `tpm report review` の旗。 */
@@ -644,7 +653,7 @@ export interface ReviewOptions {
 const WAIT_NEXT_REVIEW = WAIT.tpm('次のレビュー');
 
 /**
- * Staff Engineer 担当が、レビューのページと判定を返す（【review】）。渡された依頼書の頼み（まだ返していない物）に判定を書き、課題があれば記録「レビュー」を書く。
+ * Staff Engineer 担当が、レビューのページと判定を返す（【review】）。いちばん古い依頼書の頼み（まだ返していない物）に判定を書き、課題があれば記録「レビュー」を書く。
  * TPM 担当が、中身を判じずに頼んだ担当へ回す。
  */
 export function reportReview(ctx: Context, options: ReviewOptions): string[] {
@@ -654,7 +663,10 @@ export function reportReview(ctx: Context, options: ReviewOptions): string[] {
   const verdict = options.verdict as Verdict;
   if (!isPageUrl(ctx.env, options.url) || !REVIEW_PAGE.test(options.url)) throw new TpmError(`--url は、tpm page put --kind review で置いたレビューのページの URL にしてください: ${options.url}`);
   const subject = subjectOf(self);
-  const asks = openReviews(ctx, subject).filter(r => r.brief !== undefined);
+  if (pageOwner(ctx, options.url)?.key !== subject) throw new TpmError(`--url は、${subject} のレビューのページにしてください（別の課題のページ）: ${options.url}`);
+  // 返すのは、いちばん古い依頼書の頼みだけ（依頼書は積まれた順にこなす。--after で積まれた次の依頼書の頼みは、次の【review】で返す）。
+  const briefed = openReviews(ctx, subject).filter(r => r.brief !== undefined);
+  const asks = briefed.filter(r => r.brief === briefed[0]?.brief);
   if (asks.length === 0) throw new TpmError(`${subject} に、返していないレビューの頼みがありません（もう返したか、依頼書がまだ来ていない）。送っていません`);
   const label = VERDICTS[verdict];
   const body = `${options.url} 判定: ${label}（${verdict}）／一言: ${options.summary}／頼み: ${asks.map(r => `#${r.n}`).join(' ')}`;

@@ -201,11 +201,12 @@ function staffBriefPage(subject: RoleRecord, asks: Review[]): string {
   ].join('\n');
 }
 
-/** レビューの頼みから依頼書のページを作って置き、頼みに依頼書の URL を書く。URL を返す。 */
-function putStaffBrief(ctx: Context, subject: RoleRecord, asks: Review[]): string {
-  const { url } = putPage(ctx, { text: staffBriefPage(subject, asks) }, 'brief', subject.key);
+/** レビューの頼みから依頼書のページを作って置き、URL を返す。 */
+const putStaffBrief = (ctx: Context, subject: RoleRecord, asks: Review[]): string => putPage(ctx, { text: staffBriefPage(subject, asks) }, 'brief', subject.key).url;
+
+/** 頼みに、渡した依頼書の URL を書く（渡した後に呼ぶ。渡せなかった回に、依頼書にした事にしない）。 */
+function markBriefed(ctx: Context, asks: Review[], url: string): void {
   for (const r of asks) patchReview(ctx, r.n, { brief: url });
-  return url;
 }
 
 /**
@@ -225,8 +226,8 @@ export function assign(ctx: Context, subjectKey: string, options: AssignOptions)
   const key = subject === undefined ? subjectKey : staffKey(subjectKey);
   const existing = readRole(ctx, key);
   const alive = existing?.address !== undefined && ctx.transport.seats().some(s => s.address === existing.address);
-  // Staff に渡す頼み: まだ依頼書にしていない物。席が無ければ、依頼書にしたが返っていない物も（席が消えたら、起こし直して渡し直す）。
-  const asks = subject === undefined ? [] : openReviews(ctx, subjectKey).filter(r => r.brief === undefined || !alive);
+  // Staff に渡す頼み: まだ依頼書にしていない物。席が無い時（消えたら、起こし直して渡し直す）と、前の依頼書を取り消す時（--supersede）は、依頼書にしたが返っていない物も。
+  const asks = subject === undefined ? [] : openReviews(ctx, subjectKey).filter(r => r.brief === undefined || !alive || options.supersede === true);
   if (subject !== undefined) {
     if (options.brief !== undefined) throw new TpmError('Staff Engineer 担当への依頼書は、レビューの頼み（tpm ask review）から命令が作ります。--brief は書かないでください');
     if (asks.length === 0) throw new TpmError(`${subjectKey} に、まだ依頼書にしていないレビューの頼みがありません。頼むのは課題の担当（tpm ask review）。今の頼みは tpm review list --key ${subjectKey}`);
@@ -246,7 +247,9 @@ export function assign(ctx: Context, subjectKey: string, options: AssignOptions)
     Object.assign(existing, issueCopy(ctx, existing.issue ?? subjectKey, subjectKey, options.noIssueCopy));
     // 送る前の検査を通ってから、頼みを依頼書にする（止まった回に、渡した事にしない）。
     const url = subject === undefined ? options.brief ?? '' : putStaffBrief(ctx, subject, asks);
-    return brief(ctx, existing, url, options.note, settled === undefined || choice === undefined ? undefined : { text: settled, choice });
+    const sent = brief(ctx, existing, url, options.note, settled === undefined || choice === undefined ? undefined : { text: settled, choice });
+    markBriefed(ctx, asks, url);
+    return sent;
   }
   if (options.issue !== undefined && !ctx.tracker.owns(options.issue)) {
     throw new TpmError(`${options.issue} に記録を書く課題管理が、どの設定にもありません（読んだ設定: ${describeTrackers(ctx.config.sources)}）。記録するなら、その課題を扱う repo の .claude/roles/config.jsonc に "tracker"（jira・github）を書いてください`);
@@ -262,7 +265,9 @@ export function assign(ctx: Context, subjectKey: string, options: AssignOptions)
   // 居場所を作る前に読む（読めなければ、担当を起こさずに止まる）。
   const copy = issueCopy(ctx, issue ?? subjectKey, subjectKey, options.noIssueCopy);
   const def = ROLES[options.role];
+  // 起こす席には、依頼書を名簿の行で渡す（起こせなかった回は席が無いので、次の回に渡し直す）。
   const briefUrl = subject === undefined ? options.brief : putStaffBrief(ctx, subject, asks);
+  if (briefUrl !== undefined) markBriefed(ctx, asks, briefUrl);
   const record: RoleRecord = {
     key,
     ...(subject === undefined ? {} : { subject: subjectKey }),

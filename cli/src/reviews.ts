@@ -1,4 +1,4 @@
-// レビューの頼みと判定の記録（状態の folder の reviews.jsonl）。課題の担当の tpm ask review が頼みを、TPM 担当の tpm assign --role staff-engineer が
+// レビューの頼みと判定の記録（状態の folder の reviews/ に、頼み 1 件 1 file）。課題の担当の tpm ask review が頼みを、TPM 担当の tpm assign --role staff-engineer が
 // 依頼書を、Staff Engineer 担当の tpm report review が判定を足す。どれだけ頼まれ、どう判じられ、どれだけ待ったかを、後から数で言うための物。
 // 台帳と同じく、メッセージの字を持つので、tpm を動かす機械の外には写さない。
 import type { Context } from './context.ts';
@@ -36,25 +36,32 @@ export interface Review {
   reviewedAt?: string
 }
 
-const FILE = 'reviews.jsonl';
+/** 頼み 1 件の file（状態の folder の `reviews/<番号>.jsonc`）。 */
+const fileOf = (n: number): string => `reviews/${n}.jsonc`;
 
-/** 頼みの一覧（番号の順）。file の行は足すだけで、同じ番号の後ろの行が前の行の欄を上書きする。 */
+/** 頼みの一覧（番号の順）。 */
 export function readReviews(ctx: Context): Review[] {
-  const byN = new Map<number, Review>();
-  for (const line of ctx.state.lines<Partial<Review> & { n: number }>(FILE)) byN.set(line.n, { ...byN.get(line.n), ...line } as Review);
-  return [...byN.values()].sort((a, b) => a.n - b.n);
+  return ctx.state.list('reviews').map(name => ctx.state.read<Review>(`reviews/${name}.jsonc`)).filter(r => r !== undefined).sort((a, b) => a.n - b.n);
 }
 
-/** 頼みを足す。番号を付けて返す。 */
+/**
+ * 頼みを足す。番号は、今の最大＋1 から、無い番号の file を「在れば失敗」で作って決める（担当が同時に頼んでも同じ番号にならない。台帳と同じ決め方）。
+ */
 export function addReview(ctx: Context, ask: Omit<Review, 'n' | 'askedAt'>): Review {
-  const review: Review = { n: readReviews(ctx).length + 1, ...ask, askedAt: ctx.now().toISOString() };
-  ctx.state.append(FILE, review);
-  return review;
+  const askedAt = ctx.now().toISOString();
+  for (let n = Math.max(0, ...readReviews(ctx).map(r => r.n)) + 1; ; n++) {
+    const review: Review = { n, ...ask, askedAt };
+    if (ctx.state.create(fileOf(n), review)) return review;
+  }
 }
+
+/** 頼みを消す（【ask-review】を送れなかった回に、書いた頼みを取り消す）。 */
+export const removeReview = (ctx: Context, n: number): void => ctx.state.remove(fileOf(n));
 
 /** 頼みに欄を足す（依頼書・判定）。 */
 export function patchReview(ctx: Context, n: number, fields: Partial<Omit<Review, 'n'>>): void {
-  ctx.state.append(FILE, { n, ...fields });
+  const review = ctx.state.read<Review>(fileOf(n));
+  if (review !== undefined) ctx.state.write(fileOf(n), { ...review, ...fields });
 }
 
 /** その課題の、まだ判定が返っていない頼み。 */
