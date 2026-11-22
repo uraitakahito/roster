@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { castlistUrl } from '../castlist.ts';
 import { readRolesConfig, rolesConfigFile } from '../config.ts';
 import type { Context } from '../context.ts';
-import { modelStatus, ROLES, type RoleDef, type RoleName } from '../protocol.ts';
+import { modelStatus, ROLES, type RoleName } from '../protocol.ts';
 import { readRole, writeRole, type RoleRecord } from '../roster.ts';
 import { shellQuote } from '../shell.ts';
 import { TpmError } from '../skill-sets.ts';
@@ -15,11 +15,10 @@ import { copyIssue, issueTracker } from './issue.ts';
 const HELLO_INTERVAL_MS = 2000;
 
 /**
- * 起こした居場所に、役割の色を付ける。色は飾りなので、付けられなくても止めずに 1 行で知らせる（居場所はもう動いていて、宛先も名簿に書いてある）。
+ * 居場所に色（役割の色。ROLES の color・TPM_COLOR）を付ける。色は飾りなので、付けられなくても止めずに 1 行で知らせる
+ * （起こした席はもう動いていて宛先も名簿に書いてあり、名乗る席は名乗りを続ける）。
  */
-function paint(ctx: Context, role: RoleName, address: string): string[] {
-  const { color }: RoleDef = ROLES[role];
-  if (color === undefined) return [];
+export function paint(ctx: Context, address: string, color: string): string[] {
   try {
     ctx.transport.setColor(address, color);
   }
@@ -47,7 +46,7 @@ export function launch(ctx: Context, record: RoleRecord, again: boolean, wait: n
   const command = [join(ctx.root, 'cli', 'bin', 'tpm'), 'run-role', record.key, '--project', ctx.project, '--state', ctx.state.dir].map(shellQuote).join(' ');
   record.address = ctx.transport.spawn({ title: record.title, cwd: record.cwd, command, ...(description === undefined ? {} : { description }) });
   writeRole(ctx, record);
-  const head = [`${again ? '起こし直した' : '起こした'}: ${record.title}（${record.address}・${modelStatus(record.model, record.effort)}）`, `folder: ${record.cwd}`, ...more, ...paint(ctx, record.role, record.address)];
+  const head = [`${again ? '起こし直した' : '起こした'}: ${record.title}（${record.address}・${modelStatus(record.model, record.effort)}）`, `folder: ${record.cwd}`, ...more, ...paint(ctx, record.address, ROLES[record.role].color)];
   if (wait === 0) return [...head, '名乗り（tpm hello）は待っていない'];
   for (let waited = 0; waited < wait * 1000; waited += HELLO_INTERVAL_MS) {
     if (readRole(ctx, record.key)?.helloAt !== undefined) return [...head, '名乗った（tpm hello が来た）'];

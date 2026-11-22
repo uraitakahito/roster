@@ -144,6 +144,24 @@ Auditor が、件の記録に残っている物（Key・役割・時刻）で ca
 
 ![cmux のサイドバー。workspace の題の下に、model（Opus 5.5 · medium）と wait（回答待ち(TPM): merge（14:30 まで））が並ぶ](../../assets/screens/sidebar.webp)
 
+### 居場所の色
+
+どの居場所も、役割ごとの色を 1 つ持つ（cmux ではサイドバーの左の端の帯）。帯の色で、題を読まずに役割が分かる。色は役割の表（`cli/src/protocol.ts` の `ROLES` の `color`。TPM 担当は `TPM_COLOR`）にある。
+
+| 役割 | 色（cmux の色の名） |
+|---|---|
+| TPM 担当 | Amber（#7D6608） |
+| Software Engineer 担当 | Green（#196F3D） |
+| DevOps Engineer 担当 | Orange（#A04000） |
+| Sustaining Engineer 担当 | Magenta（#AD1457） |
+| Staff Engineer 担当 | Purple（#6A1B9A） |
+| Auditor | Olive（#4A5C18） |
+
+- 色は、選んだ居場所の地の青と紛れない物から選ぶ（Blue・Navy・Indigo・Aqua・Teal・Charcoal は使わない）。どれも暗い画面の地より明るく、互いの色相も離す。課題ごとに色を替えない（同じ課題の席は、題の Key で分かる）。
+- 起こされる席（`tpm assign`・`tpm ask review`・`tpm audit start`）は、宛先を名簿に書いた後に、起こす命令が連携の口の `setColor` で付ける。TPM 担当の居場所は利用者が作るので、`tpm hello` で名乗る時に自分に付ける。Auditor も、名乗る時に題と一緒に付け直す（Product Manager が手で起こした席のため）。
+- 色は飾りなので、付けられなくても止めずに 1 行で知らせる。
+- 色は起こす時・名乗る時に付くので、前から居る席には付かない。起こし直すか、TPM 担当なら `tpm hello` を打ち直すと付く。
+
 ## 見出しの流れ
 
 担当どうしは、`tpm` の命令で見出しの付いたメッセージを送り合う。Software Engineer 担当の 1 つの課題では、おおよそ次の順に流れる（見出しと命令の一覧は `protocol.md`）。
@@ -192,7 +210,7 @@ sequenceDiagram
 
 Staff Engineer 担当（役割 `staff-engineer`。題は `レビュー <課題の Key>: <見る物>`、名簿の Key は `<課題の Key>.staff`。skill は `/staff-engineer`）は、課題の担当が頼んだ計画・提案・PR を見て助言する担当。席は課題ごとに、課題の担当の隣に立つ。**頼み（【ask-review】）と判定（【review】）は、TPM 担当を通らず、課題の担当と席の間をじかに届く**（担当から担当への道は、この 2 通だけ。見出しの表（`cli/src/protocol.ts` の `HEADINGS`）の `peer` の印）。席は、頼みの命令が起こす。課題の担当が判定を受けない時だけ、`tpm ask tpm --review <番号>` で TPM 担当に上がる。いつ頼むか・判定の意味・助言で縛らないことは、決まり（`skill-sets/core/.claude/skills/_shared/protocol.md` の「レビュー」と「連携の 3 つの形」）。コードは `cli/src/reviews.ts`・`cli/src/commands/review.ts` と、`cli/src/commands/staff.ts` の `askReview`・`reportReview`・`launchStaff`、`cli/src/commands/messages.ts` の `toPeer`。
 
-席の題・説明・色は、席を起こす命令（`tpm ask review`。起こし直しは `tpm assign`）が頼みから作る（`cli/src/reviews.ts` の `reviewLabel`）。見る物は、PR なら `PR #<番号>`、置き場のページなら種類の名と file の名（`計画 plan-2`・`提案 proposal-1`・`結果 result-3`、ほかの種類は file の名だけ）。依頼書の頼みが 2 つ以上なら、番号の新しい頼みに `+<残りの数>` を付ける。説明は新しい頼みの見てほしい所（24 字で切る。無ければ付けない）。色は役割の表（`cli/src/protocol.ts` の `ROLES` の `color`）の Purple で、Staff の席だけが持つ（cmux では左の端の帯）。色は宛先を名簿に書いた後に連携の口の `setColor` で付け、付けられなくても止めずに 1 行で知らせる。居る席に頼み（【ask-review】。TPM 担当の起こし直しでは【brief】）を送る時は、連携の口の `relabel` で題と説明を替え、名簿の題も同じ字にする（通知のバナーの hook は、居場所の題と名簿の題が同じかで席を探す）。替えられなければ名簿は替えず、命令が 1 行で知らせる。Staff の席に `--title` を書くと、`tpm assign` は止まる。
+席の題・説明・色は、席を起こす命令（`tpm ask review`。起こし直しは `tpm assign`）が頼みから作る（`cli/src/reviews.ts` の `reviewLabel`）。見る物は、PR なら `PR #<番号>`、置き場のページなら種類の名と file の名（`計画 plan-2`・`提案 proposal-1`・`結果 result-3`、ほかの種類は file の名だけ）。依頼書の頼みが 2 つ以上なら、番号の新しい頼みに `+<残りの数>` を付ける。説明は新しい頼みの見てほしい所（24 字で切る。無ければ付けない）。色は Purple（上の「居場所の色」）。居る席に頼み（【ask-review】。TPM 担当の起こし直しでは【brief】）を送る時は、連携の口の `relabel` で題と説明を替え、名簿の題も同じ字にする（通知のバナーの hook は、居場所の題と名簿の題が同じかで席を探す）。替えられなければ名簿は替えず、命令が 1 行で知らせる。Staff の席に `--title` を書くと、`tpm assign` は止まる。
 
 ```mermaid
 sequenceDiagram
@@ -231,7 +249,7 @@ Auditor（役割 `auditor`。題は `Audit`、課題の Key は `audit`。skill 
 | 命令 | 打つ人 | すること |
 |---|---|---|
 | `tpm audit start` | Product Manager | 名簿に Auditor の行を書き、居場所を作って、名乗るまで待つ（`--model`・`--effort`・`--permission-mode`・`--wait`）。席は project に 1 つで、もうあれば断る。居場所が消えていれば起こし直す。skill `/audit` が無ければ断る |
-| `tpm hello` | Auditor | 居場所の題を `Audit` にし、状態を出し、監査の規程・手順の path と、前の監査・答えの出ていない報告を返す。TPM 担当が起きていなくても名乗れる |
+| `tpm hello` | Auditor | 居場所の題を `Audit` にし、色（Olive）を付け、状態を出し、監査の規程・手順の path と、前の監査・答えの出ていない報告を返す。TPM 担当が起きていなくても名乗れる |
 | `tpm audit begin [番号…]` | Auditor | 監査を始める（番号があれば、その件の臨時の監査）。**前の報告の後に新しい文脈になっていなければ、始めずに止まる**（`gate.jsonl` に `stale-context`）。通れば、監査の材料（規程・手順・前の監査・答えの出ていない報告・台帳の件数）を返す |
 | `tpm audit fresh` | Auditor の席の hook | 席を起こした時（`startup`）と `/clear` の時（`clear`）に、新しい文脈の印を書く。続きから開いた時（`resume`）と文脈を要約した時（`compact`）は書かない |
 | `tpm report audit` | Auditor | 監査のページを Product Manager へじかに報告した、と記録する。TPM 担当に写し（【audit】）を送り、状態を `回答待ち(PM): 監査の報告` にする（その回の終わりに通知のバナーが出る）。TPM 担当が起きていなければ、写しは送らずに記録だけ書く |
