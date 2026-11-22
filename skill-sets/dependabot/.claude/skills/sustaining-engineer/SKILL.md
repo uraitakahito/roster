@@ -1,6 +1,7 @@
 ---
 name: sustaining-engineer
 description: Sustaining Engineer 担当として、Dependabot の PR 1 本を受け持つ（72 時間の確かめ・直し・CI を緑に・TPM 担当に merge を頼む）。TPM 担当の /dependabot-triage が `tpm assign` で起こした Claude Code が、最初の入力 `/sustaining-engineer` で使う。
+disable-model-invocation: true
 ---
 
 # Sustaining Engineer 担当（Dependabot の PR 1 本）

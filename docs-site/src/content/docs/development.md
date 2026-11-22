@@ -1,6 +1,6 @@
 ---
 title: 開発
-description: 試験の流し方・ページの置き場のサーバー（pagetray）とのつなぎ・Dependabot の判定の道具・この docs の見方と公開の流れ
+description: 試験の流し方・ページの置き場のサーバー（pagetray）とのつなぎ・Dependabot の判定の道具・skill の frontmatter・この docs の見方と公開の流れ
 ---
 
 ## 試験
@@ -62,6 +62,16 @@ build は無い。`cli/bin/tpm` は `cli/src/cli.ts` を node で直に動かす
 
 Dependabot の PR の判定の道具は `cli/src/release-age.ts`（`node cli/src/release-age.ts <owner>/<repo> <PR> [--hours <時間>] [--now <ISO 時刻>]`）。version は PR の差分（pnpm-lock・package-lock・yarn.lock・workflow の `uses:`）から読み、依存の依存も数える。終了コードは 0 対象・10 まだ・20 判定できない・1 道具の誤り。skill は Dependabot の PR を見る repo の folder でこれを打つが、nodenv の `node` の shim は渡された script の folder から `.node-version` を探すので、この repo の version で動く。`cli/bin/tpm` も同じ訳で、`~/.local/bin/tpm` のような repo の外の symlink から呼ばれても、本当の在り処の path を `node` に渡す sh にしてある。また cmux の通知の hook のように PATH が既定だけで呼ばれたときは、`node`（nodenv の shim）と `cmux`（app の中）を自分で PATH に足す（見つからなければ、探した所を出して 127 で終わる）。
 
+## skill の frontmatter
+
+`skill-sets/` の `SKILL.md` の frontmatter は、Claude Code に渡す設定。担当の居場所には、どの skill セットも `--add-dir` で全部渡る（`cli/src/run-role.ts`）ので、model が呼べる skill は、どの担当の居場所の一覧にも載る。
+
+- 担当の skill（`tpm start` や `tpm assign` が最初の入力で呼ぶ物・Product Manager が打つ物）は `disable-model-invocation: true` にする。一覧に載らず、model が自分で呼ばない。`when_to_use` は書かない（書いても効かない）。
+- model に呼ばせる skill（今は `/dependabot-triage` だけ）は、`description` に何をするかを、`when_to_use` に呼ぶ場面（言い方の例）と呼ばない場面（どの担当の居場所で呼ばないか）を書く。2 つは一覧で続けて載り、合わせて 1,536 字で切られる。
+- 引用符の無い値に「`: `」を書くと YAML として読めない。全角の「：」にするか、言い換える。
+
+`pnpm run check` の `docs-site/scripts/check-skills.mjs` が、欄の名・`name` と folder の揃い・`when_to_use` と `disable-model-invocation` の組・字数を見る。
+
 ## この docs
 
 原稿は `docs-site/src/content/docs/` の Markdown（Astro + Starlight）。`docs-site/` は `cli/` と別の pnpm の project で、依存と lockfile を自分で持つ。
@@ -79,7 +89,7 @@ Prettier は既定の設定のまま使い、設定のファイルは置かな�
 
 Prettier の `--parser jsonc` は複数行の最後に末尾のカンマを付けるが、VS Code は知らない `.jsonc` の末尾のカンマに警告（`jsonc(519)`）を出す。そこで `.vscode/settings.json` が、repo の `*.jsonc` に `.vscode/jsonc.schema.json`（`allowComments`・`allowTrailingCommas` だけの schema）を当てて、警告を出させない。欄の名や型は見ない。
 
-`astro build` は `.md` のページの中で何が落ちても exit 0 で終わるので、`check` は build の後に `docs-site/scripts/check-refs.mjs` を流す。見る物は、ページへのリンク・本文が名指した repo の path（git が追跡する物と、add 前の新しい物だけを数える。build の書き出しなど `.gitignore` にある物は、手元に在っても無いとみなす）・README の URL・skill が名指す原稿の見出し・`config.jsonc` の欄の揃い・skill の中の相対パス（`${CLAUDE_SKILL_DIR}/…` の先）・skill が名指す `_shared/` の決まりの見出し・画面の絵（`docs-site/src/assets/screens/`）と本文の参照の揃い・skill に連携と課題管理の道具の命令が直に書かれていないこと・skill と原稿が書いた `tpm` の命令が在ること・`protocol.md` の見出しと `cli/src/protocol.ts` の見出しの表の揃い。Mermaid の図は書き間違えても検査を通るので、図を変えたら手元で見る。
+`astro build` は `.md` のページの中で何が落ちても exit 0 で終わるので、`check` は build の後に `docs-site/scripts/check-refs.mjs` を流す。見る物は、ページへのリンク・本文が名指した repo の path（git が追跡する物と、add 前の新しい物だけを数える。build の書き出しなど `.gitignore` にある物は、手元に在っても無いとみなす）・README の URL・skill が名指す原稿の見出し・`config.jsonc` の欄の揃い・skill の中の相対パス（`${CLAUDE_SKILL_DIR}/…` の先）・skill が名指す `_shared/` の決まりの見出し・画面の絵（`docs-site/src/assets/screens/`）と本文の参照の揃い・skill に連携と課題管理の道具の命令が直に書かれていないこと・skill と原稿が書いた `tpm` の命令が在ること・`protocol.md` の見出しと `cli/src/protocol.ts` の見出しの表の揃い。続けて `docs-site/scripts/check-skills.mjs` が skill の frontmatter を見る（[skill の frontmatter](#skill-の-frontmatter)）。Mermaid の図は書き間違えても検査を通るので、図を変えたら手元で見る。
 
 skill は Pages ではなく原稿の Markdown を読む（`/dependabot-triage` と `/sustaining-engineer` が [設定](/configuration/) を読む）。原稿の見出しや表を変えたら、`check` が skill の読む先を確かめる。
 
