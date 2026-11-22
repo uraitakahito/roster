@@ -163,7 +163,7 @@ describe('castlist が止まっている時', () => {
     const [, port, version] = RUN_LINE.exec(run) ?? [];
     expect(port).toBe(new URL(dead).port);
     expect(version).toBe(CASTLIST_VERSION);
-    expect(CASTLIST_VERSION).toBe('v0.2.0');
+    expect(CASTLIST_VERSION).toBe('v0.3.0');
     expect(message).toContain('https://uraitakahito.github.io/castlist/');
   });
 
