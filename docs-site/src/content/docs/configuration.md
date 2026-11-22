@@ -158,16 +158,16 @@ export TPM_EFFORT=medium
 
 ## ページの置き場の環境変数（任意）
 
-`tpm page put`・`tpm page path`・`tpm page list`・`tpm page import`・`tpm page delete` と `tpm file put`・`tpm file path`・`tpm file list`・`tpm file delete` が使う、置き場（[担当のあいだの決まり](/protocol/#ページの置き場)）の URL と、控えの folder。置き場は Mac に 1 つで、project をまたいで同じなので、`.claude/roles/config.jsonc` には書かない。替えるのは、置き場の container の port を替えたときだけ。
+`tpm page put`・`tpm page path`・`tpm page list`・`tpm page import`・`tpm page delete` と `tpm file put`・`tpm file path`・`tpm file list`・`tpm file delete` が使う、置き場（[担当のあいだの決まり](/protocol/#ページの置き場)）の URL と、控えの folder。置き場は tpm を動かす機械に 1 つで、project をまたいで同じなので、`.claude/roles/config.jsonc` には書かない。替えるのは、置き場の container の port を替えたときだけ。
 
 | 環境変数 | 決める物 | 無いとき |
 |---|---|---|
-| `TPM_PAGES_DIR` | 控えの folder（置いた・読んだページと file をこの Mac に写す所。前の置き場の folder と同じ） | `$XDG_DATA_HOME/tpm/pages`（`$XDG_DATA_HOME` も無ければ `~/.local/share/tpm/pages`） |
+| `TPM_PAGES_DIR` | 控えの folder（置いた・読んだページと file を tpm を動かす機械に写す所。前の置き場の folder と同じ） | `$XDG_DATA_HOME/tpm/pages`（`$XDG_DATA_HOME` も無ければ `~/.local/share/tpm/pages`） |
 | `TPM_PAGES_URL` | 置き場の URL（container の port の publish と同じにする） | `http://127.0.0.1:8801` |
 
 ## アクターの台帳（castlist）（任意）
 
-アクターの台帳（別の repo の [castlist](https://uraitakahito.github.io/castlist/)）は、Claude Code の session 1 つ（TPM 担当・担当・Auditor）と人の Product Manager を、それぞれアクターとして残す、この Mac だけのサーバー。誰が誰を起こしたか・どの model と effort で動いたかを、Auditor が後から引く。`tpm` が何をいつ送るかは [担当のあいだの決まり](/protocol/#アクターの台帳castlist)。
+アクターの台帳（別の repo の [castlist](https://uraitakahito.github.io/castlist/)）は、Claude Code の session 1 つ（TPM 担当・担当・Auditor）と人の Product Manager を、それぞれアクターとして残す、tpm を動かす機械の中だけのサーバー。誰が誰を起こしたか・どの model と effort で動いたかを、Auditor が後から引く。`tpm` が何をいつ送るかは [担当のあいだの決まり](/protocol/#アクターの台帳castlist)。
 
 - project の folder の `.claude/roles/config.jsonc` に `"castlist": "http://127.0.0.1:8802"` を書くと、`tpm` が castlist に送る。直下の folder の設定に書いた値は読まない（連携と同じ）。
 - 書かなければ、`tpm` は castlist に何も送らない。hook の命令（`tpm castlist session-start`・`tpm castlist session-end`）はどの席にも付くが、何もしない。castlist を読む命令（`tpm castlist find` など。[担当のあいだの決まり](/protocol/#監査の検索を読む)）は、設定していないと言う 1 行で止まり、`tpm incident timeline` はアクターの欄を出さない。
@@ -177,9 +177,9 @@ export TPM_EFFORT=medium
 |---|---|---|
 | `TPM_CASTLIST_URL` | castlist の URL（`http://127.0.0.1:<port>` か `http://localhost:<port>`） | 設定の `castlist`。それも無ければ、castlist に何も送らない |
 
-## Mac のバナー（任意）
+## 通知のバナー（任意）
 
-Mac の右上に出るバナーは、cmux が居場所の Claude Code の通知（答え終わった・入力待ちの催促・許可/質問）のたびに出す。担当の居場所のバナーまで出ると、Product Manager が見る物が多すぎるので、`tpm banner hook` を cmux の通知の hook に置き、居場所の役割 × きっかけで出すか消すかを選ぶ。消した通知も、cmux の通知の一覧と未読の印には残る。tpm の名簿に無い居場所（tpm の外の Claude Code）は cmux のまま。
+画面の右上に出る通知のバナーは、cmux が居場所の Claude Code の通知（答え終わった・入力待ちの催促・許可/質問）のたびに出す。担当の居場所のバナーまで出ると、Product Manager が見る物が多すぎるので、`tpm banner hook` を cmux の通知の hook に置き、居場所の役割 × きっかけで出すか消すかを選ぶ。消した通知も、cmux の通知の一覧と未読の印には残る。tpm の名簿に無い居場所（tpm の外の Claude Code）は cmux のまま。
 
 ### cmux.json に hook を足す
 

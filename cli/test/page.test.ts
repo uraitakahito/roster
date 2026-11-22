@@ -210,7 +210,7 @@ describe('tpm page path', () => {
   test('控えに無ければ、置き場から取って控えに写す', () => {
     const s = setup();
     const url = pagePut(s.role, s.html, { kind: 'plan' })[1]?.replace('URL: ', '') ?? '';
-    // ほかの Mac の控えは無い、という形にする。
+    // ほかの機械の控えは無い、という形にする。
     const other = { ...s.role, env: { ...s.role.env, TPM_PAGES_DIR: join(s.dir, 'other') } };
     const path = join(s.dir, 'other', s.project, 't-x7k2', 'plan-1.html');
     expect(pagePath(other, url)).toEqual([path]);
@@ -258,7 +258,7 @@ describe('tpm page path', () => {
 });
 
 describe('tpm page path と、ページが参照する file', () => {
-  /** 画像を t-x7k2 と t-y に上げ、それを参照するページを置いて、別の Mac（控えが空）の周りを返す。 */
+  /** 画像を t-x7k2 と t-y に上げ、それを参照するページを置いて、別の機械（控えが空）の周りを返す。 */
   function referenced(body: (key: string) => string) {
     const s = setup();
     const png = join(s.dir, '..', `${basename(s.dir)}-shot.png`);

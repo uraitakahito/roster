@@ -1,4 +1,4 @@
-// Mac のバナー（tpm banner …）: 決め方・設定・cmux の通知の hook・setup と check。
+// 通知のバナー（tpm banner …）: 決め方・設定・cmux の通知の hook・setup と check。
 import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';

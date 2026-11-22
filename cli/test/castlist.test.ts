@@ -238,7 +238,7 @@ describe('tpm start', () => {
 
 describe('名の決まり', () => {
   test('issuer は tpm. と状態の folder の名（英小文字にし、castlist の受ける形に収める）', () => {
-    expect(castlistIssuer('/Users/x/.local/state/tpm/-Users-takahito-projects-ai')).toBe('tpm.-users-takahito-projects-ai');
+    expect(castlistIssuer('/Users/me/.local/state/tpm/-Users-me-projects-ai')).toBe('tpm.-users-me-projects-ai');
     const long = castlistIssuer(`/s/-${'a'.repeat(100)}`);
     expect(long).toMatch(/^tpm\.[a-z0-9.-]+$/);
     expect(long.length).toBeLessThanOrEqual(64);

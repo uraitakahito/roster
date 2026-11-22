@@ -268,7 +268,7 @@ export function buildProgram(): Command {
       process.exit(runRole(requireRole(ctx, key), ctx.project, ctx.state.dir, ctx.root));
     });
 
-  const banner = program.command('banner').description('Mac のバナー（cmux の通知）を、居場所の役割 × きっかけで出すか消すか');
+  const banner = program.command('banner').description('通知のバナー（cmux の通知）を、居場所の役割 × きっかけで出すか消すか');
   banner.command('hook').description('（cmux の通知の hook が呼ぶ）標準入力の通知を読み、バナーを消すなら effects を返す')
     .action(() => {
       // どんな誤りでも {} を返して 0 で終わる（失敗すると cmux が「Notification Hook Failed」を出すため）。

@@ -1,5 +1,5 @@
-// 置き場（別の repo の pagetray。127.0.0.1 で待つ、ページと file を DB に持つサーバー）に curl で頼む足場と、この Mac の控えの folder。
-// tpm page と tpm file が使う。置き場は Mac に 1 つで、project をまたいで同じなので、控えの folder と URL は設定（config.jsonc）でなく環境変数で替える。
+// 置き場（別の repo の pagetray。127.0.0.1 で待つ、ページと file を DB に持つサーバー）に curl で頼む足場と、tpm を動かす機械の控えの folder。
+// tpm page と tpm file が使う。置き場は tpm を動かす機械に 1 つで、project をまたいで同じなので、控えの folder と URL は設定（config.jsonc）でなく環境変数で替える。
 // 置き場を起こす・止めるのは DevOps Engineer 担当（docs-site の運用のページの「ページの置き場（pagetray）」）。
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';

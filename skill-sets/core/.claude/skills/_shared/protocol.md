@@ -55,7 +55,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
   - Product Manager の答えを待つ: `tpm wait pm "<何を>"`（`回答待ち(PM): <何を>`）。TPM 担当が Product Manager に手の操作を頼んで待つ回は `--hand` を付ける（下の「思わぬ出来事」）
   - TPM 担当の答えを待つ: `tpm wait tpm "<何を>"`（`回答待ち(TPM): <何を>`）
   - 待つ時間に限りがあれば添える: `tpm wait tpm "merge（14:30 まで）"`
-- `tpm wait` は打った時刻も覚える。Product Manager の Mac のバナーは、TPM 担当が**その回に** `tpm wait pm` を打って手を止めた時に出る（設定は docs の「設定」の「Mac のバナー」）。
+- `tpm wait` は打った時刻も覚える。Product Manager への通知のバナーは、TPM 担当が**その回に** `tpm wait pm` を打って手を止めた時に出る（設定は docs の「設定」の「通知のバナー」）。
 - やりとりの命令は、メッセージを送った後の待ちも出す（`tpm ask …` は回答待ち、`tpm report done` は `回答待ち(TPM): 次の依頼`、`tpm report end` は `回答待ち(TPM): workspace を閉じる`）。答えが来たら `tpm wait work "<段>"` に戻す。
 - **`/model`・`/effort` は打たない**（新しい session の既定まで書き換わる）。model と effort は起動の旗で決まる。
 
@@ -91,7 +91,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 - `tpm incident timeline <件の番号|課題の Key>` が、その前後の記録（メッセージと届いた時刻・課題管理への書き込み・guard と入口の検査が止めた回・`wait` の移り）を時刻の順に 1 枚のページにして置く。届く前に相手が次を送った所には「行き違い」の印が付く。原因を調べる Auditor が読む。
 - 原因の調べと、種類のある件（出来事）の扱い（調べない・済み）を決めるのは、Auditor（下の「監査」）。TPM 担当は出来事を「調べない」「済み」にできない（命令が断る）。振り先を結ぶ・tag を足すことはできる。
 - TPM 担当は `tpm incident add <Key> "<起きた事実>" --type <種類>` で書く。見直す・扱いを決める命令（`tpm incident review` など）は、TPM 担当と Auditor のほかの担当からは打てない。
-- **台帳・送ったメッセージの記録（state の `*.jsonl`）は、メッセージや命令の字を持つ。この Mac の外（課題管理のコメント・PR の本文・公開の site）に写さない。**【incident】は課題管理に記録を書かない。
+- **台帳・送ったメッセージの記録（state の `*.jsonl`）は、メッセージや命令の字を持つ。tpm を動かす機械の外（課題管理のコメント・PR の本文・公開の site）に写さない。**【incident】は課題管理に記録を書かない。
 
 ## 監査
 
@@ -130,10 +130,10 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 
 ## ページ
 
-依頼書・確認・提案・計画・結果・監査は、HTML の file に書いて、この Mac の置き場（`127.0.0.1` の pagetray。ページを DB に持つサーバーで、起こすのは DevOps Engineer 担当）に置く。置いた物を「ページ」と言う。Artifact tool（publish・read・open）は、依頼書と成果には使わない。
+依頼書・確認・提案・計画・結果・監査は、HTML の file に書いて、tpm を動かす機械の置き場（`127.0.0.1` の pagetray。ページを DB に持つサーバーで、起こすのは DevOps Engineer 担当）に置く。置いた物を「ページ」と言う。Artifact tool（publish・read・open）は、依頼書と成果には使わない。
 
 - 置く: `tpm page put <file> --kind <brief|confirm|proposal|plan|result|audit|issue>`。担当の Key は今の課題の Key。TPM 担当は `--key <Key>` を付ける。出た `URL:` を、`tpm assign --brief`・`tpm ask pm --url`・`tpm report done --url` に書く。番号は置き場が決める。同じ種類を置き直すと次の番号になり、前の版は残る。置いた担当の役割と居場所の宛先も、置き場が覚える。
-- 読む: `tpm page path <URL>` で file の path にして Read tool で読む（この Mac の控えの path。控えに無ければ置き場から取る。前の置き場の `8800` の URL も読める）。
+- 読む: `tpm page path <URL>` で file の path にして Read tool で読む（tpm を動かす機械の控えの path。控えに無ければ置き場から取る。前の置き場の `8800` の URL も読める）。
 - 時系列のページ（種類は `timeline`）は、`tpm incident timeline` が state の記録から作って置く（下の「思わぬ出来事」）。手では置かない。
 - 探す: `tpm page list`（今の project の新しい順）。`--key <Key>`・`--role <役割>`・`--workspace <宛先>`・`--kind <種類>`・`--q <語>`・`--reply <waiting|answered>`（返事の状態）で絞り、`--json` で記録を出す。Product Manager は、置き場の一覧の UI（`http://127.0.0.1:8801/`）で同じように絞って見る。
 - 開く: ページは自動では開かない（`tpm ask pm`・`tpm report done` も開かない）。Product Manager は、置き場の一覧の UI（`http://127.0.0.1:8801/`）を 1 つ開いておき、新着の印で気づいて読む。その場で開いて人に見せる時だけ `tpm show <URL>`。
@@ -159,7 +159,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
   - 図を入れないページには、入れない訳を頭に 1 行書く（例: 「図: 無し。変えたのは文 1 行だけ」）。
   - 図の中の字は SVG の text で書き（画像の中の字にしない）、`role="img"` と `aria-label` を付ける。色は明るい画面と暗い画面の両方で読めるように、ひな形の色の変数を使う。
 - file（画像・PDF・字の file）: ページに付ける画面の写し・図・log は、置き場に上げて、ページから相対で参照する。受けるのは png・jpg・jpeg・gif・webp・pdf・txt・log・md・csv・json で、1 つ 16 MiB まで（動画・HTML・SVG は受けない）。
-  - 上げる: `tpm file put <file> --reviewed`（TPM 担当は `--key <Key>` も）。画像と PDF は、上げる前に Read tool で見て、token・鍵・個人の情報・ほかの人の画面・この Mac の path が写っていないか確かめる（`--reviewed` が無いと止まる）。字の file は秘密の形を走査し、当たれば行の番号を出して止まる。置き場での名は元の名から作り（`--name <語>.<拡張子>` で替えられる）、番号は置き場が付ける。同じ名で上げ直すと次の番号になり、前の物は残る。
+  - 上げる: `tpm file put <file> --reviewed`（TPM 担当は `--key <Key>` も）。画像と PDF は、上げる前に Read tool で見て、token・鍵・個人の情報・ほかの人の画面・tpm を動かす機械の path が写っていないか確かめる（`--reviewed` が無いと止まる）。字の file は秘密の形を走査し、当たれば行の番号を出して止まる。置き場での名は元の名から作り（`--name <語>.<拡張子>` で替えられる）、番号は置き場が付ける。同じ名で上げ直すと次の番号になり、前の物は残る。
   - ページには、出た `ページからの参照:` の形で相対に書く（同じ Key なら `<img src="files/<語>-<n>.<拡張子>">`、別の Key なら `../<Key>/files/…`）。置き場でも控えでも同じ形で開く。
   - 読む: `tpm file path <URL>` で file の path にして Read tool で読む。`tpm page path` も、ページが参照する file を控えに写し、`参照の file:` の行に path を出す。探すのは `tpm file list`。
   - 消す: ページと同じく TPM 担当だけ。担当は `tpm ask tpm` で URL と訳を送って頼む（秘密を上げてしまった時は、すぐ）。TPM 担当は `tpm file delete <URL>…` で消す物と、それを参照しているページを見て、`--yes` を付けて消す。

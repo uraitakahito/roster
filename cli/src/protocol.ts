@@ -159,7 +159,7 @@ export const HEADINGS = {
   'merged': { from: 'role' },
   'done': { from: 'role' },
   'end': { from: 'role', record: '結果' },
-  // 課題管理には書かない（台帳の中身は、この Mac の外に出さない）。
+  // 課題管理には書かない（台帳の中身は、tpm を動かす機械の外に出さない）。
   'incident': { from: 'role' },
   // Auditor だけが送る。audit は Product Manager へじかに出した報告の写し、decided は Product Manager の決定。
   'audit': { from: 'role' },

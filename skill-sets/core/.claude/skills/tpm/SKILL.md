@@ -25,7 +25,7 @@ disable-model-invocation: true
 2. 名簿を読む。動いている担当がいれば、課題の Key と担当の対応を覚える（Key は下の 2）。「消えた」と出た担当は、居場所がもう無い。Product Manager に伝え、続けるなら `tpm assign` で起こし直し、終えるなら `tpm close <Key>` で名簿から消す。
 3. `tpm wait pm 指示` を打ち、Product Manager の指示を待つ。
    - Product Manager に手の操作（Jira や GitHub の画面の操作・`!` の 1 行）を頼んで手を止める回は、`tpm wait pm "<頼んだ手>" --hand` と打つ（頼んだ手が台帳に数えられる。下の「6. 監査」）。
-   - **Product Manager に返して手を止める回は、毎回その回の最後に `tpm wait pm "<何を>"` を打つ**（答え・報告・質問を返した時。前の回の `回答待ち(PM)` が残っていても打ち直す）。Product Manager の Mac のバナーは、その回に `tpm wait pm` を打った時だけ出る。担当のメッセージ（【merged】【ask-tpm】など）をひとりで片付けて Product Manager に何も返さない回は打たない（打つと要らないバナーが出る）。
+   - **Product Manager に返して手を止める回は、毎回その回の最後に `tpm wait pm "<何を>"` を打つ**（答え・報告・質問を返した時。前の回の `回答待ち(PM)` が残っていても打ち直す）。Product Manager への通知のバナーは、その回に `tpm wait pm` を打った時だけ出る。担当のメッセージ（【merged】【ask-tpm】など）をひとりで片付けて Product Manager に何も返さない回は打たない（打つと要らないバナーが出る）。
 
 名簿は `tpm roles` でいつでも見られる（動いているか・`wait` の字・依頼書）。
 

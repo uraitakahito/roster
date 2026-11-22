@@ -1,4 +1,4 @@
-// Mac のバナー（cmux の通知の desktop）を、居場所の役割 × きっかけで出すか消すかを決める。I/O を持たない。
+// 通知のバナー（cmux の通知の desktop）を、居場所の役割 × きっかけで出すか消すかを決める。I/O を持たない。
 // 設定は利用者の $XDG_CONFIG_HOME/tpm/banner.jsonc（無ければ ~/.config/tpm/banner.jsonc）。バナーを見るのは project でなく人なので、project の config.jsonc には置かない。
 import { homedir } from 'node:os';
 import { join } from 'node:path';
