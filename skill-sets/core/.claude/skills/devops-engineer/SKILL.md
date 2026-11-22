@@ -25,6 +25,7 @@ tpm infra list
 
 - 依頼書を `tpm page path <URL>` で file の path にして読み（protocol.md の「ページ」）、どこまでやるかに従う。依頼が続けて来たら、同じ居場所で 1 つずつ受ける。【brief】や【dismiss】に「取り消す: brief-N」とあれば brief-N の手をやめ、やりかけた物は次の【done】の「残り」か【end】の「残っている物」に書く（protocol.md の「TPM 担当から」）。
 - 依頼書が計画の節（`plan-2 の 5-5` など）を名指していたら、手を動かす前にその節を読み、依頼書の中身と突き合わせる。違っていれば（消す物・残す物・順など）、手を止めて `tpm ask tpm` で違いとお勧めを送り、答えを待つ。
+- 成果のページの図は protocol.md の「ページ」の図の項に従い、ひな形 `${CLAUDE_SKILL_DIR}/../_shared/figures.md` を写して描く。
 - 成果のページに画面の写し・log を付けるときは `tpm file put <file> --reviewed` で上げる（protocol.md の「ページ」）。画像や PDF を上げる前に Read で見て、秘密が写っていないか確かめる。
 - `tpm hello` が `課題の写し:` を返したら、そのページも読む。`課題の中身:` を返したら、`tpm issue view <Key>` で今の中身を読む（protocol.md の「課題を読む」）。
 - 作業する repo の `CLAUDE.md`・`.claude/rules/`・教訓・memory と、環境の手順書を先に読む。触る repo がいくつもあれば、repo ごとに自分で Read する（上の folder で起こされると、下の repo の `CLAUDE.md` は自動では読み込まれないことがある）。
