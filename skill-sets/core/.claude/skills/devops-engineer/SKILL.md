@@ -16,7 +16,7 @@ tpm infra list
 ```
 
 - **`tpm hello` が最初の手。** 状態を出し、TPM 担当に名乗りを届け、受け持ち（依頼書の URL・課題管理の課題）を返す。誤りで止まったら（`tpm assign` で起こされていない）、何もせずにそのことを画面に書いて止まる。
-- `tpm infra list` は、この project の環境と手続き（自由・TPM に相談・PM の承認）と、今ある承認を出す。
+- `tpm infra list` は、この project の環境と手続き（自由・TPM に相談・PM の承認・PM だけ）と、今ある承認を出す。
 - `tpm hello` の依頼書が「無し」なら、`tpm wait tpm 依頼` を打って止まる。【brief】が来たら読んで始める。
 
 続けて `${CLAUDE_SKILL_DIR}/../_shared/protocol.md` を読み、従う。
@@ -32,6 +32,7 @@ tpm infra list
 - 環境を変える前に、その環境の手続きを見る（protocol.md の「共有の環境」）:
   - **TPM に相談**（並べて動いている担当が困る。動いている container や worker を止める・消す・作り直す、共有の volume・network・secret を変える）: 先に `tpm ask tpm` で何が止まるかとお勧めを送り、答えを待つ。
   - **PM の承認**（ほかの人やチームが困る）: 何を・なぜ・何が止まるか・戻し方を確認のページに書き、`tpm ask pm` で送る。【answer】で承認が来るまで変えない。承認は時間を限って効くので、切れたら頼み直す。
+  - **PM だけ**（Product Manager が自分の手に取っておく。起こす・止める・data を消すなど）: DevOps Engineer 担当も打てない（`tpm infra run` も止まる）。打ってほしい 1 行と訳を確認のページに書き、`tpm ask pm` で送る。Product Manager が自分の terminal で打つ。
   - 設定に書かれていない環境でも、並べて動いている担当やほかの人が困りそうなら、先に `tpm ask tpm`。
   - 誰も困らない操作（新しい物を足す・読むだけ）は確かめずに進める。
 - 承認の下で環境を変える命令は `tpm infra run <環境> -- <命令>` で打つ（打った記録が残る）。

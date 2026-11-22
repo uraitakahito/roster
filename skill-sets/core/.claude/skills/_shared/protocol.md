@@ -194,6 +194,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 | 自由 | 自分だけ | どの担当も | 無し |
 | TPM に相談 | 並べて動いているほかの担当 | DevOps Engineer 担当だけ | 【ask-tpm】で何が止まるかとお勧めを送り、答えを待つ |
 | PM の承認 | ほかの人・ほかのチーム | DevOps Engineer 担当だけ | 【ask-pm】で承認を取る。承認は時間を限って効く |
+| PM だけ | Product Manager が自分の手に取っておく物 | どの担当も打てない（TPM 担当・DevOps Engineer 担当も。承認も書けない） | 打ってほしい 1 行と訳を確認のページに書き、【ask-pm】で送る。Product Manager が自分の terminal で直に打つ |
 
 - 自分が変えてよくない環境は、自分では変えず【ask-devops】で TPM 担当に送る。
 - 手続きを踏んでいない命令は、guard が実行の前に止める。止まったら、出た文のとおりに頼む（別の書き方で通そうとしない）。

@@ -127,6 +127,9 @@ export function touched(command: string, infra: Record<string, InfraEnv>): strin
 /** 環境 1 つについて、この担当が今、変えてよいか。 */
 export function judgeEnv(name: string, env: InfraEnv, role: RoleName | undefined, approval: Approval | undefined, now: Date): Verdict {
   if (env.guard === 'free') return { allow: true };
+  if (env.guard === 'pm-only') {
+    return { allow: false, reason: `環境 ${envLabel(name, env)} の手は Product Manager だけのものです（どの担当も、承認があっても打てない）。Product Manager が自分の terminal で直に打ちます。打ってほしい 1 行と訳を確認のページに書き（tpm page put）、tpm ask pm で送ってください。` };
+  }
   if (role !== INFRA_ROLE) {
     return { allow: false, reason: `環境 ${envLabel(name, env)} を変えてよいのは DevOps Engineer 担当だけです。tpm ask devops --what … --why … で TPM 担当に頼んでください。` };
   }
