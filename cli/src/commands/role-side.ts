@@ -3,7 +3,7 @@ import type { Context } from '../context.ts';
 import { modelStatus, ROLES, WAIT } from '../protocol.ts';
 import { requireSelf, requireTpm, subjectOf, writeRole } from '../roster.ts';
 import { auditorHello } from './audit.ts';
-import { castlistHello } from './castlist.ts';
+import { castlistHello, sweep } from './castlist.ts';
 import { TpmError } from '../skill-sets.ts';
 import { issueTracker } from './issue.ts';
 import { issueCopyLine, markShown } from './messages.ts';
@@ -43,6 +43,8 @@ export function hello(ctx: Context, options: { model?: string, effort?: string }
     ...(issueTracker(ctx, issueKey) === undefined ? [] : [`課題の中身: tpm issue view ${issueKey}`]),
     `TPM 担当の宛先: ${tpm.address}`,
     `自分の宛先: ${record.address}`,
+    // 落ちた session の推しの幕引き（castlist と cmux があれば。Auditor は打たない）。
+    ...sweep(ctx),
   ];
 }
 

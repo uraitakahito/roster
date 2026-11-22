@@ -164,7 +164,7 @@ describe('castlist が止まっている時', () => {
     const [, port, version] = RUN_LINE.exec(run) ?? [];
     expect(port).toBe(new URL(dead).port);
     expect(version).toBe(CASTLIST_VERSION);
-    expect(CASTLIST_VERSION).toBe('v0.3.0');
+    expect(CASTLIST_VERSION).toBe('v0.4.0');
     expect(message).toContain('https://uraitakahito.github.io/castlist/');
   });
 
@@ -736,7 +736,7 @@ describe('落ちた session の突き合わせ（推しの幕引き）', () => {
     const got = mark();
     expect(guard(back, bashInput(SID)).allow).toBe(true);
     const sent = writes(got());
-    expect(sent.find(r => r.path === '/v1/actors')?.body).toMatchObject({ bindings: expect.arrayContaining([{ type: 'cmux.workspace.ref', value: moved.ref }]) });
+    expect(sent.find(r => r.path === '/v1/actors')?.body?.bindings).toContainEqual({ type: 'cmux.workspace.ref', value: moved.ref });
     const re = sent.find(r => r.body?.type === 'reentered');
     expect(re?.body).toMatchObject({ by: `claude.session:${SID}`, detail: { source: 'guard' } });
     expect(re?.path).toMatch(new RegExp(`-${SID}-reentered-1$`));

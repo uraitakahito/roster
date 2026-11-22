@@ -15,7 +15,7 @@ import { allRoles, assertKey, isStaffKey, LOCAL_KEY, readRole, removeRole, requi
 import { readSkillSets, skillSetDir, TpmError } from '../skill-sets.ts';
 import { route } from '../tracker/routed.ts';
 import { findHook, staleHook } from './banner.ts';
-import { castlistHello, closeLaunch } from './castlist.ts';
+import { castlistHello, closeLaunch, sweep } from './castlist.ts';
 import { issueCopy, launch, roleDefaults } from './launch.ts';
 import { assertRead, assertSettled, brief } from './messages.ts';
 import { pageFolder } from './page.ts';
@@ -107,17 +107,19 @@ export function bannerHint(ctx: Context, cmuxFile?: string): string[] {
 
 /** 名簿を、実際に動いている居場所と突き合わせて出す。 */
 export function roles(ctx: Context): string[] {
+  // 落ちた session の推しの幕引き（castlist と cmux があれば）。
+  const swept = sweep(ctx);
   const seats = ctx.transport.seats();
   const records = allRoles(ctx);
   // 台帳に未決の件があれば、名簿の終わりに 1 行出す（見直しを忘れないため）。
-  if (records.length === 0) return ['名簿: 担当はいない', ...lastAuditLine(ctx), ...openLine(ctx)];
+  if (records.length === 0) return ['名簿: 担当はいない', ...swept, ...lastAuditLine(ctx), ...openLine(ctx)];
   return ['名簿:', ...records.map((r) => {
     const alive = r.address !== undefined && seats.some(s => s.address === r.address);
     const wait = alive && r.address !== undefined ? ctx.transport.status(r.address)?.wait : undefined;
     const gone = r.role === 'auditor' ? '消えた（居場所が無い。起こし直すのは Product Manager: tpm audit start）' : '消えた（居場所が無い。tpm assign で起こし直すか、tpm close で名簿から消す）';
     const where = alive ? `${r.address}（${wait ?? '状態なし'}）` : gone;
     return `- ${r.key}  ${r.title}  ${where}${r.dismissed ? `  dismiss 済み（${r.dismissed === 'handover' ? '交代' : '終わり'}）` : ''}${r.brief ? `  依頼書: ${r.brief}` : ''}${r.issuePage ? `  課題の写し: ${r.issuePage}` : ''}`;
-  }), ...lastAuditLine(ctx), ...openLine(ctx)];
+  }), ...swept, ...lastAuditLine(ctx), ...openLine(ctx)];
 }
 
 /** Key に使う字: 英小文字と数字から、読み違えやすい 0・o・1・l・i を除いた 31 字。 */
@@ -168,6 +170,13 @@ export interface AssignOptions {
  * TPM 担当がこの形で打つのは、返っていない頼みがあるのに席が落ちた時の起こし直し。
  */
 export function assign(ctx: Context, subjectKey: string, options: AssignOptions): string[] {
+  const lines = assignSeat(ctx, subjectKey, options);
+  // 落ちた session の推しの幕引き（castlist と cmux があれば）。
+  return [...lines, ...sweep(ctx)];
+}
+
+/** tpm assign の本体（上の assign が、終わりに落ちた session の突き合わせを足す）。 */
+function assignSeat(ctx: Context, subjectKey: string, options: AssignOptions): string[] {
   requireTpmSide(ctx, 'tpm assign');
   assertKey(subjectKey);
   if (!Number.isFinite(options.wait) || options.wait < 0) throw new TpmError('--wait は 0 以上の数にしてください（0 なら待たない）');

@@ -33,7 +33,7 @@ background: false
 2. `tpm incident timeline <件の番号>` で時系列のページを置き、出た URL を `tpm page path` で file にして読む。
 3. 件の課題の Key の依頼書・成果のページ（`tpm page list --key <Key>` と `tpm page path`）のうち、時系列に出てくる物を読む。
 4. 件の事実が skill・決まり・コードの文を名指すときは、その file と `git log` を読む。
-5. 件の事実に、誰が・誰に起こされ・どの model と effort で動いたかが要るときは、`tpm castlist find --label tpm.key:<Key>`（時刻で絞るなら `--active-from`・`--active-to`）でアクターを探し、`tpm castlist show <名か id>`・`tpm castlist lineage`・`tpm castlist settings --actor <名か id> --at <時刻>` で読む。時系列のページのアクターの欄も、同じ所から引いた物。`castlist を設定していない`・`castlist に聞けない` と出たら、`読めなかった物:` に書く。
+5. 件の事実に、誰が・誰に起こされ・どの model と effort で動いたかが要るときは、`tpm castlist find --label tpm.key:<Key>`（時刻で絞るなら `--active-from`・`--active-to`）でアクターを探し、`tpm castlist show <名か id>`・`tpm castlist lineage`・`tpm castlist settings --actor <名か id> --at <時刻>` で読む。時系列のページのアクターの欄も、同じ所から引いた物。`castlist を設定していない`・`castlist に聞けない` と出たら、`読めなかった物:` に書く。幕引き（`closed`）の `detail.inferred` が true の物は、tpm が落ちたと推して後から送った物で、時刻は止まった時刻でなく tpm が気づいた時刻（docs の「担当のあいだの決まり」の「推しの幕引き」）。
 
 ## 2. 返す
 
