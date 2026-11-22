@@ -14,7 +14,7 @@ import { TpmError } from './skill-sets.ts';
  * castlist が止まっている時に Product Manager へ出す `container run` の image の版。
  * TODO: castlist の release（https://github.com/uraitakahito/castlist/releases）の版を上げたら、ここも上げる。
  */
-export const CASTLIST_VERSION = 'v0.1.0';
+export const CASTLIST_VERSION = 'v0.1.1';
 /** castlist の docs（動かし方）。 */
 export const CASTLIST_DOCS = 'https://uraitakahito.github.io/castlist/';
 
@@ -106,20 +106,34 @@ export function request(ctx: Pick<Context, 'exec'>, url: string, method: 'GET' |
 /** URL の port（書いていなければ http の 80）。 */
 const portOf = (url: string): string => new URL(url).port || '80';
 
+/** castlist の container の名（0.1.1 から。同じ network の container が DNS の domain box で名で引く）。 */
+export const CASTLIST_CONTAINER = 'castlist.box';
+/** 0.1.0 の docs の container の名。この名で動かしている間は、この名で起こし直す。 */
+const LEGACY_CONTAINER = 'castlist';
+
+/** container が在るか（`container inspect <名>` が通る。読むだけの命令）。 */
+const exists = (ctx: Pick<Context, 'exec'>, name: string): boolean => ctx.exec('container', ['inspect', name]).status === 0;
+
 /**
- * castlist が止まっている時に、Product Manager が自分の terminal で打つ 1 行。
- * container が在れば（`container inspect castlist` が通る。読むだけの命令）起こし直し、無ければ作って起こす。
+ * castlist が止まっている時に、Product Manager が自分の terminal で打つ 1 行（と、要れば添える行）。
+ * 新しい名の container が在れば起こし直し、0.1.0 の名の container だけが在ればその名で起こし直して名を替える docs を添え、どちらも無ければ作って起こす。
  */
-export function pmStartLine(ctx: Pick<Context, 'exec'>, url: string): string {
-  if (ctx.exec('container', ['inspect', 'castlist']).status === 0) return 'container start castlist';
-  return `container run -d --name castlist -p 127.0.0.1:${portOf(url)}:8080 -v castlist-data:/data -m 200M -c 1 ghcr.io/uraitakahito/castlist:${CASTLIST_VERSION}`;
+export function pmStartLines(ctx: Pick<Context, 'exec'>, url: string): string[] {
+  if (exists(ctx, CASTLIST_CONTAINER)) return [`container start ${CASTLIST_CONTAINER}`];
+  if (exists(ctx, LEGACY_CONTAINER)) {
+    return [
+      `container start ${LEGACY_CONTAINER}`,
+      `（前の名 ${LEGACY_CONTAINER} で動いています。次に版を上げる時に、名を ${CASTLIST_CONTAINER} にして起こし直します: ${CASTLIST_DOCS}run.html の「版を上げる」）`,
+    ];
+  }
+  return [`container run -d --name ${CASTLIST_CONTAINER} -p 127.0.0.1:${portOf(url)}:8080 -v castlist-data:/data -m 200M -c 1 ghcr.io/uraitakahito/castlist:${CASTLIST_VERSION}`];
 }
 
 /** castlist が止まっている時の文。done はしなかった事、after は 1 行の後に続ける行。打つ 1 行は、それだけで 1 行に置く。 */
 export function downMessage(ctx: Pick<Context, 'exec'>, url: string, done: string, after: string[] = []): string {
   return [
     `castlist（${url}）が応えません。${done}castlist を起こすのは Product Manager です。Product Manager が自分の terminal で次の 1 行を打ちます（docs: ${CASTLIST_DOCS}）:`,
-    pmStartLine(ctx, url),
+    ...pmStartLines(ctx, url),
     ...after,
   ].join('\n');
 }
