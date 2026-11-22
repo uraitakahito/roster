@@ -14,7 +14,7 @@ import { TpmError } from './skill-sets.ts';
  * castlist が止まっている時に Product Manager へ出す `container run` の image の版。
  * TODO: castlist の release（https://github.com/uraitakahito/castlist/releases）の版を上げたら、ここも上げる。
  */
-export const CASTLIST_VERSION = 'v0.1.1';
+export const CASTLIST_VERSION = 'v0.2.0';
 /** castlist の docs（動かし方）。 */
 export const CASTLIST_DOCS = 'https://uraitakahito.github.io/castlist/';
 
@@ -174,7 +174,7 @@ export function registerPm(ctx: Context, url: string): Reply {
     name_prefix: 'product-manager',
     labels: { 'tpm.project': ctx.project },
     bindings: [{ type: PM_REF.split(':')[0], value: PM_REF.split(':')[1] }],
-    at: ctx.now().toISOString(),
+    sent_at: ctx.now().toISOString(),
   });
 }
 
