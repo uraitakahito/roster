@@ -1,7 +1,7 @@
 // cmux の adapter。連携の口を cmux の命令に写す。cmux の言葉（workspace・surface・サイドバー）はこのファイルの外に出さない。
 import type { Exec, ExecResult } from '../exec.ts';
 import { TpmError } from '../skill-sets.ts';
-import type { Delivery, Incoming, MessageTrace, Seat, SeatLabel, SpawnOptions, StatusKey, Transport } from './types.ts';
+import type { Delivery, Incoming, MailboxEntry, MessageTrace, Seat, SeatLabel, SpawnOptions, StatusKey, Transport } from './types.ts';
 
 /** 状態の鍵ごとの見た目（protocol の「サイドバー」）。 */
 const STATUS_STYLE: Record<StatusKey, string[]> = {
@@ -22,6 +22,10 @@ const HISTORY_LIMIT = 1000;
 /** cmux の受信箱の 1 件のうち、時刻に使う欄（時刻は UNIX の秒）。 */
 interface CmuxMessage {
   id: string
+  sender_name?: string
+  body?: string
+  state?: string
+  delivered_via?: string | null
   created_at?: number | null
   delivered_at?: number | null
   read_at?: number | null
@@ -83,6 +87,27 @@ export class CmuxTransport implements Transport {
   queued(to: string): string[] {
     const inbox = this.json(['agent', 'inbox', '--surface', to, '--state', 'queued']) as { messages?: { id: string }[] };
     return (inbox.messages ?? []).map(m => m.id);
+  }
+
+  mailbox(address: string): MailboxEntry[] {
+    return this.entries(['agent', 'inbox', '--surface', address, '--limit', String(HISTORY_LIMIT)]);
+  }
+
+  markQueuedRead(address: string): MailboxEntry[] {
+    // --mark-read は、並べた物そのものを既読にする。数は cmux が覚える上限まで並べる（並べ残した物は既読にならず配られる）。
+    return this.entries(['agent', 'inbox', '--surface', address, '--state', 'queued', '--limit', String(HISTORY_LIMIT), '--mark-read']);
+  }
+
+  private entries(args: string[]): MailboxEntry[] {
+    const messages = (this.json(args) as { messages?: CmuxMessage[] }).messages ?? [];
+    return messages.map(m => ({
+      id: m.id,
+      from: m.sender_name ?? '',
+      text: m.body ?? '',
+      state: (['queued', 'delivered', 'read', 'failed'] as const).find(s => s === m.state) ?? 'failed',
+      ...(typeof m.delivered_via === 'string' ? { deliveredVia: m.delivered_via } : {}),
+      ...iso('deliveredAt', m.delivered_at),
+    }));
   }
 
   history(): MessageTrace[] {

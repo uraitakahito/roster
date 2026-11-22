@@ -20,7 +20,29 @@ import { readShown, seenTimes, shownFile, type SeenAt } from '../seen.ts';
 /** 記録の 1 行目の一言に使う長さの上限（メッセージの本文から作るとき）。 */
 const SUMMARY_LIMIT = 80;
 
-interface Sent {
+/**
+ * 送り手・受け手の担当: 名簿の Key（TPM 担当は tpm）と、起こしの id（$TPM_LAUNCH・名簿の launch。castlist を設定した時だけある）。
+ * 届いた所で、宛先の担当と受けた session を比べるのに使う（tpm returned check）。
+ */
+export interface Party {
+  key: string
+  launch?: string
+}
+
+/** TPM 担当の担当の名（Party の key）。 */
+export const TPM_PARTY = 'tpm';
+
+/** 自分の担当（$TPM_KEY が無ければ TPM 担当）。 */
+export function selfParty(env: NodeJS.ProcessEnv): Party {
+  const launch = env.TPM_LAUNCH;
+  return { key: env.TPM_KEY || TPM_PARTY, ...(launch ? { launch } : {}) };
+}
+
+/** 名簿の行の担当。 */
+const partyOf = (role: RoleRecord): Party => ({ key: role.key, ...(role.launch === undefined ? {} : { launch: role.launch }) });
+
+/** 送った記録の 1 行（log.jsonl）。 */
+export interface Sent {
   at: string
   key: string
   heading: string
@@ -38,6 +60,13 @@ interface Sent {
   settle?: SettleChoice | 'none'
   /** 担当から担当へじかに送った行（レビューの頼みと判定）。前の版が TPM 担当へ送った【ask-review】【review】の行には無い。 */
   peer?: true
+  /** 送った担当。前の版の行には無い。 */
+  sender?: Party
+  /**
+   * 届く担当。返事の形（--reply-to）では、cmux が元のメッセージの送り手の居場所へ届けるので、元の行の送り手にする（元の行が無ければ書かない）。
+   * 前の版の行には無い（届いた所で比べない）。
+   */
+  recipient?: Party
 }
 
 /** 同じメッセージの 2 度送りとみなす間（秒）。 */
@@ -60,18 +89,41 @@ function assertNotRepeat(ctx: Context, id: HeadingId, from: string, to: string, 
 /** 担当が TPM 担当へ送る物の 2 度送りを見る（課題に記録を書く前に呼ぶ）。 */
 const notRepeatToTpm = (ctx: Context, self: RoleRecord, id: HeadingId, body: string): void => assertNotRepeat(ctx, id, self.title, requireTpm(ctx).address, body);
 
-/** メッセージを送り、送った記録を log.jsonl に足す。extra は記録の行に足す欄。 */
-function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: string, body: string, replyTo?: string, extra: Pick<Sent, 'settle' | 'peer'> = {}): string {
+/** メッセージを送り、送った記録を log.jsonl に足す。recipient は届く担当（返事の形なら元の行の送り手に替える）、extra は記録の行に足す欄。 */
+function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: string, body: string, recipient: Party, replyTo?: string, extra: Pick<Sent, 'settle' | 'peer'> = {}): string {
   assertNotRepeat(ctx, id, from, to, body, replyTo);
   const text = message(id, body);
+  const receiving = replyTo === undefined ? recipient : ctx.state.lines<Sent>('log.jsonl').findLast(l => l.id === replyTo)?.sender;
   const d = ctx.transport.send(to, from, text, replyTo);
-  ctx.state.append('log.jsonl', { at: ctx.now().toISOString(), key, heading: id, from, to, text, id: d.id, delivered: d.delivered, ...(replyTo === undefined ? {} : { replyTo }), ...extra } satisfies Sent);
+  ctx.state.append('log.jsonl', {
+    at: ctx.now().toISOString(),
+    key,
+    heading: id,
+    from,
+    to,
+    text,
+    id: d.id,
+    delivered: d.delivered,
+    ...(replyTo === undefined ? {} : { replyTo }),
+    ...extra,
+    sender: selfParty(ctx.env),
+    ...(receiving === undefined ? {} : { recipient: receiving }),
+  } satisfies Sent);
   return `送った: 【${id}】→ ${to}（${d.delivered ? '届いた' : '相手が手を動かしているので、まだ届いていない。空いたら届く'}）`;
 }
 
 /** 担当から TPM 担当へ。 */
 function toTpm(ctx: Context, self: RoleRecord, id: HeadingId, body: string, replyTo?: string): string {
-  return deliver(ctx, id, self.key, self.title, requireTpm(ctx).address, body, replyTo);
+  return deliver(ctx, id, self.key, self.title, requireTpm(ctx).address, body, { key: TPM_PARTY }, replyTo);
+}
+
+/**
+ * 届け違いのメッセージを、担当から TPM 担当へ【returned】で返す（tpm returned check が呼ぶ。送る前の検査は通さない: hook の中なので止まれない）。
+ * TPM 担当の居場所が無ければ送らずに止まる。
+ */
+export function returnToTpm(ctx: Context, self: RoleRecord, body: string): string {
+  if (tpmSeat(ctx) === undefined) throw new TpmError('TPM 担当の居場所がありません');
+  return toTpm(ctx, self, 'returned', body);
 }
 
 /** 担当の居場所が今あるかを見て、宛先を返す。無ければ止まる。 */
@@ -85,7 +137,7 @@ function seatOf(ctx: Context, role: RoleRecord): string {
 
 /** TPM 担当から担当へ。居場所が無ければ止まる。 */
 function toRole(ctx: Context, role: RoleRecord, id: HeadingId, body: string, replyTo?: string, extra: Pick<Sent, 'settle'> = {}): string {
-  return deliver(ctx, id, role.key, TPM_TITLE, seatOf(ctx, role), body, replyTo, extra);
+  return deliver(ctx, id, role.key, TPM_TITLE, seatOf(ctx, role), body, partyOf(role), replyTo, extra);
 }
 
 /** 担当の相手（課題の担当から見た Staff Engineer 担当の席・その逆）の宛先。居場所が無ければ止まる（送っていない・記録も書いていない）。 */
@@ -99,7 +151,7 @@ function peerSeat(ctx: Context, peer: RoleRecord): string {
 
 /** 担当から担当へ、じかに（レビューの頼みと判定だけ）。送り手の名は名簿の題。相手の居場所が無ければ止まる。 */
 export function toPeer(ctx: Context, self: RoleRecord, peer: RoleRecord, id: HeadingId, body: string): string {
-  return deliver(ctx, id, self.key, self.title, peerSeat(ctx, peer), body, undefined, { peer: true });
+  return deliver(ctx, id, self.key, self.title, peerSeat(ctx, peer), body, partyOf(peer), undefined, { peer: true });
 }
 
 /** 担当が担当へじかに送る物の 2 度送りを見る（課題に記録を書く前に呼ぶ。相手の宛先で数える）。 */

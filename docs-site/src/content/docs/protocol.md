@@ -207,6 +207,21 @@ sequenceDiagram
 - **TPM 担当だけの命令**: `tpm assign`・`tpm close`・`tpm notify`・`tpm answer`・`tpm dismiss` は、担当の session（`$TPM_KEY` がある）から打つと、何も送らず・書かずに止まる（`cli/src/roster.ts` の `requireTpmSide`。`gate.jsonl` に `tpm-only`。`tpm infra approve`・`tpm infra revoke`・`tpm incident add` も、同じ検査で断って残す）。送り手の名は命令が付けるので、担当が打つと TPM 担当の名で相手に届いてしまうため。
 - **前の監査の文脈**: `tpm audit begin` は、前の報告の後に新しい文脈（席を起こした・`/clear` した）になっていなければ、監査を始めずに止まる（下の「Auditor の席」）。
 
+## 届け違い
+
+待っているメッセージは連携の道具（cmux）が持ち、居場所の中の面で次に起きた Claude に、Claude の hook から配る。cmux は宛先を面の id で覚え、居場所を復元してもその id は残るので、前の session 宛てで待っていた物が、同じ居場所で起きた別の担当の session に配られることがある（2026-11-23、台帳 #84）。`tpm` は配る道に入っていないので、届いた所で見分ける（`cli/src/commands/returned.ts`）。
+
+- **送る時**: 送った記録（`log.jsonl`）の行に、送り手（`sender`）と届く担当（`recipient`）を書く。担当は名簿の Key（TPM 担当は `tpm`）と起こしの id（`$TPM_LAUNCH`・名簿の `launch`。castlist を設定した時だけある）。返事の形（`--reply-to`）では、cmux が元のメッセージの送り手の居場所へ届けるので、届く担当は元の行の送り手にする（元の行が無ければ書かない）。
+- **始まりに比べる**: どの席の SessionStart にも `tpm returned check` の hook が付く（castlist の設定に依らない）。自分の面の受信箱のうち、まだ待ちの物と、この session が起きた時に cmux が配った物（`delivered_via` が `claude.wake` で、配った時刻が hook の始まりの前後 10 秒の内）を、記録の届く担当と比べる。前の session に配られた物は拾わない。記録の無い物・届く担当の無い前の版の行は比べない。
+- **違うとみなす**: Key が違う。または Key が同じ担当で、起こしの id が両方あって違う（同じ Key で起こし直した）。TPM 担当は役割で比べる（起こし直した TPM 担当が前の TPM 担当宛てを受けるのは決まりどおり）。/clear の後は同じ起こしなので違わない。
+- **違う物があれば**、順に:
+  1. 待ちの物がみな違う宛てなら、`cmux agent inbox --mark-read` で既読にして配らせない（cmux は 1 通ずつは既読にできないので、正しい宛ての物が混じる時は既読にしない）。既読にした物に、確かめた組の外の物（間に届いた物）があれば、その中身を「あなた宛てかもしれない」として示す。
+  2. 台帳に 1 件書く（reliability、tag「届け違い」）。【incident】は送らない。
+  3. TPM 担当へ【returned】を送る（id・見出し・送った時刻・本文の先頭 80 字。全文は TPM 担当が `tpm returned show <id>` で読む）。自分が TPM 担当なら送らない。TPM 担当の居場所が無ければ送らず、そう示す。
+  4. 返した id を `returned.jsonl` に控える（resume・compact で hook がもう 1 度走っても 2 度返さない。返せなかった物は控えず、次の始まりでもう 1 度試す）。
+  5. 画面（`systemMessage`）と Claude の文脈（`additionalContext`）に「前の session 宛て。扱わない」と一覧を出す。
+- **見ない物**: session が起きた後に届く届け違い（次の始まりまで見ない）。tpm の hook を付けずに起きた Claude（比べる自分が分からない）。
+
 ## Staff Engineer 担当の席
 
 Staff Engineer 担当（役割 `staff-engineer`。題は `レビュー <課題の Key>: <見る物>`、名簿の Key は `<課題の Key>.staff`。skill は `/staff-engineer`）は、課題の担当が頼んだ計画・提案・PR を見て助言する担当。席は課題ごとに、課題の担当の隣に立つ。**頼み（【ask-review】）と判定（【review】）は、TPM 担当を通らず、課題の担当と席の間をじかに届く**（担当から担当への道は、この 2 通だけ。見出しの表（`cli/src/protocol.ts` の `HEADINGS`）の `peer` の印）。席は、頼みの命令が起こす。課題の担当が判定を受けない時だけ、`tpm ask tpm --review <番号>` で TPM 担当に上がる。いつ頼むか・判定の意味・助言で縛らないことは、決まり（`skill-sets/core/.claude/skills/_shared/protocol.md` の「レビュー」と「連携の 3 つの形」）。コードは `cli/src/reviews.ts`・`cli/src/commands/review.ts` と、`cli/src/commands/staff.ts` の `askReview`・`reportReview`・`launchStaff`、`cli/src/commands/messages.ts` の `toPeer`。

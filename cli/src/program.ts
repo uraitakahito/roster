@@ -5,6 +5,7 @@ import { Command, CommanderError } from 'commander';
 import { startTpm } from './command.ts';
 import { registerAudit } from './commands/audit.ts';
 import { sessionEnd, sessionStart } from './commands/castlist.ts';
+import { checkStart, showReturned } from './commands/returned.ts';
 import { castlistEvents, castlistFind, castlistLineage, castlistSettings, castlistShow, type EventsOptions, type FindOptions, type JsonOption, type LineageOptions, type SettingsOptions } from './commands/castlist-read.ts';
 import { bannerCheck, bannerHook, bannerLog, bannerSetup } from './commands/banner.ts';
 import { registerIncident } from './commands/incident.ts';
@@ -187,6 +188,20 @@ export function buildProgram(): Command {
       process.stderr.write(`tpm guard: ${verdict.reason}\n`);
       process.exit(2);
     });
+  const returned = program.command('returned').description('届け違い: 新しい session の始まりに、前の session 宛てに届いたメッセージを見つけて TPM 担当へ返す（check は hook が呼ぶ）・返った物の全文を読む（show）');
+  returned.command('check').description('（SessionStart の hook が呼ぶ）この居場所に届いた・待っているメッセージの宛先の担当と自分を比べ、違う物を配らせず、扱わないよう示し、台帳に書いて【returned】で返す')
+    .action(() => {
+      // hook なので、どんな誤りでも 0 で終わる。標準出力は、届け違いがあった時の JSON だけ（Claude Code が画面と文脈に出す）。
+      try {
+        const out = checkStart(createContext());
+        if (out !== undefined) console.log(JSON.stringify(out));
+      }
+      catch (e) {
+        process.stderr.write(`tpm returned check: ${(e as Error).message}\n`);
+      }
+    });
+  returned.command('show').description('返った物（【returned】の id）の宛先と全文を、送った記録から出す（TPM 担当。読むだけ）').argument('<id>', 'メッセージの id（頭の数字だけでもよい）')
+    .action((id: string) => print(showReturned(createContext(), id)));
   const castlist = program.command('castlist').description('アクターの台帳（castlist）: session の始まりと終わりを送る（hook が呼ぶ。castlist を設定していなければ何もしない）・監査の検索を読む（find・show・lineage・events・settings。読むだけ）');
   castlist.command('session-start').description('（SessionStart の hook が呼ぶ）session を登録し、登場・再登場・要約・分身と、起こした・継いだ線を送る')
     .action(() => {

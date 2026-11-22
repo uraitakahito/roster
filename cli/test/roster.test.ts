@@ -395,7 +395,7 @@ describe('run-role', () => {
     assign(w.tpm, 'app#12', { role: 'sustaining-engineer', wait: 0 });
     expect(claudeArgs(requireRole(w.tpm, 'app#12'), '/r')).toEqual([
       '--settings',
-      '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"/r/cli/bin/tpm guard"}]}],"SessionStart":[{"hooks":[{"type":"command","command":"/r/cli/bin/tpm castlist session-start"}]}],"SessionEnd":[{"hooks":[{"type":"command","command":"/r/cli/bin/tpm castlist session-end"}]}]}}',
+      '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"/r/cli/bin/tpm guard"}]}],"SessionStart":[{"hooks":[{"type":"command","command":"/r/cli/bin/tpm castlist session-start"},{"type":"command","command":"/r/cli/bin/tpm returned check"}]}],"SessionEnd":[{"hooks":[{"type":"command","command":"/r/cli/bin/tpm castlist session-end"}]}]}}',
       '--model',
       'claude-opus-5-5',
       '--effort',
@@ -415,7 +415,7 @@ describe('run-role', () => {
     expect(JSON.parse(args[1] ?? '')).toEqual({
       hooks: {
         PreToolUse: [{ matcher: 'Bash|Edit|Write|NotebookEdit', hooks: [{ type: 'command', command: '/r/cli/bin/tpm guard' }] }],
-        SessionStart: [{ hooks: [{ type: 'command', command: '/r/cli/bin/tpm audit fresh' }, { type: 'command', command: '/r/cli/bin/tpm castlist session-start' }] }],
+        SessionStart: [{ hooks: [{ type: 'command', command: '/r/cli/bin/tpm audit fresh' }, { type: 'command', command: '/r/cli/bin/tpm castlist session-start' }, { type: 'command', command: '/r/cli/bin/tpm returned check' }] }],
         SessionEnd: [{ hooks: [{ type: 'command', command: '/r/cli/bin/tpm castlist session-end' }] }],
       },
     });
