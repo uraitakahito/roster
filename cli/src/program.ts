@@ -5,6 +5,7 @@ import { Command, CommanderError } from 'commander';
 import { startTpm } from './command.ts';
 import { registerAudit } from './commands/audit.ts';
 import { sessionEnd, sessionStart } from './commands/castlist.ts';
+import { castlistEvents, castlistFind, castlistLineage, castlistSettings, castlistShow, type EventsOptions, type FindOptions, type JsonOption, type LineageOptions, type SettingsOptions } from './commands/castlist-read.ts';
 import { bannerCheck, bannerHook, bannerLog, bannerSetup } from './commands/banner.ts';
 import { registerIncident } from './commands/incident.ts';
 import { guard, infraApprove, infraList, infraRevoke, infraRun } from './commands/infra.ts';
@@ -184,7 +185,7 @@ export function buildProgram(): Command {
       process.stderr.write(`tpm guard: ${verdict.reason}\n`);
       process.exit(2);
     });
-  const castlist = program.command('castlist').description('（hook が呼ぶ）アクターの台帳（castlist）に、session の始まりと終わりを送る。castlist を設定していなければ何もしない');
+  const castlist = program.command('castlist').description('アクターの台帳（castlist）: session の始まりと終わりを送る（hook が呼ぶ。castlist を設定していなければ何もしない）・監査の検索を読む（find・show・lineage・events・settings。読むだけ）');
   castlist.command('session-start').description('（SessionStart の hook が呼ぶ）session を登録し、登場・再登場・要約・分身と、起こした・継いだ線を送る')
     .action(() => {
       // hook なので、どんな誤りでも何も出さずに 0 で終わる（標準出力は、Claude Code が文脈に足してしまう）。
@@ -204,6 +205,61 @@ export function buildProgram(): Command {
         process.stderr.write(`tpm castlist session-end: ${(e as Error).message}\n`);
       }
     });
+  // 監査の検索を読む命令（GET だけ）。旗は castlist の引数にそのまま写す（時刻は RFC 3339。値を確かめて断るのは castlist）。
+  const repeat = (value: string, previous: string[] | undefined): string[] => [...previous ?? [], value];
+  castlist.command('find').description('アクターを探す（GET /v1/actors。条件は AND。行ごとにプロフィールの画面の URL を出す）')
+    .option('--label <鍵:値>', 'そのラベルを持つ（何度でも。tpm.key:<Key>・tpm.role:<役割>・tpm.project:<folder> など）', repeat)
+    .option('--binding <種類:値>', 'その付随する id を、--at の時（無ければ今）に最後に受けた者（cmux.workspace.ref:workspace:3 など）')
+    .option('--at <時刻>', '--binding の時刻')
+    .option('--active-from <時刻>', '居た間が、この時刻から後に掛かる')
+    .option('--active-to <時刻>', '居た間が、この時刻までに掛かる')
+    .option('--active <true|false>', 'true で今居る者、false で今居ない者')
+    .option('--model <model>', 'その model で動いたことがある')
+    .option('--effort <effort>', 'その effort で動いたことがある')
+    .option('--launched-by <名か id>', 'その者が起こした')
+    .option('--skewed', '送り手の時計がずれた行を持つ')
+    .option('--kind <ai|human>', 'アクターの種類')
+    .option('--sort <entered|exited>', '初めの登場（既定）か最後の退場で並べる')
+    .option('--order <asc|desc>', '並べる向き（既定は asc）')
+    .option('--limit <件数>', '1 頁の数（castlist の既定は 100・1000 まで）')
+    .option('--after <next>', '前の答えの next（続きの頁）')
+    .option('--json', 'castlist の答えをそのまま出す')
+    .action((options: FindOptions) => print(castlistFind(createContext(), options)));
+  castlist.command('show <名か-id>').description('1 つのアクター: ラベル・付随する id・今の状態・最新の model と effort・線の要約（名は、この project の tpm が登録して控えた物だけ引ける）')
+    .option('--json', 'castlist の答え（GET /v1/actors/{id}）をそのまま出す')
+    .action((target: string, options: JsonOption) => print(castlistShow(createContext(), target, options)));
+  castlist.command('lineage <名か-id>').description('誰が起こしたか・誰を起こしたか（GET /v1/actors/{id}/lineage。上は人まで、下は既定で 1 段）')
+    .option('--direction <up|down|both>', '辿る向き（既定は both）')
+    .option('--depth <段>', '辿る段（1〜20）')
+    .option('--type <launched|continued>', 'その線だけを辿る')
+    .option('--json', 'castlist の答えをそのまま出す')
+    .action((target: string, options: LineageOptions) => print(castlistLineage(createContext(), target, options)));
+  castlist.command('events').description('出来事を、アクターをまたいで探す（GET /v1/events。受けた順）')
+    .option('--type <種類>', '出来事の種類（何度でも。どれか）', repeat)
+    .option('--actor <名か id>', 'そのアクターの物')
+    .option('--from <時刻>', 'castlist が受けた時刻の窓の始め')
+    .option('--to <時刻>', 'castlist が受けた時刻の窓の終わり')
+    .option('--reason <訳>', 'detail.reason が、その値')
+    .option('--source <きっかけ>', 'detail.source が、その値')
+    .option('--skewed', '送り手の時計がずれた行')
+    .option('--limit <件数>', '1 頁の数（1000 まで）')
+    .option('--after <next>', '前の答えの next（続きの頁）')
+    .option('--json', 'castlist の答えをそのまま出す')
+    .action((options: EventsOptions) => print(castlistEvents(createContext(), options)));
+  castlist.command('settings').description('model と effort の行（--actor が無ければ GET /v1/settings、あれば GET /v1/actors/{id}/settings）')
+    .option('--actor <名か id>', 'そのアクターの行（--at でその時に効いていた 1 行）')
+    .option('--at <時刻>', '--actor の時刻')
+    .option('--model <model>', 'その model の行')
+    .option('--effort <effort>', 'その effort の行')
+    .option('--source <requested|observed>', '頼んだ行か、見た行')
+    .option('--from <時刻>', 'castlist が受けた時刻の窓の始め')
+    .option('--to <時刻>', 'castlist が受けた時刻の窓の終わり')
+    .option('--mismatch', '見た行のうち、その前に頼んだ行と model か effort が違う物')
+    .option('--skewed', '送り手の時計がずれた行')
+    .option('--limit <件数>', '1 頁の数（1000 まで）')
+    .option('--after <next>', '前の答えの next（続きの頁）')
+    .option('--json', 'castlist の答えをそのまま出す')
+    .action((options: SettingsOptions) => print(castlistSettings(createContext(), options)));
   program.command('run-role <key>').description('（連携の道具が動かす）名簿を読んで担当の claude を起こす')
     .requiredOption('--project <folder>', 'TPM 担当を起こした folder')
     .requiredOption('--state <folder>', '状態の folder')

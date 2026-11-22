@@ -25,8 +25,8 @@ export const PM_REF = 'tpm.person:product-manager';
 const MAX_SKEW_MS = 2000;
 /** /healthz を待つ秒（起こす前に見るので、長くは待たない）。 */
 const HEALTH_TIMEOUT = '1';
-/** 書く要求を待つ秒（castlist は 1 つの問い合わせを 5 秒で切る）。 */
-const WRITE_TIMEOUT = '6';
+/** 書く要求と、監査の検索を読む要求を待つ秒（castlist は 1 つの問い合わせを 5 秒で切る）。 */
+const REQUEST_TIMEOUT = '6';
 /** 名の接頭辞の長さの上限（castlist の決まり）。 */
 const PREFIX_LIMIT = 32;
 /** issuer の長さの上限（castlist の決まり）。 */
@@ -78,11 +78,11 @@ export function projectPrefix(project: string, seat: 'tpm' | 'audit'): string {
   return fit(slug(basename(project)) || 'project', `-${seat}`, PREFIX_LIMIT);
 }
 
-/** castlist の答え。down は、つながらない・時間内に答えない。busy は 503（混んでいる）。 */
-export type Reply = { kind: 'ok', code: number, body: unknown } | { kind: 'down' } | { kind: 'busy' } | { kind: 'refused', code: number, error: string };
+/** castlist の答え。ok の text は答えの本文の字のまま（--json で出す）。down は、つながらない・時間内に答えない。busy は 503（混んでいる）。 */
+export type Reply = { kind: 'ok', code: number, body: unknown, text: string } | { kind: 'down' } | { kind: 'busy' } | { kind: 'refused', code: number, error: string };
 
 /** castlist に頼む。body があれば JSON で送る。Origin は付けない（castlist は Origin の付いた書く要求を断る）。 */
-export function request(ctx: Pick<Context, 'exec'>, url: string, method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown, timeout = WRITE_TIMEOUT): Reply {
+export function request(ctx: Pick<Context, 'exec'>, url: string, method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown, timeout = REQUEST_TIMEOUT): Reply {
   const input = body === undefined ? undefined : JSON.stringify(body);
   const args = ['-sS', '--max-time', timeout, '-X', method, '-w', '\n%{http_code}', ...(input === undefined ? [] : ['-H', 'Content-Type: application/json', '--data-binary', '@-']), `${url}${path}`];
   const r = ctx.exec('curl', args, input === undefined ? undefined : { input });
@@ -98,7 +98,7 @@ export function request(ctx: Pick<Context, 'exec'>, url: string, method: 'GET' |
   catch {
     parsed = text;
   }
-  if (code >= 200 && code < 300) return { kind: 'ok', code, body: parsed };
+  if (code >= 200 && code < 300) return { kind: 'ok', code, body: parsed, text };
   const error = typeof parsed === 'object' && parsed !== null && typeof (parsed as { error?: unknown }).error === 'string' ? (parsed as { error: string }).error : text.trim();
   return { kind: 'refused', code, error };
 }
