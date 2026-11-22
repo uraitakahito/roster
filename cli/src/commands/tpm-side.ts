@@ -9,7 +9,7 @@ import { syncDeliveries } from '../evidence.ts';
 import { AUDIT_KEY, modelStatus, ROLES, TPM_TITLE, WAIT, type RoleName } from '../protocol.ts';
 import { lastAuditLine } from '../audits.ts';
 import { openLine } from '../incidents.ts';
-import { openReviews, reviewLabel } from '../reviews.ts';
+import { openReviews } from '../reviews.ts';
 import { resolveSettings } from '../settings.ts';
 import { allRoles, assertKey, isStaffKey, LOCAL_KEY, readRole, removeRole, requireTpmSide, staffKey, type RoleRecord, type TpmRecord } from '../roster.ts';
 import { readSkillSets, skillSetDir, TpmError } from '../skill-sets.ts';
@@ -19,7 +19,7 @@ import { castlistHello, closeLaunch } from './castlist.ts';
 import { issueCopy, launch, roleDefaults } from './launch.ts';
 import { assertRead, assertSettled, brief } from './messages.ts';
 import { pageFolder } from './page.ts';
-import { markBriefed, putStaffBrief, relabelStaff, STAFF, staffSubject } from './staff.ts';
+import { launchStaff, markBriefed, putStaffBrief, relabelStaff, STAFF, staffSubject } from './staff.ts';
 
 /**
  * TPM 担当が名乗る（$TPM_KEY の無い tpm hello）: 居場所の題と状態を出し、自分の宛先を状態に書く。続けて名簿を出す。
@@ -164,7 +164,8 @@ export interface AssignOptions {
  * 課題を担当に振る。同じ Key の担当が動いていれば、その担当に【brief】で新しい依頼書を送る（背景を知っているため）。
  * いなければ（居場所が消えていても）起こし、名乗るまで待つ。
  * Staff Engineer 担当（--role staff-engineer）は、課題の担当と並べるために、名簿の Key を `<課題の Key>.staff` にして起こす（subjectKey は、どの役割でも課題の Key）。
- * その依頼書は、課題の担当のレビューの頼み（tpm ask review）から命令が作る（--brief は受けない）。
+ * その依頼書は、課題の担当のレビューの頼み（tpm ask review）から命令が作る（--brief は受けない）。いつもは tpm ask review が席を起こし、じかに頼みを届けるので、
+ * TPM 担当がこの形で打つのは、返っていない頼みがあるのに席が落ちた時の起こし直し。
  */
 export function assign(ctx: Context, subjectKey: string, options: AssignOptions): string[] {
   requireTpmSide(ctx, 'tpm assign');
@@ -207,27 +208,34 @@ export function assign(ctx: Context, subjectKey: string, options: AssignOptions)
   if (options.issue !== undefined && !ctx.tracker.owns(options.issue)) {
     throw new TpmError(`${options.issue} に記録を書く課題管理が、どの設定にもありません（読んだ設定: ${describeTrackers(ctx.config.sources)}）。記録するなら、その課題を扱う repo の .claude/roles/config.jsonc に "tracker"（jira・github）を書いてください`);
   }
+  const castlistHint = [`この 1 行を Product Manager に頼み、tpm wait pm "castlist を起こす" --hand で待ってから、もう 1 度 tpm assign を打ってください。`];
+  // Staff Engineer 担当の席の起こし直し（返っていない頼みがあるのに席が落ちた時）。いつもは、課題の担当の tpm ask review が起こす。
+  if (subject !== undefined) {
+    return launchStaff(ctx, subject, asks, {
+      flags: options,
+      wait: options.wait,
+      again: existing !== undefined,
+      castlistHint,
+      more: issue => issue === undefined ? [] : [`課題の記録: ${recordingTo(ctx, issue)}`],
+      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+      ...(options.issue === undefined ? {} : { issue: options.issue }),
+      ...(options.noIssueCopy === undefined ? {} : { noIssueCopy: options.noIssueCopy }),
+    });
+  }
   // 新しい担当（交代を含む）は背景を知らないので、依頼書に課題の概要の節を求める。続きの【brief】には求めない。
   if (options.brief !== undefined) assertSummary(ctx, key, options.brief);
-  // Staff Engineer 担当の記録は、見ている課題の課題管理の課題に書く。
-  const issue = options.issue ?? subject?.issue;
+  const issue = options.issue;
   const cwd = options.cwd ?? ctx.project;
   const settings = resolveSettings(options.role, { flags: options, config: roleDefaults(ctx, options.role, cwd), env: ctx.env });
   // castlist を設定していれば、起きているかを、写しを置く前に見る（止まっていれば、担当を起こさずに止まる）。
-  const skew = requireUp(ctx, '担当は起こしていません。', [`この 1 行を Product Manager に頼み、tpm wait pm "castlist を起こす" --hand で待ってから、もう 1 度 tpm assign を打ってください。`]);
+  const skew = requireUp(ctx, '担当は起こしていません。', castlistHint);
   // 居場所を作る前に読む（読めなければ、担当を起こさずに止まる）。
   const copy = issueCopy(ctx, issue ?? subjectKey, subjectKey, options.noIssueCopy);
-  const def = ROLES[options.role];
-  // Staff Engineer 担当の席の題と説明は、渡す頼みから作る。
-  const label = subject === undefined ? undefined : reviewLabel(asks);
-  // 起こす席には、依頼書を名簿の行で渡す（起こせなかった回は席が無いので、次の回に渡し直す）。
-  const briefUrl = subject === undefined ? options.brief : putStaffBrief(ctx, subject, asks);
-  if (briefUrl !== undefined) markBriefed(ctx, asks, briefUrl);
+  const briefUrl = options.brief;
   const record: RoleRecord = {
     key,
-    ...(subject === undefined ? {} : { subject: subjectKey }),
     role: options.role,
-    title: def.title(subjectKey, label?.target ?? options.title ?? '課題'),
+    title: ROLES[options.role].title(subjectKey, options.title ?? '課題'),
     cwd,
     addDirs: ['core', ...ctx.skillSets].map(s => skillSetDir(ctx.root, s)),
     ...settings,
@@ -238,7 +246,7 @@ export function assign(ctx: Context, subjectKey: string, options: AssignOptions)
   // 担当を起こした folder と、記録の先を出す（上の folder から振ると、どちらも 1 つに決まっていないため）。
   const sid = ctx.env.CLAUDE_CODE_SESSION_ID;
   const more = [...(issue === undefined ? [] : [`課題の記録: ${recordingTo(ctx, issue)}`]), ...skew];
-  return launch(ctx, record, existing !== undefined, options.wait, more, sid ? sessionRef(sid) : undefined, label?.description);
+  return launch(ctx, record, existing !== undefined, options.wait, more, sid ? sessionRef(sid) : undefined);
 }
 
 /** 担当の居場所を閉じ、名簿から消す。課題の担当を閉じる時は、その課題の Staff Engineer 担当の席が残っていれば、一緒に閉じる。 */

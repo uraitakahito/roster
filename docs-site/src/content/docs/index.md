@@ -7,15 +7,14 @@ roster は、Product Manager（人）を、Claude Code の各担当が助ける�
 
 ## skill で呼び出される担当者
 
-Product Manager が TPM 担当を起こし、TPM 担当が課題ごとにほかの担当を起こします。Staff Engineer 担当は、課題の担当がレビューを頼んだ時に、その課題の隣に起こします。監査の担当（Auditor）だけは、TPM 担当の回し方も見るので、Product Manager が起こします。
+Product Manager が TPM 担当を起こし、TPM 担当が課題ごとにほかの担当を起こします。Staff Engineer 担当の席は、課題の担当がレビューを頼んだ時に、頼みの命令がその課題の隣に起こします（頼みと判定は、TPM 担当を通らず、じかに届きます）。監査の担当（Auditor）だけは、TPM 担当の回し方も見るので、Product Manager が起こします。
 
 ```mermaid
 flowchart LR
   PM["Product Manager（人）"] -->|"tpm start の 1 行 → /tpm"| TPM["Technical Program Manager"]
   TPM -->|"tpm assign → /software-engineer"| SE["Software Engineer"]
   TPM -->|"tpm assign → /devops-engineer"| DE["DevOps Engineer"]
-  TPM -->|"tpm assign --role staff-engineer → /staff-engineer"| ST["Staff Engineer"]
-  SE -.->|"tpm ask review（TPM 担当を通る）"| ST
+  SE -->|"tpm ask review → /staff-engineer（じかに頼み、判定もじかに返る）"| ST["Staff Engineer"]
   TPM -->|"/dependabot-triage → /sustaining-engineer"| SU["Sustaining Engineer"]
   PM -->|"tpm audit start → /audit"| AU["Auditor"]
 ```

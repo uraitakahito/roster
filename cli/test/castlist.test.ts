@@ -10,6 +10,7 @@ import { auditStart } from '../src/commands/audit.ts';
 import { sessionEnd, sessionStart } from '../src/commands/castlist.ts';
 import { guard } from '../src/commands/infra.ts';
 import { hello } from '../src/commands/role-side.ts';
+import { askReview } from '../src/commands/staff.ts';
 import { assign, close } from '../src/commands/tpm-side.ts';
 import { startTpm } from '../src/command.ts';
 import type { Context } from '../src/context.ts';
@@ -19,7 +20,7 @@ import { requireRole, readRole, type RoleRecord } from '../src/roster.ts';
 import { roleEnv } from '../src/run-role.ts';
 import { resolveSettings } from '../src/settings.ts';
 import { deadUrl, startFakeCastlist, type CastlistRequest, type FakeCastlist } from './castlist-fake.ts';
-import { BRIEF, world, type World } from './helpers.ts';
+import { BRIEF, staffRoot, world, type World } from './helpers.ts';
 
 const SE = { role: 'software-engineer', title: '計画と実装', brief: BRIEF, wait: 0 } as const;
 const TPM_SID = 'aaaaaaaa-0000-4000-8000-000000000000';
@@ -277,6 +278,19 @@ describe('名の決まり', () => {
 
   test('接頭辞は 32 字まで', () => {
     expect(seatPrefix('a-very-long-key-name-for-the-issue-1', 'software-engineer').length).toBeLessThanOrEqual(32);
+  });
+});
+
+describe('課題の担当が tpm ask review で起こした Staff Engineer 担当の席', () => {
+  test('起こした者（launchedBy）は、課題の担当の session（TPM 担当ではない）', () => {
+    const { w } = launched();
+    const se = { ...seat(w, 't-x7k2', SID), root: staffRoot() };
+    sessionStart(se, startInput('startup', SID));
+    hello(se);
+    askReview(se, { url: 'https://github.com/o/r/pull/7', wait: 0 });
+    const staff = requireRole(w.tpm, 't-x7k2.staff');
+    expect(staff.launch).toMatch(/^[0-9a-f-]{36}$/);
+    expect(staff.launchedBy).toBe(`claude.session:${SID}`);
   });
 });
 

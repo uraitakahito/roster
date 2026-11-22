@@ -5,8 +5,8 @@ import { castlistUrl } from '../castlist.ts';
 import type { Context } from '../context.ts';
 import { syncDeliveries, type GateStop, type GuardStop, type WaitChange } from '../evidence.ts';
 import { incidentLine, readIncidents, requireIncident, writeIncident, type Incident } from '../incidents.ts';
-import { HEADINGS, type HeadingId } from '../protocol.ts';
-import { staffKey } from '../roster.ts';
+import { HEADINGS, type Heading, type HeadingId } from '../protocol.ts';
+import { isStaffKey, staffKey, subjectOfStaffKey } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
 import type { TrackerWrite } from '../tracker/recorded.ts';
 import type { MessageTrace } from '../transport/types.ts';
@@ -63,6 +63,11 @@ const cut = (text: string): string => text.length > TEXT_LIMIT ? `${text.slice(0
 /** 見出しの向き（担当から・TPM 担当から）。知らない見出しは undefined。 */
 const direction = (heading: string): 'role' | 'tpm' | undefined => Object.hasOwn(HEADINGS, heading) ? HEADINGS[heading as HeadingId].from : undefined;
 
+/** 担当から担当へじかに届く見出しか（レビューの頼みと判定）。 */
+const peer = (heading: string): boolean => Object.hasOwn(HEADINGS, heading) && (HEADINGS[heading as HeadingId] as Heading).peer === true;
+/** じかのやりとりの相手の Key（課題の担当 ⇄ その課題の Staff Engineer 担当の席）。 */
+const counterpart = (key: string): string => isStaffKey(key) ? subjectOfStaffKey(key) : staffKey(key);
+
 /**
  * Key の記録を集めて、時刻の順の行にする。window（from・to の ISO）があれば、その間だけ。
  * メッセージには届いた時刻を添え、届く前に相手が送ったメッセージがあれば「行き違い」の印を付ける。
@@ -80,9 +85,14 @@ export function collect(ctx: Context, key: string, window?: { from: string, to: 
       arrived === undefined ? (m.delivered ? '送った時に届いた' : '届いた時刻: 分からない（送った時は、まだ届いていない）') : `届いた: ${hms(arrived)}（${seconds(m.at, arrived)} 秒後）`,
       ...(m.replyTo === undefined ? [] : [`返事の先: ${m.replyTo}`]),
     ];
-    // 行き違い: これが届く前に、相手（向きが逆）が送ったメッセージ。
+    // 行き違い: これが届く前に、相手が送ったメッセージ。相手は、送り手と受け手の組で見る。
+    // 担当と TPM 担当の間の物は、同じ Key で向きが逆の物。じかの物（レビューの頼みと判定）は、課題の担当と、その Staff Engineer 担当の席の間の、逆向きのじかの物。
+    // じかの物を「同じ Key で向きが逆」で数えると、課題の担当が続けて TPM 担当へ送った物や、TPM 担当からの【notify】まで相手の物に数えてしまう。
     if (arrived !== undefined) {
-      const crossed = messages.filter(o => o.key === m.key && direction(o.heading) !== undefined && direction(o.heading) !== direction(m.heading) && o.at > m.at && o.at < arrived);
+      const reply = (o: Sent): boolean => peer(m.heading)
+        ? peer(o.heading) && o.key === counterpart(m.key)
+        : !peer(o.heading) && o.key === m.key && direction(o.heading) !== undefined && direction(o.heading) !== direction(m.heading);
+      const crossed = messages.filter(o => reply(o) && o.at > m.at && o.at < arrived);
       if (crossed.length > 0) notes.push(`行き違い: これが届く前に、相手が ${crossed.length} 件送った（${crossed.map(o => `【${o.heading}】${hms(o.at)}`).join('・')}）`);
     }
     const from = direction(m.heading);

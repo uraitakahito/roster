@@ -11,7 +11,7 @@ const minutes = (from: string, to: string): number => Math.round((Date.parse(to)
 /** 頼み 1 件の行。 */
 function line(ctx: Context, r: Review): string {
   const waiting = r.brief === undefined ? '席に渡していない' : readRole(ctx, staffKey(r.key)) === undefined ? '渡したが、席がもう無い' : '席が見ている';
-  const state = r.verdict !== undefined ? VERDICTS[r.verdict] : `まだ（${waiting}）`;
+  const state = `${r.verdict !== undefined ? VERDICTS[r.verdict] : `まだ（${waiting}）`}${r.escalatedAt === undefined ? '' : '・TPM 担当に上げた'}`;
   const when = `${short(r.askedAt)} に頼んだ${r.reviewedAt === undefined ? '' : `・${minutes(r.askedAt, r.reviewedAt)} 分で返った`}`;
   return [`#${r.n}`, r.key, state, r.url, when, ...(r.page === undefined ? [] : [r.page])].join('  ');
 }
@@ -33,7 +33,7 @@ export function reviewList(ctx: Context, options: { key?: string }): string[] {
   if (reviews.length === 0) return [options.key === undefined ? 'レビューの頼みは無い' : `${options.key} のレビューの頼みは無い`];
   const count = (v: Verdict): number => reviews.filter(r => r.verdict === v).length;
   const counts = (Object.keys(VERDICTS) as Verdict[]).map(v => `${VERDICTS[v]} ${count(v)}`).join('・');
-  const lines = [...reviews.map(r => line(ctx, r)), `頼み ${reviews.length} 件: ${counts}・まだ ${reviews.filter(r => r.verdict === undefined).length}`];
+  const lines = [...reviews.map(r => line(ctx, r)), `頼み ${reviews.length} 件: ${counts}・まだ ${reviews.filter(r => r.verdict === undefined).length}・TPM 担当に上げた ${reviews.filter(r => r.escalatedAt !== undefined).length}`];
   if (options.key !== undefined) return lines;
   const asked = new Set(all.map(r => r.key));
   const results = resultKeys(ctx, all[0]?.askedAt ?? '');

@@ -143,7 +143,7 @@ describe('tpm page put', () => {
       const { id } = s.w.wire.send('file:1', 'Technical Program Manager', `【answer】案 B にする ${i}`);
       const before = s.curls().length;
       expect(() => pagePut(s.role, s.html, { kind })).toThrow([
-        'TPM 担当から、まだ読んでいないメッセージが 1 件あります。ページを置いていません。',
+        '相手から、まだ読んでいないメッセージが 1 件あります。ページを置いていません。',
         `--- Technical Program Manager（id ${id}）`,
         `【answer】案 B にする ${i}`,
         '--- ここまで',

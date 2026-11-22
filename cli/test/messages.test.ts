@@ -306,7 +306,7 @@ describe('入口の検査: 送る前に、読んでいないメッセージを�
     w.wire.hold('file:1');
     expect(notify(w.tpm, 't-x7k2', { text: 'tag はまだ打たないで待つこと' })[0]).toMatch(/まだ届いていない/);
     const done = (): string[] => reportDone(w.se, { url: OUT, kind: 'result', summary: '実装した', remaining: 'なし', decisions: 'なし', points: [] });
-    expect(done).toThrow('TPM 担当から、まだ読んでいないメッセージが 1 件あります。送っていません。\n--- Technical Program Manager（id m1-file-1）\n【notify】tag はまだ打たないで待つこと\n--- ここまで\n読んだうえで、同じ命令を打ち直せば送ります（事情が変わっていたら、中身を変えて打つ）。');
+    expect(done).toThrow('相手から、まだ読んでいないメッセージが 1 件あります。送っていません。\n--- Technical Program Manager（id m1-file-1）\n【notify】tag はまだ打たないで待つこと\n--- ここまで\n読んだうえで、同じ命令を打ち直せば送ります（事情が変わっていたら、中身を変えて打つ）。');
     // 止まった回は、メッセージも課題の記録も書かない
     expect(texts(w, 'file:tpm')).toEqual([]);
     expect(w.calls.filter(c => c.args[1] === 'comment')).toEqual([]);
