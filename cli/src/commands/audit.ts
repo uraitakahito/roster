@@ -15,6 +15,7 @@ import { skillSetDir, TpmError } from '../skill-sets.ts';
 import { numberOf } from './incident.ts';
 import { roleOf } from './infra.ts';
 import { launch } from './tpm-side.ts';
+import { PM_REF, requireUp } from '../castlist.ts';
 
 /** core の skill セットの中の file（skill と、監査の手順・規程）。 */
 const coreSkill = (ctx: Context, ...path: string[]): string => join(skillSetDir(ctx.root, 'core'), '.claude', 'skills', ...path);
@@ -54,7 +55,9 @@ export function auditStart(ctx: Context, options: StartOptions): string[] {
     addDirs: ['core', ...ctx.skillSets].map(s => skillSetDir(ctx.root, s)),
     ...resolveSettings('auditor', { flags: options, config: ctx.config.roles.auditor, env: ctx.env }),
   };
-  const lines = launch(ctx, record, existing !== undefined, options.wait, ['この席で /audit（定期の監査）か /audit <件の番号…>（臨時の監査）を呼ぶ。2 度目からは、先に /clear を打つ']);
+  // castlist を設定していれば、起きているかを見る（止まっていれば、席を起こさずに止まる）。
+  const skew = requireUp(ctx, 'Audit の席は起こしていません。', ['打ってから、もう 1 度 tpm audit start を打ってください。']);
+  const lines = launch(ctx, record, existing !== undefined, options.wait, ['この席で /audit（定期の監査）か /audit <件の番号…>（臨時の監査）を呼ぶ。2 度目からは、先に /clear を打つ', ...skew], PM_REF);
   appendAudit(ctx, { kind: 'start', address: record.address ?? '' });
   return lines;
 }

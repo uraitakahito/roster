@@ -3,6 +3,7 @@ import type { Context } from '../context.ts';
 import { modelStatus, ROLES, WAIT } from '../protocol.ts';
 import { requireSelf, requireTpm, writeRole } from '../roster.ts';
 import { auditorHello } from './audit.ts';
+import { castlistHello } from './castlist.ts';
 import { TpmError } from '../skill-sets.ts';
 import { issueTracker } from './issue.ts';
 import { issueCopyLine, markShown } from './messages.ts';
@@ -11,6 +12,7 @@ import { recordingTo, tpmHello } from './tpm-side.ts';
 /**
  * 名乗る。$TPM_KEY が無ければ TPM 担当の名乗り（tpmHello）。
  * 担当なら、状態を出し、名簿に自分の宛先と時刻を書き、受け持ちを返す。担当の model と effort は tpm assign が決めたので、旗は受けない。
+ * castlist を設定していれば、名乗りを castlist に送り、`アクター: <名>` の行を頭に出す（castlist が止まっていれば、名乗らずに止まる）。
  */
 export function hello(ctx: Context, options: { model?: string, effort?: string } = {}): string[] {
   if (!ctx.env.TPM_KEY) return tpmHello(ctx, options);
@@ -18,8 +20,9 @@ export function hello(ctx: Context, options: { model?: string, effort?: string }
     throw new TpmError('--model・--effort は TPM 担当が名乗るときだけ使う（担当の model と effort は tpm assign が決める）');
   }
   const record = requireSelf(ctx);
-  if (record.role === 'auditor') return auditorHello(ctx, record);
-  const tpm = requireTpm(ctx);
+  const tpm = record.role === 'auditor' ? undefined : requireTpm(ctx);
+  const actor = castlistHello(ctx);
+  if (tpm === undefined) return [...actor, ...auditorHello(ctx, record)];
   record.address = ctx.transport.whoami();
   record.helloAt = ctx.now().toISOString();
   ctx.transport.setStatus('model', modelStatus(record.model, record.effort));
@@ -28,6 +31,7 @@ export function hello(ctx: Context, options: { model?: string, effort?: string }
   // 課題の Key が Jira か GitHub の Issue の形なら、課題管理の設定によらず中身を読める。
   const issueKey = record.issue ?? record.key;
   return [
+    ...actor,
     `役割: ${ROLES[record.role].label}`,
     `課題の Key: ${record.key}`,
     `依頼書: ${record.brief ?? '無し（【brief】を待つ）'}`,

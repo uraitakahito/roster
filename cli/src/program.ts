@@ -2,8 +2,9 @@
 import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { Command, CommanderError } from 'commander';
-import { buildCommand } from './command.ts';
+import { startTpm } from './command.ts';
 import { registerAudit } from './commands/audit.ts';
+import { sessionEnd, sessionStart } from './commands/castlist.ts';
 import { bannerCheck, bannerHook, bannerLog, bannerSetup } from './commands/banner.ts';
 import { registerIncident } from './commands/incident.ts';
 import { guard, infraApprove, infraList, infraRevoke, infraRun } from './commands/infra.ts';
@@ -49,7 +50,7 @@ export function buildProgram(): Command {
       process.exit(err.exitCode === 0 ? 0 : EXIT_USAGE);
     });
 
-  program.command('start [folder]').description('TPM 担当の Claude Code を起こす 1 行を出す（起こすのは、それを写して打つ利用者）')
+  program.command('start [folder]').description('TPM 担当の Claude Code を起こす 1 行を出す（起こすのは、それを写して打つ利用者。castlist を設定していれば、起きているかを先に見る）')
     .option('-v, --verbose', '読んだ config・追加の skill セット・skill セットごとの skill を stderr に出す')
     .action((folder: string | undefined, options: { verbose?: boolean }) => {
       const dir = resolveFolder(folder ?? process.cwd());
@@ -58,7 +59,11 @@ export function buildProgram(): Command {
       if (options.verbose) {
         for (const line of explain({ given: folder, dir, root, configFiles: sources.map(s => s.file), skillSets })) process.stderr.write(`tpm: ${line}\n`);
       }
-      console.log(buildCommand(dir, root, skillSets, process.env));
+      // 担当の居場所の中で打っても、その担当の project と状態の folder を受け継がない（設定と状態は、渡した folder の物）。
+      const ctx = createContext({ ...process.env, TPM_PROJECT: dir, TPM_STATE: undefined }, dir);
+      const { warnings, line } = startTpm(ctx);
+      for (const warning of warnings) process.stderr.write(`tpm: ${warning}\n`);
+      console.log(line);
     });
 
   program.command('roles').description('名簿を、動いている居場所と突き合わせて出す').action(() => print(roles(createContext())));
@@ -178,6 +183,26 @@ export function buildProgram(): Command {
       if (verdict.allow) return;
       process.stderr.write(`tpm guard: ${verdict.reason}\n`);
       process.exit(2);
+    });
+  const castlist = program.command('castlist').description('（hook が呼ぶ）アクターの台帳（castlist）に、session の始まりと終わりを送る。castlist を設定していなければ何もしない');
+  castlist.command('session-start').description('（SessionStart の hook が呼ぶ）session を登録し、登場・再登場・要約・分身と、起こした・継いだ線を送る')
+    .action(() => {
+      // hook なので、どんな誤りでも何も出さずに 0 で終わる（標準出力は、Claude Code が文脈に足してしまう）。
+      try {
+        sessionStart(createContext(), readFileSync(0, 'utf8'));
+      }
+      catch (e) {
+        process.stderr.write(`tpm castlist session-start: ${(e as Error).message}\n`);
+      }
+    });
+  castlist.command('session-end').description('（SessionEnd の hook が呼ぶ）/clear なら交代、ほかは退場を送る')
+    .action(() => {
+      try {
+        sessionEnd(createContext(), readFileSync(0, 'utf8'));
+      }
+      catch (e) {
+        process.stderr.write(`tpm castlist session-end: ${(e as Error).message}\n`);
+      }
     });
   program.command('run-role <key>').description('（連携の道具が動かす）名簿を読んで担当の claude を起こす')
     .requiredOption('--project <folder>', 'TPM 担当を起こした folder')
