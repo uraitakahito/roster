@@ -12,7 +12,7 @@ import { TpmError } from './skill-sets.ts';
 
 /**
  * castlist が止まっている時に Product Manager へ出す `container run` の image の版。
- * TODO: castlist の release（https://github.com/uraitakahito/castlist/releases）の版を上げたら、ここも上げる。
+ * castlist の release を出したら、ここと試験の版を上げる（決まりは docs の開発の「castlist を上げる時」と、castlist の docs の「release を出す」）。
  */
 export const CASTLIST_VERSION = 'v0.2.0';
 /** castlist の docs（動かし方）。 */

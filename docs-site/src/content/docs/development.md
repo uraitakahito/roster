@@ -59,6 +59,13 @@ build は無い。`cli/bin/tpm` は `cli/src/cli.ts` を node で直に動かす
 - **種類と役割の名**: 一覧は `cli/src/` だけが持つ。サーバーは字の形（英小文字で始まり、英小文字・数字・`-` で 32 字まで）だけを見るので、`cli` に種類や役割を足してもサーバーは変えない。
 - **だれが消してよいか**: サーバーは人を見分けない。「消してよいのは TPM 担当だけ」という決まりは、`tpm page delete`・`tpm file delete` と guard（`cli/src/guard.ts`）が持つ。置き場の CLI（`pagetray`）の消す命令（ページも file も）も、guard と、担当に渡す `PAGETRAY_NO_DELETE=1` で止める。
 
+## castlist（アクターの台帳）とのつなぎ
+
+アクターの台帳のサーバー（Rust）は、別の repo [castlist](https://github.com/uraitakahito/castlist) にある（[castlist の docs](https://uraitakahito.github.io/castlist/)）。この repo が持つのは、その API を `curl` で呼ぶ側（`cli/src/castlist.ts`）と、偽の castlist（`cli/test/castlist-fake.ts`）。
+
+- **合わせる版**: castlist が止まっていて container も無い時に出す `container run` の 1 行は、image の版に `cli/src/castlist.ts` の `CASTLIST_VERSION` を使う（[運用](/operations/)）。古い版のままだと、送る欄の名が替わった後に古い image を起こす 1 行を出してしまう（0.2.0 で送り手の時刻の名が `sent_at` に替わった）。
+- **castlist を上げる時**: castlist で release を出す（castlist の docs の「[release を出す](https://uraitakahito.github.io/castlist/release.html)」）→ この repo で `CASTLIST_VERSION` と、それを名指す試験（`cli/test/castlist.test.ts` の `expect(CASTLIST_VERSION).toBe(…)`）を新しい版にする PR を出す。API を変えた版なら、同じ PR で偽の castlist（`/healthz` の `version` も）と `cli/src/castlist.ts` を合わせる。
+
 ## 判定の道具
 
 Dependabot の PR の判定の道具は `cli/src/release-age.ts`（`node cli/src/release-age.ts <owner>/<repo> <PR> [--hours <時間>] [--now <ISO 時刻>]`）。version は PR の差分（pnpm-lock・package-lock・yarn.lock・workflow の `uses:`）から読み、依存の依存も数える。終了コードは 0 対象・10 まだ・20 判定できない・1 道具の誤り。skill は Dependabot の PR を見る repo の folder でこれを打つが、nodenv の `node` の shim は渡された script の folder から `.node-version` を探すので、この repo の version で動く。`cli/bin/tpm` も同じ訳で、`~/.local/bin/tpm` のような repo の外の symlink から呼ばれても、本当の在り処の path を `node` に渡す sh にしてある。また cmux の通知の hook のように PATH が既定だけで呼ばれたときは、`node`（nodenv の shim）と `cmux`（app の中）を自分で PATH に足す（見つからなければ、探した所を出して 127 で終わる）。
