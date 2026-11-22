@@ -128,6 +128,12 @@ export class FileTransport implements Transport {
     this.state.write(file, { ...seat, ...label });
   }
 
+  setColor(address: string, color: string): void {
+    const file = `${DIR}/seats/${fileName(address)}.jsonc`;
+    const seat = this.state.read<FileSeat>(file);
+    if (seat !== undefined) this.state.write(file, { ...seat, color });
+  }
+
   /** 居場所の見た目（試験が読む）。居場所が無ければ undefined。 */
   look(address: string): SeatLook | undefined {
     const seat = this.state.read<FileSeat>(`${DIR}/seats/${fileName(address)}.jsonc`);

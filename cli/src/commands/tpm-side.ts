@@ -212,6 +212,7 @@ function markBriefed(ctx: Context, asks: Review[], url: string): void {
 /**
  * 起きている Staff Engineer 担当の席の題と説明を、新しい依頼書の頼みに替え、名簿の題も同じ字にする（通知のバナーは、居場所の題と名簿の題で席を探す）。
  * 替えられなければ名簿は替えずに、そのことを 1 行返す（依頼書はもう渡してあるので、止めない）。
+ * 送る前の検査（assertRead）と通知のバナーは、相手を題で見分ける。この関数より前に Staff の席が前の題で送ったメッセージは、後の検査で拾われない（1 回の assign の中の短い間だけ）。
  */
 function relabelStaff(ctx: Context, seat: RoleRecord, subjectKey: string, asks: Review[]): string[] {
   const { target, description } = reviewLabel(asks);
@@ -308,10 +309,25 @@ export function assign(ctx: Context, subjectKey: string, options: AssignOptions)
 }
 
 /**
+ * 起こした居場所に、役割の色を付ける。色は飾りなので、付けられなくても止めずに 1 行で知らせる（居場所はもう動いていて、宛先も名簿に書いてある）。
+ */
+function paint(ctx: Context, role: RoleName, address: string): string[] {
+  const { color }: RoleDef = ROLES[role];
+  if (color === undefined) return [];
+  try {
+    ctx.transport.setColor(address, color);
+  }
+  catch (e) {
+    return [`居場所の色（${color}）を付けられなかった: ${e instanceof Error ? e.message : String(e)}`];
+  }
+  return [];
+}
+
+/**
  * 名簿の行の担当を起こす: 名簿に書き、居場所を作って tpm run-role を動かし、名乗るまで wait 秒待つ（0 なら待たない）。
  * again は起こし直しか（出す字が変わる）。more は、起こした行と folder の行の後に出す行。tpm assign と tpm audit start が使う。
  * castlist を設定していれば、起こしの id と、起こした者（launchedBy。castlist の付随する id）を名簿に書く（tpm run-role が担当の環境変数にする）。
- * description は題の下に出す説明。色は役割の表（ROLES の color）から付ける。
+ * description は題の下に出す説明。色は役割の表（ROLES の color）から、宛先を名簿に書いた後に付ける（paint）。
  */
 export function launch(ctx: Context, record: RoleRecord, again: boolean, wait: number, more: string[] = [], launchedBy?: string, description?: string): string[] {
   if (castlistUrl(ctx) !== undefined) {
@@ -320,10 +336,9 @@ export function launch(ctx: Context, record: RoleRecord, again: boolean, wait: n
   }
   writeRole(ctx, record);
   const command = [join(ctx.root, 'cli', 'bin', 'tpm'), 'run-role', record.key, '--project', ctx.project, '--state', ctx.state.dir].map(shellQuote).join(' ');
-  const { color }: RoleDef = ROLES[record.role];
-  record.address = ctx.transport.spawn({ title: record.title, cwd: record.cwd, command, ...(description === undefined ? {} : { description }), ...(color === undefined ? {} : { color }) });
+  record.address = ctx.transport.spawn({ title: record.title, cwd: record.cwd, command, ...(description === undefined ? {} : { description }) });
   writeRole(ctx, record);
-  const head = [`${again ? '起こし直した' : '起こした'}: ${record.title}（${record.address}・${modelStatus(record.model, record.effort)}）`, `folder: ${record.cwd}`, ...more];
+  const head = [`${again ? '起こし直した' : '起こした'}: ${record.title}（${record.address}・${modelStatus(record.model, record.effort)}）`, `folder: ${record.cwd}`, ...more, ...paint(ctx, record.role, record.address)];
   if (wait === 0) return [...head, '名乗り（tpm hello）は待っていない'];
   for (let waited = 0; waited < wait * 1000; waited += HELLO_INTERVAL_MS) {
     if (readRole(ctx, record.key)?.helloAt !== undefined) return [...head, '名乗った（tpm hello が来た）'];

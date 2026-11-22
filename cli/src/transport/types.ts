@@ -38,8 +38,6 @@ export interface SpawnOptions {
   command: string
   /** 題の下に出す説明。 */
   description?: string
-  /** 居場所の色（cmux の色の名か #hex。サイドバーの帯）。 */
-  color?: string
 }
 
 /** 居場所の題と説明。説明が無ければ、前の説明を消す。 */
@@ -73,6 +71,8 @@ export interface Transport {
   setTitle(title: string): void
   /** ほかの居場所の題と説明を替える（TPM 担当が、起こした席に新しい依頼書を渡すとき）。 */
   relabel(address: string, label: SeatLabel): void
+  /** 居場所に色を付ける（cmux の色の名か #hex。サイドバーの帯）。 */
+  setColor(address: string, color: string): void
   /** 自分の状態を出す。 */
   setStatus(key: StatusKey, text: string): void
   /** 居場所の画面の字（名乗らない訳を読む）。 */

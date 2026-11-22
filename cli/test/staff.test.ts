@@ -68,6 +68,18 @@ describe('tpm assign --role staff-engineer', () => {
     expect(w.wire.look('file:1')).toEqual({ title: 'SWE AI-8: 計画と実装' });
   });
 
+  test('色を付けられなくても止めない。宛先は名簿に書き、1 行で知らせる', () => {
+    const w = started();
+    const setColor = (): never => {
+      throw new Error('unknown color');
+    };
+    const tpm = { ...w.tpm, transport: Object.assign(Object.create(w.tpm.transport) as Context['transport'], { setColor }) };
+    const out = assign(tpm, 'AI-8', STAFF);
+    expect(out[0]).toBe('起こした: レビュー AI-8: 計画 plan-1（file:2・Opus 5.5 · high）');
+    expect(out).toContain('居場所の色（Purple）を付けられなかった: unknown color');
+    expect(requireRole(w.tpm, 'AI-8.staff').address).toBe('file:2');
+  });
+
   test('Staff の席の題は命令が作るので、--title は止める（黙って捨てない）', () => {
     const w = started();
     expect(() => assign(w.tpm, 'AI-8', { ...STAFF, title: 'レビュー' })).toThrow(/Staff Engineer 担当の席の題は、レビューの頼みから命令が作ります。--title は書かないでください/);

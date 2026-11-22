@@ -300,6 +300,11 @@ describe('Staff の席の題と説明（reviewLabel）', () => {
     expect(reviewLabel([ask(1, page('proposal-1'))])).toEqual({ target: '提案 proposal-1' });
     expect(reviewLabel([ask(1, page('result-3'))])).toEqual({ target: '結果 result-3' });
     expect(reviewLabel([ask(1, page('confirm-1'))])).toEqual({ target: 'confirm-1' });
+    // 節の印・問い・末尾の / は除く。読めない URL は元の字のまま
+    expect(reviewLabel([ask(1, `${page('plan-2')}#risks`)])).toEqual({ target: '計画 plan-2' });
+    expect(reviewLabel([ask(1, `${page('plan-2')}?v=1`)])).toEqual({ target: '計画 plan-2' });
+    expect(reviewLabel([ask(1, 'http://127.0.0.1:8801/p/AI-8/')])).toEqual({ target: 'AI-8' });
+    expect(reviewLabel([ask(1, 'not a url')])).toEqual({ target: 'not a url' });
   });
 
   test('頼みが 2 つ以上なら、番号の新しい頼みと +<残りの数>。説明も新しい頼みの見てほしい所', () => {

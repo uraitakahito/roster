@@ -76,7 +76,10 @@ const DESCRIPTION_LIMIT = 24;
 function targetName(url: string): string {
   const pr = /\/pull\/(\d+)/.exec(url);
   if (pr !== null) return `PR #${pr[1] ?? ''}`;
-  const name = (url.split('/').at(-1) ?? url).replace(/\.html$/, '');
+  // 節の印（#）と問い（?）を除いた path の、空でない最後の区切り。読めない URL は元の字のまま。
+  const last = URL.canParse(url) ? new URL(url).pathname.split('/').filter(p => p !== '').at(-1) : undefined;
+  if (last === undefined) return url;
+  const name = last.replace(/\.html$/, '');
   const kind = KIND_NAMES[name.split('-')[0] ?? ''];
   return kind === undefined ? name : `${kind} ${name}`;
 }

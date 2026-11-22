@@ -112,8 +112,6 @@ export class CmuxTransport implements Transport {
     const description = options.description === undefined ? [] : ['--description', options.description];
     const created = this.json(['workspace', 'create', '--name', options.title, '--cwd', options.cwd, '--command', options.command, '--focus', 'false', ...description]) as { workspace_ref?: string };
     if (!created.workspace_ref) throw new TpmError('cmux workspace create が workspace を返しません');
-    // create は色を受けないので、作った居場所に後から付ける。
-    if (options.color !== undefined) this.workspaceAction(created.workspace_ref, ['set-color', '--color', options.color]);
     return created.workspace_ref;
   }
 
@@ -147,8 +145,13 @@ export class CmuxTransport implements Transport {
   }
 
   relabel(address: string, label: SeatLabel): void {
-    this.run(['workspace', 'rename', address, '--title', label.title]);
+    // 題は最後に替える（説明の命令が落ちたら題は前のまま。名簿の題と揃ったままにする）。
     this.workspaceAction(address, label.description === undefined ? ['clear-description'] : ['set-description', '--description', label.description]);
+    this.run(['workspace', 'rename', address, '--title', label.title]);
+  }
+
+  setColor(address: string, color: string): void {
+    this.workspaceAction(address, ['set-color', '--color', color]);
   }
 
   /** 居場所の右クリックの操作（色・説明）を、名指した居場所に打つ。 */
