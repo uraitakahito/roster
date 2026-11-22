@@ -17,7 +17,7 @@ TPM 担当を起こした folder（project）に置くと、道具の選び方�
 | `skill-sets` | core のほかに加える、追加の skill セットの名前の配列 | core だけ |
 | `folders` | 設定を集める folder（project の folder からの path）の配列。書くと、直下を探さずに書いた folder だけを集める。`[]` なら集めない | 直下の folder のうち、設定がある物を全部集める |
 | `castlist` | アクターの台帳（castlist）の URL（`http://127.0.0.1:<port>` か `http://localhost:<port>`）。project の folder の設定だけが効く（下の「[アクターの台帳（castlist）](#アクターの台帳castlist任意)」） | castlist に何も送らない |
-| `software-engineer`・`devops-engineer`・`auditor` | 起こす担当の `model`・`effort`・`permissionMode` | [環境変数](#model-などの既定の環境変数任意)、それも無ければ既定（Software Engineer 担当は Opus 5.5・medium、DevOps Engineer 担当は Opus 5.5・low、Auditor は Fable 5.2・high、どれも `bypassPermissions`） |
+| `software-engineer`・`devops-engineer`・`staff-engineer`・`auditor` | 起こす担当の `model`・`effort`・`permissionMode` | [環境変数](#model-などの既定の環境変数任意)、それも無ければ既定（Software Engineer 担当は Opus 5.5・medium、DevOps Engineer 担当は Opus 5.5・low、Staff Engineer 担当は Opus 5.5・high、Auditor は Fable 5.2・high、どれも `bypassPermissions`） |
 
 ```jsonc
 {
@@ -47,6 +47,11 @@ TPM 担当を起こした folder（project）に置くと、道具の選び方�
     "effort": "low",
     "permissionMode": "bypassPermissions",
   },
+  "staff-engineer": {
+    "model": "claude-opus-5-5",
+    "effort": "high",
+    "permissionMode": "bypassPermissions",
+  },
   "auditor": {
     "model": "claude-fable-5-2",
     "effort": "high",
@@ -73,7 +78,7 @@ ai/                               ← ここで tpm start（設定は任意）
 | `tracker` | 道具ごとに、宣言した設定を覚える（`none` は足さない）。記録を書く先は、課題の Key の形で選ぶ（下の「[課題の Key](#課題の-key)」）。`gh-12` の記録は、`github` を宣言した folder の repo の Issue に書く（`gh` をその folder で打つ）。`github` を宣言した設定が 2 つ以上あると、`gh-` の Key がどの repo の Issue かが決まらないので止まる（`folders` で 1 つに絞る） |
 | `infra` | 環境の名前ごとに合わせる。同じ名前がいくつもの設定にあれば、`match` は足し、`guard` は厳しい方（`pm-only` > `pm` > `tpm` > `free`）にする。どこで打った命令にも効く。`tpm infra list` と guard が止めた文に、宣言した設定が出る |
 | `skill-sets` | 全部を足す（project の folder が先、次に直下の folder を名前の順。重なりは除く）。TPM 担当（`tpm start`）にも、起こす担当にも効く |
-| `software-engineer`・`devops-engineer`・`auditor` | 合わせない。**担当を起こす folder**（`tpm assign --cwd`）の設定 > project の folder の設定 の順に、欄ごとに先に値がある物を使う。Auditor は project の folder で起きるので、project の folder の設定だけ |
+| `software-engineer`・`devops-engineer`・`staff-engineer`・`auditor` | 合わせない。**担当を起こす folder**（`tpm assign --cwd`）の設定 > project の folder の設定 の順に、欄ごとに先に値がある物を使う。Auditor は project の folder で起きるので、project の folder の設定だけ |
 | `transport` | project の folder の設定だけ（直下の folder の値は読まない） |
 
 どの値がどの設定から来たかは、TPM 担当の `tpm hello` が出す。上の図の folder で起こすと、次のように出る（直下に設定のある folder が無ければ、`設定: <file>` と `課題管理: …・連携: …` の 2 行。設定の file が無いための値には「（既定）」が付く）。
@@ -142,9 +147,9 @@ shell の profile などで書くと、すべての project・すべての担当
 | 順 | どこ | 効く担当 |
 |---|---|---|
 | 1 | 命令の旗（`tpm assign --model` など。Sustaining Engineer 担当は `.claude/dependabot/config.jsonc` に書いた欄を `/dependabot-triage` が旗にする） | その 1 回 |
-| 2 | `.claude/roles/config.jsonc` の担当の欄 | Software Engineer・DevOps Engineer・Auditor |
+| 2 | `.claude/roles/config.jsonc` の担当の欄 | Software Engineer・DevOps Engineer・Staff Engineer・Auditor |
 | 3 | 環境変数 `TPM_MODEL`・`TPM_EFFORT`・`TPM_PERMISSION_MODE` | すべて（TPM 担当を含む） |
-| 4 | コードの既定（TPM 担当・Software Engineer 担当・Sustaining Engineer 担当は Opus 5.5・medium、DevOps Engineer 担当は Opus 5.5・low、Auditor は Fable 5.2・high、どれも `bypassPermissions`） | すべて |
+| 4 | コードの既定（TPM 担当・Software Engineer 担当・Sustaining Engineer 担当は Opus 5.5・medium、DevOps Engineer 担当は Opus 5.5・low、Staff Engineer 担当は Opus 5.5・high、Auditor は Fable 5.2・high、どれも `bypassPermissions`） | すべて |
 
 ```sh
 # ~/.zshrc など
@@ -196,7 +201,7 @@ tpm banner check   # 設定と hook を確かめる
 
 ```jsonc
 {
-  // 役割: tpm・software-engineer・devops-engineer・sustaining-engineer・auditor と、ほかをまとめる "*"
+  // 役割: tpm・software-engineer・devops-engineer・staff-engineer・sustaining-engineer・auditor と、ほかをまとめる "*"
   // きっかけ: turn（答え終わった）・idle（入力待ちの催促）・ask（許可/質問）
   // 値: "show"（出す）・"hide"（消す）・"pm-wait"（その回に tpm wait pm を打った時だけ出す）
   "banner": {

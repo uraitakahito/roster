@@ -39,7 +39,7 @@ Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【
 
 Staff Engineer 担当だけが使う見出しは【review】（`tpm report review --url <レビューのページの URL> --verdict <判定> --summary "<一言>"`。レビューのページと判定。下の「レビュー」）。Staff Engineer 担当は、【done】【end】【merged】【doc-fix】【ask-pm】【ask-review】を送らない（命令が断る）。
 
-Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけが使う見出しは 2 つ。【audit】は、Product Manager へじかに出した監査の報告の写し（`tpm report audit`）。【decided】は、Product Manager の決定（`tpm report decided`）。Auditor は、【done】【end】【merged】【doc-fix】【ask-pm】を送らない（下の「監査」）。
+Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけが使う見出しは 2 つ。【audit】は、Product Manager へじかに出した監査の報告の写し（`tpm report audit`）。【decided】は、Product Manager の決定（`tpm report decided`）。Auditor は、【done】【end】【merged】【doc-fix】【ask-pm】【ask-review】を送らない（下の「監査」）。
 
 ### TPM 担当から
 
