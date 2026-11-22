@@ -74,13 +74,13 @@ async function seed(w: World, prefix: string, labels: Record<string, string>, en
     name_prefix: prefix,
     labels,
     bindings: [{ type: 'claude.session', value: sid }, ...(options.workspace === undefined ? [] : [{ type: 'cmux.workspace.ref', value: options.workspace }])],
-    at: entered ?? '2026-11-20T11:00:00.000Z',
+    sent_at: entered ?? '2026-11-20T11:00:00.000Z',
     settings: { model: options.model ?? 'claude-opus-5-5', effort: options.effort ?? 'high' },
   }) as { id: string, name: string };
-  if (entered !== undefined) await fake.send('PUT', `/v1/events/${sid}-in`, { issuer, by: `claude.session:${sid}`, type: 'entered', detail: {}, at: entered });
+  if (entered !== undefined) await fake.send('PUT', `/v1/events/${sid}-in`, { issuer, by: `claude.session:${sid}`, type: 'entered', detail: {}, sent_at: entered });
   if (exited !== undefined) {
     fake.setNow(exited);
-    await fake.send('PUT', `/v1/events/${sid}-out`, { issuer, by: `claude.session:${sid}`, type: 'exited', detail: { reason: 'other' }, at: exited });
+    await fake.send('PUT', `/v1/events/${sid}-out`, { issuer, by: `claude.session:${sid}`, type: 'exited', detail: { reason: 'other' }, sent_at: exited });
   }
   fake.setNow('2026-11-20T12:00:00.000Z');
   return { id: a.id, name: a.name, sid };
@@ -88,7 +88,7 @@ async function seed(w: World, prefix: string, labels: Record<string, string>, en
 
 /** a が b を起こした線（launched）か、継いだ線（continued）を送る。 */
 async function link(w: World, type: 'launched' | 'continued', from: Seeded, to: Seeded): Promise<void> {
-  await fake.send('PUT', `/v1/links/${from.sid}-${to.sid}`, { issuer: castlistIssuer(w.tpm.state.dir), type, from: `claude.session:${from.sid}`, to: `claude.session:${to.sid}`, at: '2026-11-20T11:00:00.000Z' });
+  await fake.send('PUT', `/v1/links/${from.sid}-${to.sid}`, { issuer: castlistIssuer(w.tpm.state.dir), type, from: `claude.session:${from.sid}`, to: `claude.session:${to.sid}`, sent_at: '2026-11-20T11:00:00.000Z' });
 }
 
 /** castlist を設定した世界と、Auditor の席の周り（$TPM_ROLE=auditor）。 */
@@ -323,7 +323,7 @@ describe('tpm castlist settings', () => {
     const { w, auditor } = auditorWorld();
     const a = await seed(w, 't-st01-swe', { 'tpm.project': w.project }, '2026-11-20T11:00:00.000Z', undefined, { model: 'claude-opus-5-5', effort: 'high' });
     fake.setNow('2026-11-20T11:20:00.000Z');
-    await fake.send('PUT', `/v1/settings/${a.sid}-seen`, { issuer: castlistIssuer(w.tpm.state.dir), by: `claude.session:${a.sid}`, model: 'claude-sonnet-5', effort: 'high', source: 'observed', at: '2026-11-20T11:20:00.000Z' });
+    await fake.send('PUT', `/v1/settings/${a.sid}-seen`, { issuer: castlistIssuer(w.tpm.state.dir), by: `claude.session:${a.sid}`, model: 'claude-sonnet-5', effort: 'high', source: 'observed', sent_at: '2026-11-20T11:20:00.000Z' });
     fake.setNow('2026-11-20T12:00:00.000Z');
     const since = mark();
     const out = castlistSettings(auditor, { mismatch: true, source: 'observed' });

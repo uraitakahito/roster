@@ -78,7 +78,7 @@ function idOf(ctx: Context, head: 'e' | 'l' | 't', sid: string, rest: string): s
 
 /** 出来事・線・model と effort を、決めた id で送る。 */
 function put(ctx: Context, url: string, kind: 'events' | 'links' | 'settings', id: string, body: Record<string, unknown>): Sent {
-  return settle(request(ctx, url, 'PUT', `/v1/${kind}/${encodeURIComponent(id)}`, { issuer: issuerOf(ctx), ...body, at: ctx.now().toISOString() }), `${kind}/${id}`);
+  return settle(request(ctx, url, 'PUT', `/v1/${kind}/${encodeURIComponent(id)}`, { issuer: issuerOf(ctx), ...body, sent_at: ctx.now().toISOString() }), `${kind}/${id}`);
 }
 
 /** 出来事を送る。seq なら、送れた数の次の番号を id に付け、送れたら数を進める。 */
@@ -136,7 +136,7 @@ function enter(ctx: Context, url: string, sid: string, source: Source): Sent {
       ...(ref === undefined ? [] : [{ type: 'cmux.workspace.ref', value: ref }]),
       ...(uuid === undefined ? [] : [{ type: 'cmux.workspace.uuid', value: uuid }]),
     ],
-    at: ctx.now().toISOString(),
+    sent_at: ctx.now().toISOString(),
     ...(fresh ? { settings: { model, effort } } : {}),
   });
   if (reply.kind === 'down' || reply.kind === 'busy') return reply.kind;
