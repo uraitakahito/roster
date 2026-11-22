@@ -421,7 +421,7 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
     const sent = texts(w, 'file:1').length;
     expect(() => dismiss(w.tpm, 't-x7k2', { handover: true })).toThrow([
       't-x7k2 の担当に、まだ済んでいない物があります。送っていません。',
-      '--- 届いていない（2026-11-20T12:00:00.000Z に送った。id m1-file-1）',
+      '--- まだ見ていない（届いておらず、tpm も見せていない。2026-11-20T12:00:00.000Z に送った。id m1-file-1）',
       `【brief】${B4}`,
       `--- 【done】が返っていない依頼書: brief-4（${B4}）`,
       '--- ここまで',
@@ -445,6 +445,34 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
     expect(() => dismiss(w.tpm, 't-x7k2', { handover: false })).toThrow(/^t-x7k2 の担当に、まだ済んでいない物があります。[\s\S]*【done】が返っていない依頼書: brief-4/);
     expect(() => assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B5, wait: 0 })).toThrow(/【done】が返っていない依頼書: brief-4[\s\S]*--after、取り消すなら --supersede/);
     expect(() => dismiss(w.tpm, 't-x7k2', { handover: false })).not.toThrow(/届いていない/);
+  });
+
+  test('#110 の形: 配られていなくても、担当に見せた物では止まらない（見せていない物では今までどおり止まる）', () => {
+    const w = started();
+    reportDone(w.se, { kind: 'result', summary: '1 つ目', remaining: 'なし', decisions: 'なし', points: [] });
+    // 担当は手を動かし続けていて、cmux は配らない。TPM 担当の【notify】2 通は queued のまま
+    w.wire.hold('file:1');
+    notify(w.tpm, 't-x7k2', { text: '受け取った' });
+    notify(w.tpm, 't-x7k2', { text: 'お勧めのとおりで' });
+    // 担当が tpm inbox で 2 通を見た（shown/ に入る）。cmux はまだ配っていない
+    expect(inbox(w.se)).toHaveLength(4);
+    dismiss(w.tpm, 't-x7k2', { handover: false });
+    expect(gates(w)).toEqual([]);
+  });
+
+  test('見せていない queued の物は「まだ見ていない」として出して止まり、--supersede の本文も同じ字にする', () => {
+    const w = started();
+    reportDone(w.se, { kind: 'result', summary: '1 つ目', remaining: 'なし', decisions: 'なし', points: [] });
+    w.wire.hold('file:1');
+    notify(w.tpm, 't-x7k2', { text: '受け取った' });
+    expect(() => dismiss(w.tpm, 't-x7k2', { handover: false })).toThrow([
+      't-x7k2 の担当に、まだ済んでいない物があります。送っていません。',
+      '--- まだ見ていない（届いておらず、tpm も見せていない。2026-11-20T12:00:00.000Z に送った。id m1-file-1）',
+      '【notify】受け取った',
+      '--- ここまで',
+    ].join('\n'));
+    dismiss(w.tpm, 't-x7k2', { handover: false, supersede: true });
+    expect(texts(w, 'file:1').at(-1)).toMatch(/取り消す: まだ見ていない【notify】（2026-11-20T12:00:00\.000Z に送った。id m1-file-1）$/);
   });
 
   test('ふつうの流れ（依頼書 → 【done】 → dismiss・続きの assign）では止まらない', () => {

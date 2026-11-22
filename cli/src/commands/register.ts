@@ -112,6 +112,6 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
     .action((key: string, text: string, options: { replyTo?: string }) => print(notify(createContext(), key, { text, ...options })));
   program.command('dismiss <key>').description('TPM 担当が【dismiss】を送る')
     .option('--handover', '担当の交代のため（担当は課題を閉じない）', false)
-    .option('--supersede', '済んでいない依頼書・届いていないメッセージを取り消して送る（本文に「取り消す: …」と載る）', false)
+    .option('--supersede', '済んでいない依頼書・まだ見ていないメッセージを取り消して送る（本文に「取り消す: …」と載る）', false)
     .action((key: string, options: { handover: boolean, supersede: boolean }) => print(dismiss(createContext(), key, options)));
 }
