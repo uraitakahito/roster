@@ -82,6 +82,34 @@ describe('CmuxTransport', () => {
     expect(calls[0]?.args).toEqual(['--json', 'workspace', 'create', '--name', 'SWE t-x7k2: 題', '--cwd', '/w', '--command', 'tpm run-role t-x7k2', '--focus', 'false']);
   });
 
+  test('spawn は説明を create に渡す。setColor は名指した居場所に色を付ける', () => {
+    const { transport, calls } = fake([['--json workspace create', json({ workspace_ref: 'workspace:12' })]]);
+    expect(transport.spawn({ title: 'レビュー t-x7k2: PR #7', cwd: '/w', command: 'c', description: '名簿の Key' })).toBe('workspace:12');
+    transport.setColor('workspace:12', 'Purple');
+    expect(calls.map(c => c.args)).toEqual([
+      ['--json', 'workspace', 'create', '--name', 'レビュー t-x7k2: PR #7', '--cwd', '/w', '--command', 'c', '--focus', 'false', '--description', '名簿の Key'],
+      ['workspace-action', '--workspace', 'workspace:12', '--action', 'set-color', '--color', 'Purple'],
+    ]);
+  });
+
+  test('relabel はほかの居場所の説明を替えてから題を替える。説明が無ければ消す', () => {
+    const { transport, calls } = fake([]);
+    transport.relabel('workspace:12', { title: 'レビュー t-x7k2: PR #8', description: '試験' });
+    transport.relabel('workspace:12', { title: 'レビュー t-x7k2: PR #9' });
+    expect(calls.map(c => c.args)).toEqual([
+      ['workspace-action', '--workspace', 'workspace:12', '--action', 'set-description', '--description', '試験'],
+      ['workspace', 'rename', 'workspace:12', '--title', 'レビュー t-x7k2: PR #8'],
+      ['workspace-action', '--workspace', 'workspace:12', '--action', 'clear-description'],
+      ['workspace', 'rename', 'workspace:12', '--title', 'レビュー t-x7k2: PR #9'],
+    ]);
+  });
+
+  test('relabel の説明の命令が落ちたら、題は替えない（名簿の題と揃ったまま）', () => {
+    const { transport, calls } = fake([['workspace-action', { status: 1, stderr: 'Error: unknown action' }]]);
+    expect(() => transport.relabel('workspace:12', { title: 'レビュー t-x7k2: PR #8', description: '試験' })).toThrow(TpmError);
+    expect(calls.some(c => c.args[1] === 'rename')).toBe(false);
+  });
+
   test('1,024 バイトを超える命令は起こさずに TpmError', () => {
     const { transport, calls } = fake([]);
     expect(() => transport.spawn({ title: 't', cwd: '/w', command: 'あ'.repeat(342) })).toThrow(/1024 バイト/);

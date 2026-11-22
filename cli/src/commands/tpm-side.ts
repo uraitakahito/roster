@@ -8,10 +8,10 @@ import { castlistUrl, requireUp, sessionRef } from '../castlist.ts';
 import { describeTrackers, OWN_LABEL, readRolesConfig, rolesConfigFile, sourceLabel, type ConfigSource } from '../config.ts';
 import type { Context } from '../context.ts';
 import { syncDeliveries } from '../evidence.ts';
-import { AUDIT_KEY, modelStatus, ROLES, TPM_TITLE, WAIT, type RoleName } from '../protocol.ts';
+import { AUDIT_KEY, modelStatus, ROLES, TPM_TITLE, WAIT, type RoleDef, type RoleName } from '../protocol.ts';
 import { lastAuditLine } from '../audits.ts';
 import { openLine } from '../incidents.ts';
-import { openReviews, patchReview, type Review } from '../reviews.ts';
+import { openReviews, patchReview, reviewLabel, type Review } from '../reviews.ts';
 import { resolveSettings } from '../settings.ts';
 import { allRoles, assertKey, isStaffKey, LOCAL_KEY, readRole, removeRole, staffKey, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
 import { readSkillSets, skillSetDir, TpmError } from '../skill-sets.ts';
@@ -210,6 +210,25 @@ function markBriefed(ctx: Context, asks: Review[], url: string): void {
 }
 
 /**
+ * 起きている Staff Engineer 担当の席の題と説明を、新しい依頼書の頼みに替え、名簿の題も同じ字にする（通知のバナーは、居場所の題と名簿の題で席を探す）。
+ * 替えられなければ名簿は替えずに、そのことを 1 行返す（依頼書はもう渡してあるので、止めない）。
+ * 送る前の検査（assertRead）と通知のバナーは、相手を題で見分ける。この関数より前に Staff の席が前の題で送ったメッセージは、後の検査で拾われない（1 回の assign の中の短い間だけ）。
+ */
+function relabelStaff(ctx: Context, seat: RoleRecord, subjectKey: string, asks: Review[]): string[] {
+  const { target, description } = reviewLabel(asks);
+  const title = ROLES[STAFF].title(subjectKey, target);
+  try {
+    ctx.transport.relabel(seat.address ?? '', { title, ...(description === undefined ? {} : { description }) });
+  }
+  catch (e) {
+    return [`居場所の題を替えられなかった（名簿の題は ${seat.title} のまま）: ${e instanceof Error ? e.message : String(e)}`];
+  }
+  seat.title = title;
+  writeRole(ctx, seat);
+  return [];
+}
+
+/**
  * 課題を担当に振る。同じ Key の担当が動いていれば、その担当に【brief】で新しい依頼書を送る（背景を知っているため）。
  * いなければ（居場所が消えていても）起こし、名乗るまで待つ。
  * Staff Engineer 担当（--role staff-engineer）は、課題の担当と並べるために、名簿の Key を `<課題の Key>.staff` にして起こす（subjectKey は、どの役割でも課題の Key）。
@@ -230,6 +249,7 @@ export function assign(ctx: Context, subjectKey: string, options: AssignOptions)
   const asks = subject === undefined ? [] : openReviews(ctx, subjectKey).filter(r => r.brief === undefined || !alive || options.supersede === true);
   if (subject !== undefined) {
     if (options.brief !== undefined) throw new TpmError('Staff Engineer 担当への依頼書は、レビューの頼み（tpm ask review）から命令が作ります。--brief は書かないでください');
+    if (options.title !== undefined) throw new TpmError('Staff Engineer 担当の席の題は、レビューの頼みから命令が作ります。--title は書かないでください');
     if (asks.length === 0) throw new TpmError(`${subjectKey} に、まだ依頼書にしていないレビューの頼みがありません。頼むのは課題の担当（tpm ask review）。今の頼みは tpm review list --key ${subjectKey}`);
   }
   // 名簿にある担当（前の決まりの長い Key を含む）は、そのまま動き続けられるよう形を問わない。
@@ -249,7 +269,7 @@ export function assign(ctx: Context, subjectKey: string, options: AssignOptions)
     const url = subject === undefined ? options.brief ?? '' : putStaffBrief(ctx, subject, asks);
     const sent = brief(ctx, existing, url, options.note, settled === undefined || choice === undefined ? undefined : { text: settled, choice });
     markBriefed(ctx, asks, url);
-    return sent;
+    return subject === undefined ? sent : [...sent, ...relabelStaff(ctx, existing, subjectKey, asks)];
   }
   if (options.issue !== undefined && !ctx.tracker.owns(options.issue)) {
     throw new TpmError(`${options.issue} に記録を書く課題管理が、どの設定にもありません（読んだ設定: ${describeTrackers(ctx.config.sources)}）。記録するなら、その課題を扱う repo の .claude/roles/config.jsonc に "tracker"（jira・github）を書いてください`);
@@ -265,6 +285,8 @@ export function assign(ctx: Context, subjectKey: string, options: AssignOptions)
   // 居場所を作る前に読む（読めなければ、担当を起こさずに止まる）。
   const copy = issueCopy(ctx, issue ?? subjectKey, subjectKey, options.noIssueCopy);
   const def = ROLES[options.role];
+  // Staff Engineer 担当の席の題と説明は、渡す頼みから作る。
+  const label = subject === undefined ? undefined : reviewLabel(asks);
   // 起こす席には、依頼書を名簿の行で渡す（起こせなかった回は席が無いので、次の回に渡し直す）。
   const briefUrl = subject === undefined ? options.brief : putStaffBrief(ctx, subject, asks);
   if (briefUrl !== undefined) markBriefed(ctx, asks, briefUrl);
@@ -272,7 +294,7 @@ export function assign(ctx: Context, subjectKey: string, options: AssignOptions)
     key,
     ...(subject === undefined ? {} : { subject: subjectKey }),
     role: options.role,
-    title: def.title(subjectKey, options.title ?? '課題'),
+    title: def.title(subjectKey, label?.target ?? options.title ?? '課題'),
     cwd,
     addDirs: ['core', ...ctx.skillSets].map(s => skillSetDir(ctx.root, s)),
     ...settings,
@@ -283,24 +305,40 @@ export function assign(ctx: Context, subjectKey: string, options: AssignOptions)
   // 担当を起こした folder と、記録の先を出す（上の folder から振ると、どちらも 1 つに決まっていないため）。
   const sid = ctx.env.CLAUDE_CODE_SESSION_ID;
   const more = [...(issue === undefined ? [] : [`課題の記録: ${recordingTo(ctx, issue)}`]), ...skew];
-  return launch(ctx, record, existing !== undefined, options.wait, more, sid ? sessionRef(sid) : undefined);
+  return launch(ctx, record, existing !== undefined, options.wait, more, sid ? sessionRef(sid) : undefined, label?.description);
+}
+
+/**
+ * 起こした居場所に、役割の色を付ける。色は飾りなので、付けられなくても止めずに 1 行で知らせる（居場所はもう動いていて、宛先も名簿に書いてある）。
+ */
+function paint(ctx: Context, role: RoleName, address: string): string[] {
+  const { color }: RoleDef = ROLES[role];
+  if (color === undefined) return [];
+  try {
+    ctx.transport.setColor(address, color);
+  }
+  catch (e) {
+    return [`居場所の色（${color}）を付けられなかった: ${e instanceof Error ? e.message : String(e)}`];
+  }
+  return [];
 }
 
 /**
  * 名簿の行の担当を起こす: 名簿に書き、居場所を作って tpm run-role を動かし、名乗るまで wait 秒待つ（0 なら待たない）。
  * again は起こし直しか（出す字が変わる）。more は、起こした行と folder の行の後に出す行。tpm assign と tpm audit start が使う。
  * castlist を設定していれば、起こしの id と、起こした者（launchedBy。castlist の付随する id）を名簿に書く（tpm run-role が担当の環境変数にする）。
+ * description は題の下に出す説明。色は役割の表（ROLES の color）から、宛先を名簿に書いた後に付ける（paint）。
  */
-export function launch(ctx: Context, record: RoleRecord, again: boolean, wait: number, more: string[] = [], launchedBy?: string): string[] {
+export function launch(ctx: Context, record: RoleRecord, again: boolean, wait: number, more: string[] = [], launchedBy?: string, description?: string): string[] {
   if (castlistUrl(ctx) !== undefined) {
     record.launch = randomUUID();
     if (launchedBy !== undefined) record.launchedBy = launchedBy;
   }
   writeRole(ctx, record);
   const command = [join(ctx.root, 'cli', 'bin', 'tpm'), 'run-role', record.key, '--project', ctx.project, '--state', ctx.state.dir].map(shellQuote).join(' ');
-  record.address = ctx.transport.spawn({ title: record.title, cwd: record.cwd, command });
+  record.address = ctx.transport.spawn({ title: record.title, cwd: record.cwd, command, ...(description === undefined ? {} : { description }) });
   writeRole(ctx, record);
-  const head = [`${again ? '起こし直した' : '起こした'}: ${record.title}（${record.address}・${modelStatus(record.model, record.effort)}）`, `folder: ${record.cwd}`, ...more];
+  const head = [`${again ? '起こし直した' : '起こした'}: ${record.title}（${record.address}・${modelStatus(record.model, record.effort)}）`, `folder: ${record.cwd}`, ...more, ...paint(ctx, record.role, record.address)];
   if (wait === 0) return [...head, '名乗り（tpm hello）は待っていない'];
   for (let waited = 0; waited < wait * 1000; waited += HELLO_INTERVAL_MS) {
     if (readRole(ctx, record.key)?.helloAt !== undefined) return [...head, '名乗った（tpm hello が来た）'];

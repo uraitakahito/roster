@@ -9,7 +9,7 @@ import { reviewList } from '../src/commands/review.ts';
 import { hello } from '../src/commands/role-side.ts';
 import { assign } from '../src/commands/tpm-side.ts';
 import type { Context } from '../src/context.ts';
-import { readReviews } from '../src/reviews.ts';
+import { readReviews, reviewLabel, type Review } from '../src/reviews.ts';
 import { requireRole } from '../src/roster.ts';
 import { BRIEF, staffRoot, world, type World } from './helpers.ts';
 
@@ -77,7 +77,9 @@ describe('tpm assign --role staff-engineer（頼みから起こす）', () => {
     const w = started({ tracker: 'jira' }, 'AI-8');
     askReview(w.se, { url: w.plan, focus: '名簿の Key の決め方' });
     w.wire.inbox('file:tpm');
-    expect(assign(w.tpm, 'AI-8', STAFF)[0]).toBe('起こした: Staff AI-8（file:2・Opus 5.5 · high）');
+    expect(assign(w.tpm, 'AI-8', STAFF)[0]).toBe('起こした: レビュー AI-8: 計画 plan-1（file:2・Opus 5.5 · high）');
+    // 説明は見てほしい所、帯は紫
+    expect(w.wire.look('file:2')).toEqual({ title: 'レビュー AI-8: 計画 plan-1', description: '名簿の Key の決め方', color: 'Purple' });
     const brief = requireRole(w.tpm, 'AI-8.staff').brief ?? '';
     expect(brief).toMatch(new RegExp(`/${basename(w.tpm.state.dir)}/AI-8/brief-1\\.html$`));
     const html = readFileSync(pagePath(w.tpm, brief)[0] ?? '', 'utf8');
@@ -111,7 +113,33 @@ describe('tpm assign --role staff-engineer（頼みから起こす）', () => {
     w.wire.inbox('file:tpm');
     expect(assign(w.tpm, 'AI-8', STAFF)).toEqual(['送った: 【brief】→ file:2（届いた）']);
     expect(texts(w, 'file:2').at(-1)).toMatch(/^【brief】http:\/\/127\.0\.0\.1:8801\/.+\/AI-8\/brief-2\.html 課題の写し: /);
+    // 題と説明は、新しい依頼書の頼みに替わる（見てほしい所の無い頼みなので、前の説明は消える）。名簿の題も同じ字にする（通知のバナーが題で席を探す）
+    expect(w.wire.look('file:2')).toEqual({ title: 'レビュー AI-8: PR #7', color: 'Purple' });
+    expect(requireRole(w.tpm, 'AI-8.staff').title).toBe('レビュー AI-8: PR #7');
+    // Staff の次のメッセージは、新しい題で届く
+    w.staff.now = () => new Date('2026-11-20T12:30:00.000Z');
+    reportReview(w.staff, { url: w.put(w.staff, 'review'), verdict: 'approve', summary: 'よい' });
+    expect(w.wire.inbox('file:tpm').at(-1)?.from).toBe('レビュー AI-8: PR #7');
     expect(readReviews(w.tpm)[1]).toMatchObject({ n: 2, url: PR, brief: expect.stringMatching(/brief-2\.html$/) as string });
+  });
+});
+
+describe('Staff の席の題を替えられない時', () => {
+  test('依頼書は渡したまま、名簿の題は替えずに 1 行で知らせる', () => {
+    const w = asked();
+    w.staff.now = () => new Date('2026-11-20T12:20:00.000Z');
+    reportReview(w.staff, { url: w.put(w.staff, 'review'), verdict: 'approve', summary: 'よい' });
+    w.wire.inbox('file:tpm');
+    w.se.now = () => new Date('2026-11-20T12:30:00.000Z');
+    askReview(w.se, { url: PR });
+    w.wire.inbox('file:tpm');
+    const relabel = (): never => {
+      throw new Error('Workspace ref not found');
+    };
+    const tpm = { ...w.tpm, transport: Object.assign(Object.create(w.tpm.transport) as Context['transport'], { relabel }) };
+    expect(assign(tpm, 'AI-8', STAFF)).toEqual(['送った: 【brief】→ file:2（届いた）', '居場所の題を替えられなかった（名簿の題は レビュー AI-8: 計画 plan-1 のまま）: Workspace ref not found']);
+    expect(requireRole(w.tpm, 'AI-8.staff').title).toBe('レビュー AI-8: 計画 plan-1');
+    expect(readReviews(w.tpm)[1]?.brief).toMatch(/brief-2\.html$/);
   });
 });
 
@@ -150,6 +178,8 @@ describe('頼みと依頼書を取り違えない', () => {
     const [one, two] = readReviews(w.tpm);
     expect(one?.brief).toMatch(/brief-2\.html$/);
     expect(two?.brief).toBe(one?.brief);
+    // 頼みが 2 つの依頼書は、新しい方の頼みと +1
+    expect(w.wire.look('file:2')?.title).toBe('レビュー AI-8: PR #7 +1');
     w.staff.now = () => new Date('2026-11-20T12:20:00.000Z');
     reportReview(w.staff, { url: w.put(w.staff, 'review'), verdict: 'concerns', summary: '2 つとも見た' });
     expect(texts(w, 'file:tpm').at(-1)).toMatch(/／頼み: #1 #2$/);
@@ -257,5 +287,33 @@ describe('tpm review list', () => {
     // 初めての頼みより前に出た【done】は数えない（レビューの仕組みが入る前の課題）
     w.tpm.state.append('log.jsonl', { at: '2026-11-19T10:00:00.000Z', key: 't-old1', heading: 'done', from: 'SWE t-old1', to: 'file:tpm', text: '【done】http://127.0.0.1:8801/p/t-old1/result-1.html 要点: 前の課題', id: 'old', delivered: true });
     expect(reviewList(w.tpm, {}).at(-1)).toBe('結果の【done】を出した課題 2 件のうち、レビューを頼んでいない課題: 1 件（t-x7k2）');
+  });
+});
+
+describe('Staff の席の題と説明（reviewLabel）', () => {
+  const ask = (n: number, url: string, focus?: string): Review => ({ n, key: 'AI-8', url, by: 'SWE AI-8: 題', askedAt: '2026-11-20T12:00:00.000Z', ...(focus === undefined ? {} : { focus }) });
+  const page = (name: string): string => `http://127.0.0.1:8801/p/AI-8/${name}.html`;
+
+  test('PR は PR #<番号>、置き場のページは種類の名と file の名', () => {
+    expect(reviewLabel([ask(1, 'https://github.com/o/r/pull/180')])).toEqual({ target: 'PR #180' });
+    expect(reviewLabel([ask(1, page('plan-2'))])).toEqual({ target: '計画 plan-2' });
+    expect(reviewLabel([ask(1, page('proposal-1'))])).toEqual({ target: '提案 proposal-1' });
+    expect(reviewLabel([ask(1, page('result-3'))])).toEqual({ target: '結果 result-3' });
+    expect(reviewLabel([ask(1, page('confirm-1'))])).toEqual({ target: 'confirm-1' });
+    // 節の印・問い・末尾の / は除く。読めない URL は元の字のまま
+    expect(reviewLabel([ask(1, `${page('plan-2')}#risks`)])).toEqual({ target: '計画 plan-2' });
+    expect(reviewLabel([ask(1, `${page('plan-2')}?v=1`)])).toEqual({ target: '計画 plan-2' });
+    expect(reviewLabel([ask(1, 'http://127.0.0.1:8801/p/AI-8/')])).toEqual({ target: 'AI-8' });
+    expect(reviewLabel([ask(1, 'not a url')])).toEqual({ target: 'not a url' });
+  });
+
+  test('頼みが 2 つ以上なら、番号の新しい頼みと +<残りの数>。説明も新しい頼みの見てほしい所', () => {
+    expect(reviewLabel([ask(3, page('plan-1'), '古い'), ask(5, 'https://github.com/o/r/pull/9', '新しい'), ask(4, page('plan-2'))])).toEqual({ target: 'PR #9 +2', description: '新しい' });
+  });
+
+  test('長い見てほしい所は 24 字で切って「…」を付ける', () => {
+    const long = 'あ'.repeat(30);
+    expect(reviewLabel([ask(1, page('plan-1'), long)]).description).toBe(`${'あ'.repeat(24)}…`);
+    expect(reviewLabel([ask(1, page('plan-1'), 'い'.repeat(24))]).description).toBe('い'.repeat(24));
   });
 });

@@ -95,6 +95,8 @@ export interface RoleDef {
   defaults: RoleSettings
   /** 居場所の題（メッセージの差出人にも使う）。担当の名は略す（記録には label を書く）。TPM 担当は同じ Key の担当をこの題でも見分けられる。 */
   title: (key: string, short: string) => string
+  /** 居場所の色（cmux の色の名。サイドバーの左の端の帯）。無ければ付けない。 */
+  color?: string
   /** 【dismiss】を待たずに【end】を送ってよいか（PR 1 本を受け持つ担当は、merge のメッセージで終える）。 */
   endsWithoutDismiss: boolean
 }
@@ -136,8 +138,10 @@ export const ROLES = {
     prompt: '/staff-engineer',
     /** Software Engineer 担当と同じ model で、effort を 1 段上げる（書いた者より深く見る）。 */
     defaults: { model: 'claude-opus-5-5', effort: 'high', permissionMode: 'bypassPermissions' },
-    /** 居場所の題（`Staff <課題の Key>`）。課題の担当の隣に、課題ごとに立つ。 */
-    title: key => `Staff ${key}`,
+    /** 居場所の題（`レビュー <課題の Key>: <見る物>`）。見る物は頼みから命令が作り（reviews.ts の reviewLabel）、頼みのたびに替える。課題の担当の隣に、課題ごとに立つ。 */
+    title: (key, target) => `レビュー ${key}: ${target}`,
+    /** ほかの担当の席は色を持たないので、帯の有る無しでレビューの席と分かる。選んだ席の地の青と紛れない色。 */
+    color: 'Purple',
     endsWithoutDismiss: false,
   },
   'auditor': {

@@ -1,11 +1,18 @@
 // 試験用の adapter。メッセージ・居場所・状態を、状態の folder の下のファイルに書くだけ（命令は動かさない）。
 // cmux 無しで決まりの 1 周を試すためと、連携の口が cmux の形に寄りすぎていないかを確かめるためにある。
 import type { State } from '../state.ts';
-import type { Delivery, Incoming, MessageTrace, Seat, SpawnOptions, StatusKey, Transport } from './types.ts';
+import type { Delivery, Incoming, MessageTrace, Seat, SeatLabel, SpawnOptions, StatusKey, Transport } from './types.ts';
 
 interface FileSeat extends Seat {
   cwd: string
   command: string
+  description?: string
+  color?: string
+}
+
+/** 居場所の見た目（題・説明・色）。試験が読む。 */
+export interface SeatLook extends SeatLabel {
+  color?: string
 }
 
 /** ファイルに書いたメッセージ 1 件。 */
@@ -110,6 +117,29 @@ export class FileTransport implements Transport {
     const seat = this.state.read<FileSeat>(file);
     // 起こされていない居場所（TPM 担当）は一覧に載らないので、題を覚える先が無い。
     if (seat !== undefined) this.state.write(file, { ...seat, title });
+  }
+
+  relabel(address: string, label: SeatLabel): void {
+    const file = `${DIR}/seats/${fileName(address)}.jsonc`;
+    const seat = this.state.read<FileSeat>(file);
+    if (seat === undefined) return;
+    // 説明の無い label は、前の説明を消す。
+    delete seat.description;
+    this.state.write(file, { ...seat, ...label });
+  }
+
+  setColor(address: string, color: string): void {
+    const file = `${DIR}/seats/${fileName(address)}.jsonc`;
+    const seat = this.state.read<FileSeat>(file);
+    if (seat !== undefined) this.state.write(file, { ...seat, color });
+  }
+
+  /** 居場所の見た目（試験が読む）。居場所が無ければ undefined。 */
+  look(address: string): SeatLook | undefined {
+    const seat = this.state.read<FileSeat>(`${DIR}/seats/${fileName(address)}.jsonc`);
+    if (seat === undefined) return undefined;
+    const { title, description, color } = seat;
+    return { title, ...(description === undefined ? {} : { description }), ...(color === undefined ? {} : { color }) };
   }
 
   setStatus(key: StatusKey, text: string): void {
