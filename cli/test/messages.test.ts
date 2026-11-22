@@ -621,4 +621,16 @@ describe('入口の検査: 自分が送った物は、未読に数えない（�
     notify(w.tpm, 't-x7k2', { text: '待つこと' });
     expect(() => askTpm(w.se, { text: '2 通目', waitingFor: 'a' })).toThrow(/まだ読んでいないメッセージが 1 件あります[\s\S]*【notify】待つこと/);
   });
+
+  test('返事の形で、記録の宛先とずれて自分に届いた物は、除かない（送り手で見分ける）', () => {
+    const w = started();
+    assign(w.tpm, 't-b2c3', { role: 'software-engineer', title: '別の課題', brief: BRIEF, wait: 0 });
+    hello(w.role('t-b2c3', 'file:2'));
+    // TPM 担当が別の担当（file:2）宛てに送った物が、返事の先の取り違えで、この担当に届いた形（記録の宛先は file:2 のまま）
+    w.wire.hold('file:2');
+    notify(w.tpm, 't-b2c3', { text: '取り違えた返事' });
+    const stray = w.wire.inbox('file:2').map(m => ({ id: m.id, from: m.from, text: m.text }));
+    w.se.transport.pending = () => stray;
+    expect(() => askTpm(w.se, { text: 'q', waitingFor: 'a' })).toThrow(/まだ読んでいないメッセージが 1 件あります[\s\S]*【notify】取り違えた返事/);
+  });
 });

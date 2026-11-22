@@ -97,12 +97,13 @@ export function requireTpm(ctx: Context): TpmRecord {
 /**
  * TPM 担当だけが打つ命令（担当に送る・担当を起こす・閉じる）を、担当の session（$TPM_KEY がある）から打ったら止める。
  * 送り手の名は命令が付けるので、担当が打つと TPM 担当の名で相手に届いてしまう（台帳 #117）。止めた回は入口の検査の記録に残す。
+ * message は、命令ごとの断りの字（無ければ、tpm ask tpm で頼むよう言う字）。
  */
-export function requireTpmSide(ctx: Context, command: string): void {
+export function requireTpmSide(ctx: Context, command: string, message?: string): void {
   const key = ctx.env.TPM_KEY;
   if (!key) return;
   recordGateStop(ctx, 'tpm-only', command);
-  throw new TpmError(`${command} は TPM 担当の命令です。担当の session（${key}）からは打てません。TPM 担当に頼むことは、tpm ask tpm で送ってください`);
+  throw new TpmError(message ?? `${command} は TPM 担当の命令です。担当の session（${key}）からは打てません。TPM 担当に頼むことは、tpm ask tpm で送ってください`);
 }
 
 /** 自分の名簿の行。担当は起こされるときに $TPM_KEY を渡される。 */

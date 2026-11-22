@@ -134,13 +134,17 @@ const READ_STOP = {
  * from は相手の題（TPM 担当が担当に送るとき。ほかの担当からのメッセージでは止まらない）。担当は TPM 担当からしか受けないので、付けない。
  * 見せた物は覚えるので、同じ命令を打ち直せば送る。action は止まった時の字（put は tpm page put が置く前に呼ぶとき）。
  * 自分が送った物は数えない: cmux は、自分の受信箱の「まだ届いていない物」に、自分が送ってまだ相手に届いていない物も返す
- * （送った直後の次の命令が、自分のメッセージを未読として出して止まった。台帳 #97・#100）。送った記録に、宛先が自分でないと残っている id を除く。
+ * （送った直後の次の命令が、自分のメッセージを未読として出して止まった。台帳 #97・#100）。送った記録（log.jsonl）の、送り手が自分の行の id を除く。
+ * 送り手は、担当なら「Key が自分で、TPM 担当の名でない行」、TPM 担当なら「TPM 担当の名の行」で見る（宛先では見ない。返事の形（--reply-to）は、
+ * 記録の宛先と本当の受け手がずれることがある。題でも見ない。居場所の題は替わることがある）。
  */
 export function assertRead(ctx: Context, who: string, from?: string, action: keyof typeof READ_STOP = 'send'): void {
   const incoming = ctx.transport.pending().filter(m => from === undefined || m.from === from);
   if (incoming.length === 0) return;
   const self = ctx.transport.whoami();
-  const sent = new Set(ctx.state.lines<Sent>('log.jsonl').filter(l => l.to !== self).map(l => l.id));
+  const key = ctx.env.TPM_KEY;
+  const mine = (l: Sent): boolean => key ? l.key === key && l.from !== TPM_TITLE : l.from === TPM_TITLE;
+  const sent = new Set(ctx.state.lines<Sent>('log.jsonl').filter(mine).map(l => l.id));
   const pending = incoming.filter(m => !sent.has(m.id));
   if (pending.length === 0) return;
   const shown = new Set(readShown(ctx, self).map(e => e.id));
