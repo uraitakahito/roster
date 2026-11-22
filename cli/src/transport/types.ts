@@ -65,6 +65,8 @@ export interface Transport {
   spawn(options: SpawnOptions): string
   /** 今ある居場所の一覧。 */
   seats(): Seat[]
+  /** 居場所の uuid → 宛先（ref）と題。持たない道具（file）は無い。落ちた session の突き合わせが使う。 */
+  seatsById?(): Map<string, Seat>
   /** 居場所が出している状態（鍵 → 字）。居場所が無ければ undefined。 */
   status(address: string): Record<string, string> | undefined
   /** 自分の居場所の題を替える。 */

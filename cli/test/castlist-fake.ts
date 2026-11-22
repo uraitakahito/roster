@@ -98,7 +98,9 @@ function presence(id) {
   const first = evs.find(e => ENTER.includes(e.type));
   const exit = evs.filter(e => EXIT.includes(e.type)).at(-1);
   const latest = evs.at(-1);
-  return { first, exit, latest, present: latest !== undefined && ENTER.includes(latest.type) };
+  // 推しの幕引き: 今の状態を決めた出来事が closed で、detail.inferred が true（castlist 0.4.0）。
+  const inferred = latest?.type === 'closed' && latest.detail?.inferred === true;
+  return { first, exit, latest, present: latest !== undefined && ENTER.includes(latest.type), inferred };
 }
 
 const current = (id) => settings.filter(s => s.actor_id === id).at(-1);
@@ -113,7 +115,7 @@ function item(a) {
     ...without(a, 'seq', 'labels'), labels: a.labels,
     first_entered_at: pr.first?.received_at ?? null,
     last_exited_at: pr.exit?.received_at ?? null, last_exit_type: pr.exit?.type ?? null,
-    present: pr.present,
+    present: pr.present, inferred: pr.inferred,
     model: cur?.model ?? null, effort: cur?.effort ?? null,
     url: '/actors/' + a.id,
   };
@@ -134,7 +136,7 @@ function detail(a, asOf) {
     current_settings: cur === undefined ? null : { model: cur.model, effort: cur.effort, source: cur.source, sent_at: cur.sent_at, received_at: cur.received_at },
     links_in: links.filter(l => l.to === a.id).map(l => without(l, 'seq')),
     links_out: links.filter(l => l.from === a.id).map(l => without(l, 'seq')),
-    state: { presence: pr.latest?.type ?? null, present: pr.present, entered_at: pr.first?.received_at ?? null, exited_at: pr.exit?.received_at ?? null },
+    state: { presence: pr.latest?.type ?? null, present: pr.present, inferred: pr.inferred, entered_at: pr.first?.received_at ?? null, exited_at: pr.exit?.received_at ?? null },
     as_of: asOf,
   };
 }
@@ -309,7 +311,7 @@ const server = createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');
     const parts = url.pathname.split('/').map(decodeURIComponent);
     try {
-      if (req.method === 'GET' && url.pathname === '/healthz') return answer(200, { status: 'ok', version: '0.3.0', now });
+      if (req.method === 'GET' && url.pathname === '/healthz') return answer(200, { status: 'ok', version: '0.4.0', now });
       if (req.method === 'GET' && url.pathname === '/v1/actors') return answer(200, searchActors(url, now));
       if (req.method === 'GET' && url.pathname === '/v1/settings') return answer(200, searchSettings(url, now));
       if (req.method === 'GET' && url.pathname === '/v1/events') return answer(200, searchEvents(url, now));

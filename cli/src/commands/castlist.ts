@@ -4,6 +4,7 @@
 // 出来事・線・model と effort の id は、issuer・session・種類（と、何度も起きる物は番号）で決める。送り直しても同じ id なので、castlist は 2 度足さない
 // （castlist の id は issuer をまたいで 1 つなので、issuer の hash を頭に付ける）。
 // 番号は、送れた時だけ進める（届かなかった物は、次に同じ id で送り直す）。
+// 落ちて終わりを送れなかった session は、hello・roles・assign が cmux の居場所の一覧と突き合わせ、推しの幕引き（detail.inferred）を送る（sweep）。
 import { createHash } from 'node:crypto';
 import type { Context } from '../context.ts';
 import { busyMessage, castlistUrl, downMessage, issuerOf, modelOf, request, requireUp, seatOf, sessionRef, type Reply } from '../castlist.ts';
@@ -26,6 +27,10 @@ export interface SessionRecord {
   observed?: { model: string, effort: string }
   /** model を読めなかったことを送ったか（session に 1 度だけ送る）。 */
   modelUnreadable?: boolean
+  /** 登録した時の cmux の居場所（ref は起こし直しで替わり、uuid は復元で残る）。 */
+  workspace?: { ref?: string, uuid?: string }
+  /** 推しの幕引き（tpm が、落ちたと推して送った幕引き）で居ないにした。guard が、その session の Bash で再登場を送る印。 */
+  endedBy?: 'inferred'
 }
 
 /** 起こし 1 回の控え（`launches/<起こしの id>.jsonc`）。 */
@@ -36,7 +41,7 @@ interface LaunchRecord {
   requested?: boolean
 }
 
-/** 登録のきっかけ。startup・resume・clear・compact・fork は SessionStart の source。guard と hello は、控えが無い session を、その命令が登録した時。 */
+/** 登録のきっかけ。startup・resume・clear・compact・fork は SessionStart の source。guard と hello は、控えが無い session（か、推しの幕引きで居ないにした session）を、その命令が登録した時。 */
 type Source = 'startup' | 'resume' | 'clear' | 'compact' | 'fork' | 'guard' | 'hello';
 const SOURCES: Source[] = ['startup', 'resume', 'clear', 'compact', 'fork'];
 
@@ -87,8 +92,15 @@ function event(ctx: Context, url: string, record: SessionRecord, type: string, d
   const sent = put(ctx, url, 'events', idOf(ctx, 'e', record.session, `${type}${seq ? `-${n}` : ''}`), { by: sessionRef(record.session), type, detail });
   if (sent !== 'ok') return sent;
   if (seq) record.seq[type] = n;
-  if (['entered', 'reentered', 'forked'].includes(type)) record.present = true;
-  if (['cleared', 'exited', 'closed'].includes(type)) record.present = false;
+  if (['entered', 'reentered', 'forked'].includes(type)) {
+    record.present = true;
+    delete record.endedBy;
+  }
+  if (['cleared', 'exited', 'closed'].includes(type)) {
+    record.present = false;
+    if (detail.inferred === true) record.endedBy = 'inferred';
+    else delete record.endedBy;
+  }
   ctx.state.write(sessionFile(record.session), record);
   return 'ok';
 }
@@ -106,11 +118,12 @@ function workspaceRef(ctx: Context): string | undefined {
 }
 
 /**
- * session を登録し（鍵は session。何度登録しても同じアクター）、きっかけの出来事と線を送る。
+ * session を登録し（鍵は session。何度登録しても同じアクター）、きっかけの出来事と線を送る。控えには、その時の居場所（cmux の ref と uuid）も書く。
+ * revive なら、推しの幕引きで居ないにした session を、今の居場所で登録し直して、番号つきの再登場（source は guard）だけを送る（線は送らない）。
  * 頼んだ model と effort（$TPM_LAUNCH_MODEL・$TPM_LAUNCH_EFFORT）は、tpm が起こしたばかりの process（$TPM_LAUNCH_FRESH）の初めの登録でだけ送る
  * （/clear の後の session は同じ環境変数を持つが、その後に /model で替えたかもしれないので送らない）。
  */
-function enter(ctx: Context, url: string, sid: string, source: Source): Sent {
+function enter(ctx: Context, url: string, sid: string, source: Source, revive = false): Sent {
   const launch = text(ctx.env.TPM_LAUNCH);
   const launched = launch === undefined ? { sessions: [] } : ctx.state.read<LaunchRecord>(launchFile(launch)) ?? { sessions: [] };
   const model = text(ctx.env.TPM_LAUNCH_MODEL);
@@ -146,8 +159,10 @@ function enter(ctx: Context, url: string, sid: string, source: Source): Sent {
   }
   const actor = reply.body as { id?: unknown, name?: unknown };
   const had = readSession(ctx, sid);
-  const record: SessionRecord = { ...had, session: sid, id: String(actor.id), name: String(actor.name), ...(launch === undefined ? {} : { launch }), present: had?.present ?? false, seq: had?.seq ?? {} };
+  const workspace = ref === undefined && uuid === undefined ? had?.workspace : { ...(ref === undefined ? {} : { ref }), ...(uuid === undefined ? {} : { uuid }) };
+  const record: SessionRecord = { ...had, session: sid, id: String(actor.id), name: String(actor.name), ...(launch === undefined ? {} : { launch }), present: had?.present ?? false, seq: had?.seq ?? {}, ...(workspace === undefined ? {} : { workspace }) };
   ctx.state.write(sessionFile(sid), record);
+  if (revive) return event(ctx, url, record, 'reentered', { source }, true);
   const previous = launched.sessions.filter(s => s !== sid).at(-1);
   if (launch !== undefined) {
     ctx.state.write(launchFile(launch), {
@@ -235,8 +250,10 @@ export function castlistGuard(ctx: Context, stdin: string): Verdict {
   const input = hookInput(stdin);
   const sid = text(input.session_id);
   if (input.tool_name !== 'Bash' || sid === undefined) return { allow: true };
-  if (readSession(ctx, sid) === undefined) {
-    const sent = enter(ctx, url, sid, 'guard');
+  const had = readSession(ctx, sid);
+  // 控えが無ければ登録する。推しの幕引きで居ないにした session が Bash を打てば、生きていたので、今の居場所で登録し直して再登場を送る。
+  if (had === undefined || (had.present === false && had.endedBy === 'inferred')) {
+    const sent = enter(ctx, url, sid, 'guard', had !== undefined);
     if (sent !== 'ok') return stop(ctx, url, sent);
   }
   const record = readSession(ctx, sid);
@@ -267,8 +284,10 @@ export function castlistGuard(ctx: Context, stdin: string): Verdict {
 function reportIn(ctx: Context, url: string, sid: string): string[] {
   const done = '名乗っていません。';
   const fail = (sent: Exclude<Sent, 'ok'>): TpmError => new TpmError(sent === 'busy' ? busyMessage(url, done) : downMessage(ctx, url, done));
-  if (readSession(ctx, sid) === undefined) {
-    const sent = enter(ctx, url, sid, 'hello');
+  const had = readSession(ctx, sid);
+  // 控えが無ければ登録する。推しの幕引きで居ないにした session なら、名乗りの前に今の居場所で登録し直して再登場を送る（guard と同じ）。
+  if (had === undefined || (had.present === false && had.endedBy === 'inferred')) {
+    const sent = enter(ctx, url, sid, 'hello', had !== undefined);
     if (sent !== 'ok') throw fail(sent);
   }
   const record = readSession(ctx, sid);
@@ -299,4 +318,96 @@ export function closeLaunch(ctx: Context, role: RoleRecord): string[] {
   const present = (launched?.sessions ?? []).map(sid => readSession(ctx, sid)).filter(r => r?.present === true);
   const failed = present.filter(record => record !== undefined && event(ctx, url, record, 'closed', {}) !== 'ok');
   return failed.length === 0 ? [] : [`castlist（${url}）に幕引きを送れませんでした（${failed.map(r => r?.name).join('・')}）。castlist が起きてから送る道は無いので、台帳に要るなら tpm report incident で挙げる`];
+}
+
+/** 1 つの命令の中で、突き合わせを 1 度だけにする（tpm hello は名簿も出すので、2 度呼ばれる）。 */
+const swept = new WeakSet<Context>();
+
+/** 居場所の組。 */
+type Place = { ref: string, uuid: string };
+const isPlace = (w: SessionRecord['workspace']): w is Place => w?.ref !== undefined && w.uuid !== undefined;
+
+/**
+ * 控えの居場所。無ければ castlist のアクターの付随する id（種類ごとに最新）から引き、読み直した控えに居場所だけを足して書く
+ * （引く間に、その session の hook が控えを書いても消さない）。引けなければ undefined、castlist が止まっている・混んでいれば、その印。
+ */
+function placeOf(ctx: Context, url: string, record: SessionRecord): Place | undefined | Exclude<Sent, 'ok'> {
+  if (isPlace(record.workspace)) return record.workspace;
+  const reply = request(ctx, url, 'GET', `/v1/actors/${encodeURIComponent(record.id)}`);
+  if (reply.kind === 'down' || reply.kind === 'busy') return reply.kind;
+  if (reply.kind !== 'ok') return undefined;
+  const bindings = (reply.body as { current_bindings?: { type?: unknown, value?: unknown }[] }).current_bindings ?? [];
+  const value = (type: string): string | undefined => text(bindings.find(b => b.type === type)?.value);
+  const workspace = { ref: value('cmux.workspace.ref'), uuid: value('cmux.workspace.uuid') };
+  if (!isPlace(workspace)) return undefined;
+  const fresh = readSession(ctx, record.session);
+  if (fresh !== undefined) ctx.state.write(sessionFile(record.session), { ...fresh, workspace });
+  return workspace;
+}
+
+/**
+ * 落ちた session の突き合わせ（tpm hello・roles・assign が呼ぶ）。cmux の居場所の一覧（uuid → ref）と、控えで「居る」ままの session を突き合わせ、
+ * 次のどちらかなら推しの幕引き（closed。detail は inferred: true と訳）を番号つきの id で送り、控えを居ないにする。送った session の名の行を返す。
+ * - workspace_gone: 居場所の uuid が一覧に無い。
+ * - superseded: uuid は残り ref が替わった（cmux が起こし直され、居場所を復元した）うえ、今の組（uuid と今の ref）に別の session が登録した
+ *   （今の ref は起こし直しの後に振られたので、その session は後から来た）。ref が替わっただけでは送らない（cmux が session を続けることがある）。
+ * 自分の session は見ない。自分の session の id が無い（tpm の起こした session の外で打った）・一覧が引けない・自分の組が一覧に無い（一覧を信じられない）時は、
+ * 何もしない。castlist が止まっている・混んでいれば、そこでやめる。送れなくても命令は止めず、送れなかった session を 1 行で出す。
+ */
+export function sweep(ctx: Context): string[] {
+  const url = castlistUrl(ctx);
+  if (url === undefined || ctx.config.transport !== 'cmux' || ctx.transport.seatsById === undefined || swept.has(ctx)) return [];
+  swept.add(ctx);
+  let seats: Map<string, { address: string }>;
+  try {
+    seats = ctx.transport.seatsById();
+  }
+  catch {
+    return [];
+  }
+  const mine = text(ctx.env.CLAUDE_CODE_SESSION_ID);
+  const ref = workspaceRef(ctx);
+  const uuid = text(ctx.env.CMUX_WORKSPACE_ID);
+  if (mine === undefined || ref === undefined || uuid === undefined || seats.get(uuid)?.address !== ref) return [];
+  const records = ctx.state.list('sessions')
+    .map(name => ctx.state.read<SessionRecord>(`sessions/${name}.jsonc`))
+    .filter((r): r is SessionRecord => r !== undefined && r.session !== mine);
+  const stopped = (): string[] => [`castlist（${url}）が応えないので、落ちた session の突き合わせをやめました（次の tpm roles などで、また見ます）`];
+  const places = new Map<string, Place | undefined>();
+  for (const r of records.filter(r => r.present)) {
+    const p = placeOf(ctx, url, r);
+    if (p === 'down' || p === 'busy') return stopped();
+    places.set(r.session, p);
+  }
+  // 組ごとの、登録した session（自分も）。
+  const at = (p: Place): string => `${p.uuid} ${p.ref}`;
+  const seated = new Map<string, string[]>([[at({ ref, uuid }), [mine]]]);
+  for (const r of records) {
+    const p = places.get(r.session) ?? r.workspace;
+    if (isPlace(p)) seated.set(at(p), [...seated.get(at(p)) ?? [], r.session]);
+  }
+  const closed: string[] = [];
+  const failed: string[] = [];
+  for (const r of records.filter(r => r.present)) {
+    const p = places.get(r.session);
+    if (p === undefined) continue;
+    const now = seats.get(p.uuid)?.address;
+    const reason = now === undefined
+      ? 'workspace_gone'
+      : now !== p.ref && (seated.get(at({ uuid: p.uuid, ref: now })) ?? []).some(s => s !== r.session) ? 'superseded' : undefined;
+    if (reason === undefined) continue;
+    // 送る直前に読み直す（その session の guard と書き合わないため）。
+    const fresh = readSession(ctx, r.session);
+    if (fresh?.present !== true) continue;
+    const sent = event(ctx, url, fresh, 'closed', { inferred: true, reason }, true);
+    if (sent === 'ok') closed.push(`${fresh.name}（${reason === 'workspace_gone' ? '居場所が消えた' : '居場所に後から別の session が入った'}）`);
+    else {
+      failed.push(fresh.name);
+      break;
+    }
+  }
+  return [
+    ...(closed.length === 0 ? [] : [`castlist: 落ちたと推して幕引きを送った: ${closed.join('・')}`]),
+    ...(failed.length === 0 ? [] : [`castlist（${url}）に、落ちたと推した幕引きを送れませんでした（${failed.join('・')}）。castlist が応えないので、残りもやめました（次の tpm roles などで、また見ます）`]),
+  ];
 }
