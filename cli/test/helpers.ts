@@ -46,9 +46,25 @@ export class FakeStore {
   noFiles = false;
   /** true の間、返事の状態を持てない（0.5.0 より前の置き場。書く道は 405 を返し、一覧は reply の絞りを読まずにみな返す）。 */
   noReply = false;
+  /** 置く要求（ページと file の POST）の引数。送った順。 */
+  posts: URLSearchParams[] = [];
+  /**
+   * 送り手（actor_issuer・actor_ref）を書いた置く要求に、castlist が何と答えたことにするか（pagetray 0.6.0 の「送り手」）。
+   * known は登録のあるアクター（置く）、unregistered は登録が無い（422）、unreachable は castlist に聞けない（503）。どちらも何も置かない。
+   */
+  sender: 'known' | 'unregistered' | 'unreachable' = 'known';
 
   /** 返事の状態を書いた回数（時刻をずらすため）。 */
   private replies = 0;
+
+  /** 置く要求の送り手を見る。置いてよければ undefined、断るなら答えの code と本文。片方だけ書いた時は 400（castlist には聞かない）。 */
+  private senderRefusal(q: URLSearchParams): { code: number, body: string } | undefined {
+    if (q.has('actor_issuer') !== q.has('actor_ref')) return { code: 400, body: '{"error":"actor_issuer と actor_ref は両方書くか、両方書かない"}' };
+    if (!q.has('actor_ref') || this.sender === 'known') return undefined;
+    return this.sender === 'unregistered'
+      ? { code: 422, body: '{"error":"castlist に登録の無い送り手"}' }
+      : { code: 503, body: '{"error":"castlist に送り手を聞けない"}' };
+  }
 
   /** curl の引数を読んで答える。答えの形は `<本文>\n<HTTP の code>`（-o があれば本文は file に書く）。 */
   curl(args: string[], options?: ExecOptions): ExecResult {
@@ -94,7 +110,10 @@ export class FakeStore {
       return reply(200, JSON.stringify({ removed: gone }));
     }
     if (args.includes('POST')) {
+      this.posts.push(q);
       if (this.refuse !== undefined) return reply(this.refuse.code, this.refuse.body);
+      const refusal = this.senderRefusal(q);
+      if (refusal !== undefined) return reply(refusal.code, refusal.body);
       const data = args[args.indexOf('--data-binary') + 1] ?? '';
       const body = data === '@-' ? Buffer.from(options?.input ?? '') : readFileSync(data.slice(1));
       const [project, key, kind] = [q.get('project') ?? '', q.get('key') ?? '', q.get('kind') ?? ''];
@@ -151,6 +170,7 @@ export class FakeStore {
       return reply(200, JSON.stringify({ removed: gone }));
     }
     if (args.includes('POST')) {
+      this.posts.push(q);
       if (this.refuse !== undefined) return reply(this.refuse.code, this.refuse.body);
       const body = readFileSync((args[args.indexOf('--data-binary') + 1] ?? '').slice(1));
       const [project, key, name] = [q.get('project') ?? '', q.get('key') ?? '', q.get('name') ?? ''];
@@ -158,6 +178,9 @@ export class FakeStore {
       if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(stem) || body.length === 0) return reply(400, '{"error":"引数が決まりに合わない"}');
       const type = args.find(a => a.startsWith('Content-Type: '))?.slice('Content-Type: '.length) ?? '';
       if (!Object.hasOwn(FILE_TYPES, ext) || type.split(';')[0] !== FILE_TYPES[ext]?.split(';')[0]) return reply(415, '{"error":"受けない種類"}');
+      // castlist には、ほかの決まり（400・415）を見終えてから聞く。
+      const refusal = this.senderRefusal(q);
+      if (refusal !== undefined) return reply(refusal.code, refusal.body);
       const prefix = `/${project}/${key}/files/${stem}-`;
       const taken = [...this.files.keys(), ...this.removedFiles].filter(p => p.startsWith(prefix) && p.endsWith(`.${ext}`) && /^\d+$/.test(p.slice(prefix.length, -ext.length - 1)))
         .map(p => Number.parseInt(p.slice(prefix.length), 10));

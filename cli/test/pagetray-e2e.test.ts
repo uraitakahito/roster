@@ -9,6 +9,7 @@ import { describe, expect, test } from 'vitest';
 import { fileDelete, fileList, filePath, filePut, type FileRecord } from '../src/commands/file.ts';
 import { PAGE_KINDS, pageDelete, pageImport, pageList, pagePath, pagePut, pageReply, type PageRecord } from '../src/commands/page.ts';
 import { setReply, waitingUrls } from '../src/commands/reply.ts';
+import { castlistIssuer } from '../src/castlist.ts';
 import type { Context } from '../src/context.ts';
 import { exec } from '../src/exec.ts';
 import { ROLE_NAMES } from '../src/protocol.ts';
@@ -25,6 +26,14 @@ const FILES = URL !== '' && execFileSync('curl', ['-s', '-o', '/dev/null', '-w',
  * 持てない置き場には、「印を付けずに通る」方の試験を流す（新しい tpm が古い置き場に当たった時の振る舞い）。
  */
 const REPLY = URL !== '' && execFileSync('curl', ['-s', '-o', '/dev/null', '-w', '%{http_code}', '-X', 'POST', `${URL}/api/pages/reply`], { encoding: 'utf8' }) === '400';
+/**
+ * 置き場が送り手（actor_issuer・actor_ref）を記録するか（pagetray 0.6.0 から）。/api/version の版で見る（前の版は知らない引数を読まずに置くので、答えでは見分けられない）。
+ * CI の置き場は PAGETRAY_CASTLIST_URL を付けずに起こすので、castlist には聞かず、付随する id だけを残す（未確認。`sender.actor` は null）。
+ */
+const SENDER = URL !== '' && ((): boolean => {
+  const [major = 0, minor = 0] = (JSON.parse(execFileSync('curl', ['-fsS', `${URL}/api/version`], { encoding: 'utf8' })) as { version: string }).version.split('.').map(Number);
+  return major > 0 || minor >= 6;
+})();
 /** PNG の頭の 8 byte と、少しの中身。 */
 const PNG = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('つなぎの試験の図')]);
 
@@ -239,5 +248,25 @@ describe.skipIf(!FILES)('cli と pagetray のつなぎ（file。置き場が 0.4
     expect(waitingUrls(s.tpm, 'K-9')).toEqual([]);
     expect(s.list(s.tpm, { reply: 'waiting' })).toEqual([]);
     expect(() => pageReply(s.tpm, [first], { waiting: true })).toThrow(/版が古く/);
+  });
+});
+
+describe.skipIf(!SENDER)('cli と pagetray のつなぎ（送り手。置き場が 0.6.0 から）', () => {
+  test('castlist の設定と session の id があると、ページと file の記録に、付けた issuer と ref が残る（置き場に castlist の URL が無いので未確認）', () => {
+    const s = setup();
+    const sid = '5f0c2a8e-0000-4000-8000-0000000000e2';
+    const ctx = s.real(s.w.role('K-20', 'file:1'), { TPM_ROLE: 'software-engineer', TPM_CASTLIST_URL: 'http://127.0.0.1:8802', CLAUDE_CODE_SESSION_ID: sid });
+    const sender = { issuer: castlistIssuer(s.w.tpm.state.dir), ref: `claude.session:${sid}`, actor: null };
+    const url = s.put(ctx, 'result', '<title>送り手のある結果</title><p>つなぎの試験</p>');
+    expect(s.list(s.tpm, { key: 'K-20' })).toEqual([expect.objectContaining({ url, sender: expect.objectContaining(sender) as unknown })]);
+    const src = join(s.dir, 'src-sender.png');
+    writeFileSync(src, PNG);
+    const file = filePut(ctx, src, { reviewed: true })[1]?.replace('URL: ', '') ?? '';
+    const listed = JSON.parse(fileList(s.tpm, { key: 'K-20', json: true }).join('\n')) as (FileRecord & { url: string })[];
+    expect(listed).toEqual([expect.objectContaining({ url: file, sender: expect.objectContaining(sender) as unknown })]);
+    // 付けない時は、前と同じに置き、sender は出ない。
+    const plain = s.put(s.real(s.w.role('K-21', 'file:1'), { TPM_ROLE: 'software-engineer' }), 'result', '<title>送り手の無い結果</title>');
+    expect(s.list(s.tpm, { key: 'K-21' })).toEqual([expect.not.objectContaining({ sender: expect.anything() as unknown })]);
+    expect(s.list(s.tpm, { key: 'K-21' })[0]?.url).toBe(plain);
   });
 });
