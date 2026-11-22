@@ -1,6 +1,6 @@
 # 依頼書のひな形
 
-TPM 担当が Software Engineer 担当・DevOps Engineer 担当に渡す依頼書。HTML の file に書いて `tpm page put <file> --kind brief --key <Key>` で置き（protocol.md の「ページ」）、出た URL を `tpm assign <Key> … --brief <URL>` で渡す（担当が動いていれば【brief】で届き、いなければ起こされた担当が `tpm hello` で受け取る）。
+TPM 担当が Software Engineer 担当・DevOps Engineer 担当に渡す依頼書（Staff Engineer 担当への依頼書は、`tpm assign --role staff-engineer` がレビューの頼みから作るので、書かない）。HTML の file に書いて `tpm page put <file> --kind brief --key <Key>` で置き（protocol.md の「ページ」）、出た URL を `tpm assign <Key> … --brief <URL>` で渡す（担当が動いていれば【brief】で届き、いなければ起こされた担当が `tpm hello` で受け取る）。
 
 **書かない物**: 連絡の仕方・見出しの表・状態・終わり方・文書の食い違いの扱い・共有の環境の扱い・TPM 担当の宛先。これらは `/software-engineer`・`/devops-engineer` と `_shared/protocol.md`、`tpm` の命令にある。依頼書には、その課題だけのことを書く。
 
@@ -12,7 +12,7 @@ TPM 担当が Software Engineer 担当・DevOps Engineer 担当に渡す依頼�
 | 頭書き | 課題の Key（`SKILL.md` の 2。Jira・GitHub の Issue の Key なら、担当は `tpm issue view` で課題を読む）・repo か folder・前の依頼書や成果の URL |
 | 課題の概要 | 新しい担当を起こす依頼書だけ。何が求められているか（あなたの言葉で 3〜8 行）・受け入れの条件（原文のまま）・わからない所（無ければ「なし」）。形は下の「課題の概要の節」 |
 | やること | 番号付きで。どこまでやるか（提案まで・計画まで・実装まで）をはっきり書く |
-| 前提 | その課題だけの決まり（破壊的でよいか・後方互換を考えるか・触ってはいけない物・使う model の指示） |
+| 前提 | その課題だけの決まり（破壊的でよいか・後方互換を考えるか・触ってはいけない物・使う model の指示）。レビューを必ず受けさせる課題は「レビューを受ける: 計画と PR を Staff Engineer 担当に頼む」と書く（`SKILL.md` の 2） |
 | 材料 | 読む物（貼られた文・ファイル・URL）。長い文は `<pre>` でそのまま |
 | TPM が知っていること | 調べ済みのこと・試して駄目だったこと |
 | 成果の形 | 何を出せば終わりか（`tpm page put` で置く提案・計画・結果のページ・PR）。担当は【done】の後に次の【brief】か【dismiss】を待つので、「【done】の後は待つ」とは書かなくてよい |

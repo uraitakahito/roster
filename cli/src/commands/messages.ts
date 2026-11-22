@@ -1,5 +1,6 @@
 // 見出しの付いたメッセージを送る命令。送る・届いたかを見る・課題に記録を書く・状態を替える、を 1 度にする。
 // 担当が打つ物（ask・report・wait）と、TPM 担当が打つ物（answer・notify・dismiss・show）。brief は命令でなく、assign の中で使う。
+// レビューは、課題の担当が tpm ask review で頼み、Staff Engineer 担当が tpm report review で返す（どちらも TPM 担当を通る）。
 // Auditor は、成果を tpm report audit（Product Manager へじかに出した報告の写し）と tpm report decided（Product Manager の決定）で出す。
 import { basename } from 'node:path';
 import { appendAudit } from '../audits.ts';
@@ -7,7 +8,8 @@ import type { Context } from '../context.ts';
 import { recordGateStop, recordWait } from '../evidence.ts';
 import { addIncident, foldIntoIncident, incidentLine, incidentType, INCIDENT_TYPES, readIncidents, tagLines } from '../incidents.ts';
 import { message, ROLES, TPM_TITLE, WAIT, WAIT_CLOSE, WAIT_NEXT_BRIEF, type HeadingId, type WaitKind } from '../protocol.ts';
-import { readRole, requireRole, requireSelf, requireTpm, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
+import { readRole, requireRole, requireSelf, requireTpm, subjectOf, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
+import { addReview, openReviews, patchReview, removeReview, VERDICTS, type Verdict } from '../reviews.ts';
 import { TpmError } from '../skill-sets.ts';
 import { MAX_POINTS, type Note, type NoteKind, type NoteLink } from '../tracker/types.ts';
 import type { Incoming } from '../transport/types.ts';
@@ -164,7 +166,7 @@ function notAuditor(self: RoleRecord, command: string): void {
     throw new TpmError(`Auditor は ${command} を打ちません。監査の報告は tpm report audit、Product Manager の決定は tpm report decided で出してください（PR は出さず、Product Manager とは Audit の席でじかに話す）`);
   }
   if (self.role === 'staff-engineer') {
-    throw new TpmError(`Staff Engineer 担当は ${command} を打ちません。レビューの結果は、レビューのページで返します（PR は出さず、直さない。Product Manager に決めてほしいことは、tpm ask tpm で TPM 担当に送る）`);
+    throw new TpmError(`Staff Engineer 担当は ${command} を打ちません。レビューの結果は tpm report review で返してください（PR は出さず、直さない。Product Manager に決めてほしいことは、tpm ask tpm で TPM 担当に送る）`);
   }
 }
 
@@ -237,7 +239,8 @@ function openBriefs(ctx: Context, role: RoleRecord, address: string, log: Sent[]
     else if (role.helloAt !== undefined && l.at >= role.helloAt) {
       // 前の居場所（担当の交代の前）が出した物は数えない。
       if (l.heading === 'end') open = [];
-      if (l.heading !== 'done') continue;
+      // Staff Engineer 担当は、依頼書 1 つの成果を【review】で返す（【done】は送らない）。
+      if (l.heading !== 'done' && l.heading !== 'review') continue;
       const i = open.findIndex(b => b.seen !== undefined && b.seen <= l.at);
       if (i >= 0) open.splice(i, 1);
     }
@@ -603,6 +606,77 @@ export function reportDependabot(ctx: Context, id: 'merge-request' | 'not-yet' |
   out.push(toTpm(ctx, self, id, options.text));
   if (id === 'merge-request') out.push(...wait(ctx, 'tpm', 'merge'));
   return out;
+}
+
+// ---- レビュー（課題の担当が頼み、Staff Engineer 担当が返す） ----
+
+/** PR の URL の形（`https://<host>/<owner>/<repo>/pull/<番号>`）。 */
+const PR_URL = /^https:\/\/[^\s/]+\/[^\s/]+\/[^\s/]+\/pull\/\d+/;
+/** 置き場のレビューのページの URL の終わり。 */
+const REVIEW_PAGE = /\/review-[1-9]\d*\.html(?:[?#].*)?$/;
+
+/**
+ * 課題の担当が、計画・提案のページか PR のレビューを頼む（【ask-review】）。頼みを記録（reviews.ts）に書き、状態を回答待ちにする。
+ * TPM 担当が tpm assign <Key> --role staff-engineer で Staff Engineer 担当の席を起こし、結果を【notify】で回す。レビューは助言で、頼んだ担当を縛らない。
+ */
+export function askReview(ctx: Context, options: { url: string, focus?: string }): string[] {
+  const self = sender(ctx);
+  notAuditor(self, 'tpm ask review');
+  if (!isPageUrl(ctx.env, options.url) && !PR_URL.test(options.url)) throw new TpmError(`--url は、置き場のページか PR の URL にしてください（見る物）: ${options.url}`);
+  const same = openReviews(ctx, self.key).find(r => r.url === options.url);
+  if (same !== undefined) throw new TpmError(`同じ物のレビューを、もう頼んであります（#${same.n}。${same.askedAt} に頼んだ）。2 度目は送っていません。結果は TPM 担当から【notify】で届きます`);
+  const focus = options.focus?.trim() || undefined;
+  const review = addReview(ctx, { key: self.key, url: options.url, ...(focus === undefined ? {} : { focus }), by: self.title });
+  const body = `#${review.n} ${options.url}${focus === undefined ? '' : ` 見てほしい所: ${focus}`}`;
+  let sent: string;
+  try {
+    sent = toTpm(ctx, self, 'ask-review', body);
+  }
+  catch (e) {
+    // 送れなかった頼みを残すと、TPM 担当が知らないまま、打ち直しが「もう頼んであります」で止まる。
+    removeReview(ctx, review.n);
+    throw e;
+  }
+  return [sent, ...wait(ctx, 'tpm', 'レビュー')];
+}
+
+/** `tpm report review` の旗。 */
+export interface ReviewOptions {
+  /** レビューのページ（tpm page put --kind review で置いた URL）。 */
+  url: string
+  /** 判定（VERDICTS の語）。 */
+  verdict: string
+  summary: string
+}
+
+/** 次のレビューの頼みを待つ（Staff Engineer 担当の【review】の後）。 */
+const WAIT_NEXT_REVIEW = WAIT.tpm('次のレビュー');
+
+/**
+ * Staff Engineer 担当が、レビューのページと判定を返す（【review】）。いちばん古い依頼書の頼み（まだ返していない物）に判定を書き、課題があれば記録「レビュー」を書く。
+ * TPM 担当が、中身を判じずに頼んだ担当へ回す。
+ */
+export function reportReview(ctx: Context, options: ReviewOptions): string[] {
+  const self = sender(ctx);
+  if (self.role !== 'staff-engineer') throw new TpmError('tpm report review は Staff Engineer 担当（Staff の席）が打ちます。レビューを頼むのは tpm ask review');
+  if (!Object.hasOwn(VERDICTS, options.verdict)) throw new TpmError(`--verdict は ${Object.keys(VERDICTS).join('・')} のどれかにしてください（${Object.entries(VERDICTS).map(([id, label]) => `${id}＝${label}`).join('・')}）`);
+  const verdict = options.verdict as Verdict;
+  if (!isPageUrl(ctx.env, options.url) || !REVIEW_PAGE.test(options.url)) throw new TpmError(`--url は、tpm page put --kind review で置いたレビューのページの URL にしてください: ${options.url}`);
+  const subject = subjectOf(self);
+  if (pageOwner(ctx, options.url)?.key !== subject) throw new TpmError(`--url は、${subject} のレビューのページにしてください（別の課題のページ）: ${options.url}`);
+  // 返すのは、いちばん古い依頼書の頼みだけ（依頼書は積まれた順にこなす。--after で積まれた次の依頼書の頼みは、次の【review】で返す）。
+  const briefed = openReviews(ctx, subject).filter(r => r.brief !== undefined);
+  const asks = briefed.filter(r => r.brief === briefed[0]?.brief);
+  if (asks.length === 0) throw new TpmError(`${subject} に、返していないレビューの頼みがありません（もう返したか、依頼書がまだ来ていない）。送っていません`);
+  const label = VERDICTS[verdict];
+  const body = `${options.url} 判定: ${label}（${verdict}）／一言: ${options.summary}／頼み: ${asks.map(r => `#${r.n}`).join(' ')}`;
+  notRepeatToTpm(ctx, self, 'review', body);
+  const recorded = record(ctx, self, { kind: 'レビュー', role: ROLES[self.role].label, summary: oneLine(`${label}: ${options.summary}`), links: [{ label: 'レビュー', url: options.url }], points: [] });
+  const sent = toTpm(ctx, self, 'review', body);
+  const reviewedAt = ctx.now().toISOString();
+  for (const r of asks) patchReview(ctx, r.n, { verdict, page: options.url, summary: options.summary, reviewedAt });
+  showWait(ctx, WAIT_NEXT_REVIEW);
+  return [...recorded, sent, `状態: ${WAIT_NEXT_REVIEW}`];
 }
 
 // ---- Auditor が打つ ----

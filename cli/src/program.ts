@@ -13,6 +13,7 @@ import { issueView } from './commands/issue.ts';
 import { fileDelete, fileList, filePath, filePut, type FileListOptions, type FilePutOptions } from './commands/file.ts';
 import { PAGE_KINDS, pageDelete, pageImport, pageList, pagePath, pagePut, pageReply, type PageDeleteOptions, type PageListOptions } from './commands/page.ts';
 import { registerMessages } from './commands/register.ts';
+import { registerReview } from './commands/review.ts';
 import { hello, inbox } from './commands/role-side.ts';
 import { assign, close, newKey, roles, type AssignOptions } from './commands/tpm-side.ts';
 import { composeSkillSets, readConfigSources } from './config.ts';
@@ -97,6 +98,7 @@ export function buildProgram(): Command {
     .action((options: { model?: string, effort?: string }) => print(hello(createContext(), options)));
   program.command('inbox').description('自分宛てで、まだ届いていないメッセージを出す（段の区切りに見る）').action(() => print(inbox(createContext())));
   registerMessages(program, print);
+  registerReview(program, print);
   registerIncident(program, print);
   registerAudit(program, print, () => readFileSync(0, 'utf8'));
 

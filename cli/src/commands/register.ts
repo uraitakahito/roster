@@ -4,7 +4,8 @@ import { createContext } from '../context.ts';
 import { WAIT, type WaitKind } from '../protocol.ts';
 import { TpmError } from '../skill-sets.ts';
 import { INCIDENT_TYPES } from '../incidents.ts';
-import { answer, askDevops, askPm, askTpm, dismiss, DONE_KINDS, doneKind, notify, reportAudit, reportDecided, reportDependabot, reportDocFix, reportDone, reportEnd, reportIncident, reportMerged, show, wait } from './messages.ts';
+import { VERDICTS } from '../reviews.ts';
+import { answer, askDevops, askPm, askReview, askTpm, dismiss, DONE_KINDS, doneKind, notify, reportAudit, reportDecided, reportDependabot, reportDocFix, reportDone, reportEnd, reportIncident, reportMerged, reportReview, show, wait } from './messages.ts';
 
 const collect = (value: string, all: string[]): string[] => [...all, value];
 
@@ -32,6 +33,10 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
   ask.command('devops').description('【ask-devops】共有の環境で DevOps Engineer 担当の手が要る')
     .requiredOption('--what <何を>').requiredOption('--why <なぜ>').option('--urgent', '急ぎ', false)
     .action((options: { what: string, why: string, urgent: boolean }) => print(askDevops(createContext(), options)));
+  ask.command('review').description('【ask-review】計画・提案のページか PR のレビューを頼む（TPM 担当が Staff Engineer 担当の席を起こす。レビューは助言）')
+    .requiredOption('--url <URL>', '見る物（置き場のページか PR の URL）')
+    .option('--focus <見てほしい所>', '特に見てほしい所')
+    .action((options: { url: string, focus?: string }) => print(askReview(createContext(), options)));
 
   const report = program.command('report').description('担当が TPM 担当に知らせる');
   report.command('merged').description('【merged】自分の PR を 1 本 merge した（PR が merge 済みでなければ送らない）')
@@ -76,6 +81,11 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
     .option('--accept <勧告の題>', '受け入れる（直さない。繰り返せる）', collect, [] as string[])
     .option('--later <勧告の題>', '見送る（今は決めない。繰り返せる）', collect, [] as string[])
     .action((options: { url: string, do: string[], accept: string[], later: string[] }) => print(reportDecided(createContext(), { url: options.url, adopted: options.do, accepted: options.accept, later: options.later })));
+  report.command('review').description('【review】（Staff Engineer 担当）レビューのページと判定を返す（課題に「レビュー」の記録も書く）')
+    .requiredOption('--url <URL>', 'レビューのページ（tpm page put --kind review で置いた URL）')
+    .requiredOption('--verdict <判定>', Object.entries(VERDICTS).map(([id, label]) => `${id}（${label}）`).join('・'))
+    .requiredOption('--summary <一言>')
+    .action((options: { url: string, verdict: string, summary: string }) => print(reportReview(createContext(), options)));
   for (const [id, description] of [
     ['merge-request', '【merge-request】（Dependabot）PR の merge を頼む'],
     ['not-yet', '【not-yet】（Dependabot）まだ対象でない・rebase に応じない'],

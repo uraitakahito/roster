@@ -42,6 +42,7 @@ tpm hello
 - 動くことを示してから「できた」と言う。試験を流し、要るなら実際に起こして見る。
 - 環境（container・サーバーなど）を変える前に、protocol.md の「共有の環境」を見る。自分が変えてよくない環境は、自分では変えず `tpm ask devops`。
 - 思わぬ出来事（うその知らせ・行き違い・session の権限で断られた命令・計画と違う公開や削除・自分の誤り）に気づいたら、その場で `tpm report incident` で台帳に 1 行書いて続ける（protocol.md の「思わぬ出来事」）。原因は調べなくてよい（調べるのは Auditor。protocol.md の「監査」）。
+- **レビュー**（protocol.md の「レビュー」）: 計画・提案を置く前と、PR を merge する前に、別の目が要ると見たら（設計の判断がある・戻しにくい・広く触る）、`tpm ask review --url <見る物の URL> --focus "<見てほしい所>"` で Staff Engineer 担当に頼む。**依頼書に「レビューを受ける」とあれば、計画と PR を必ず頼む。**結果は TPM 担当から【notify】で届く。レビューのページを読み、指摘を自分で確かめてから扱う（レビューは助言。「直すべき」を受けない時だけ、訳を付けて `tpm ask tpm` で上げる）。PR のレビューを頼んだら、結果が届くまで merge しない。
 - 迷ったら `tpm ask tpm` で、困っていること・試したこと・案とお勧めを送る。
 
 ## 3. 成果を出す
@@ -49,6 +50,7 @@ tpm hello
 - 提案・計画・報告は HTML の file に書き、`tpm page put <file> --kind <proposal|plan|result>` で置く（protocol.md の「ページ」）。図は protocol.md の「ページ」の図の項に従い、ひな形 `${CLAUDE_SKILL_DIR}/../_shared/figures.md` を写して描く。
 - 画面の写しや PDF をページに付けるときは `tpm file put <file> --reviewed` で上げ、ページから相対で参照する（protocol.md の「ページ」）。画像や PDF を上げる前に Read で見て、秘密が写っていないか確かめる。
 - 直した PR（文書の食い違いを含む）は、成果のページに一覧で載せる。
+- 計画と結果のページには、「レビュー: 誰が・判定・どう扱ったか」を書く（レビューのページの URL を添える。頼まなかった時は「レビュー: 無し」）。
 - 成果に Product Manager に決めてほしいことがあれば、ページに書くだけで済ませない。protocol.md の「Product Manager に確かめる」で `tpm ask pm` も送る。前の確認（まだ返事待ちの物）を置き換えるなら、`--supersede <古い確認の URL>` で名指す。
 - 置いたら、出た URL で `tpm report done` を打つ:
   ```sh
