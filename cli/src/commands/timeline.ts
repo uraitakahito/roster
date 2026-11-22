@@ -6,6 +6,7 @@ import type { Context } from '../context.ts';
 import { syncDeliveries, type GateStop, type GuardStop, type WaitChange } from '../evidence.ts';
 import { incidentLine, readIncidents, requireIncident, writeIncident, type Incident } from '../incidents.ts';
 import { HEADINGS, type HeadingId } from '../protocol.ts';
+import { staffKey } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
 import type { TrackerWrite } from '../tracker/recorded.ts';
 import type { MessageTrace } from '../transport/types.ts';
@@ -69,7 +70,9 @@ const direction = (heading: string): 'role' | 'tpm' | undefined => Object.hasOwn
 export function collect(ctx: Context, key: string, window?: { from: string, to: string }, triggerId?: string): TimelineEvent[] {
   // 同じ id の行は後ろが新しい。
   const traces = new Map(ctx.state.lines<MessageTrace>('deliveries.jsonl').map(t => [t.id, t]));
-  const messages = ctx.state.lines<Sent>('log.jsonl').filter(l => l.key === key);
+  // 課題の Key で集めると、その課題の Staff Engineer 担当の席（名簿の Key は <課題の Key>.staff）の行も入る。
+  const mine = (k: string | undefined): boolean => k === key || k === staffKey(key);
+  const messages = ctx.state.lines<Sent>('log.jsonl').filter(l => mine(l.key));
   const events: TimelineEvent[] = messages.map((m) => {
     const trace = traces.get(m.id);
     const arrived = trace?.deliveredAt;
@@ -79,29 +82,29 @@ export function collect(ctx: Context, key: string, window?: { from: string, to: 
     ];
     // 行き違い: これが届く前に、相手（向きが逆）が送ったメッセージ。
     if (arrived !== undefined) {
-      const crossed = messages.filter(o => direction(o.heading) !== undefined && direction(o.heading) !== direction(m.heading) && o.at > m.at && o.at < arrived);
+      const crossed = messages.filter(o => o.key === m.key && direction(o.heading) !== undefined && direction(o.heading) !== direction(m.heading) && o.at > m.at && o.at < arrived);
       if (crossed.length > 0) notes.push(`行き違い: これが届く前に、相手が ${crossed.length} 件送った（${crossed.map(o => `【${o.heading}】${hms(o.at)}`).join('・')}）`);
     }
     const from = direction(m.heading);
     const seat = from === 'role' ? m.key : from === 'tpm' ? 'tpm' : undefined;
     return { at: m.at, kind: 'メッセージ', who: m.from, what: `${cut(m.text)}（id ${m.id}）`, notes, ...(m.id === triggerId ? { trigger: true } : {}), ...(seat === undefined ? {} : { seat }) };
   });
-  for (const w of ctx.state.lines<TrackerWrite>('tracker.jsonl').filter(l => l.issue === key || l.by === key)) {
+  for (const w of ctx.state.lines<TrackerWrite>('tracker.jsonl').filter(l => l.issue === key || mine(l.by))) {
     events.push({ at: w.at, kind: '課題管理', who: w.by, what: `${w.issue} に${w.op === 'close' ? '「済み」' : `コメント【${w.kind ?? ''}】`}${w.ok ? '' : `（失敗: ${w.error ?? ''}）`}`, notes: [], seat: w.by });
   }
-  for (const g of ctx.state.lines<GuardStop>('guard.jsonl').filter(l => l.by === key)) {
+  for (const g of ctx.state.lines<GuardStop>('guard.jsonl').filter(l => mine(l.by))) {
     events.push({ at: g.at, kind: 'guard', who: g.by, what: `止めた: ${g.command}`, notes: [g.reason], seat: g.by });
   }
-  for (const g of ctx.state.lines<GateStop>('gate.jsonl').filter(l => l.by === key)) {
+  for (const g of ctx.state.lines<GateStop>('gate.jsonl').filter(l => mine(l.by))) {
     events.push({ at: g.at, kind: '入口の検査', who: g.by, what: `送るのを止めた（${g.gate}）`, notes: [g.detail], seat: g.by });
   }
-  for (const w of ctx.state.lines<WaitChange>('waits.jsonl').filter(l => l.by === key)) {
+  for (const w of ctx.state.lines<WaitChange>('waits.jsonl').filter(l => mine(l.by))) {
     events.push({ at: w.at, kind: 'wait', who: w.by, what: w.text, notes: [], seat: w.by });
   }
   for (const r of ctx.state.lines<InfraRun>('infra.jsonl').filter(l => l.key === key)) {
     events.push({ at: r.at, kind: 'infra', who: key, what: `${r.env}: ${r.command.join(' ')}`, notes: [`exit ${r.status}`], seat: key });
   }
-  for (const i of readIncidents(ctx).filter(i => i.key === key)) {
+  for (const i of readIncidents(ctx).filter(i => mine(i.key))) {
     events.push({ at: i.at, kind: '台帳', who: i.by, what: incidentLine(i), notes: [], seat: i.by });
   }
   return events

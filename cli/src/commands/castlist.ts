@@ -127,6 +127,8 @@ function enter(ctx: Context, url: string, sid: string, source: Source): Sent {
       'tpm.project': ctx.project,
       ...(launch === undefined ? {} : { 'tpm.launch': launch }),
       ...(seat.key === undefined ? {} : { 'tpm.key': seat.key }),
+      // Staff Engineer 担当の席は、見ている課題の Key でも引けるようにする（tpm.key は席を 1 つに決める名簿の Key）。
+      ...(seat.subject === undefined ? {} : { 'tpm.subject': seat.subject }),
       'tpm.role': seat.role,
     },
     bindings: [

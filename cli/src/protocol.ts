@@ -128,6 +128,15 @@ export const ROLES = {
     title: key => `Sustaining ${key}`,
     endsWithoutDismiss: true,
   },
+  'staff-engineer': {
+    label: 'Staff Engineer',
+    prompt: '/staff-engineer',
+    /** Software Engineer 担当と同じ model で、effort を 1 段上げる（書いた者より深く見る）。 */
+    defaults: { model: 'claude-opus-5-5', effort: 'high', permissionMode: 'bypassPermissions' },
+    /** 居場所の題（`Staff <課題の Key>`）。課題の担当の隣に、課題ごとに立つ。 */
+    title: key => `Staff ${key}`,
+    endsWithoutDismiss: false,
+  },
   'auditor': {
     label: 'Auditor',
     /** 起きたら名乗って待つ。監査は Product Manager がその席で `/audit` を呼んで始める。 */

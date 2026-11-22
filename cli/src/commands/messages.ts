@@ -155,10 +155,17 @@ function sender(ctx: Context): RoleRecord {
   return self;
 }
 
-/** Auditor が打たない命令を止める（成果は PR や【done】でなく、Product Manager へじかに報告する）。 */
+/**
+ * 成果を PR や【done】で出さない担当が、打たない命令を止める。
+ * Auditor は Product Manager へじかに報告する。Staff Engineer 担当はレビューのページで返す（【end】を打てると、レビューが済んだだけで課題が済みになる）。
+ */
 function notAuditor(self: RoleRecord, command: string): void {
-  if (self.role !== 'auditor') return;
-  throw new TpmError(`Auditor は ${command} を打ちません。監査の報告は tpm report audit、Product Manager の決定は tpm report decided で出してください（PR は出さず、Product Manager とは Audit の席でじかに話す）`);
+  if (self.role === 'auditor') {
+    throw new TpmError(`Auditor は ${command} を打ちません。監査の報告は tpm report audit、Product Manager の決定は tpm report decided で出してください（PR は出さず、Product Manager とは Audit の席でじかに話す）`);
+  }
+  if (self.role === 'staff-engineer') {
+    throw new TpmError(`Staff Engineer 担当は ${command} を打ちません。レビューの結果は、レビューのページで返します（PR は出さず、直さない。Product Manager に決めてほしいことは、tpm ask tpm で TPM 担当に送る）`);
+  }
 }
 
 /** Auditor だけが打つ命令の、自分の名簿の行。送る前の検査（assertRead）を通す。 */
@@ -723,6 +730,8 @@ export function notify(ctx: Context, key: string, options: { text: string, reply
 /** この課題に続きは無い、と知らせる。handover は担当の交代（課題は続くので、担当は課題を閉じない）。 */
 export function dismiss(ctx: Context, key: string, options: { handover: boolean, supersede?: boolean }): string[] {
   if (readRole(ctx, key)?.role === 'auditor') throw new TpmError('Auditor の席に【dismiss】は送れません（Auditor の席は、Product Manager が起こし、閉じる）');
+  // Staff Engineer 担当は worktree も PR も持たないので、片付けのやりとり（【dismiss】と【end】）は要らない。
+  if (readRole(ctx, key)?.role === 'staff-engineer') throw new TpmError(`Staff Engineer 担当の席に【dismiss】は送りません。tpm close ${key} で閉じます（課題の席を tpm close で閉じる時にも、一緒に閉じる）`);
   const role = receiver(ctx, key);
   const settled = assertSettled(ctx, role, 'dismiss', options.supersede === true ? 'supersede' : undefined);
   const body = [options.handover
