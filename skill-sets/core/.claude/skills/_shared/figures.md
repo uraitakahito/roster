@@ -29,33 +29,45 @@ figcaption{color:var(--mute);font-size:13px}
 | `--fg`・`--mute` | 字・補いの字 |
 | `--line` | 枠・今の物（変えない物）・棒の地 |
 | `--a` | 変える物・新しい物・強調 |
-| `--ok`・`--mid`・`--ng` | 良い・中ほど・悪い（お勧め・手間の大小など） |
+| `--ok`・`--mid`・`--ng` | 良い・中ほど・悪い（手間の大小など。お勧めの道は `--a`） |
 
-## 1. 比べ（確認・提案の選択肢）
+## 1. 選ぶ問いの木（確認・提案の選択肢）
 
-選択肢を、Product Manager が比べる物（手間・速さ・変える所など）で並べる。棒の長さは大きいほど悪い物（手間・回数）にそろえ、横に値を字で書く。お勧めには「（お勧め）」と書く。
+選択肢を、Product Manager が答えれば決まる問いの木にする。性質（手間・速さ・変える所など）を並べる比べは表に任せ、図には描かない（棒の長さで性質を並べる図は、表のくり返しになり、棒の向きも読む人が読み解く要がある。2026-11-23 t-uepv）。
+
+- 問いは Product Manager が答えられる物（先の予定・好み・許せる事）にする。技術の細かい差は書き手が答えて表に書く。
+- 問いは 1〜2 つ。3 つ以上要るなら、選択肢を減らすか項目を分ける。
+- どの選択肢も、どこかの葉に置く。
+- 線の横に答え（「はい」「いいえ」か短い答え）を字で書く。
+- 書き手の見立ての道（線と葉の枠）を `--a` の太線にし、お勧めの葉に「（お勧め）」と書く。ほかの線は `--mute`、葉の枠は `--line`。`<figcaption>` に「見立て: <どう答えると見たか・訳>」を書く（SVG の字は折り返さないので、SVG の中に置かない）。
+- `<svg>` に `data-fig="tree"` を付ける（見直しで数えるため）。
+- Product Manager が答えて選びが決まる問いが無い項目（2 択で違いが 1 つ・違いが技術の差だけで書き手が決められる、など）は図を入れず、表の上に「図: 無し。<訳>」と 1 行書く。技術の問いを Product Manager に投げるために木を作らない。
 
 ```html
 <figure>
-<svg viewBox="0 0 620 130" width="100%" role="img" aria-label="選択肢の比べ" style="max-width:620px">
+<svg viewBox="0 0 760 220" width="100%" role="img" data-fig="tree" aria-label="ER 図の 3 案を選ぶ問いの木" style="max-width:760px">
+  <defs><marker id="tree" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="var(--mute)"/></marker>
+  <marker id="tree-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="var(--a)"/></marker></defs>
   <g font-size="13">
-    <text x="150" y="16">Product Manager の手間</text><text x="420" y="16">変える所</text>
-    <text x="0" y="50">案 A（お勧め）</text>
-    <rect x="150" y="38" width="30" height="16" rx="3" fill="var(--ok)"/><text x="188" y="51">押さない</text>
-    <text x="420" y="51">script だけ</text>
-    <text x="0" y="85">案 B</text>
-    <rect x="150" y="73" width="90" height="16" rx="3" fill="var(--mid)"/><text x="248" y="86">戻るたび</text>
-    <text x="420" y="86">script と server</text>
-    <text x="0" y="120">案 C</text>
-    <rect x="150" y="108" width="160" height="16" rx="3" fill="var(--ng)"/><text x="318" y="121">毎回</text>
-    <text x="420" y="121">server だけ</text>
+    <rect x="10" y="95" width="210" height="50" rx="8" fill="none" stroke="var(--fg)" stroke-width="2"/>
+    <text x="115" y="117" text-anchor="middle">問い 1: 表は、これから</text><text x="115" y="135" text-anchor="middle">よく増えるか？</text>
+    <rect x="290" y="20" width="220" height="50" rx="8" fill="none" stroke="var(--fg)" stroke-width="2"/>
+    <text x="400" y="42" text-anchor="middle">問い 2: site に JavaScript</text><text x="400" y="60" text-anchor="middle">（3 MB）を足してよいか？</text>
+    <rect x="290" y="160" width="250" height="50" rx="8" fill="none" stroke="var(--a)" stroke-width="3"/>
+    <text x="415" y="182" text-anchor="middle" font-weight="bold">B. 手の SVG（お勧め）</text><text x="415" y="200" text-anchor="middle">小さく直す・表は手で足す</text>
+    <rect x="600" y="2" width="150" height="40" rx="8" fill="none" stroke="var(--line)" stroke-width="2"/><text x="675" y="27" text-anchor="middle">A. mermaid</text>
+    <rect x="600" y="56" width="150" height="40" rx="8" fill="none" stroke="var(--line)" stroke-width="2"/><text x="675" y="81" text-anchor="middle">C. DB から作る</text>
+    <line x1="220" y1="110" x2="288" y2="50" stroke="var(--mute)" stroke-width="2" marker-end="url(#tree)"/><text x="232" y="70">はい</text>
+    <line x1="220" y1="130" x2="288" y2="182" stroke="var(--a)" stroke-width="3" marker-end="url(#tree-a)"/><text x="214" y="192" style="fill:var(--a)">いいえ</text>
+    <line x1="510" y1="38" x2="598" y2="24" stroke="var(--mute)" stroke-width="2" marker-end="url(#tree)"/><text x="528" y="22">はい</text>
+    <line x1="510" y1="56" x2="598" y2="74" stroke="var(--mute)" stroke-width="2" marker-end="url(#tree)"/><text x="524" y="84">いいえ</text>
   </g>
 </svg>
-<figcaption>図 1: 案ごとの手間と変える所</figcaption>
+<figcaption>図 1: ER 図の 3 案を選ぶ問い（青い道が書き手の見立て）。見立て: 表は 0001 から 8 つのまま（移行は 3 つ）なので「いいえ」</figcaption>
 </figure>
 ```
 
-選択肢を足すときは、行ごとに `y` を 35 ずつ足し、`viewBox` の高さも 35 足す。
+問いが 1 つなら、問い 2 の箱を消し、問い 1 から葉へ線を引く。葉を足すときは、葉の `y` を 54 ずつ足し、`viewBox` の高さも足す。線の横の答えが 3 字を超えるなら、葉の `x` を超えた字の数 × 14 だけ右へ寄せ、葉の幅をその分縮める（答えの字を矢じりに触れさせない）。1 ページに木を 2 つ以上置くときは、`marker` の `id` を図ごとに替える（`tree2`・`tree2-a`…）。
 
 ## 2. 流れ（提案・計画の段、命令やデータの通り道）
 
@@ -128,6 +140,32 @@ figcaption{color:var(--mute);font-size:13px}
 <figcaption>図 4: 日ごとの件数</figcaption>
 </figure>
 ```
+
+## 5. 並べ（監査の勧告など、1 つを選ぶのでない物）
+
+1 つを選ぶのでない物（監査の勧告ごとの手間など）を、棒で並べる。確認・提案のページには使わない（選択肢は「1. 選ぶ問いの木」、項目ごとに「する・見送る」を決める物も表にする）。棒は長いほど手間が大きい、に決める（良さを棒にしない）。値は「小・中・大」の字を棒の横に書く。`<svg>` に `data-fig="bars"` を付ける（見直しで数えるため）。
+
+```html
+<figure>
+<svg viewBox="0 0 620 130" width="100%" role="img" data-fig="bars" aria-label="勧告ごとの手間の並べ" style="max-width:620px">
+  <g font-size="13">
+    <text x="150" y="16">直す手間（長いほど大きい）</text><text x="420" y="16">効く件</text>
+    <text x="0" y="50">R1 命令で止める</text>
+    <rect x="150" y="38" width="160" height="16" rx="3" fill="var(--ng)"/><text x="318" y="51">大</text>
+    <text x="420" y="51">#12・#53</text>
+    <text x="0" y="85">R2 文に足す</text>
+    <rect x="150" y="73" width="30" height="16" rx="3" fill="var(--ok)"/><text x="188" y="86">小</text>
+    <text x="420" y="86">#12</text>
+    <text x="0" y="120">R3 試験を足す</text>
+    <rect x="150" y="108" width="90" height="16" rx="3" fill="var(--mid)"/><text x="248" y="121">中</text>
+    <text x="420" y="121">#56</text>
+  </g>
+</svg>
+<figcaption>図 1: 勧告ごとの直す手間と効く件</figcaption>
+</figure>
+```
+
+行を足すときは、行ごとに `y` を 35 ずつ足し、`viewBox` の高さも 35 足す。
 
 ## 画面の写しを撮る（画面を変えた結果）
 
