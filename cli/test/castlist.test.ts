@@ -747,6 +747,16 @@ describe('落ちた session の突き合わせ（推しの幕引き）', () => {
     expect(inferredCloses(after())).toEqual([]);
   });
 
+  test('推しで閉じた session が tpm hello を打てば、名乗りより前に再登場を送る', () => {
+    const { se, tpmIn } = world2();
+    roles(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref }));
+    const got = mark();
+    hello(inCmux(se, { ref: 'workspace:12', uuid: SE_AT.uuid }, () => ({ [SE_AT.uuid]: 'workspace:12' })));
+    const types = writes(got()).map(r => r.body?.type).filter(t => t === 'reentered' || t === 'reported_in');
+    expect(types).toEqual(['reentered', 'reported_in']);
+    expect(writes(got()).find(r => r.body?.type === 'reentered')?.body?.detail).toEqual({ source: 'hello' });
+  });
+
   test('退場・交代・tpm close の後の session が Bash を打っても、再登場を送らない', () => {
     const { w, se } = world2();
     sessionEnd(se, endInput('other', SID));

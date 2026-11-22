@@ -41,7 +41,7 @@ interface LaunchRecord {
   requested?: boolean
 }
 
-/** 登録のきっかけ。startup・resume・clear・compact・fork は SessionStart の source。guard と hello は、控えが無い session を、その命令が登録した時。 */
+/** 登録のきっかけ。startup・resume・clear・compact・fork は SessionStart の source。guard と hello は、控えが無い session（か、推しの幕引きで居ないにした session）を、その命令が登録した時。 */
 type Source = 'startup' | 'resume' | 'clear' | 'compact' | 'fork' | 'guard' | 'hello';
 const SOURCES: Source[] = ['startup', 'resume', 'clear', 'compact', 'fork'];
 
@@ -162,7 +162,7 @@ function enter(ctx: Context, url: string, sid: string, source: Source, revive = 
   const workspace = ref === undefined && uuid === undefined ? had?.workspace : { ...(ref === undefined ? {} : { ref }), ...(uuid === undefined ? {} : { uuid }) };
   const record: SessionRecord = { ...had, session: sid, id: String(actor.id), name: String(actor.name), ...(launch === undefined ? {} : { launch }), present: had?.present ?? false, seq: had?.seq ?? {}, ...(workspace === undefined ? {} : { workspace }) };
   ctx.state.write(sessionFile(sid), record);
-  if (revive) return event(ctx, url, record, 'reentered', { source: 'guard' }, true);
+  if (revive) return event(ctx, url, record, 'reentered', { source }, true);
   const previous = launched.sessions.filter(s => s !== sid).at(-1);
   if (launch !== undefined) {
     ctx.state.write(launchFile(launch), {
@@ -284,8 +284,10 @@ export function castlistGuard(ctx: Context, stdin: string): Verdict {
 function reportIn(ctx: Context, url: string, sid: string): string[] {
   const done = '名乗っていません。';
   const fail = (sent: Exclude<Sent, 'ok'>): TpmError => new TpmError(sent === 'busy' ? busyMessage(url, done) : downMessage(ctx, url, done));
-  if (readSession(ctx, sid) === undefined) {
-    const sent = enter(ctx, url, sid, 'hello');
+  const had = readSession(ctx, sid);
+  // 控えが無ければ登録する。推しの幕引きで居ないにした session なら、名乗りの前に今の居場所で登録し直して再登場を送る（guard と同じ）。
+  if (had === undefined || (had.present === false && had.endedBy === 'inferred')) {
+    const sent = enter(ctx, url, sid, 'hello', had !== undefined);
     if (sent !== 'ok') throw fail(sent);
   }
   const record = readSession(ctx, sid);
