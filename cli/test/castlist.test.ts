@@ -28,7 +28,7 @@ const SID2 = 'bbbbbbbb-0000-4000-8000-000000000002';
 const SID3 = 'bbbbbbbb-0000-4000-8000-000000000003';
 /** world の時計の時刻（偽の castlist の既定の now と同じ）。 */
 const NOW = '2026-11-20T12:00:00.000Z';
-const RUN_LINE = /^container run -d --name castlist -p 127\.0\.0\.1:(\d+):8080 -v castlist-data:\/data -m 200M -c 1 ghcr\.io\/uraitakahito\/castlist:(\S+)$/;
+const RUN_LINE = /^container run -d --name castlist\.box -p 127\.0\.0\.1:(\d+):8080 -v castlist-data:\/data -m 200M -c 1 ghcr\.io\/uraitakahito\/castlist:(\S+)$/;
 
 let fake: FakeCastlist;
 let dead: string;
@@ -120,20 +120,37 @@ describe('castlist を設定していない時', () => {
 describe('castlist が止まっている時', () => {
   test('tpm start は 1 行を出さず、Product Manager が打つ container start を出す（container が在る時）', () => {
     const w = world({ castlist: dead });
-    w.answers.set('container inspect castlist', { status: 0, stdout: '[{}]', stderr: '' });
+    w.answers.set('container inspect castlist.box', { status: 0, stdout: '[{}]', stderr: '' });
     expect(() => startTpm(w.tpm)).toThrow(/castlist/);
     try {
       startTpm(w.tpm);
     }
     catch (e) {
       const lines = (e as Error).message.split('\n');
-      expect(lines).toContain('container start castlist');
+      expect(lines).toContain('container start castlist.box');
       expect(lines.join('\n')).not.toContain('claude --model');
     }
   });
 
-  test('container が無ければ、container run の 1 行（port は設定の URL の port、版と docs の URL つき）', () => {
+  test('新しい名の container が無く、0.1.0 の docs の名（castlist）の container が在れば、前の名で起こし、名を替える docs を添える', () => {
     const w = world({ castlist: dead });
+    w.answers.set('container inspect castlist.box', { status: 1, stdout: '', stderr: 'not found' });
+    w.answers.set('container inspect castlist', { status: 0, stdout: '[{}]', stderr: '' });
+    let message = '';
+    try {
+      startTpm(w.tpm);
+    }
+    catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message.split('\n')).toContain('container start castlist');
+    expect(message).toContain('castlist.box');
+    expect(message).toContain('https://uraitakahito.github.io/castlist/run.html');
+  });
+
+  test('container が無ければ、container run の 1 行（名は castlist.box、port は設定の URL の port、版と docs の URL つき）', () => {
+    const w = world({ castlist: dead });
+    w.answers.set('container inspect castlist.box', { status: 1, stdout: '', stderr: 'not found' });
     w.answers.set('container inspect castlist', { status: 1, stdout: '', stderr: 'not found' });
     let message = '';
     try {
@@ -146,6 +163,7 @@ describe('castlist が止まっている時', () => {
     const [, port, version] = RUN_LINE.exec(run) ?? [];
     expect(port).toBe(new URL(dead).port);
     expect(version).toBe(CASTLIST_VERSION);
+    expect(CASTLIST_VERSION).toBe('v0.1.1');
     expect(message).toContain('https://uraitakahito.github.io/castlist/');
   });
 
@@ -153,22 +171,23 @@ describe('castlist が止まっている時', () => {
     const w = world({ castlist: dead });
     hello(w.tpm);
     expect(() => assign(w.tpm, 't-x7k2', SE)).toThrow(/tpm wait pm "castlist を起こす" --hand/);
-    expect(() => assign(w.tpm, 't-x7k2', SE)).toThrow(/^container start castlist$/m);
+    expect(() => assign(w.tpm, 't-x7k2', SE)).toThrow(/^container start castlist\.box$/m);
     expect(w.wire.seats()).toEqual([]);
     expect(readRole(w.tpm, 't-x7k2')).toBeUndefined();
   });
 
   test('tpm audit start は席を起こさない', () => {
     const w = world({ castlist: dead });
+    w.answers.set('container inspect castlist.box', { status: 1, stdout: '', stderr: '' });
     w.answers.set('container inspect castlist', { status: 1, stdout: '', stderr: '' });
-    expect(() => auditStart(w.tpm, { wait: 0 })).toThrow(/^container run -d --name castlist /m);
+    expect(() => auditStart(w.tpm, { wait: 0 })).toThrow(/^container run -d --name castlist\.box /m);
     expect(w.wire.seats()).toEqual([]);
     expect(readRole(w.tpm, 'audit')).toBeUndefined();
   });
 
   test('tpm hello は名乗らずに止まる', () => {
     const w = world({ castlist: dead });
-    expect(() => hello(tpmSeat(w))).toThrow(/^container start castlist$/m);
+    expect(() => hello(tpmSeat(w))).toThrow(/^container start castlist\.box$/m);
     expect(w.tpm.state.read('tpm.jsonc')).toBeUndefined();
   });
 
