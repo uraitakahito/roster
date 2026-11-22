@@ -3,8 +3,8 @@
 // (2) 連携と課題管理の道具の直打ち（tpm を通さないと、記録と状態が抜ける）。
 // (3) 担当が置き場のページと file を消す命令: 消す要求を直に送る curl と、置き場の CLI（pagetray）の消す命令
 //     （消してよいのは TPM 担当だけ。tpm page delete・tpm file delete も担当からは止まる）。
-// (4) Auditor が repo・設定・記録を変えること: project の folder・状態の folder・ページの控えの下への書き込み（Edit・Write・NotebookEdit）と、
-//     git・gh の変える命令（Auditor は見て勧めるだけで、直さない）。
+// (4) 読むだけの担当（Auditor・Staff Engineer 担当）が repo・設定・記録を変えること: project の folder・状態の folder・ページの控えの下への書き込み（Edit・Write・NotebookEdit）と、
+//     git・gh の変える命令（どちらも見て勧めるだけで、直さない）。
 // (1) は命令の字全体に match の字が含まれるかで見る（共有の環境は、疑わしければ止める）。
 // (2)〜(4) の shell の命令は、単純な命令に分け、その頭（実際に打つ道具の命令）だけを見る。commit の文・grep の型・here-document に道具の名が入っても止めない。
 // どれも字で見るので、防げるのは「うっかり」まで。script に包んだ命令や、shell の redirect での書き込みはすり抜ける。確実な守りは、担当に渡す権限の方で行う。
@@ -18,8 +18,25 @@ import type { State } from './state.ts';
 /** 環境を変えてよい担当。 */
 const INFRA_ROLE: RoleName = 'devops-engineer';
 
-/** 見て勧めるだけで、repo・設定・記録を変えない担当。 */
-const READ_ONLY_ROLE: RoleName = 'auditor';
+/** Auditor（session の始まりに tpm audit fresh を呼ぶ席）。 */
+const AUDIT_ROLE: RoleName = 'auditor';
+
+/** 見て勧めるだけで、repo・設定・記録を変えない担当と、止めた訳に書く字（name は文の頭に置く名。英字で終わる名は、後ろに空白を空ける）。 */
+const READ_ONLY: Partial<Record<RoleName, { name: string, instead: string, how: string }>> = {
+  'auditor': {
+    name: 'Auditor ',
+    instead: '直すことは、監査のページの勧告に書いてください（直すのは、Product Manager が通した後に振られた担当）。',
+    how: '監査のページの file は一時の folder（$TMPDIR など）に書いて tpm page put で置き、見つけた食い違いは監査のページに挙げてください。',
+  },
+  'staff-engineer': {
+    name: 'Staff Engineer 担当',
+    instead: '直すことは、レビューのページの指摘に書いてください（直すのは、その課題の担当）。',
+    how: 'レビューのページの file は一時の folder（$TMPDIR など）に書いて tpm page put で置き、直すことはレビューのページの指摘に書いてください。',
+  },
+};
+
+/** 役割が、読むだけの担当なら、その字。 */
+const readOnly = (role: RoleName | undefined) => role === undefined ? undefined : READ_ONLY[role];
 
 /** file を書き替える道具（hook が、shell の命令のほかに見る物）。 */
 export const WRITE_TOOLS = ['Edit', 'Write', 'NotebookEdit'] as const;
@@ -105,7 +122,7 @@ function changesRepo(words: string[]): boolean {
 /** Audit の席を起こす命令。Product Manager が自分の手で打つ物なので、TPM 担当と担当が道具として打つのは止める。 */
 const AUDIT_START = /^tpm audit start\b/;
 
-/** 命令の頭にこれを書くと、道具の直打ちを通す（tpm 自身の開発と試しのため。環境の手続きと、Auditor の守りと、Audit の席を起こす命令には効かない）。 */
+/** 命令の頭にこれを書くと、道具の直打ちを通す（tpm 自身の開発と試しのため。環境の手続きと、読むだけの担当の守りと、Audit の席を起こす命令には効かない）。 */
 export const RAW = 'TPM_RAW=1';
 
 /** guard に聞く 1 件。打った命令と、決めるのに要る設定・承認・時刻。 */
@@ -154,10 +171,11 @@ export function judge(asked: Asked): Verdict {
   if (commands.some(words => AUDIT_START.test(words.join(' ')))) {
     return { allow: false, reason: 'Audit の席を起こすのは Product Manager です。tpm audit start は、Product Manager が自分の手で打ちます（Auditor は TPM 担当の回し方も見るので、TPM 担当と担当は起こさない）。' };
   }
-  if (asked.role === READ_ONLY_ROLE) {
+  const reader = readOnly(asked.role);
+  if (reader !== undefined) {
     const change = commands.find(changesRepo);
     if (change !== undefined) {
-      return { allow: false, reason: `Auditor は repo を変えません（${change.slice(0, 3).join(' ')}）。直すことは、監査のページの勧告に書いてください（直すのは、Product Manager が通した後に振られた担当）。` };
+      return { allow: false, reason: `${reader.name}は repo を変えません（${change.slice(0, 3).join(' ')}）。${reader.instead}` };
     }
   }
   if (!asked.command.includes(RAW)) {
@@ -225,40 +243,41 @@ function realPath(path: string): string {
   return join(realpathSync(dir), ...rest);
 }
 
-/** Auditor が書き替えない folder（名は、止めた訳に出す字）。 */
+/** 読むだけの担当が書き替えない folder（名は、止めた訳に出す字）。 */
 export interface Protected {
   name: string
   dir: string
 }
 
 /**
- * file を書き替える道具を通すか。Auditor は、守る folder（project・状態・ページの控え）の下を書き替えない。
+ * file を書き替える道具を通すか。読むだけの担当（Auditor・Staff Engineer 担当）は、守る folder（project・状態・ページの控え）の下を書き替えない。
  * 書く先を読めない呼び出しも止める（疑わしければ止める）。ほかの担当と TPM 担当は通す。
  */
 export function judgeWrite(call: WriteCall, role: RoleName | undefined, roots: Protected[]): Verdict {
-  if (role !== READ_ONLY_ROLE) return { allow: true };
-  const how = '監査のページの file は一時の folder（$TMPDIR など）に書いて tpm page put で置き、見つけた食い違いは監査のページに挙げてください。';
-  if (call.path === undefined) return { allow: false, reason: `Auditor の ${call.tool} の書く先を読めないので止めます。${how}` };
+  const reader = readOnly(role);
+  if (reader === undefined) return { allow: true };
+  const { name, how } = reader;
+  if (call.path === undefined) return { allow: false, reason: `${name}の ${call.tool} の書く先を読めないので止めます。${how}` };
   const path = realPath(call.path);
   const hit = roots.find(r => path === realPath(r.dir) || path.startsWith(`${realPath(r.dir)}${sep}`));
   if (hit === undefined) return { allow: true };
-  return { allow: false, reason: `Auditor は、${hit.name} の下を書き替えません（repo・設定・記録は変えない）: ${path}。${how}` };
+  return { allow: false, reason: `${name}は、${hit.name} の下を書き替えません（repo・設定・記録は変えない）: ${path}。${how}` };
 }
 
 /**
  * 担当の claude に渡す settings（--settings）。道具の前に tpm guard を呼ぶ hook。hook の命令は shell が読むので、path を引用する。
- * 見る道具は Bash。Auditor の席だけ、file を書き替える道具（WRITE_TOOLS）も見る（ほかの担当では、書くたびに hook を動かさない）。
+ * 見る道具は Bash。読むだけの担当の席だけ、file を書き替える道具（WRITE_TOOLS）も見る（ほかの担当では、書くたびに hook を動かさない）。
  * どの席にも、session の始まりと終わりに castlist に送る hook（tpm castlist session-start・session-end）を付ける。castlist を設定していなければ、その命令は何もしない。
  * Auditor の席には、session の始まりに tpm audit fresh を呼ぶ hook も付ける。
  */
 export function guardSettings(tpmBin: string, role?: RoleName): string {
   const hook = (command: string) => ({ type: 'command', command: `${shellQuote(tpmBin)} ${command}` });
-  const matcher = role === READ_ONLY_ROLE ? ['Bash', ...WRITE_TOOLS].join('|') : 'Bash';
+  const matcher = readOnly(role) === undefined ? 'Bash' : ['Bash', ...WRITE_TOOLS].join('|');
   return JSON.stringify({
     hooks: {
       PreToolUse: [{ matcher, hooks: [hook('guard')] }],
       // Auditor の席は、席を起こした時と /clear の時に印を書く（前の監査の文脈が残ったまま、次の監査を始めないため）。
-      SessionStart: [{ hooks: [...(role === READ_ONLY_ROLE ? [hook('audit fresh')] : []), hook('castlist session-start')] }],
+      SessionStart: [{ hooks: [...(role === AUDIT_ROLE ? [hook('audit fresh')] : []), hook('castlist session-start')] }],
       SessionEnd: [{ hooks: [hook('castlist session-end')] }],
     },
   });

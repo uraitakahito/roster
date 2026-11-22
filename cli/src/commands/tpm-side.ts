@@ -12,7 +12,7 @@ import { AUDIT_KEY, modelStatus, ROLES, TPM_TITLE, WAIT, type RoleName } from '.
 import { lastAuditLine } from '../audits.ts';
 import { openLine } from '../incidents.ts';
 import { resolveSettings } from '../settings.ts';
-import { allRoles, assertKey, LOCAL_KEY, readRole, removeRole, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
+import { allRoles, assertKey, isStaffKey, LOCAL_KEY, readRole, removeRole, staffKey, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
 import { readSkillSets, skillSetDir, TpmError } from '../skill-sets.ts';
 import { route } from '../tracker/routed.ts';
 import { findHook, staleHook } from './banner.ts';
@@ -163,18 +163,38 @@ export interface AssignOptions {
   wait: number
 }
 
+/** Staff Engineer 担当の役割の名。 */
+const STAFF: RoleName = 'staff-engineer';
+
+/**
+ * Staff Engineer 担当を起こす前の確かめ。課題の担当が名簿に居ること（Staff は、その隣に起こす）と、skill が在ること
+ * （無いまま起こすと、最初の入力が Unknown command になる）。課題の担当の名簿の行を返す。
+ */
+function staffSubject(ctx: Context, key: string): RoleRecord {
+  const subject = readRole(ctx, key);
+  if (subject === undefined) throw new TpmError(`${key} の担当が名簿にいません。Staff Engineer 担当は、課題の担当の隣に起こします（tpm roles で名簿を見る）`);
+  const skill = join(skillSetDir(ctx.root, 'core'), '.claude', 'skills', 'staff-engineer', 'SKILL.md');
+  if (!existsSync(skill)) throw new TpmError(`skill /staff-engineer がまだありません（${skill}）。roster の repo を新しくしてから打ってください`);
+  return subject;
+}
+
 /**
  * 課題を担当に振る。同じ Key の担当が動いていれば、その担当に【brief】で新しい依頼書を送る（背景を知っているため）。
  * いなければ（居場所が消えていても）起こし、名乗るまで待つ。
+ * Staff Engineer 担当（--role staff-engineer）は、課題の担当と並べるために、名簿の Key を `<課題の Key>.staff` にして起こす（subjectKey は、どの役割でも課題の Key）。
  */
-export function assign(ctx: Context, key: string, options: AssignOptions): string[] {
-  assertKey(key);
+export function assign(ctx: Context, subjectKey: string, options: AssignOptions): string[] {
+  assertKey(subjectKey);
   if (!Number.isFinite(options.wait) || options.wait < 0) throw new TpmError('--wait は 0 以上の数にしてください（0 なら待たない）');
   // Auditor は TPM 担当の回し方も見るので、TPM 担当の手では起こさない・依頼書も送らない。
-  if (options.role === 'auditor' || key === AUDIT_KEY) throw new TpmError('Auditor の席（Key audit）は、Product Manager が tpm audit start で起こします。tpm assign では起こせません・依頼書も送れません');
+  if (options.role === 'auditor' || subjectKey === AUDIT_KEY) throw new TpmError('Auditor の席（Key audit）は、Product Manager が tpm audit start で起こします。tpm assign では起こせません・依頼書も送れません');
+  if (isStaffKey(subjectKey)) throw new TpmError(`${subjectKey} は Staff Engineer 担当の席の Key です。席を起こす・依頼書を送るのは tpm assign <課題の Key> --role staff-engineer`);
+  const subject = options.role === STAFF ? staffSubject(ctx, subjectKey) : undefined;
+  // 名簿の Key。Staff Engineer 担当の席だけ、課題の Key と違う。
+  const key = subject === undefined ? subjectKey : staffKey(subjectKey);
   const existing = readRole(ctx, key);
   // 名簿にある担当（前の決まりの長い Key を含む）は、そのまま動き続けられるよう形を問わない。
-  if (existing === undefined && key.startsWith('t-') && !LOCAL_KEY.test(key)) {
+  if (existing === undefined && subject === undefined && key.startsWith('t-') && !LOCAL_KEY.test(key)) {
     throw new TpmError(`課題管理の課題が無いときの Key は、t- と英小文字・数字 4 文字にしてください（tpm key で作る）: ${key}`);
   }
   if (existing?.address !== undefined && ctx.transport.seats().some(s => s.address === existing.address)) {
@@ -185,7 +205,7 @@ export function assign(ctx: Context, key: string, options: AssignOptions): strin
     const choice = options.supersede === true ? 'supersede' : options.after === true ? 'after' : undefined;
     const settled = assertSettled(ctx, existing, 'assign', choice);
     // 続きのときも写しを作り直す（コメントが増えているため）。
-    Object.assign(existing, issueCopy(ctx, existing.issue ?? key, key, options.noIssueCopy));
+    Object.assign(existing, issueCopy(ctx, existing.issue ?? subjectKey, subjectKey, options.noIssueCopy));
     return brief(ctx, existing, options.brief, options.note, settled === undefined || choice === undefined ? undefined : { text: settled, choice });
   }
   if (options.issue !== undefined && !ctx.tracker.owns(options.issue)) {
@@ -193,27 +213,30 @@ export function assign(ctx: Context, key: string, options: AssignOptions): strin
   }
   // 新しい担当（交代を含む）は背景を知らないので、依頼書に課題の概要の節を求める。続きの【brief】には求めない。
   if (options.brief !== undefined) assertSummary(ctx, key, options.brief);
+  // Staff Engineer 担当の記録は、見ている課題の課題管理の課題に書く。
+  const issue = options.issue ?? subject?.issue;
   const cwd = options.cwd ?? ctx.project;
   const settings = resolveSettings(options.role, { flags: options, config: roleDefaults(ctx, options.role, cwd), env: ctx.env });
   // castlist を設定していれば、起きているかを、写しを置く前に見る（止まっていれば、担当を起こさずに止まる）。
   const skew = requireUp(ctx, '担当は起こしていません。', [`この 1 行を Product Manager に頼み、tpm wait pm "castlist を起こす" --hand で待ってから、もう 1 度 tpm assign を打ってください。`]);
   // 居場所を作る前に読む（読めなければ、担当を起こさずに止まる）。
-  const copy = issueCopy(ctx, options.issue ?? key, key, options.noIssueCopy);
+  const copy = issueCopy(ctx, issue ?? subjectKey, subjectKey, options.noIssueCopy);
   const def = ROLES[options.role];
   const record: RoleRecord = {
     key,
+    ...(subject === undefined ? {} : { subject: subjectKey }),
     role: options.role,
-    title: def.title(key, options.title ?? '課題'),
+    title: def.title(subjectKey, options.title ?? '課題'),
     cwd,
     addDirs: ['core', ...ctx.skillSets].map(s => skillSetDir(ctx.root, s)),
     ...settings,
     ...(options.brief === undefined ? {} : { brief: options.brief, firstBrief: options.brief }),
-    ...(options.issue === undefined ? {} : { issue: options.issue }),
+    ...(issue === undefined ? {} : { issue }),
     ...copy,
   };
   // 担当を起こした folder と、記録の先を出す（上の folder から振ると、どちらも 1 つに決まっていないため）。
   const sid = ctx.env.CLAUDE_CODE_SESSION_ID;
-  const more = [...(options.issue === undefined ? [] : [`課題の記録: ${recordingTo(ctx, options.issue)}`]), ...skew];
+  const more = [...(issue === undefined ? [] : [`課題の記録: ${recordingTo(ctx, issue)}`]), ...skew];
   return launch(ctx, record, existing !== undefined, options.wait, more, sid ? sessionRef(sid) : undefined);
 }
 
@@ -285,7 +308,7 @@ function notStarted(ctx: Context, record: RoleRecord, waited: number): string {
   return `${head}居場所は残してあります。画面の終わり:\n${screen.trimEnd().split('\n').slice(-12).join('\n')}`;
 }
 
-/** 担当の居場所を閉じ、名簿から消す。 */
+/** 担当の居場所を閉じ、名簿から消す。課題の担当を閉じる時は、その課題の Staff Engineer 担当の席が残っていれば、一緒に閉じる。 */
 export function close(ctx: Context, key: string): string[] {
   const record = readRole(ctx, key);
   if (record === undefined) throw new TpmError(`名簿に担当がいません: ${key}`);
@@ -297,5 +320,6 @@ export function close(ctx: Context, key: string): string[] {
   const castlist = closeLaunch(ctx, record);
   if (alive && record.address !== undefined) ctx.transport.close(record.address);
   removeRole(ctx, key);
-  return [`閉じた: ${record.title}${alive ? `（${record.address}）` : '（居場所はもう無かった）'}`, ...castlist];
+  const staff = isStaffKey(key) || readRole(ctx, staffKey(key)) === undefined ? [] : close(ctx, staffKey(key));
+  return [`閉じた: ${record.title}${alive ? `（${record.address}）` : '（居場所はもう無かった）'}`, ...castlist, ...staff];
 }

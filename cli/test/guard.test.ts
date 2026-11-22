@@ -373,6 +373,49 @@ describe('Auditor は repo を変えない', () => {
   });
 });
 
+describe('Staff Engineer 担当は repo を変えない', () => {
+  test.each<[string, boolean]>([
+    ['git fetch origin', true],
+    ['git show origin/ai-8/impl:cli/src/guard.ts', true],
+    ['git diff origin/main...origin/ai-8/impl', true],
+    ['gh pr diff 141', true],
+    ['gh pr view 141 --json files', true],
+    ['gh pr checks 141', true],
+    ['tpm page put /tmp/review.html --kind result', true],
+    ['git commit -m x', false],
+    ['git checkout ai-8/impl', false],
+    ['git worktree add ../w ai-8/impl', false],
+    ['git push origin ai-8/impl', false],
+    ['gh pr review 141 --approve', false],
+    ['gh pr comment 141 --body x', false],
+    ['gh pr merge 141 --squash', false],
+    ['TPM_RAW=1 git push', false],
+  ])('%s', (command, allow) => {
+    expect(ask(command, 'staff-engineer').allow).toBe(allow);
+  });
+
+  test('止めた訳に、レビューのページの指摘に書くよう言う', () => {
+    expect(ask('gh pr review 141 --approve', 'staff-engineer')).toEqual({ allow: false, reason: expect.stringContaining('Staff Engineer 担当は repo を変えません（gh pr review）。直すことは、レビューのページの指摘に') as string });
+  });
+
+  test('project の folder の下への書き込みを止め、外への書き込みは通す', () => {
+    const base = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-staff-')));
+    mkdirSync(join(base, 'project'), { recursive: true });
+    const roots = [{ name: 'project の folder', dir: join(base, 'project') }];
+    const write = (path: string | undefined) => judgeWrite({ tool: 'Edit', path }, 'staff-engineer', roots);
+    expect(write(join(base, 'project', 'cli', 'src', 'guard.ts'))).toEqual({ allow: false, reason: expect.stringMatching(/^Staff Engineer 担当は、project の folder の下を書き替えません.*レビューのページの file は一時の folder/) as string });
+    expect(write(join(base, 'scratch', 'review.html')).allow).toBe(true);
+    expect(write(undefined)).toEqual({ allow: false, reason: expect.stringContaining('Staff Engineer 担当の Edit の書く先を読めない') as string });
+  });
+
+  test('席の settings は、file を書き替える道具の前にも tpm guard を呼ぶ。audit fresh は Auditor の席だけ', () => {
+    const settings = (role: RoleName) => JSON.parse(guardSettings('/r/cli/bin/tpm', role)) as { hooks: { PreToolUse: { matcher: string }[], SessionStart: { hooks: { command: string }[] }[] } };
+    expect(settings('staff-engineer').hooks.PreToolUse[0]?.matcher).toBe('Bash|Edit|Write|NotebookEdit');
+    expect(settings('staff-engineer').hooks.SessionStart[0]?.hooks.map(h => h.command)).toEqual(['/r/cli/bin/tpm castlist session-start']);
+    expect(settings('auditor').hooks.SessionStart[0]?.hooks.map(h => h.command)).toEqual(['/r/cli/bin/tpm audit fresh', '/r/cli/bin/tpm castlist session-start']);
+  });
+});
+
 describe('tpm infra と tpm guard', () => {
   const hook = (command: string): string => JSON.stringify({ tool_name: 'Bash', tool_input: { command } });
   const devops = (w: ReturnType<typeof world>) => ({ ...w.role('devops', 'file:1'), env: { TPM_KEY: 'devops', TPM_ROLE: 'devops-engineer' } });

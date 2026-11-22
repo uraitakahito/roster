@@ -9,7 +9,7 @@ import type { ExecResult } from '../exec.ts';
 import type { RoleRecord, TpmRecord } from '../roster.ts';
 import { castlistUrl, issuerOf, sessionRef } from '../castlist.ts';
 import { rolesConfigFile } from '../config.ts';
-import { readRole } from '../roster.ts';
+import { readRole, subjectOf } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
 
 /** 置き場の URL の既定（container の port の publish の 127.0.0.1:8801）。 */
@@ -122,7 +122,9 @@ export function requireKey(ctx: Context, keyOption?: string): string {
   if (!existsSync(rolesConfigFile(ctx.project)) && ctx.state.read('tpm.jsonc') === undefined) {
     throw new TpmError(`tpm を使う project の folder ではありません: ${ctx.project}（.claude/roles/config.jsonc も、TPM 担当が起きた印も無い）。project の folder で打つか、$TPM_PROJECT に project の path を付けてください`);
   }
-  const key = keyOption ?? ctx.env.TPM_KEY;
+  // Staff Engineer 担当の席（名簿の Key は <課題の Key>.staff）は、見ている課題の Key の folder に置く。
+  const own = ctx.env.TPM_KEY || undefined;
+  const key = keyOption ?? (own === undefined ? undefined : subjectOf(readRole(ctx, own) ?? { key: own }));
   if (!key) throw new TpmError('課題の Key がわかりません。TPM 担当は --key <Key> を付けてください');
   if (!KEY.test(key)) throw new TpmError(`課題の Key に使えない字があります: ${key}`);
   return key;

@@ -37,6 +37,7 @@ const ROLE_ABBREV = {
   'software-engineer': 'swe',
   'devops-engineer': 'devops',
   'sustaining-engineer': 'sus',
+  'staff-engineer': 'staff',
   'auditor': 'audit',
 } as const satisfies Record<RoleName, string>;
 
@@ -182,19 +183,27 @@ export interface Seat {
   prefix: string
   /** 役割（TPM 担当は tpm）。 */
   role: string
+  /** 名簿の Key（席を 1 つに決める。Staff Engineer 担当の席は `<課題の Key>.staff`）。 */
   key?: string
+  /** 見ている課題の Key（Staff Engineer 担当の席だけ）。 */
+  subject?: string
 }
 
 /**
  * 今の周りの席。$TPM_KEY があれば名簿の行（無ければ $TPM_ROLE）の役割の担当、Auditor は project に 1 つの席。
+ * Staff Engineer 担当の席は、名の接頭辞を課題の Key から作り（`ai-33-staff`）、見ている課題の Key を subject に持つ。
  * $TPM_KEY が無ければ TPM 担当（castlist の hook と guard は、tpm が起こした session にしか付かない）。
  */
 export function seatOf(ctx: Context): Seat {
   const key = ctx.env.TPM_KEY || undefined;
   const fromEnv = (ROLE_NAMES as string[]).includes(ctx.env.TPM_ROLE ?? '') ? ctx.env.TPM_ROLE as RoleName : undefined;
-  const role = key === undefined ? undefined : readRole(ctx, key)?.role ?? fromEnv;
+  const record = key === undefined ? undefined : readRole(ctx, key);
+  const role = key === undefined ? undefined : record?.role ?? fromEnv;
   if (role === 'auditor') return { prefix: projectPrefix(ctx.project, 'audit'), role, ...(key === undefined ? {} : { key }) };
-  if (key !== undefined && role !== undefined) return { prefix: seatPrefix(key, role), role, key };
+  if (key !== undefined && role !== undefined) {
+    const subject = record?.subject;
+    return { prefix: seatPrefix(subject ?? key, role), role, key, ...(subject === undefined ? {} : { subject }) };
+  }
   return { prefix: projectPrefix(ctx.project, 'tpm'), role: 'tpm' };
 }
 

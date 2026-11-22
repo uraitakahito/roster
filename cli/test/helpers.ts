@@ -299,3 +299,11 @@ export function finish(w: World, key: string, address: string): void {
   hello(se);
   reportDone(se, { kind: 'result', summary: '済んだ', remaining: 'なし', decisions: 'なし', points: [] });
 }
+
+/** Staff Engineer 担当の skill が在る、偽の roster の root（tpm assign --role staff-engineer は、skill が無ければ起こす前に止まる）。 */
+export function staffRoot(): string {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-root-')));
+  mkdirSync(join(root, 'skill-sets', 'core', '.claude', 'skills', 'staff-engineer'), { recursive: true });
+  writeFileSync(join(root, 'skill-sets', 'core', '.claude', 'skills', 'staff-engineer', 'SKILL.md'), '# Staff Engineer 担当\n');
+  return root;
+}

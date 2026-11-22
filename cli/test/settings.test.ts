@@ -9,6 +9,7 @@ describe('resolveSettings', () => {
     expect(resolveSettings('devops-engineer', { env: {} })).toEqual(ROLES['devops-engineer'].defaults);
     expect(resolveSettings('tpm', { env: {} })).toEqual(TPM_SETTINGS);
     expect(resolveSettings('auditor', { env: {} })).toEqual({ model: 'claude-fable-5-2', effort: 'high', permissionMode: 'bypassPermissions' });
+    expect(resolveSettings('staff-engineer', { env: {} })).toEqual({ model: 'claude-opus-5-5', effort: 'high', permissionMode: 'bypassPermissions' });
   });
 
   test('環境変数はコードの既定に勝つ', () => {

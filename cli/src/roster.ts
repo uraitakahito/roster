@@ -7,6 +7,8 @@ import { TpmError } from './skill-sets.ts';
 /** 名簿の 1 行（`roles/` の 1 ファイル）。担当 1 人の役割・居場所・受けている依頼書。 */
 export interface RoleRecord extends RoleSettings {
   key: string
+  /** 見ている課題の Key（Staff Engineer 担当の席だけ。名簿の Key は `<課題の Key>.staff`）。ほかの担当は、名簿の Key が課題の Key。 */
+  subject?: string
   role: RoleName
   title: string
   cwd: string
@@ -46,6 +48,18 @@ const fileOf = (key: string): string => `roles/${key.replaceAll(/[^A-Za-z0-9._-]
 
 /** 課題管理の課題が無いときの Key の形（`t-` と英小文字・数字 4 文字。tpm key が作る）。 */
 export const LOCAL_KEY = /^t-[a-z0-9]{4}$/;
+
+/** Staff Engineer 担当の席の、名簿の Key の終わり。 */
+const STAFF_SUFFIX = '.staff';
+
+/** 課題の Key から、その課題の Staff Engineer 担当の席の名簿の Key（名簿は Key 1 つに 1 行なので、課題の担当と並べるために別の Key にする）。 */
+export const staffKey = (subject: string): string => `${subject}${STAFF_SUFFIX}`;
+
+/** 名簿の Key が、Staff Engineer 担当の席の形か。 */
+export const isStaffKey = (key: string): boolean => key.endsWith(STAFF_SUFFIX);
+
+/** 名簿の行の、課題の Key（Staff Engineer 担当の席は見ている課題、ほかは名簿の Key）。ページの folder と、名乗りに出す Key に使う。 */
+export const subjectOf = (record: Pick<RoleRecord, 'key' | 'subject'>): string => record.subject ?? record.key;
 
 /** 課題の Key が、使ってよい字（英数字と # . _ / -）だけかを見る。違えば止める。 */
 export function assertKey(key: string): void {
