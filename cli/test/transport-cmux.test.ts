@@ -82,6 +82,27 @@ describe('CmuxTransport', () => {
     expect(calls[0]?.args).toEqual(['--json', 'workspace', 'create', '--name', 'SWE t-x7k2: 題', '--cwd', '/w', '--command', 'tpm run-role t-x7k2', '--focus', 'false']);
   });
 
+  test('spawn は説明を create に渡し、色は作った居場所に後から付ける', () => {
+    const { transport, calls } = fake([['--json workspace create', json({ workspace_ref: 'workspace:12' })]]);
+    expect(transport.spawn({ title: 'レビュー t-x7k2: PR #7', cwd: '/w', command: 'c', description: '名簿の Key', color: 'Purple' })).toBe('workspace:12');
+    expect(calls.map(c => c.args)).toEqual([
+      ['--json', 'workspace', 'create', '--name', 'レビュー t-x7k2: PR #7', '--cwd', '/w', '--command', 'c', '--focus', 'false', '--description', '名簿の Key'],
+      ['workspace-action', '--workspace', 'workspace:12', '--action', 'set-color', '--color', 'Purple'],
+    ]);
+  });
+
+  test('relabel はほかの居場所の題と説明を替え、説明が無ければ消す', () => {
+    const { transport, calls } = fake([]);
+    transport.relabel('workspace:12', { title: 'レビュー t-x7k2: PR #8', description: '試験' });
+    transport.relabel('workspace:12', { title: 'レビュー t-x7k2: PR #9' });
+    expect(calls.map(c => c.args)).toEqual([
+      ['workspace', 'rename', 'workspace:12', '--title', 'レビュー t-x7k2: PR #8'],
+      ['workspace-action', '--workspace', 'workspace:12', '--action', 'set-description', '--description', '試験'],
+      ['workspace', 'rename', 'workspace:12', '--title', 'レビュー t-x7k2: PR #9'],
+      ['workspace-action', '--workspace', 'workspace:12', '--action', 'clear-description'],
+    ]);
+  });
+
   test('1,024 バイトを超える命令は起こさずに TpmError', () => {
     const { transport, calls } = fake([]);
     expect(() => transport.spawn({ title: 't', cwd: '/w', command: 'あ'.repeat(342) })).toThrow(/1024 バイト/);

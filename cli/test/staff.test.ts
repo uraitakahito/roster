@@ -55,14 +55,23 @@ describe('名簿の Key', () => {
 });
 
 describe('tpm assign --role staff-engineer', () => {
-  test('課題の担当の隣に、別の名簿の行で起こす。題は Staff <課題の Key>、既定は Opus 5.5・high', () => {
+  test('課題の担当の隣に、別の名簿の行で起こす。題は レビュー <課題の Key>: <見る物>、既定は Opus 5.5・high', () => {
     const w = started({ tracker: 'jira' }, 'AI-8');
     const out = assign(w.tpm, 'AI-8', STAFF);
-    expect(out[0]).toBe('起こした: Staff AI-8（file:2・Opus 5.5 · high）');
-    expect(requireRole(w.tpm, 'AI-8.staff')).toMatchObject({ key: 'AI-8.staff', subject: 'AI-8', role: 'staff-engineer', title: 'Staff AI-8', issue: 'AI-8', model: 'claude-opus-5-5', effort: 'high', permissionMode: 'bypassPermissions', address: 'file:2' });
+    expect(out[0]).toBe('起こした: レビュー AI-8: 計画 plan-1（file:2・Opus 5.5 · high）');
+    expect(requireRole(w.tpm, 'AI-8.staff')).toMatchObject({ key: 'AI-8.staff', subject: 'AI-8', role: 'staff-engineer', title: 'レビュー AI-8: 計画 plan-1', issue: 'AI-8', model: 'claude-opus-5-5', effort: 'high', permissionMode: 'bypassPermissions', address: 'file:2' });
     // 課題の担当の行は変わらない
     expect(requireRole(w.tpm, 'AI-8')).toMatchObject({ role: 'software-engineer', address: 'file:1' });
-    expect(roles(w.tpm).filter(l => l.startsWith('- ')).map(l => l.split('  ').slice(0, 2).join('  '))).toEqual(['- AI-8  SWE AI-8: 計画と実装', '- AI-8.staff  Staff AI-8']);
+    expect(roles(w.tpm).filter(l => l.startsWith('- ')).map(l => l.split('  ').slice(0, 2).join('  '))).toEqual(['- AI-8  SWE AI-8: 計画と実装', '- AI-8.staff  レビュー AI-8: 計画 plan-1']);
+    // Staff の席だけが色（紫の帯）を持つ。見てほしい所の無い頼みは、説明を付けない
+    expect(w.wire.look('file:2')).toEqual({ title: 'レビュー AI-8: 計画 plan-1', color: 'Purple' });
+    expect(w.wire.look('file:1')).toEqual({ title: 'SWE AI-8: 計画と実装' });
+  });
+
+  test('Staff の席の題は命令が作るので、--title は止める（黙って捨てない）', () => {
+    const w = started();
+    expect(() => assign(w.tpm, 'AI-8', { ...STAFF, title: 'レビュー' })).toThrow(/Staff Engineer 担当の席の題は、レビューの頼みから命令が作ります。--title は書かないでください/);
+    expect(w.wire.seats().map(s => s.address)).toEqual(['file:1']);
   });
 
   test('model などは 旗 > config.jsonc の staff-engineer の欄 > 役割の既定', () => {
@@ -117,12 +126,12 @@ describe('Staff の席の名乗り', () => {
 describe('tpm close', () => {
   test('課題の席を閉じると、Staff の席も閉じる。Staff の席だけを先に閉じることもできる', () => {
     const w = reviewed();
-    expect(close(w.tpm, 'AI-8')).toEqual(['閉じた: SWE AI-8: 計画と実装（file:1）', '閉じた: Staff AI-8（file:2）']);
+    expect(close(w.tpm, 'AI-8')).toEqual(['閉じた: SWE AI-8: 計画と実装（file:1）', '閉じた: レビュー AI-8: 計画 plan-1（file:2）']);
     expect(roles(w.tpm)[0]).toBe('名簿: 担当はいない');
     expect(w.wire.seats()).toEqual([]);
 
     const again = reviewed();
-    expect(close(again.tpm, 'AI-8.staff')).toEqual(['閉じた: Staff AI-8（file:2）']);
+    expect(close(again.tpm, 'AI-8.staff')).toEqual(['閉じた: レビュー AI-8: 計画 plan-1（file:2）']);
     expect(close(again.tpm, 'AI-8')).toEqual(['閉じた: SWE AI-8: 計画と実装（file:1）']);
   });
 });
@@ -182,7 +191,7 @@ describe('時系列のページ', () => {
     askTpm(w.se, { text: '案で迷う', waitingFor: '案' });
     askTpm(w.staff, { text: '見る物が読めない', waitingFor: '見る物' });
     const whats = (key: string): string[] => collect(w.tpm, key).filter(e => e.kind === 'メッセージ').map(e => `${e.who}: ${e.what.split('（id')[0] ?? ''}（席 ${e.seat ?? ''}）`);
-    expect(whats('AI-8').filter(l => !l.includes('【ask-review】') && !l.includes('【brief】'))).toEqual(['SWE AI-8: 計画と実装: 【ask-tpm】案で迷う（席 AI-8）', 'Staff AI-8: 【ask-tpm】見る物が読めない（席 AI-8.staff）']);
-    expect(whats('AI-8.staff')).toEqual(['Staff AI-8: 【ask-tpm】見る物が読めない（席 AI-8.staff）']);
+    expect(whats('AI-8').filter(l => !l.includes('【ask-review】') && !l.includes('【brief】'))).toEqual(['SWE AI-8: 計画と実装: 【ask-tpm】案で迷う（席 AI-8）', 'レビュー AI-8: 計画 plan-1: 【ask-tpm】見る物が読めない（席 AI-8.staff）']);
+    expect(whats('AI-8.staff')).toEqual(['レビュー AI-8: 計画 plan-1: 【ask-tpm】見る物が読めない（席 AI-8.staff）']);
   });
 });
