@@ -40,7 +40,7 @@ describe('tpm file put', () => {
   test('画像は --reviewed が無ければ、置き場に頼む前に、Read で見るよう言って止まる', () => {
     const s = setup();
     const file = s.source('screen.png', PNG);
-    expect(() => filePut(s.role, file, {})).toThrow(/Read tool でその file を見て、token・鍵・個人の情報・ほかの人の画面・この Mac の path が写っていないか確かめてから --reviewed を付けて打つ/);
+    expect(() => filePut(s.role, file, {})).toThrow(/Read tool でその file を見て、token・鍵・個人の情報・ほかの人の画面・tpm を動かす機械の path が写っていないか確かめてから --reviewed を付けて打つ/);
     expect(() => filePut(s.role, s.source('doc.pdf', '%PDF-1.4'), {})).toThrow('--reviewed');
     expect(s.curls()).toEqual([]);
   });

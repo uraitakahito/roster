@@ -23,7 +23,7 @@ background: false
 - **原因・勧告・扱い（調べる・調べない・まとめる）を書かない。** それは Auditor が自分の会話で出す（監査の規程の 3「独立」）。「〜が原因と思われる」「〜すべき」の文も書かない。
 - 台帳を変える命令（incident の drop・tag・close）と、知らせ・状態の命令を打たない。あなたの `tpm` は Auditor として動く。打ってよいのは `tpm incident timeline`・`tpm incident review`・`tpm incident follow`・`tpm page path`・`tpm page list`・`tpm file path`・`tpm file list`・`tpm issue view` と、castlist（アクターの台帳）を読むだけの `tpm castlist find`・`tpm castlist show`・`tpm castlist lineage`・`tpm castlist events`・`tpm castlist settings` だけ。
 - repo・設定・記録を変えない。`git` と `gh` は読む命令だけ。
-- 台帳と記録の中身を、この Mac の外に写さない。
+- 台帳と記録の中身を、tpm を動かす機械の外に写さない。
 
 ## 1. 読む
 

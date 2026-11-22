@@ -131,12 +131,12 @@ figcaption{color:var(--mute);font-size:13px}
 
 ## 画面の写しを撮る（画面を変えた結果）
 
-画面（置き場の一覧の UI・docs の site など）を変えた結果は、前と後の写しを png にして `tpm file put <file> --reviewed` で上げ、ページから `<img src="files/<語>-<n>.png">` で参照する（`protocol.md` の「ページ」の file の項）。この Mac の Chrome の headless で撮れる:
+画面（置き場の一覧の UI・docs の site など）を変えた結果は、前と後の写しを png にして `tpm file put <file> --reviewed` で上げ、ページから `<img src="files/<語>-<n>.png">` で参照する（`protocol.md` の「ページ」の file の項）。tpm を動かす機械の Chrome の headless で撮れる:
 
 ```sh
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --disable-gpu --hide-scrollbars \
   --user-data-dir="$TMPDIR/shot-chrome" --window-size=900,700 --screenshot="$TMPDIR/shot.png" "<URL か file:// の path>"
 ```
 
-- 写るのは開いたページだけ（ほかの窓や通知は写らない）。それでも上げる前に Read で見て、token・鍵・個人の情報・この Mac の path が写っていないか確かめる。
+- 写るのは開いたページだけ（ほかの窓や通知は写らない）。それでも上げる前に Read で見て、token・鍵・個人の情報・tpm を動かす機械の path が写っていないか確かめる。
 - 暗い画面で撮るときは `--force-dark-mode` を足す。長いページは `--window-size` の高さを増やす。

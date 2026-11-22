@@ -317,7 +317,7 @@ const oneLine = (text: string): string => {
 
 // ---- 担当が打つ ----
 
-/** `tpm wait` が状態の folder の `waits/<宛先>.jsonc` に書く記録。Mac のバナーの hook が「この回に wait pm を打ったか」を見る。 */
+/** `tpm wait` が状態の folder の `waits/<宛先>.jsonc` に書く記録。通知のバナーの hook が「この回に wait pm を打ったか」を見る。 */
 export interface WaitRecord {
   kind: WaitKind
   text: string
@@ -611,7 +611,7 @@ export interface AuditOptions {
 
 /**
  * Auditor が、監査のページを Product Manager へじかに報告した（報告は Audit の席とページに出ている）。
- * 記録を残し、TPM 担当に写しを送り（【audit】。TPM 担当は伝え直さない）、状態を回答待ち(PM) にする（その回の終わりに Mac のバナーが出る）。
+ * 記録を残し、TPM 担当に写しを送り（【audit】。TPM 担当は伝え直さない）、状態を回答待ち(PM) にする（その回の終わりに通知のバナーが出る）。
  * TPM 担当が起きていなくても報告はできる（写しは送らず、その事を出す）。
  */
 export function reportAudit(ctx: Context, options: AuditOptions): string[] {

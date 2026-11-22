@@ -259,7 +259,7 @@ describe('hook の入力と settings', () => {
     const tpmBin = join(dir, 'tpm');
     symlinkSync(realpathSync(join(import.meta.dirname, '..', 'bin', 'tpm')), tpmBin);
     const command = hookCommand(guardSettings(tpmBin));
-    // 止めた記録（guard.jsonl）を、この Mac の本物の状態の folder でなく、一時の folder に書かせる。
+    // 止めた記録（guard.jsonl）を、tpm を動かす機械の本物の状態の folder でなく、一時の folder に書かせる。
     const state = mkdtempSync(join(tmpdir(), 'tpm-guard-state-'));
     const env = { ...process.env, TPM_PROJECT: undefined, TPM_STATE: undefined, TPM_KEY: undefined, TPM_ROLE: undefined, XDG_STATE_HOME: state };
     const run = (cmd: string) => spawnSync('/bin/sh', ['-c', command], { cwd: dir, env, encoding: 'utf8', input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: cmd } }) });

@@ -146,7 +146,7 @@ export function filePut(ctx: Context, file: string, options: FilePutOptions): st
   const key = requireKey(ctx, options.key);
   const body = readFileSync(file);
   if (NEEDS_REVIEW.has(ext) && !options.reviewed) {
-    throw new TpmError(`画像と PDF は、上げる前に中身を見てください。Read tool でその file を見て、token・鍵・個人の情報・ほかの人の画面・この Mac の path が写っていないか確かめてから --reviewed を付けて打つ: ${file}`);
+    throw new TpmError(`画像と PDF は、上げる前に中身を見てください。Read tool でその file を見て、token・鍵・個人の情報・ほかの人の画面・tpm を動かす機械の path が写っていないか確かめてから --reviewed を付けて打つ: ${file}`);
   }
   const secrets = NEEDS_REVIEW.has(ext) ? [] : secretLines(body.toString('utf8'));
   if (secrets.length > 0 && !options.allowSecret) {

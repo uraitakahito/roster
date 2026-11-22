@@ -1,5 +1,5 @@
 // 依頼書と成果のページを、置き場（別の repo の pagetray。127.0.0.1 で待つ、ページを DB に持つサーバー。頼む足場は store.ts）に置く・読む・探す・消す。
-// 番号は置き場が決める。置いた・読んだページは、この Mac の控えの folder にも写す（Read tool で読むためと、置き場が止まっても読めるため）。
+// 番号は置き場が決める。置いた・読んだページは、tpm を動かす機械の控えの folder にも写す（Read tool で読むためと、置き場が止まっても読めるため）。
 // ページが参照する file（画像など。file.ts）も、読む時に控えに写し、取り込む・消す時に一緒に扱う。
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';

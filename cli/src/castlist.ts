@@ -40,7 +40,7 @@ const ROLE_ABBREV = {
   'auditor': 'audit',
 } as const satisfies Record<RoleName, string>;
 
-/** castlist の URL が受ける形（この Mac の中だけ）。 */
+/** castlist の URL が受ける形（tpm を動かす機械の中だけ）。 */
 const URL_FORM = /^http:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\/?$/;
 
 /** castlist の URL（末尾の / は落とす）。$TPM_CASTLIST_URL、無ければ project の folder の設定の castlist。どちらも無ければ undefined（castlist に何も送らない）。 */
@@ -142,7 +142,7 @@ export function requireUp(ctx: Pick<Context, 'env' | 'config' | 'exec' | 'now'>,
   const at = Date.parse(now);
   const skew = at - ctx.now().getTime();
   if (Math.abs(skew) <= MAX_SKEW_MS) return [];
-  return [`castlist の時計と、この Mac の時計が ${Number((Math.abs(skew) / 1000).toFixed(1))} 秒ずれています（castlist ${now}・この Mac ${ctx.now().toISOString()}）。castlist の記録の時刻がずれるので、tpm report incident で台帳に挙げてください（止めてはいない）`];
+  return [`castlist の時計と、tpm を動かす機械の時計が ${Number((Math.abs(skew) / 1000).toFixed(1))} 秒ずれています（castlist ${now}・tpm ${ctx.now().toISOString()}）。castlist の記録の時刻がずれるので、tpm report incident で台帳に挙げてください（止めてはいない）`];
 }
 
 /** この project の issuer。 */

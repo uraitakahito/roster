@@ -1,5 +1,5 @@
 // tpm incident timeline <番号|Key>: 件の前後に起きたことを、state の記録から時刻の順に 1 枚のページにして置く。
-// TPM 担当は読まずに、監査の依頼書に URL を貼る（原因を調べるのは担当）。メッセージの本文が入るので、この Mac の外に写さない。
+// TPM 担当は読まずに、監査の依頼書に URL を貼る（原因を調べるのは担当）。メッセージの本文が入るので、tpm を動かす機械の外に写さない。
 // castlist を設定していれば、行ごとに、その時刻にその席に居たアクターを castlist に聞いて欄に出す（聞けなければ、そう書いてページは置く）。
 import { castlistUrl } from '../castlist.ts';
 import type { Context } from '../context.ts';
@@ -156,7 +156,7 @@ td.t{white-space:nowrap;font-variant-numeric:tabular-nums}.note{color:var(--mute
 </style></head><body>
 <h1>${esc(title)}</h1>
 ${lead.map(l => `<p>${esc(l)}</p>`).join('\n')}
-<p class="note">時刻は UTC（日本の時刻は +9 時間）。tpm が state に残した記録から作った。メッセージの本文が入るので、この Mac の外に写さない。色の付いた行は、件の引き金のメッセージ。</p>
+<p class="note">時刻は UTC（日本の時刻は +9 時間）。tpm が state に残した記録から作った。メッセージの本文が入るので、tpm を動かす機械の外に写さない。色の付いた行は、件の引き金のメッセージ。</p>
 <div class="scroll"><table>
 <tr><th>時刻</th><th>記録</th><th>誰が</th>${actors === undefined ? '' : '<th>アクター</th>'}<th>何を</th></tr>
 ${rows.join('\n')}

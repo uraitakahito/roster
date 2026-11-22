@@ -1,4 +1,4 @@
-// tpm banner …: Mac のバナー（cmux の通知の desktop）を、居場所の役割 × きっかけで出すか消すか。
+// tpm banner …: 通知のバナー（cmux の通知の desktop）を、居場所の役割 × きっかけで出すか消すか。
 // hook は cmux の通知の hook（~/.config/cmux/cmux.json の notifications.hooks）から通知ごとに呼ばれる。
 // cmux は hook が失敗・時間切れ・JSON の誤りになると、いつものバナーに加えて「Notification Hook Failed」を出すので、hook はどんな時も正しい JSON を返して 0 で終わる。
 import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';

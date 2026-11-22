@@ -125,7 +125,7 @@ function fileConfig(config: Record<string, unknown>, configFile: string): FileCo
   };
 }
 
-/** castlist が受けるのは、この Mac の中からだけ（Host が 127.0.0.1 か localhost）。 */
+/** castlist が受けるのは、tpm を動かす機械の中からだけ（Host が 127.0.0.1 か localhost）。 */
 const CASTLIST_URL = /^http:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\/?$/;
 
 function castlistField(value: unknown, configFile: string): Pick<FileConfig, 'castlist'> {

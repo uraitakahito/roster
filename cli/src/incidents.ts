@@ -1,5 +1,5 @@
 // 台帳: 思わぬ出来事（信頼性・安全性・効率性が落ちた時）を 1 件 1 ファイルで覚える。状態の folder の incidents/<番号>.jsonc。
-// 書くのは事実だけ（何が起きたか）。原因は、後で監査の担当が調べる。中身はこの Mac の外に写さない。
+// 書くのは事実だけ（何が起きたか）。原因は、後で監査の担当が調べる。中身は tpm を動かす機械の外に写さない。
 import type { Context } from './context.ts';
 import { actor } from './evidence.ts';
 import { TpmError } from './skill-sets.ts';
