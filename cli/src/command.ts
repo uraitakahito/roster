@@ -1,5 +1,6 @@
 // 利用者が写して打つ 1 行（cd と claude の命令）を組む。
 import { join } from 'node:path';
+import type { Context } from './context.ts';
 import { guardSettings } from './guard.ts';
 import { presentSettingsEnv, resolveSettings } from './settings.ts';
 import { shellQuote } from './shell.ts';
@@ -20,4 +21,9 @@ export function buildCommand(dir: string, root: string, skillSets: string[], env
   const claude = ['claude', '--model', settings.model, '--effort', settings.effort, '--permission-mode', settings.permissionMode, '--settings', guardSettings(join(bin, 'tpm')), '--add-dir', ...addDirs, '--', '/tpm'];
   const assigns = [`PATH=${shellQuote(bin)}:"$PATH"`, ...presentSettingsEnv(env).map(([name, value]) => `${name}=${shellQuote(value)}`)];
   return `cd ${shellQuote(dir)} && ${assigns.join(' ')} ${claude.map(shellQuote).join(' ')}`;
+}
+
+/** tpm start（仮。今の 1 行を返すだけ）。 */
+export function startTpm(ctx: Context): { warnings: string[], line: string } {
+  return { warnings: [], line: buildCommand(ctx.project, ctx.root, ctx.skillSets, ctx.env) };
 }

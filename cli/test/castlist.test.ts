@@ -1,0 +1,572 @@
+// castlist（アクターの台帳。127.0.0.1 の別のサーバー）への組み込み。試験は偽の castlist（castlist-fake.ts）と、何も待っていない port を使う。
+// 本物の castlist（8802）と container には触らない。担当は file の連携で、本当には起こさない。
+import { spawnSync } from 'node:child_process';
+import { appendFileSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { castlistIssuer, CASTLIST_VERSION, seatPrefix } from '../src/castlist.ts';
+import { auditStart } from '../src/commands/audit.ts';
+import { sessionEnd, sessionStart } from '../src/commands/castlist.ts';
+import { guard } from '../src/commands/infra.ts';
+import { hello } from '../src/commands/role-side.ts';
+import { assign, close } from '../src/commands/tpm-side.ts';
+import { startTpm } from '../src/command.ts';
+import type { Context } from '../src/context.ts';
+import { guardSettings } from '../src/guard.ts';
+import type { RoleName } from '../src/protocol.ts';
+import { requireRole, readRole, type RoleRecord } from '../src/roster.ts';
+import { roleEnv } from '../src/run-role.ts';
+import { resolveSettings } from '../src/settings.ts';
+import { deadUrl, startFakeCastlist, type CastlistRequest, type FakeCastlist } from './castlist-fake.ts';
+import { BRIEF, world, type World } from './helpers.ts';
+
+const SE = { role: 'software-engineer', title: '計画と実装', brief: BRIEF, wait: 0 } as const;
+const TPM_SID = 'aaaaaaaa-0000-4000-8000-000000000000';
+const SID = 'bbbbbbbb-0000-4000-8000-000000000001';
+const SID2 = 'bbbbbbbb-0000-4000-8000-000000000002';
+const SID3 = 'bbbbbbbb-0000-4000-8000-000000000003';
+/** world の時計の時刻（偽の castlist の既定の now と同じ）。 */
+const NOW = '2026-11-20T12:00:00.000Z';
+const RUN_LINE = /^container run -d --name castlist -p 127\.0\.0\.1:(\d+):8080 -v castlist-data:\/data -m 200M -c 1 ghcr\.io\/uraitakahito\/castlist:(\S+)$/;
+
+let fake: FakeCastlist;
+let dead: string;
+
+beforeAll(async () => {
+  fake = await startFakeCastlist(NOW);
+  dead = await deadUrl();
+});
+
+afterAll(async () => {
+  await fake.stop();
+});
+
+/** この後に偽の castlist が受けた要求を返す関数。 */
+function mark(): () => CastlistRequest[] {
+  const since = fake.requests().length;
+  return () => fake.requests().slice(since);
+}
+
+/** 書く要求だけ（/healthz を除く）。 */
+const writes = (requests: CastlistRequest[]): CastlistRequest[] => requests.filter(r => r.path !== '/healthz');
+
+/** 周りの環境変数を足した周り。 */
+const withEnv = (ctx: Context, extra: NodeJS.ProcessEnv): Context => ({ ...ctx, env: { ...ctx.env, ...extra } });
+
+const startInput = (source: string, sid: string, extra: Record<string, unknown> = {}): string =>
+  JSON.stringify({ hook_event_name: 'SessionStart', session_id: sid, source, transcript_path: '/nonexistent/transcript.jsonl', cwd: '/w', ...extra });
+const endInput = (reason: string, sid: string): string => JSON.stringify({ hook_event_name: 'SessionEnd', session_id: sid, reason, transcript_path: '/nonexistent/transcript.jsonl' });
+const bashInput = (sid: string, extra: Record<string, unknown> = {}): string =>
+  JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'ls' }, session_id: sid, transcript_path: '/nonexistent/transcript.jsonl', ...extra });
+
+/** 外の命令のうち、castlist に触る物（container と、置き場でない URL への curl）。 */
+const castlistCalls = (w: World) => w.calls.filter(c => c.cmd === 'container' || (c.cmd === 'curl' && !/127\.0\.0\.1:880[01]/.test(c.args.at(-1) ?? '')));
+
+/** TPM 担当の周り: tpm start の 1 行が付ける環境変数を持つ。 */
+const tpmSeat = (w: World): Context => withEnv(w.tpm, {
+  CLAUDE_CODE_SESSION_ID: TPM_SID,
+  TPM_LAUNCH: 'launch-tpm',
+  TPM_LAUNCHED_BY: 'tpm.person:product-manager',
+  TPM_LAUNCH_MODEL: 'claude-opus-5-5',
+  TPM_LAUNCH_EFFORT: 'medium',
+  TPM_LAUNCH_FRESH: '1',
+});
+
+/** 担当の周り: tpm run-role が付ける環境変数（roleEnv）と、Claude Code の session。 */
+function seat(w: World, key: string, sid: string, extra: NodeJS.ProcessEnv = {}): Context {
+  const base = w.role(key, 'file:1');
+  const record = requireRole(w.tpm, key);
+  const env = roleEnv(record, w.project, w.tpm.state.dir, w.tpm.root, base.env);
+  return { ...base, env: { ...env, CLAUDE_CODE_SESSION_ID: sid, ...extra } };
+}
+
+/** castlist を設定した世界で、tpm start（PM の登録）・TPM 担当の登場・担当 1 人の assign までを済ませる。 */
+function launched(config: Record<string, unknown> = {}): { w: World, tpm: Context, record: RoleRecord } {
+  const w = world({ castlist: fake.url, ...config });
+  startTpm(w.tpm);
+  const tpm = tpmSeat(w);
+  sessionStart(tpm, startInput('startup', TPM_SID));
+  hello(tpm);
+  assign(tpm, 't-x7k2', SE);
+  return { w, tpm, record: requireRole(w.tpm, 't-x7k2') };
+}
+
+describe('castlist を設定していない時', () => {
+  test('tpm start・assign・hello・guard・close・session の hook は、castlist に触らない', () => {
+    const before = fake.requests().length;
+    const w = world();
+    const tpm = tpmSeat(w);
+    const { line } = startTpm(w.tpm);
+    expect(line).not.toContain('TPM_LAUNCH');
+    hello(tpm);
+    sessionStart(tpm, startInput('startup', TPM_SID));
+    assign(tpm, 't-x7k2', SE);
+    expect(readRole(w.tpm, 't-x7k2')).not.toHaveProperty('launch');
+    expect(readRole(w.tpm, 't-x7k2')).not.toHaveProperty('launchedBy');
+    const se = seat(w, 't-x7k2', SID);
+    expect(se.env.TPM_LAUNCH).toBeUndefined();
+    sessionStart(se, startInput('startup', SID));
+    expect(guard(se, bashInput(SID, { effort: { level: 'high' } }))).toEqual({ allow: true });
+    expect(hello(se).some(l => l.startsWith('アクター'))).toBe(false);
+    sessionEnd(se, endInput('other', SID));
+    close(tpm, 't-x7k2');
+    expect(castlistCalls(w)).toEqual([]);
+    expect(w.tpm.state.list('sessions')).toEqual([]);
+    expect(fake.requests().length).toBe(before);
+  });
+});
+
+describe('castlist が止まっている時', () => {
+  test('tpm start は 1 行を出さず、Product Manager が打つ container start を出す（container が在る時）', () => {
+    const w = world({ castlist: dead });
+    w.answers.set('container inspect castlist', { status: 0, stdout: '[{}]', stderr: '' });
+    expect(() => startTpm(w.tpm)).toThrow(/castlist/);
+    try {
+      startTpm(w.tpm);
+    }
+    catch (e) {
+      const lines = (e as Error).message.split('\n');
+      expect(lines).toContain('container start castlist');
+      expect(lines.join('\n')).not.toContain('claude --model');
+    }
+  });
+
+  test('container が無ければ、container run の 1 行（port は設定の URL の port、版と docs の URL つき）', () => {
+    const w = world({ castlist: dead });
+    w.answers.set('container inspect castlist', { status: 1, stdout: '', stderr: 'not found' });
+    let message = '';
+    try {
+      startTpm(w.tpm);
+    }
+    catch (e) {
+      message = (e as Error).message;
+    }
+    const run = message.split('\n').find(l => RUN_LINE.test(l)) ?? '';
+    const [, port, version] = RUN_LINE.exec(run) ?? [];
+    expect(port).toBe(new URL(dead).port);
+    expect(version).toBe(CASTLIST_VERSION);
+    expect(message).toContain('https://uraitakahito.github.io/castlist/');
+  });
+
+  test('tpm assign は担当を起こさず、1 行と tpm wait pm "castlist を起こす" --hand を出す', () => {
+    const w = world({ castlist: dead });
+    hello(w.tpm);
+    expect(() => assign(w.tpm, 't-x7k2', SE)).toThrow(/tpm wait pm "castlist を起こす" --hand/);
+    expect(() => assign(w.tpm, 't-x7k2', SE)).toThrow(/^container start castlist$/m);
+    expect(w.wire.seats()).toEqual([]);
+    expect(readRole(w.tpm, 't-x7k2')).toBeUndefined();
+  });
+
+  test('tpm audit start は席を起こさない', () => {
+    const w = world({ castlist: dead });
+    w.answers.set('container inspect castlist', { status: 1, stdout: '', stderr: '' });
+    expect(() => auditStart(w.tpm, { wait: 0 })).toThrow(/^container run -d --name castlist /m);
+    expect(w.wire.seats()).toEqual([]);
+    expect(readRole(w.tpm, 'audit')).toBeUndefined();
+  });
+
+  test('tpm hello は名乗らずに止まる', () => {
+    const w = world({ castlist: dead });
+    expect(() => hello(tpmSeat(w))).toThrow(/^container start castlist$/m);
+    expect(w.tpm.state.read('tpm.jsonc')).toBeUndefined();
+  });
+
+  test('guard は、まだ登録していない session の Bash を、1 行を添えて止める（Bash でない道具は通す）', () => {
+    const w = world({ castlist: dead });
+    const verdict = guard(tpmSeat(w), bashInput(TPM_SID));
+    expect(verdict.allow).toBe(false);
+    expect(verdict.allow ? '' : verdict.reason).toContain('container start castlist');
+    expect(guard(tpmSeat(w), JSON.stringify({ tool_name: 'Read', tool_input: { file_path: '/x' }, session_id: TPM_SID }))).toEqual({ allow: true });
+  });
+
+  test('session-start は誤りにせず、何も書かずに終わる', () => {
+    const w = world({ castlist: dead });
+    expect(() => sessionStart(tpmSeat(w), startInput('startup', TPM_SID))).not.toThrow();
+    expect(() => sessionEnd(tpmSeat(w), endInput('other', TPM_SID))).not.toThrow();
+    expect(w.tpm.state.list('sessions')).toEqual([]);
+  });
+});
+
+describe('時計', () => {
+  test('castlist の時刻と 2 秒より離れていれば、tpm report incident を勧める 1 行を出す（止めない）', () => {
+    const w = world({ castlist: fake.url });
+    try {
+      fake.setNow('2026-11-20T12:00:05.000Z');
+      const { warnings, line } = startTpm(w.tpm);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/5 秒.*tpm report incident/);
+      expect(line).toContain('claude --model');
+      fake.setNow('2026-11-20T11:59:58.500Z');
+      expect(startTpm(w.tpm).warnings).toEqual([]);
+    }
+    finally {
+      fake.setNow(NOW);
+    }
+  });
+});
+
+describe('tpm start', () => {
+  test('/healthz を見て、Product Manager を人のアクターとして登録する（2 度目も同じアクター）。1 行に起こした印の環境変数を付ける', () => {
+    const w = world({ castlist: fake.url });
+    const got = mark();
+    const { line } = startTpm(w.tpm);
+    startTpm(w.tpm);
+    const requests = got();
+    expect(requests[0]).toMatchObject({ method: 'GET', path: '/healthz', host: new URL(fake.url).host, origin: undefined });
+    const posts = requests.filter(r => r.path === '/v1/actors');
+    expect(posts).toHaveLength(2);
+    expect(posts[0]?.body).toMatchObject({ kind: 'human', name_prefix: 'product-manager', bindings: [{ type: 'tpm.person', value: 'product-manager' }], at: NOW });
+    expect(posts[0]?.body?.issuer).toBe(castlistIssuer(w.tpm.state.dir));
+    expect(posts.map(p => p.status)).toEqual([201, 200]);
+    for (const part of ['TPM_LAUNCH="$(uuidgen)"', 'TPM_LAUNCHED_BY=tpm.person:product-manager', 'TPM_LAUNCH_MODEL=claude-opus-5-5', 'TPM_LAUNCH_EFFORT=medium', 'TPM_LAUNCH_FRESH=1']) expect(line).toContain(` ${part} `);
+    expect(line).toMatch(/ claude --model claude-opus-5-5 --effort medium /);
+  });
+
+  test('$TPM_CASTLIST_URL は設定の castlist に勝つ', () => {
+    const w = world({ castlist: dead }, { TPM_CASTLIST_URL: fake.url });
+    const got = mark();
+    expect(() => startTpm(w.tpm)).not.toThrow();
+    expect(got().some(r => r.path === '/v1/actors')).toBe(true);
+  });
+
+  test('castlist の欄は 127.0.0.1 か localhost の http の URL', () => {
+    expect(() => world({ castlist: 'http://example.com:8802' })).toThrow(/castlist/);
+    expect(() => world({ castlist: 8802 })).toThrow(/castlist/);
+  });
+});
+
+describe('名の決まり', () => {
+  test('issuer は tpm. と状態の folder の名（英小文字にし、castlist の受ける形に収める）', () => {
+    expect(castlistIssuer('/Users/x/.local/state/tpm/-Users-takahito-projects-ai')).toBe('tpm.-users-takahito-projects-ai');
+    const long = castlistIssuer(`/s/-${'a'.repeat(100)}`);
+    expect(long).toMatch(/^tpm\.[a-z0-9.-]+$/);
+    expect(long.length).toBeLessThanOrEqual(64);
+    expect(castlistIssuer(`/s/-${'a'.repeat(100)}b`)).not.toBe(long);
+  });
+
+  test.each<[string, RoleName, string]>([
+    ['t-23zs', 'software-engineer', 't-23zs-swe'],
+    ['t-23zs', 'devops-engineer', 't-23zs-devops'],
+    ['roster#12', 'sustaining-engineer', 'roster-12-sus'],
+    ['AI-12', 'software-engineer', 'ai-12-swe'],
+    ['audit', 'auditor', 'audit-audit'],
+  ])('担当の名の接頭辞: %s・%s → %s', (key, role, prefix) => {
+    expect(seatPrefix(key, role)).toBe(prefix);
+  });
+
+  test('接頭辞は 32 字まで', () => {
+    expect(seatPrefix('a-very-long-key-name-for-the-issue-1', 'software-engineer').length).toBeLessThanOrEqual(32);
+  });
+});
+
+describe('session-start', () => {
+  test('起こされた担当の startup: 鍵の session を先頭に登録し、頼んだ model と effort・登場・起こした線を送り、控えを書く', () => {
+    const got = mark();
+    const { w, record } = launched();
+    expect(record.launch).toMatch(/^[0-9a-f-]{36}$/);
+    expect(record.launchedBy).toBe(`claude.session:${TPM_SID}`);
+    const tpmPost = got().find(r => r.path === '/v1/actors' && r.body?.kind === 'ai');
+    expect(tpmPost?.body).toMatchObject({ name_prefix: 'project-tpm', labels: { 'tpm.project': w.project, 'tpm.launch': 'launch-tpm', 'tpm.role': 'tpm' }, bindings: [{ type: 'claude.session', value: TPM_SID }], settings: { model: 'claude-opus-5-5', effort: 'medium' } });
+    expect(got().find(r => r.path.startsWith('/v1/links/'))?.body).toMatchObject({ type: 'launched', from: 'tpm.person:product-manager', to: `claude.session:${TPM_SID}` });
+
+    const se = seat(w, 't-x7k2', SID, { CMUX_WORKSPACE_ID: 'FF00-UUID' });
+    const cmux = { ...se, config: { ...se.config, transport: 'cmux' as const } };
+    w.answers.set('cmux --json identify', { status: 0, stdout: JSON.stringify({ caller: { workspace_ref: 'workspace:7' } }), stderr: '' });
+    const after = mark();
+    sessionStart(cmux, startInput('startup', SID));
+    const requests = writes(after());
+    expect(requests.map(r => [r.method, r.path.split('/').slice(0, 3).join('/'), r.status])).toEqual([
+      ['POST', '/v1/actors', 201],
+      ['PUT', '/v1/events', 201],
+      ['PUT', '/v1/links', 201],
+    ]);
+    expect(requests[0]?.body).toEqual({
+      issuer: castlistIssuer(w.tpm.state.dir),
+      kind: 'ai',
+      name_prefix: 't-x7k2-swe',
+      labels: { 'tpm.project': w.project, 'tpm.launch': record.launch, 'tpm.key': 't-x7k2', 'tpm.role': 'software-engineer' },
+      bindings: [{ type: 'claude.session', value: SID }, { type: 'cmux.workspace.ref', value: 'workspace:7' }, { type: 'cmux.workspace.uuid', value: 'FF00-UUID' }],
+      at: NOW,
+      settings: { model: record.model, effort: record.effort },
+    });
+    expect(requests[1]?.body).toMatchObject({ by: `claude.session:${SID}`, type: 'entered', detail: {} });
+    expect(requests[2]?.body).toMatchObject({ type: 'launched', from: `claude.session:${TPM_SID}`, to: `claude.session:${SID}` });
+    expect(w.tpm.state.read(`sessions/${SID}.jsonc`)).toMatchObject({ name: 't-x7k2-swe.1', launch: record.launch });
+  });
+
+  test('同じ hook が 2 度来ても、同じ id で送る（castlist は足さない）', () => {
+    const { w } = launched();
+    const se = seat(w, 't-x7k2', SID);
+    const first = mark();
+    sessionStart(se, startInput('startup', SID));
+    const a = writes(first());
+    const second = mark();
+    sessionStart(se, startInput('startup', SID));
+    const b = writes(second());
+    expect(b.map(r => r.path)).toEqual(a.map(r => r.path));
+    expect(b.map(r => r.status)).toEqual([200, 200, 200]);
+  });
+
+  test('起こされたばかりの resume は頼んだ物を送り、再登場。2 度目の resume は頼んだ物を送らない', () => {
+    const { w } = launched();
+    const se = seat(w, 't-x7k2', SID);
+    const first = mark();
+    sessionStart(se, startInput('resume', SID));
+    const a = writes(first());
+    expect(a[0]?.body).toHaveProperty('settings');
+    expect(a.find(r => r.path.startsWith('/v1/events/'))?.body).toMatchObject({ type: 'reentered' });
+    const second = mark();
+    sessionStart(se, startInput('resume', SID));
+    const b = writes(second());
+    expect(b[0]?.body).not.toHaveProperty('settings');
+    const ids = [...a, ...b].filter(r => r.body?.type === 'reentered').map(r => r.path);
+    expect(new Set(ids).size).toBe(2);
+  });
+
+  test('/clear: 前の session は交代、新しい session は頼んだ物なしで登録し、登場（source clear）と、同じ起こしの前の session からの継ぐ線', () => {
+    const { w } = launched();
+    const se = seat(w, 't-x7k2', SID);
+    sessionStart(se, startInput('startup', SID));
+    const got = mark();
+    sessionEnd(se, endInput('clear', SID));
+    const se2 = seat(w, 't-x7k2', SID2);
+    sessionStart(se2, startInput('clear', SID2));
+    const requests = writes(got());
+    expect(requests[0]?.body).toMatchObject({ by: `claude.session:${SID}`, type: 'cleared' });
+    const post = requests.find(r => r.path === '/v1/actors');
+    expect(post?.body).not.toHaveProperty('settings');
+    expect(post?.body?.bindings).toEqual([{ type: 'claude.session', value: SID2 }]);
+    expect(requests.find(r => r.path.startsWith('/v1/events/') && r.body?.by === `claude.session:${SID2}`)?.body).toMatchObject({ type: 'entered', detail: { source: 'clear' } });
+    expect(requests.find(r => r.path.startsWith('/v1/links/'))?.body).toMatchObject({ type: 'continued', from: `claude.session:${SID}`, to: `claude.session:${SID2}` });
+    expect(requests.every(r => r.status === 201)).toBe(true);
+    expect(w.tpm.state.read(`sessions/${SID2}.jsonc`)).toMatchObject({ name: 't-x7k2-swe.2' });
+  });
+
+  test('fork: 分身と、同じ起こしの前の session からの継ぐ線', () => {
+    const { w } = launched();
+    sessionStart(seat(w, 't-x7k2', SID), startInput('startup', SID));
+    const got = mark();
+    sessionStart(seat(w, 't-x7k2', SID3), startInput('fork', SID3));
+    const requests = writes(got());
+    expect(requests.find(r => r.path.startsWith('/v1/events/'))?.body).toMatchObject({ by: `claude.session:${SID3}`, type: 'forked' });
+    expect(requests.find(r => r.path.startsWith('/v1/links/'))?.body).toMatchObject({ type: 'continued', from: `claude.session:${SID}`, to: `claude.session:${SID3}` });
+  });
+
+  test('compact: 要約。2 度の compact は別の id', () => {
+    const { w } = launched();
+    const se = seat(w, 't-x7k2', SID);
+    sessionStart(se, startInput('startup', SID));
+    const got = mark();
+    sessionStart(se, startInput('compact', SID));
+    sessionStart(se, startInput('compact', SID));
+    const events = writes(got()).filter(r => r.path.startsWith('/v1/events/'));
+    expect(events.map(r => r.body?.type)).toEqual(['compacted', 'compacted']);
+    expect(new Set(events.map(r => r.path)).size).toBe(2);
+    expect(writes(got()).filter(r => r.path === '/v1/actors').every(r => !('settings' in (r.body ?? {})))).toBe(true);
+  });
+});
+
+describe('session-end', () => {
+  test.each([['clear', 'cleared', {}], ['logout', 'exited', { reason: 'logout' }], ['prompt_input_exit', 'exited', { reason: 'prompt_input_exit' }]])('%s → %s', (reason, type, detail) => {
+    const { w } = launched();
+    const se = seat(w, 't-x7k2', SID);
+    sessionStart(se, startInput('startup', SID));
+    const got = mark();
+    sessionEnd(se, endInput(reason, SID));
+    expect(writes(got()).map(r => r.body)).toEqual([expect.objectContaining({ by: `claude.session:${SID}`, type, detail: expect.objectContaining(detail) as unknown })]);
+  });
+});
+
+/** 写しの JSONL を書く（Claude Code の transcript に見立てる）。 */
+function transcript(lines: unknown[]): string {
+  const file = join(mkdtempSync(join(tmpdir(), 'tpm-transcript-')), 'session.jsonl');
+  writeFileSync(file, lines.map(l => `${JSON.stringify(l)}\n`).join(''));
+  return file;
+}
+const assistant = (model: string) => ({ type: 'assistant', message: { model, role: 'assistant', content: [{ type: 'text', text: 'x' }] } });
+const user = { type: 'user', message: { role: 'user', content: 'x' } };
+
+describe('guard と castlist', () => {
+  test('登録した session: effort と、写しの最後の model（<synthetic> は飛ばす）を見た物として送る。変わらなければ送らない', () => {
+    const { w } = launched();
+    const se = seat(w, 't-x7k2', SID);
+    sessionStart(se, startInput('startup', SID));
+    const path = transcript([user, assistant('claude-opus-5-5'), user, assistant('<synthetic>')]);
+    const got = mark();
+    expect(guard(se, bashInput(SID, { transcript_path: path, effort: { level: 'high' } }))).toEqual({ allow: true });
+    expect(guard(se, bashInput(SID, { transcript_path: path, effort: { level: 'high' } }))).toEqual({ allow: true });
+    let puts = writes(got());
+    expect(puts.map(r => [r.method, r.path.split('/').slice(0, 3).join('/')])).toEqual([['PUT', '/v1/settings']]);
+    expect(puts[0]?.body).toMatchObject({ by: `claude.session:${SID}`, model: 'claude-opus-5-5', effort: 'high', source: 'observed', at: NOW });
+    // effort を替えた
+    expect(guard(se, bashInput(SID, { transcript_path: path, effort: { level: 'low' } }))).toEqual({ allow: true });
+    // model を替えた
+    appendFileSync(path, `${JSON.stringify(assistant('claude-fable-5-2'))}\n${JSON.stringify(assistant('<synthetic>'))}\n`);
+    expect(guard(se, bashInput(SID, { transcript_path: path, effort: { level: 'low' } }))).toEqual({ allow: true });
+    puts = writes(got());
+    expect(puts.map(r => [r.body?.model, r.body?.effort])).toEqual([['claude-opus-5-5', 'high'], ['claude-opus-5-5', 'low'], ['claude-fable-5-2', 'low']]);
+    expect(new Set(puts.map(r => r.path)).size).toBe(3);
+  });
+
+  test('写しから model を読めなければ、session に 1 度だけ model 不明を送り、Bash は通す', () => {
+    const { w } = launched();
+    const se = seat(w, 't-x7k2', SID);
+    sessionStart(se, startInput('startup', SID));
+    const path = transcript([user, { type: 'assistant', message: { role: 'assistant', content: [] } }, { type: 'assistant', msg: { model: 'claude-opus-5-5' } }]);
+    const got = mark();
+    expect(guard(se, bashInput(SID, { transcript_path: path, effort: { level: 'high' } }))).toEqual({ allow: true });
+    expect(guard(se, bashInput(SID, { transcript_path: path, effort: { level: 'high' } }))).toEqual({ allow: true });
+    const events = writes(got()).filter(r => r.path.startsWith('/v1/events/'));
+    expect(events.map(r => r.body?.type)).toEqual(['model_unreadable']);
+  });
+
+  test('まだ登録していない session は、guard が登録してから通す', () => {
+    const { w } = launched();
+    const se = seat(w, 't-x7k2', SID);
+    const got = mark();
+    expect(guard(se, bashInput(SID))).toEqual({ allow: true });
+    expect(writes(got()).find(r => r.path === '/v1/actors')?.body?.bindings).toEqual([{ type: 'claude.session', value: SID }]);
+    expect(w.tpm.state.read(`sessions/${SID}.jsonc`)).toMatchObject({ name: 't-x7k2-swe.1' });
+  });
+
+  test('送る物がある時に castlist が止まっていれば、1 行を添えて止める', () => {
+    const { w } = launched();
+    const se = seat(w, 't-x7k2', SID);
+    sessionStart(se, startInput('startup', SID));
+    const path = transcript([user, assistant('claude-opus-5-5')]);
+    expect(guard(se, bashInput(SID, { transcript_path: path, effort: { level: 'high' } }))).toEqual({ allow: true });
+    w.castlist.push(dead);
+    const down = withEnv(se, { TPM_CASTLIST_URL: dead });
+    // 送る物が無ければ、castlist に聞かずに通す
+    expect(guard(down, bashInput(SID, { transcript_path: path, effort: { level: 'high' } }))).toEqual({ allow: true });
+    const verdict = guard(down, bashInput(SID, { transcript_path: path, effort: { level: 'max' } }));
+    expect(verdict.allow).toBe(false);
+    expect(verdict.allow ? '' : verdict.reason).toMatch(/^container start castlist$/m);
+  });
+});
+
+describe('hello と castlist', () => {
+  test('担当の hello: アクターの名の行を出し、名乗りを送る（登録が無ければ先に登録する）', () => {
+    const { w } = launched();
+    const se = seat(w, 't-x7k2', SID);
+    const got = mark();
+    const lines = hello(se);
+    expect(lines).toContain('アクター: t-x7k2-swe.1');
+    const requests = writes(got());
+    expect(requests[0]?.path).toBe('/v1/actors');
+    expect(requests.find(r => r.body?.type === 'reported_in')?.body).toMatchObject({ by: `claude.session:${SID}` });
+  });
+
+  test('TPM 担当の hello もアクターの名を出す', () => {
+    const { tpm } = launched();
+    expect(hello(tpm)).toContain('アクター: project-tpm.1');
+  });
+});
+
+describe('close と castlist', () => {
+  test('その起こしのアクターのうち、まだ居る物にだけ幕引きを送る', () => {
+    const { w, tpm } = launched();
+    const se = seat(w, 't-x7k2', SID);
+    sessionStart(se, startInput('startup', SID));
+    sessionEnd(se, endInput('clear', SID));
+    sessionStart(seat(w, 't-x7k2', SID2), startInput('clear', SID2));
+    const got = mark();
+    close(tpm, 't-x7k2');
+    expect(writes(got()).map(r => r.body)).toEqual([expect.objectContaining({ type: 'closed', by: `claude.session:${SID2}` })]);
+  });
+});
+
+describe('model の別名を断る', () => {
+  test('config.jsonc の担当の欄', () => {
+    const w = world({ 'software-engineer': { model: 'opus' } });
+    expect(() => assign(w.tpm, 't-x7k2', SE)).toThrow(/config\.jsonc.*software-engineer.*opus/);
+  });
+
+  test('--model の旗', () => {
+    const w = world();
+    expect(() => assign(w.tpm, 't-x7k2', { ...SE, model: 'sonnet' })).toThrow(/--model.*sonnet/);
+    expect(() => hello(w.tpm, { model: 'haiku' })).toThrow(/--model.*haiku/);
+  });
+
+  test('$TPM_MODEL', () => {
+    expect(() => resolveSettings('software-engineer', { env: { TPM_MODEL: 'opus[1m]' } })).toThrow(/\$TPM_MODEL.*opus\[1m\]/);
+    const w = world({}, { TPM_MODEL: 'opus' });
+    expect(() => startTpm(w.tpm)).toThrow(/\$TPM_MODEL/);
+  });
+
+  test('claude- で始まる id は通す', () => {
+    expect(resolveSettings('software-engineer', { flags: { model: 'claude-sonnet-5-5' }, env: {} }).model).toBe('claude-sonnet-5-5');
+  });
+});
+
+describe('hook の settings', () => {
+  const hooks = (role?: RoleName) => (JSON.parse(guardSettings('/r/cli/bin/tpm', role)) as { hooks: Record<string, { matcher?: string, hooks: { command: string }[] }[]> }).hooks;
+
+  test.each<[string, RoleName | undefined]>([['TPM 担当', undefined], ['担当', 'software-engineer'], ['Auditor', 'auditor']])('%s: session の始まりと終わりに tpm castlist を呼ぶ', (_label, role) => {
+    const h = hooks(role);
+    expect(h.SessionStart?.flatMap(g => g.hooks.map(x => x.command))).toContain('/r/cli/bin/tpm castlist session-start');
+    expect(h.SessionEnd?.flatMap(g => g.hooks.map(x => x.command))).toEqual(['/r/cli/bin/tpm castlist session-end']);
+    expect(h.PreToolUse?.[0]?.hooks.map(x => x.command)).toEqual(['/r/cli/bin/tpm guard']);
+  });
+
+  test('Auditor の席は、始まりに tpm audit fresh も呼ぶ', () => {
+    expect(hooks('auditor').SessionStart?.flatMap(g => g.hooks.map(x => x.command))).toEqual(['/r/cli/bin/tpm audit fresh', '/r/cli/bin/tpm castlist session-start']);
+  });
+});
+
+describe('tpm castlist の命令（hook が bin/tpm を動かす）', () => {
+  /** 試験を流す担当の居場所の TPM_* と cmux・Claude Code の変数を抜いた環境で、folder の中で tpm を動かす。 */
+  const run = (dir: string, args: string[], input: string) => {
+    const env: NodeJS.ProcessEnv = { PATH: process.env.PATH, HOME: process.env.HOME, XDG_STATE_HOME: join(dir, 'state') };
+    return spawnSync(join(import.meta.dirname, '..', 'bin', 'tpm'), args, { cwd: dir, env, input, encoding: 'utf8' });
+  };
+  const folder = (config: Record<string, unknown>): string => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-castlist-cli-')));
+    mkdirSync(join(dir, '.claude', 'roles'), { recursive: true });
+    writeFileSync(join(dir, '.claude', 'roles', 'config.jsonc'), JSON.stringify({ transport: 'file', ...config }));
+    return dir;
+  };
+
+  test.each([['設定が無い', false], ['castlist が止まっている', true]] as const)('%s時も、session-start と session-end は何も出さずに 0 で終わる', (_label, configured) => {
+    const dir = folder(configured ? { castlist: dead } : {});
+    for (const [command, input] of [['session-start', startInput('startup', SID)], ['session-end', endInput('other', SID)]] as const) {
+      const r = run(dir, ['castlist', command], input);
+      expect(r.status).toBe(0);
+      expect(r.stdout).toBe('');
+    }
+  });
+
+  test('読めない標準入力でも 0 で終わる', () => {
+    expect(run(folder({ castlist: dead }), ['castlist', 'session-start'], 'not json').status).toBe(0);
+  });
+});
+
+describe('担当を起こす環境変数', () => {
+  test('名簿に起こしの印があれば、起こしの id・起こした者・頼んだ model と effort・起こしたばかりの印を渡す', () => {
+    const { record } = launched();
+    const env = roleEnv(record, '/p', '/s', '/r', { PATH: '/usr/bin' });
+    expect(env).toMatchObject({
+      TPM_LAUNCH: record.launch,
+      TPM_LAUNCHED_BY: `claude.session:${TPM_SID}`,
+      TPM_LAUNCH_MODEL: record.model,
+      TPM_LAUNCH_EFFORT: record.effort,
+      TPM_LAUNCH_FRESH: '1',
+    });
+  });
+
+  test('印が無ければ、受け継いだ起こしの環境変数（TPM 担当の物）を渡さない', () => {
+    const w = world();
+    assign(w.tpm, 't-x7k2', SE);
+    const inherited = { PATH: '/usr/bin', TPM_LAUNCH: 'x', TPM_LAUNCHED_BY: 'tpm.person:product-manager', TPM_LAUNCH_MODEL: 'm', TPM_LAUNCH_EFFORT: 'e', TPM_LAUNCH_FRESH: '1' };
+    const env = roleEnv(requireRole(w.tpm, 't-x7k2'), '/p', '/s', '/r', inherited);
+    for (const name of ['TPM_LAUNCH', 'TPM_LAUNCHED_BY', 'TPM_LAUNCH_MODEL', 'TPM_LAUNCH_EFFORT', 'TPM_LAUNCH_FRESH']) expect(env).not.toHaveProperty(name);
+  });
+
+  test('tpm audit start の起こした者は Product Manager', () => {
+    const w = world({ castlist: fake.url });
+    startTpm(w.tpm);
+    auditStart(w.tpm, { wait: 0 });
+    expect(requireRole(w.tpm, 'audit')).toMatchObject({ launchedBy: 'tpm.person:product-manager' });
+  });
+});

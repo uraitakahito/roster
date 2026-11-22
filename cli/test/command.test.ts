@@ -1,9 +1,11 @@
 import { execFileSync } from 'node:child_process';
 import { describe, expect, test } from 'vitest';
 import { buildCommand } from '../src/command.ts';
+import { guardSettings } from '../src/guard.ts';
 import { shellQuote } from '../src/shell.ts';
 
-const head = (root: string): string => `PATH=${root.includes(' ') ? `'${root}/cli/bin'` : `${root}/cli/bin`}:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"${root.includes(' ') ? `'\\''${root}/cli/bin/tpm'\\''` : `${root}/cli/bin/tpm`} guard"}]}]}}'`;
+// settings の中身は guard.test.ts が見る。ここは 1 行の組み方（引用）を見る。
+const head = (root: string): string => `PATH=${root.includes(' ') ? `'${root}/cli/bin'` : `${root}/cli/bin`}:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings ${shellQuote(guardSettings(`${root}/cli/bin/tpm`))}`;
 
 describe('buildCommand', () => {
   test('追加の skill セットが無ければ /tpm', () => {

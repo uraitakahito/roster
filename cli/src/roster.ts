@@ -26,6 +26,10 @@ export interface RoleRecord extends RoleSettings {
   address?: string
   /** 担当が名乗った時刻。 */
   helloAt?: string
+  /** 起こしの id（castlist を設定した時だけ。仮）。 */
+  launch?: string
+  /** 起こした者（仮）。 */
+  launchedBy?: string
   /** 【dismiss】を送ったか。handover は担当の交代（課題は閉じない）。 */
   dismissed?: 'done' | 'handover'
 }
