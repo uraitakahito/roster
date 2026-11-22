@@ -71,8 +71,9 @@ Dependabot の PR の判定の道具は `cli/src/release-age.ts`（`node cli/src
 - 引用符の無い値に「`: `」を書くと YAML として読めない。全角の「：」にするか、言い換える。
 - 引数を取る skill（本文で `$ARGUMENTS` などを使う物。今は `/audit` と `/dependabot-triage`）は、`argument-hint` に打てる物を書く（例 `"[dry-run] [max=<n>]"`）。/ を打つと、命令の名の後ろに出る。`[` で始まる値は `"…"` で囲む（囲まないと YAML の配列か誤りになる）。引数を取らない skill には書かない。
 - `allowed-tools` は書かない。担当はどれも `bypassPermissions` で起きる（[設定](/configuration/)）ので、許可を渡す欄は効かない。bypass をやめても、skill の `allowed-tools` が効くのは skill を呼んだ turn の間だけで、【brief】や【answer】が届いた後の turn には効かない（Claude Code の skills の文書「Pre-approve tools for a skill」）。担当の許可を変えるなら、skill でなく担当を起こす旗（`--permission-mode` など。`cli/src/run-role.ts`）か settings の allow で渡す（2026-11-22 t-qnfh）。道具を絞る `disallowed-tools` は、この決まりの外。
+- `model`・`effort` は、`context: fork` の skill にだけ書く。fork でない skill では、この 2 つは skill を呼んだ turn の残りだけ効き、次の入力で session の model・effort に戻る（Claude Code の skills の文書の frontmatter の表）。担当の skill に書くと、最初の依頼書の作業だけが別の model で動き、【brief】や【answer】が届いた後は黙って戻る。状態の model の字も替わらない。担当の model・effort は、`.claude/roles/config.jsonc` の担当の欄か `tpm assign --model`・`--effort` で決める（[設定](/configuration/)）。fork の skill では、fork の中の subagent の model・effort になり、呼んだ担当の model は替わらない（2026-11-22 t-4zk5）。
 
-`pnpm run check` の `docs-site/scripts/check-skills.mjs` が、欄の名・`name` と folder の揃い・`when_to_use` と `disable-model-invocation` の組・字数・`argument-hint` と本文の引数の組・`allowed-tools` が無いことを見る。
+`pnpm run check` の `docs-site/scripts/check-skills.mjs` が、欄の名・`name` と folder の揃い・`when_to_use` と `disable-model-invocation` の組・字数・`argument-hint` と本文の引数の組・`allowed-tools` が無いこと・`model` と `effort` が fork の skill にだけあることを見る。
 
 ## この docs
 
