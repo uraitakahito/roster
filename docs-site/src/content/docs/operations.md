@@ -1,6 +1,6 @@
 ---
 title: 運用
-description: この repo を別の folder へ移す手順、Node の version の上げ方、ページの置き場（pagetray）の起こし方と保ち方、監査（Auditor の席）の運び
+description: この repo を別の folder へ移す手順、Node の version の上げ方、アクターの台帳（castlist）が止まった時、ページの置き場（pagetray）の起こし方と保ち方、監査（Auditor の席）の運び
 ---
 
 ## 移す手順
@@ -59,6 +59,15 @@ cd <TPM 担当を起こした folder>
 
 - 席は Product Manager が閉じる（cmux で居場所を閉じる）。TPM 担当は閉じられない。閉じても、監査のページ・台帳・監査線の記録（状態の folder の `audits.jsonl`）は残る。
 - 閉じた・消えた後は、上の `tpm audit start` で起こし直す。
+
+## アクターの台帳（castlist）
+
+担当と Product Manager のアクターを残す、この Mac だけのサーバー（別の repo の [castlist](https://uraitakahito.github.io/castlist/)。`tpm` が何を送るかは [担当のあいだの決まり](/protocol/#アクターの台帳castlist)、つなぐ設定は [設定](/configuration/#アクターの台帳castlist任意)）。**起こす・止める・data の volume を消すのは Product Manager だけ**で、命令は Product Manager が自分の terminal で直に打つ（手順は castlist の docs の「[動かす](https://uraitakahito.github.io/castlist/run.html)」）。
+
+- castlist を設定した project で castlist が止まっていると、`tpm start`・`tpm assign`・`tpm audit start`・`tpm hello` は起こさず・名乗らずに止まり、打つ 1 行を出す。container が在れば `container start castlist`、無ければ `container run -d --name castlist -p 127.0.0.1:<port>:8080 -v castlist-data:/data -m 200M -c 1 ghcr.io/uraitakahito/castlist:<版>`（`<port>` は設定の URL の port、`<版>` は `cli/src/castlist.ts` の `CASTLIST_VERSION`）。初めて起こす時は、先に castlist の docs の「初めて起こす」（image の digest を見る・volume を作る）をする。
+- 担当の居場所では、guard が Bash を止め、担当が TPM 担当に 1 行を渡す。TPM 担当は `tpm wait pm "castlist を起こす" --hand` で Product Manager に頼む。
+- Mac を起こし直すと止まったままになる。`container system start` の後に `container start castlist` を打つ。
+- 止めている間の session の始まりと終わりは、castlist に残らない（hook は送らずに終わる）。起きた後の初めの Bash で、guard が登録する。
 
 ## ページの置き場（pagetray）
 
