@@ -14,7 +14,7 @@ import { resolveSettings } from '../settings.ts';
 import { allRoles, assertKey, LOCAL_KEY, readRole, removeRole, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
 import { readSkillSets, skillSetDir, TpmError } from '../skill-sets.ts';
 import { route } from '../tracker/routed.ts';
-import { findHook } from './banner.ts';
+import { findHook, staleHook } from './banner.ts';
 import { copyIssue, issueTracker } from './issue.ts';
 import { assertRead, assertSettled, brief } from './messages.ts';
 import { pageFolder } from './page.ts';
@@ -90,12 +90,14 @@ export function recordingTo(ctx: Context, issue: string): string {
   return sourceLabel(to.source) === OWN_LABEL ? to.tool : `${to.tool}（${sourceLabel(to.source)} の設定）`;
 }
 
-/** cmux の連携で、cmux.json に Mac のバナーの hook が無ければ 1 行出す（TPM 担当が Product Manager に伝える）。 */
+/** cmux の連携で、cmux.json に Mac のバナーの hook が無い・命令が古ければ 1 行出す（TPM 担当が Product Manager に伝える）。 */
 export function bannerHint(ctx: Context, cmuxFile?: string): string[] {
   if (ctx.config.transport !== 'cmux') return [];
   try {
-    if (findHook(cmuxFile) !== undefined) return [];
-    return ['Mac のバナー: cmux.json に tpm の hook がありません。tpm banner setup の字を足すと、Product Manager に要るバナーだけになる（Product Manager に伝える）'];
+    const hook = findHook(cmuxFile);
+    if (hook === undefined) return ['Mac のバナー: cmux.json に tpm の hook がありません。tpm banner setup の字を足すと、Product Manager に要るバナーだけになる（Product Manager に伝える）'];
+    const stale = staleHook(hook.command, ctx.root, ctx.env);
+    return stale === undefined ? [] : [`Mac のバナー: cmux.json の hook の命令が${stale}。tpm banner setup の字に替える（Product Manager に伝える）`];
   }
   catch (e) {
     return [`Mac のバナー: cmux.json を読めません（${(e as Error).message}）`];

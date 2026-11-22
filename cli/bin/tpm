@@ -10,4 +10,17 @@ if [ ! -d "$cli/node_modules" ]; then
   echo "tpm: $cli/node_modules がありません。先に pnpm --dir $cli install --frozen-lockfile を打ってください" >&2
   exit 1
 fi
+# cmux の通知の hook のように、PATH が macOS の既定（/usr/bin:/bin:/usr/sbin:/sbin）だけで呼ばれた時のため、
+# node（nodenv の shim）と cmux（app の中）を自分で見つける。だから hook の命令に Node や cmux の path を書かなくてよい。
+# PATH に node・cmux があれば（shell から打った時）何も足さない。
+if ! command -v node >/dev/null 2>&1; then
+  shims="${NODENV_ROOT:-${HOME:-}/.nodenv}/shims"
+  if [ ! -x "$shims/node" ]; then
+    echo "tpm: node が見つかりません（PATH と $shims/node を探した）" >&2
+    exit 127
+  fi
+  PATH="$shims:$PATH"
+fi
+command -v cmux >/dev/null 2>&1 || PATH="$PATH:/Applications/cmux.app/Contents/Resources/bin"
+export PATH
 exec node "$cli/src/cli.ts" "$@"

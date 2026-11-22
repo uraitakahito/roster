@@ -1,11 +1,11 @@
 // Mac のバナー（tpm banner …）: 決め方・設定・cmux の通知の hook・setup と check。
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { decide, DEFAULT_BANNER, toBannerConfig } from '../src/banner.ts';
-import { bannerCheck, bannerHook, bannerLog, bannerSetup, currentPaths, hookCommand, hookEntry } from '../src/commands/banner.ts';
+import { bannerCheck, bannerHook, bannerLog, bannerSetup, hookCommand, hookEntry } from '../src/commands/banner.ts';
 import { wait, waitFile } from '../src/commands/messages.ts';
 import { hello } from '../src/commands/role-side.ts';
 import { assign, bannerHint } from '../src/commands/tpm-side.ts';
@@ -191,38 +191,120 @@ describe('wait の記録', () => {
 });
 
 describe('setup と check', () => {
-  test('hook の命令は、今の Node の folder を PATH の頭に置き、path を引用する', () => {
-    expect(hookCommand('/my repo', { node: '/n/bin', cmux: '/c d/bin' })).toBe('PATH=/n/bin:\'/c d/bin\':/usr/bin:/bin \'/my repo/cli/bin/tpm\' banner hook');
-    expect(hookEntry('/r', { node: '/n/bin', cmux: '/n/bin' })).toEqual({ id: 'tpm-banner', command: 'PATH=/n/bin:/usr/bin:/bin /r/cli/bin/tpm banner hook', timeoutSeconds: 5 });
-    const env = { PATH: process.env.PATH };
-    expect(bannerSetup(root, env).join('\n')).toContain(JSON.stringify(hookEntry(root, currentPaths(env))));
+  const home = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-banner-home-')));
+  /** 古い形（Node と cmux の folder を PATH に書いた形）の命令。 */
+  const OLD = 'PATH=/Users/me/.nodenv/versions/26.13.0/bin:/Applications/cmux.app/Contents/Resources/bin:/usr/bin:/bin /Users/me/roster/cli/bin/tpm banner hook';
+
+  test('hook の命令は Node と cmux の path を書かず、home の下なら "$HOME/…" で入口を呼ぶ', () => {
+    expect(hookCommand(join(home, 'projects', 'roster'), { HOME: home })).toBe('"$HOME/projects/roster/cli/bin/tpm" banner hook');
+    expect(hookEntry(join(home, 'r'), { HOME: home })).toEqual({ id: 'tpm-banner', command: '"$HOME/r/cli/bin/tpm" banner hook', timeoutSeconds: 5 });
+    expect(bannerSetup(root, { HOME: home }).join('\n')).toContain(JSON.stringify(hookEntry(root, { HOME: home })));
+    expect(bannerSetup(root, { HOME: home }).join('\n')).not.toMatch(/Node を上げたら/);
   });
 
-  test('cmux は PATH で最初に見つかる folder、無ければ cmux の app の中', () => {
-    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-banner-path-')));
-    writeFileSync(join(dir, 'cmux'), '');
-    expect(currentPaths({ PATH: `/nowhere:${dir}` }).cmux).toBe(dir);
-    expect(currentPaths({ PATH: '/nowhere' }).cmux).toBe('/Applications/cmux.app/Contents/Resources/bin');
-    expect(currentPaths({}).node).toBe(dirname(process.execPath));
+  test('二重引用符の中で意味を持つ字の path と home の外は、一重引用符の絶対 path にする', () => {
+    expect(hookCommand(join(home, 'my repo'), { HOME: home })).toBe(`'${home}/my repo/cli/bin/tpm' banner hook`);
+    expect(hookCommand(join(home, 'a$b'), { HOME: home })).toBe(`'${home}/a$b/cli/bin/tpm' banner hook`);
+    expect(hookCommand('/opt/roster', { HOME: home })).toBe('/opt/roster/cli/bin/tpm banner hook');
+    expect(hookCommand('/opt/roster', {})).toBe('/opt/roster/cli/bin/tpm banner hook');
   });
 
-  test('check は cmux.json の hook が無い・止めてある・命令が古い・合っている、を見分ける', () => {
+  test('~/.local/bin/tpm がこの repo の入口を指していれば、それを呼ぶ。別の repo を指していれば使わない', () => {
+    const h = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-banner-link-')));
+    mkdirSync(join(h, '.local', 'bin'), { recursive: true });
+    symlinkSync(join(root, 'cli', 'bin', 'tpm'), join(h, '.local', 'bin', 'tpm'));
+    expect(hookCommand(root, { HOME: h })).toBe('"$HOME/.local/bin/tpm" banner hook');
+    expect(hookCommand('/opt/other', { HOME: h })).toBe('/opt/other/cli/bin/tpm banner hook');
+  });
+
+  test('check は cmux.json の hook が無い・止めてある・古い形・合っている、を見分ける', () => {
     const dir = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-banner-cmux-')));
-    const env = { XDG_CONFIG_HOME: dir, PATH: process.env.PATH };
+    const env = { XDG_CONFIG_HOME: dir, HOME: home };
     const file = join(dir, 'cmux.json');
-    const paths = currentPaths(env);
     const put = (hooks: unknown[]): void => writeFileSync(file, `{\n  // コメント\n  "notifications": { "hooks": ${JSON.stringify(hooks)} },\n}`);
     expect(bannerCheck(root, env, file)).toMatchObject({ ok: false, lines: expect.arrayContaining([expect.stringMatching(/hook がありません/)]) as unknown });
-    put([{ ...hookEntry(root, paths), enabled: false }]);
+    put([{ ...hookEntry(root, env), enabled: false }]);
     expect(bannerCheck(root, env, file).lines.at(-1)).toMatch(/enabled: false/);
-    put([hookEntry(root, { ...paths, node: '/old/node/bin' })]);
+    put([{ id: 'tpm-banner', command: OLD }]);
     expect(bannerCheck(root, env, file)).toMatchObject({ ok: false });
-    put([{ id: 'other', command: 'true' }, hookEntry(root, paths)]);
+    expect(bannerCheck(root, env, file).lines.at(-1)).toMatch(/古い形/);
+    put([{ id: 'other', command: 'true' }, hookEntry(root, env)]);
     const ok = bannerCheck(root, env, file);
     expect(ok.ok).toBe(true);
     expect(ok.lines).toContain('  tpm: turn=pm-wait idle=hide ask=show');
     expect(ok.lines).toContain('  *: turn=hide idle=hide ask=show');
     expect(ok.lines).toContain('  バナーを消す時に一緒に消す物: sound');
+  });
+});
+
+describe('入口（bin/tpm）を cmux の app と同じ既定の PATH で起こす', () => {
+  // cmux の app が hook に渡す PATH。TPM_* と cmux の変数は渡さない（本物の project と cmux に触らない）。
+  const APP_PATH = '/usr/bin:/bin:/usr/sbin:/sbin';
+  /** 一時の home と、nodenv の root（shims/node を置ける）を作る。 */
+  const sandbox = (shim?: string): { home: string, nodenv: string } => {
+    const home = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-entry-')));
+    const nodenv = join(home, 'nodenv');
+    mkdirSync(join(nodenv, 'shims'), { recursive: true });
+    if (shim !== undefined) {
+      writeFileSync(join(nodenv, 'shims', 'node'), `#!/bin/sh\n${shim}\n`);
+      chmodSync(join(nodenv, 'shims', 'node'), 0o755);
+    }
+    return { home, nodenv };
+  };
+  const NODE = `exec '${process.execPath}' "$@"`;
+  /** cmux に聞かずに {} を返す通知（知らない category）。 */
+  const UNKNOWN = JSON.stringify({ notification: { workspaceId: 'X' }, agent: { category: 'custom' } });
+  const run = (env: NodeJS.ProcessEnv, input = UNKNOWN) =>
+    spawnSync(join(cli, 'bin', 'tpm'), ['banner', 'hook'], { input, encoding: 'utf8', cwd: '/', env });
+
+  test('PATH に node が無ければ nodenv の shim で動く', () => {
+    const { home, nodenv } = sandbox(NODE);
+    const r = run({ PATH: APP_PATH, HOME: home, NODENV_ROOT: nodenv, XDG_STATE_HOME: home, XDG_CONFIG_HOME: home });
+    expect(r.stderr).toBe('');
+    expect(r.status).toBe(0);
+    expect(r.stdout).toBe('{}\n');
+  });
+
+  test('NODENV_ROOT が無ければ ~/.nodenv の shim を探す', () => {
+    const { home } = sandbox();
+    mkdirSync(join(home, '.nodenv', 'shims'), { recursive: true });
+    writeFileSync(join(home, '.nodenv', 'shims', 'node'), `#!/bin/sh\n${NODE}\n`);
+    chmodSync(join(home, '.nodenv', 'shims', 'node'), 0o755);
+    const r = run({ PATH: APP_PATH, HOME: home, XDG_STATE_HOME: home, XDG_CONFIG_HOME: home });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toBe('{}\n');
+  });
+
+  test('node がどこにも無ければ、探した所を出して 127 で終わる', () => {
+    const { home, nodenv } = sandbox();
+    const r = run({ PATH: APP_PATH, HOME: home, NODENV_ROOT: nodenv });
+    expect(r.status).toBe(127);
+    expect(r.stderr).toContain(`tpm: node が見つかりません（PATH と ${nodenv}/shims/node を探した）`);
+  });
+
+  test('PATH に cmux が無ければ cmux の app の bin を後ろに足し、node があれば shim を足さない', () => {
+    const { home, nodenv } = sandbox('printf %s "$PATH"');
+    const r = run({ PATH: APP_PATH, HOME: home, NODENV_ROOT: nodenv });
+    expect(r.stdout).toBe(`${nodenv}/shims:${APP_PATH}:/Applications/cmux.app/Contents/Resources/bin`);
+    const bin = join(home, 'bin');
+    mkdirSync(bin);
+    for (const name of ['node', 'cmux']) {
+      writeFileSync(join(bin, name), '#!/bin/sh\nprintf %s "$PATH"\n');
+      chmodSync(join(bin, name), 0o755);
+    }
+    expect(run({ PATH: `${bin}:${APP_PATH}`, HOME: home, NODENV_ROOT: nodenv }).stdout).toBe(`${bin}:${APP_PATH}`);
+  });
+
+  test('cmux.json に書く命令の字を、HOME だけを持つ環境の /bin/sh -c で動かせる', () => {
+    const { home, nodenv } = sandbox(NODE);
+    const link = join(home, 'roster');
+    symlinkSync(root, link);
+    const command = hookCommand(link, { HOME: home });
+    expect(command).toBe('"$HOME/roster/cli/bin/tpm" banner hook');
+    const r = spawnSync('/bin/sh', ['-c', command], { input: '{}', encoding: 'utf8', cwd: '/', env: { PATH: APP_PATH, HOME: home, NODENV_ROOT: nodenv, XDG_STATE_HOME: home, XDG_CONFIG_HOME: home } });
+    expect(r.stderr).toBe('');
+    expect(r.status).toBe(0);
+    expect(r.stdout).toBe('{}\n');
   });
 });
 
@@ -265,8 +347,10 @@ describe('TPM 担当の tpm hello の一言', () => {
     const file = join(dir, 'cmux.json');
     expect(bannerHint(w.tpm, file)).toEqual([]);
     expect(bannerHint(cmux, file)).toEqual([expect.stringMatching(/hook がありません。tpm banner setup/)]);
-    writeFileSync(file, '{ "notifications": { "hooks": [{ "id": "tpm-banner", "command": "x/tpm banner hook" }] } }');
+    writeFileSync(file, `{ "notifications": { "hooks": [${JSON.stringify(hookEntry(cmux.root, cmux.env))}] } }`);
     expect(bannerHint(cmux, file)).toEqual([]);
+    writeFileSync(file, '{ "notifications": { "hooks": [{ "id": "tpm-banner", "command": "PATH=/n/bin:/usr/bin:/bin /r/cli/bin/tpm banner hook" }] } }');
+    expect(bannerHint(cmux, file)).toEqual([expect.stringMatching(/hook の命令が古い形です.*tpm banner setup/)]);
     writeFileSync(file, '{ broken');
     expect(bannerHint(cmux, file)).toEqual([expect.stringMatching(/cmux.json を読めません/)]);
   });

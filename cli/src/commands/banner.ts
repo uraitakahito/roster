@@ -1,9 +1,9 @@
 // tpm banner …: Mac のバナー（cmux の通知の desktop）を、居場所の役割 × きっかけで出すか消すか。
 // hook は cmux の通知の hook（~/.config/cmux/cmux.json の notifications.hooks）から通知ごとに呼ばれる。
 // cmux は hook が失敗・時間切れ・JSON の誤りになると、いつものバナーに加えて「Notification Hook Failed」を出すので、hook はどんな時も正しい JSON を返して 0 で終わる。
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { isAbsolute, join, relative } from 'node:path';
 import { BANNER_ROLES, bannerConfigFile, CATEGORY_TRIGGER, choiceOf, decide, toBannerConfig, TRIGGERS, type BannerConfig } from '../banner.ts';
 import type { Context } from '../context.ts';
 import type { Exec } from '../exec.ts';
@@ -111,33 +111,43 @@ export function bannerHook(input: string, deps: { env: NodeJS.ProcessEnv, exec: 
   return JSON.stringify({ effects });
 }
 
-/** cmux の app に入っている cmux の CLI の folder（PATH に cmux が無い時に使う）。 */
-const CMUX_APP_BIN = '/Applications/cmux.app/Contents/Resources/bin';
-
-/** hook の命令の PATH に書く物: 今の Node の folder と、cmux の CLI の folder。 */
-export interface HookPaths {
-  node: string
-  cmux: string
-}
-
-/** 今の Node と、PATH で最初に見つかる cmux の folder（無ければ cmux の app の中）。 */
-export function currentPaths(env: NodeJS.ProcessEnv = process.env): HookPaths {
-  const cmux = (env.PATH ?? '').split(':').find(d => d !== '' && existsSync(join(d, 'cmux'))) ?? CMUX_APP_BIN;
-  return { node: dirname(process.execPath), cmux };
+/** 本当の在り処。無ければ undefined。 */
+function realpathOrUndefined(path: string): string | undefined {
+  try {
+    return realpathSync(path);
+  }
+  catch {
+    return undefined;
+  }
 }
 
 /**
- * cmux.json に足す hook の命令。cmux の app から動くので shell の PATH を受け継がない（node も cmux も見つからない）。
- * そのため、今の Node と cmux の folder を PATH の頭に書く。
+ * cmux.json に足す hook の命令。hook は cmux の app から PATH が既定だけで動くが、node と cmux は入口（cli/bin/tpm）が自分で見つけるので、
+ * 命令は入口を呼ぶだけにして Node・cmux の path を書かない（Node を上げても替えなくてよい）。
+ * 入口は、~/.local/bin/tpm がこの repo を指していればそれ、home の下なら "$HOME/…"、ほかは絶対 path で書く。
+ * "$HOME/…" は二重引用符の中で $HOME だけを展開させるので、残りの path が二重引用符の中で意味を持つ字を含む時は絶対 path にする。
  */
-export function hookCommand(root: string, paths: HookPaths): string {
-  const path = [...new Set([paths.node, paths.cmux])].map(shellQuote).join(':');
-  return `PATH=${path}:/usr/bin:/bin ${shellQuote(join(root, 'cli', 'bin', 'tpm'))} banner hook`;
+export function hookCommand(root: string, env: NodeJS.ProcessEnv): string {
+  const entry = join(root, 'cli', 'bin', 'tpm');
+  const home = env.HOME === undefined || env.HOME === '' ? undefined : realpathOrUndefined(env.HOME);
+  if (home !== undefined) {
+    const real = realpathOrUndefined(entry) ?? entry;
+    if (realpathOrUndefined(join(home, '.local', 'bin', 'tpm')) === real) return '"$HOME/.local/bin/tpm" banner hook';
+    const rest = relative(home, entry);
+    if (rest !== '' && !rest.startsWith('..') && !isAbsolute(rest) && /^[A-Za-z0-9._/-]+$/.test(rest)) return `"$HOME/${rest}" banner hook`;
+  }
+  return `${shellQuote(entry)} banner hook`;
 }
 
 /** cmux.json の hook の欄 1 つ。 */
-export function hookEntry(root: string, paths: HookPaths): { id: string, command: string, timeoutSeconds: number } {
-  return { id: HOOK_ID, command: hookCommand(root, paths), timeoutSeconds: HOOK_TIMEOUT_SECONDS };
+export function hookEntry(root: string, env: NodeJS.ProcessEnv): { id: string, command: string, timeoutSeconds: number } {
+  return { id: HOOK_ID, command: hookCommand(root, env), timeoutSeconds: HOOK_TIMEOUT_SECONDS };
+}
+
+/** cmux.json の hook の命令が、今 tpm banner setup が出す字と違う訳。同じなら undefined。 */
+export function staleHook(command: string, root: string, env: NodeJS.ProcessEnv): string | undefined {
+  if (command === hookCommand(root, env)) return undefined;
+  return command.startsWith('PATH=') ? '古い形です（Node と cmux の path を書いた形）' : '今の tpm の在り処と違います（repo を移した）';
 }
 
 /** cmux の設定の file。 */
@@ -153,7 +163,7 @@ export function findHook(file: string = cmuxConfigFile()): { command: string, en
 
 /** `tpm banner setup`: cmux.json に足す字と手順を出す（cmux.json は利用者の設定なので、tpm は書き替えない）。 */
 export function bannerSetup(root: string, env: NodeJS.ProcessEnv): string[] {
-  const entry = JSON.stringify(hookEntry(root, currentPaths(env)));
+  const entry = JSON.stringify(hookEntry(root, env));
   return [
     `${cmuxConfigFile()} の "notifications" の "hooks" に、次の 1 行を足してください（"notifications" が無ければ、下の形で足す）。`,
     '',
@@ -164,7 +174,7 @@ export function bannerSetup(root: string, env: NodeJS.ProcessEnv): string[] {
     '  }',
     '',
     `何を出すかは ${bannerConfigFile(env)} で選ぶ（無ければ既定: TPM 担当と Auditor が Product Manager を待つ回と、どこでも許可/質問だけ出す。消す時は音も消す）。`,
-    '足した後に tpm banner check で確かめる。Node を上げたら、これを打ち直して命令を替える（PATH に今の Node と cmux の folder を書いているため）。',
+    '足した後に cmux の設定を読み直し（Cmd+Shift+, か cmux reload-config）、tpm banner check で確かめる。node と cmux は入口（cli/bin/tpm）が自分で見つけるので、Node を上げても命令は替えなくてよい。repo を移したら、これを打ち直して命令を替える。',
   ];
 }
 
@@ -194,7 +204,7 @@ export function bannerCheck(root: string, env: NodeJS.ProcessEnv, cmuxFile: stri
     lines.push(`cmux.json を読めません: ${cmuxFile}: ${(e as Error).message}`);
     return { ok, lines };
   }
-  const want = hookCommand(root, currentPaths(env));
+  const stale = hook === undefined ? undefined : staleHook(hook.command, root, env);
   if (hook === undefined) {
     ok = false;
     lines.push(`cmux.json に hook がありません（tpm banner setup の字を ${cmuxFile} に足す）`);
@@ -203,9 +213,9 @@ export function bannerCheck(root: string, env: NodeJS.ProcessEnv, cmuxFile: stri
     ok = false;
     lines.push('cmux.json の hook が enabled: false です');
   }
-  else if (hook.command !== want) {
+  else if (stale !== undefined) {
     ok = false;
-    lines.push(`cmux.json の hook の命令が今の tpm・Node・cmux と違います（Node を上げた・repo を移した）。tpm banner setup の字に替える: ${hook.command}`);
+    lines.push(`cmux.json の hook の命令が${stale}。tpm banner setup の字に替える: ${hook.command}`);
   }
   else {
     lines.push(`cmux.json の hook: あり（${cmuxFile}）`);
