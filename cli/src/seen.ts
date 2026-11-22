@@ -20,7 +20,7 @@ export function readShown(ctx: Context, address: string): Shown[] {
 /**
  * 見た時刻と、その出どころ。
  * - delivered: 連携の道具（cmux）が画面に配った時刻
- * - shown: tpm が受け手に本文を見せた時刻（送る前の検査・tpm inbox・tpm hello。時刻の無い前の版の項目は送った時刻）
+ * - shown: tpm が受け手に本文を見せた時刻（送る前の検査・tpm inbox・tpm hello。時刻の無い前の版の項目は、検査用では送った時刻、記録用では使わない）
  * - legacy: 前の版が送った時に「届いた」と書いた行（送った時刻）
  * - assumed: 時刻がどこにも無く、受け手の「まだ配っていない」にも無いので、送った時刻に倒した物（道具が時刻を返さない時。止めすぎない側）
  */
@@ -89,7 +89,9 @@ export function seenTimes(ctx: Context, options: { live: boolean }): SeenAt {
     const s = shownTo(sent.to);
     // 前の版の delivered:true は、道具の配った時刻が無い時だけ使う（同じ配りの写しで、道具の時刻の方が確か）。
     const arrived: Seen | undefined = at !== undefined ? { at, by: 'delivered' } : sent.delivered === true ? { at: sent.at, by: 'legacy' } : undefined;
-    const seen = earliest([arrived, s.has(sent.id) ? { at: s.get(sent.id) ?? sent.at, by: 'shown' } : undefined]);
+    // 時刻の無い前の版の shown/ の項目は、検査用では送った時刻に見せた物とする（見せたのは確か）。記録用（時系列）では作った時刻を持ち込まないので使わない。
+    const shownAt = s.has(sent.id) ? s.get(sent.id) ?? (options.live ? sent.at : undefined) : undefined;
+    const seen = earliest([arrived, shownAt === undefined ? undefined : { at: shownAt, by: 'shown' }]);
     if (seen !== undefined || !options.live) return seen;
     return queuedTo(sent.to).has(sent.id) ? undefined : { at: sent.at, by: 'assumed' };
   };

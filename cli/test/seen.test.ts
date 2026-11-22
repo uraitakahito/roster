@@ -19,6 +19,8 @@ describe('見た時刻の口', () => {
     expect(seen(sent('b', '12:00:00'))).toEqual({ at: T('12:01:00'), by: 'delivered' });
     // c: 前の版が時刻を書かずに覚えた見せた物は、送った時刻に見せた物とする
     expect(seen(sent('c', '12:00:30'))).toEqual({ at: T('12:00:30'), by: 'shown' });
+    // 記録用（時系列）では、時刻の無い項目は作った時刻になるので使わない
+    expect(seenTimes(w.tpm, { live: false })(sent('c', '12:00:30'))).toBeUndefined();
     // d: 前の版が送った時に「届いた」と書いた行
     expect(seen(sent('d', '12:00:40', { delivered: true }))).toEqual({ at: T('12:00:40'), by: 'legacy' });
   });
