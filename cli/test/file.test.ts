@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, truncateSy
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
+import { castlistIssuer } from '../src/castlist.ts';
 import { fileDelete, fileList, filePath, filePut, uploadName } from '../src/commands/file.ts';
 import { pagePath, pagePut } from '../src/commands/page.ts';
 import type { Context } from '../src/context.ts';
@@ -145,6 +146,36 @@ describe('tpm file put', () => {
     s.store.refuse = undefined;
     s.store.down = true;
     expect(() => s.put(s.role, 'a.png')).toThrow(/応えません。file は上げていません.*tpm ask devops/);
+    expect(existsSync(join(s.dir, s.project))).toBe(false);
+  });
+});
+
+describe('tpm file put の送り手（pagetray 0.6.0 の actor_issuer・actor_ref）', () => {
+  const SID = '5f0c2a8e-0000-4000-8000-000000000002';
+  const seated = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({ ...ctx, env: { ...ctx.env, TPM_CASTLIST_URL: 'http://127.0.0.1:8802', CLAUDE_CODE_SESSION_ID: SID, ...env } });
+
+  test('castlist の設定と session の id があれば、ページと同じ issuer と claude.session:<id> を付ける', () => {
+    const s = setup();
+    s.put(seated(s.role), 'screen.png');
+    expect(s.store.posts.map(q => [q.get('actor_issuer'), q.get('actor_ref')])).toEqual([[castlistIssuer(s.w.tpm.state.dir), `claude.session:${SID}`]]);
+    expect(s.curls()[0]?.at(-1)).toContain(`&actor_ref=claude.session%3A${SID}`);
+    expect(s.store.files.get(`/${s.project}/t-x7k2/files/screen-1.png`)?.record).toMatchObject({ role: 'software-engineer' });
+  });
+
+  test('castlist の設定が無い・session の id が無い時は付けない', () => {
+    const s = setup();
+    s.put({ ...s.role, env: { ...s.role.env, CLAUDE_CODE_SESSION_ID: SID } }, 'a.png');
+    s.put(seated(s.role, { CLAUDE_CODE_SESSION_ID: undefined }), 'b.png');
+    expect(s.store.posts.map(q => q.has('actor_issuer') || q.has('actor_ref'))).toEqual([false, false]);
+  });
+
+  test('503 は castlist に聞けない、422 は登録が無い。どちらも file を上げずに 1 行で止まり、控えも書かない', () => {
+    const s = setup();
+    s.store.sender = 'unreachable';
+    expect(() => s.put(seated(s.role), 'a.png')).toThrow(/^置き場（http:\/\/127\.0\.0\.1:8801）が castlist に送り手を聞けませんでした（503）。file は上げていません。.*castlist が起きてから.*打ち直して.*tpm report incident[^\n]*$/);
+    s.store.sender = 'unregistered';
+    expect(() => s.put(seated(s.role), 'a.png')).toThrow(new RegExp(`^この session（claude\\.session:${SID}）は castlist に登録が無いと、置き場が答えました（422）。file は上げていません。.*guard.*Bash.*打ち直して.*tpm report incident[^\\n]*$`));
+    expect(s.store.files.size).toBe(0);
     expect(existsSync(join(s.dir, s.project))).toBe(false);
   });
 });

@@ -96,11 +96,14 @@ tpm infra run pagetray -- container run -d --name pagetray \
   -p 127.0.0.1:8800:8080 \
   -v pagetray-data:/data \
   -m 200M -c 1 \
+  -e PAGETRAY_CASTLIST_URL=http://castlist.box:8080 \
   ghcr.io/uraitakahito/pagetray:<版>
 ```
 
 - `<版>` は `.pagetray-version` の `@` の前（`v0.2.0` など）。pull した image の digest が `@` の後ろと同じかを見る（見方は pagetray の docs の「[起こす](https://uraitakahito.github.io/pagetray/run.html#起こす)」）。
 - `-p` には必ず `127.0.0.1:` を書く。`-p 8801:8080` と書くと LAN に開く。
+- `PAGETRAY_CASTLIST_URL`（pagetray 0.6.0 から）は、置き場が送り手を castlist（[アクターの台帳](#アクターの台帳castlist)）に聞く先。`tpm page put`・`tpm file put` は、castlist の設定がある project では送り手（session の付随する id）を付けて置き、置き場が受けたその時に castlist に聞いて記録に残す（[担当のあいだの決まり](/protocol/#ページの置き場)）。container の中の `127.0.0.1` は container 自身なので、castlist の container `castlist.box` に名でつなぐ（Apple Container の DNS が domain `box` の名を答える）。一覧の UI の送り手の link の頭 `PAGETRAY_CASTLIST_LINK_URL` は、既定の `http://127.0.0.1:8802`（host の browser で開く castlist）のままにする。
+- `PAGETRAY_CASTLIST_URL` を書いた置き場は、castlist が止まっている・名で届かない間、送り手を付けた置く要求を `503` で断る（何も置かない。`tpm page put` は「castlist に送り手を聞けませんでした」と出す）。castlist を起こすのは Product Manager（[アクターの台帳](#アクターの台帳castlist)）。castlist が起きているのに続く時は、置き場から `castlist.box` に届いていない（同じ network に居ない・名が違う）。
 - 8801 が使われていたら別の port にし、担当が使う URL を環境変数 `TPM_PAGES_URL`（[設定](/configuration/)）で合わせる。
 - 起こしたら、pagetray の docs の「[確かめる](https://uraitakahito.github.io/pagetray/run.html#確かめる)」をする。試しのページを置いたら、TPM 担当が `tpm page delete <URL> --yes` で消す（[担当のあいだの決まり](/protocol/#ページの置き場)）。
 - 「確かめる」の 6（一覧の UI を、読むだけの試験で見る。pagetray 0.3.2 から）は、DevOps Engineer 担当が自分で流す。pagetray の checkout のある folder で打ち、Node と pnpm が要る。試験は本物の browser（tpm を動かす機械の Chrome）で一覧の UI を開くが、置き場には何も書かない。出力を結果のページに載せる。browser で一覧を見ることを、Product Manager に頼まない。試験が落ちたら、落ちた所を【ask-tpm】で知らせる。
@@ -134,6 +137,7 @@ pagetray の新しい版が出て、この repo の `.pagetray-version` が上�
 3. pagetray の docs の「[版を上げる](https://uraitakahito.github.io/pagetray/run.html#版を上げる)」のとおりに、DB の写しを取り、container を作り直して、確かめる（volume はそのまま付く）。「確かめる」は、6 の読むだけの試験まで流す。
 4. `tpm page` が「API の版が違う」と言って止まる時は、置き場の版とこの repo の版（`.pagetray-version`）が合っていない。どちらかが古いので、合わせる。`tpm file` が「置き場（pagetray）の版が古く」と言って止まる時は、置き場が 0.4.0 より前。`tpm ask pm`・`tpm answer` が「置き場の印: 付けていない（置き場の版が古く…）」と出す時と、`tpm page reply` が「版が古く」と言って止まる時は、置き場が 0.5.0 より前（返事の状態を持てない）。`.pagetray-version` の版に上げる。
 5. **0.5.0 に上げる時**: 移行の SQL が足される版なので、上げた後の DB では 0.4.2 までの版は起きない。戻す道は、3 で取った DB の写しだけ（写しの後に置かれたページと file は、`tpm page import` で控えから入れ直す）。上げた直後は、返事待ちは 0 件（前からあるページには印が付かない）。
+6. **0.6.0 に上げる時**: これも移行の SQL が足される版で、上げた後の DB では 0.5.0 までの版は起きない（戻す道は 3 の写しだけ）。作り直す `container run` に、上の「起こす」の `-e PAGETRAY_CASTLIST_URL=http://castlist.box:8080` を足す。前からあるページと file には、送り手は付かない。0.6.0 より前の置き場は、`tpm` が付けた送り手を読まずに置く（記録に残らないだけで、止まらない）。
 
 ### 秘密を上げてしまった時
 

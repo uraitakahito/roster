@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path';
 import type { Context } from '../context.ts';
 import type { ExecResult } from '../exec.ts';
 import type { RoleRecord, TpmRecord } from '../roster.ts';
+import { castlistUrl, issuerOf, sessionRef } from '../castlist.ts';
 import { rolesConfigFile } from '../config.ts';
 import { readRole } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
@@ -83,6 +84,28 @@ export function reason(body: string): string {
 /** 置き場が応えない時の文。 */
 export const down = (ctx: Context, what: string): TpmError =>
   new TpmError(`置き場（${pagesUrl(ctx.env)}）が応えません。${what}置き場を起こすよう tpm ask devops で頼んでください`);
+
+/**
+ * 置く人を指す付随する id（pagetray 0.6.0 の `actor_issuer`・`actor_ref`）。置き場は受けたその時に castlist に送り手を聞いて残す。
+ * castlist の設定があり、$CLAUDE_CODE_SESSION_ID がある時だけ付ける（issuer と鍵は、session を登録する時と同じ）。どちらかが無ければ空（今までどおり付けない）。
+ */
+export function sender(ctx: Context): Record<string, string> {
+  const sid = ctx.env.CLAUDE_CODE_SESSION_ID;
+  if (castlistUrl(ctx) === undefined || !sid) return {};
+  return { actor_issuer: issuerOf(ctx), actor_ref: sessionRef(sid) };
+}
+
+/**
+ * 送り手を付けて置いた要求を、置き場が castlist に聞いた答えで断った時の文（what はページか file）。断っていなければ（送り手を付けていない・503 でも 422 でもない）undefined。
+ * 503 は置き場が castlist に聞けない、422 は castlist に登録の無い session。どちらも置き場は何も置いていない。打ち直すのは担当で、tpm は送り直さない。
+ */
+export function senderRefused(ctx: Context, query: URLSearchParams, code: string, what: string): TpmError | undefined {
+  const ref = query.get('actor_ref');
+  if (ref === null) return undefined;
+  if (code === '503') return new TpmError(`置き場（${pagesUrl(ctx.env)}）が castlist に送り手を聞けませんでした（503）。${what}。castlist が起きてから打ち直してください。続く時は tpm report incident で台帳に挙げてください`);
+  if (code === '422') return new TpmError(`この session（${ref}）は castlist に登録が無いと、置き場が答えました（422）。${what}。session は guard が Bash の前に登録するので、打ち直してください。続く時は tpm report incident で台帳に挙げてください`);
+  return undefined;
+}
 
 /** 自分の居場所の宛先（担当は名簿、TPM 担当は tpm.jsonc）。わからなければ空。 */
 export function selfAddress(ctx: Context): string {

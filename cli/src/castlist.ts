@@ -162,6 +162,9 @@ export function requireUp(ctx: Pick<Context, 'env' | 'config' | 'exec' | 'now'>,
 /** この project の issuer。 */
 export const issuerOf = (ctx: Pick<Context, 'state'>): string => castlistIssuer(ctx.state.dir);
 
+/** Claude Code の session を指す鍵の付随する id（`claude.session:<session の id>`。session の登録の鍵）。 */
+export const sessionRef = (sid: string): string => `claude.session:${sid}`;
+
 /** 人の Product Manager を登録する（tpm start。鍵が同じなので何度打っても同じアクター）。 */
 export function registerPm(ctx: Context, url: string): Reply {
   return request(ctx, url, 'POST', '/v1/actors', {

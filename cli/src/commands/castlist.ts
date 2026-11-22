@@ -6,7 +6,7 @@
 // 番号は、送れた時だけ進める（届かなかった物は、次に同じ id で送り直す）。
 import { createHash } from 'node:crypto';
 import type { Context } from '../context.ts';
-import { busyMessage, castlistUrl, downMessage, issuerOf, modelOf, request, requireUp, seatOf, type Reply } from '../castlist.ts';
+import { busyMessage, castlistUrl, downMessage, issuerOf, modelOf, request, requireUp, seatOf, sessionRef, type Reply } from '../castlist.ts';
 import type { Verdict } from '../guard.ts';
 import type { RoleRecord } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
@@ -47,9 +47,6 @@ type Sent = 'ok' | 'down' | 'busy';
 const safe = (id: string): string => id.replaceAll(/[^A-Za-z0-9._-]/g, '_');
 const sessionFile = (sid: string): string => `sessions/${safe(sid)}.jsonc`;
 const launchFile = (launch: string): string => `launches/${safe(launch)}.jsonc`;
-
-/** session を指す鍵の付随する id。 */
-const sessionRef = (sid: string): string => `claude.session:${sid}`;
 
 /** 控えた session。無ければ undefined。 */
 export const readSession = (ctx: Context, sid: string): SessionRecord | undefined => ctx.state.read<SessionRecord>(sessionFile(sid));

@@ -12,7 +12,7 @@ import { copyRefs, fileImport, findFiles, removeFiles } from './file.ts';
 import { roleOf } from './infra.ts';
 import { assertRead } from './messages.ts';
 import { inState, isStorePage, REPLY_LABEL, setReply, type ReplyState } from './reply.ts';
-import { call, compareStored, down, fetchTo, inStore, KEY, localPath, pagesDir, pagesUrl, PROJECT, reason, removeLocal, requireKey, selfAddress, writeCopy } from './store.ts';
+import { call, compareStored, down, fetchTo, inStore, KEY, localPath, pagesDir, pagesUrl, PROJECT, reason, removeLocal, requireKey, selfAddress, sender, senderRefused, writeCopy } from './store.ts';
 
 /** ページの種類。file の名の頭になる（`<種類>-<番号>.html`）。置き場は名の一覧を持たないので、種類を足すのはここだけ。 */
 export const PAGE_KINDS = ['brief', 'confirm', 'proposal', 'plan', 'result', 'issue', 'timeline', 'audit'] as const;
@@ -86,6 +86,7 @@ export function putPage(ctx: Context, source: { file: string } | { text: string 
     kind,
     role: roleOf(ctx.env) ?? 'tpm',
     workspace: selfAddress(ctx),
+    ...sender(ctx),
   });
   const record = post(ctx, source, query);
   if (record === 'taken') throw new TpmError('置き場が番号を決められませんでした（409）。もう 1 度打ってください');
@@ -94,7 +95,7 @@ export function putPage(ctx: Context, source: { file: string } | { text: string 
   return { path, url: `${pagesUrl(ctx.env)}${record.path}` };
 }
 
-/** 置き場に 1 枚送る。置けたら記録を、番号を名指して使われていたら 'taken' を返す。ほかは止まる。 */
+/** 置き場に 1 枚送る。置けたら記録を、番号を名指して使われていたら 'taken' を返す。ほかは止まる（送り手を付けた要求の 503・422 は senderRefused の文）。 */
 function post(ctx: Context, source: { file: string } | { text: string }, query: URLSearchParams): PageRecord | 'taken' {
   const data = 'file' in source ? `@${source.file}` : '@-';
   const r = call(
@@ -105,6 +106,8 @@ function post(ctx: Context, source: { file: string } | { text: string }, query: 
   if (r.code === '201') return JSON.parse(r.body) as PageRecord;
   if (r.code === '409') return 'taken';
   if (r.code === '000') throw down(ctx, 'ページは置けていません（番号は置き場が決めます）。');
+  const refused = senderRefused(ctx, query, r.code, 'ページは置けていません');
+  if (refused !== undefined) throw refused;
   throw new TpmError(`置き場がページを受け取りませんでした（${r.code}）: ${reason(r.body)}`);
 }
 

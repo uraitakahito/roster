@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { assertSummary } from '../brief.ts';
 import { shellQuote } from '../shell.ts';
-import { castlistUrl, requireUp } from '../castlist.ts';
+import { castlistUrl, requireUp, sessionRef } from '../castlist.ts';
 import { describeTrackers, OWN_LABEL, readRolesConfig, rolesConfigFile, sourceLabel, type ConfigSource } from '../config.ts';
 import type { Context } from '../context.ts';
 import { syncDeliveries } from '../evidence.ts';
@@ -214,7 +214,7 @@ export function assign(ctx: Context, key: string, options: AssignOptions): strin
   // 担当を起こした folder と、記録の先を出す（上の folder から振ると、どちらも 1 つに決まっていないため）。
   const sid = ctx.env.CLAUDE_CODE_SESSION_ID;
   const more = [...(options.issue === undefined ? [] : [`課題の記録: ${recordingTo(ctx, options.issue)}`]), ...skew];
-  return launch(ctx, record, existing !== undefined, options.wait, more, sid ? `claude.session:${sid}` : undefined);
+  return launch(ctx, record, existing !== undefined, options.wait, more, sid ? sessionRef(sid) : undefined);
 }
 
 /**

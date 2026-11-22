@@ -8,7 +8,7 @@ import type { Context } from '../context.ts';
 import { TpmError } from '../skill-sets.ts';
 import { roleOf } from './infra.ts';
 import type { PageRecord } from './page.ts';
-import { call, compareStored, down, fetchTo, inStore, KEY, localPath, pagesDir, pagesUrl, PROJECT, reason, removeLocal, requireKey, selfAddress, writeCopy } from './store.ts';
+import { call, compareStored, down, fetchTo, inStore, KEY, localPath, pagesDir, pagesUrl, PROJECT, reason, removeLocal, requireKey, selfAddress, sender, senderRefused, writeCopy } from './store.ts';
 
 /** 置き場が返す、file 1 つの記録（中身は入らない）。 */
 export interface FileRecord {
@@ -108,13 +108,15 @@ function hasExif(body: Buffer): boolean {
   return false;
 }
 
-/** 置き場に file を 1 つ送る。置けたら記録を、番号を名指して使われていたら 'taken' を返す。ほかは止まる。 */
+/** 置き場に file を 1 つ送る。置けたら記録を、番号を名指して使われていたら 'taken' を返す。ほかは止まる（送り手を付けた要求の 503・422 は senderRefused の文）。 */
 function postFile(ctx: Context, file: string, ext: string, query: URLSearchParams): FileRecord | 'taken' {
   const r = call(ctx, ['-X', 'POST', '-H', `Content-Type: ${FILE_TYPES[ext] ?? ''}`, '--data-binary', `@${file}`, `${pagesUrl(ctx.env)}/api/files?${query.toString()}`]);
   if (r.code === '201') return JSON.parse(r.body) as FileRecord;
   if (r.code === '409') return 'taken';
   if (r.code === '404') throw oldStore();
   if (r.code === '000') throw down(ctx, 'file は上げていません（番号は置き場が決めます）。');
+  const refused = senderRefused(ctx, query, r.code, 'file は上げていません');
+  if (refused !== undefined) throw refused;
   throw new TpmError(`置き場が file を受け取りませんでした（${r.code}）: ${reason(r.body)}`);
 }
 
@@ -153,7 +155,7 @@ export function filePut(ctx: Context, file: string, options: FilePutOptions): st
     throw new TpmError(`秘密の形（token・鍵）に当たる行があります: ${secrets.join('・')} 行目（${file}）。上げていません。その行を消してから上げるか、秘密でないと確かめたなら --allow-secret を付けて打ってください`);
   }
   const role = roleOf(ctx.env) ?? 'tpm';
-  const query = new URLSearchParams({ project: basename(ctx.state.dir), key, name: `${stem}.${ext}`, role, workspace: selfAddress(ctx) });
+  const query = new URLSearchParams({ project: basename(ctx.state.dir), key, name: `${stem}.${ext}`, role, workspace: selfAddress(ctx), ...sender(ctx) });
   const record = postFile(ctx, file, ext, query);
   if (record === 'taken') throw new TpmError('置き場が番号を決められませんでした（409）。もう 1 度打ってください');
   const path = localPath(ctx, record.path);

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { readAudits } from '../src/audits.ts';
+import { castlistIssuer } from '../src/castlist.ts';
 import { filePut } from '../src/commands/file.ts';
 import { pageDelete, pageImport, pageList, pagePath, pagePut } from '../src/commands/page.ts';
 import { isPageUrl, pagesDir, pagesUrl } from '../src/commands/store.ts';
@@ -193,6 +194,89 @@ describe('tpm page put', () => {
     const ctx = { ...s.role, env: { ...s.role.env, TPM_PAGES_URL: 'http://127.0.0.1:9900/' } };
     expect(pagePut(ctx, s.html, { kind: 'plan' })[1]).toBe(`URL: http://127.0.0.1:9900/${s.project}/t-x7k2/plan-1.html`);
     expect(s.curls()[0]?.at(-1)).toMatch(/^http:\/\/127\.0\.0\.1:9900\/api\/pages\?/);
+  });
+});
+
+/** 送り手の試験の castlist の URL（置き場に聞かせるだけで、tpm からは送らない）と、Claude Code の session の id。 */
+const CASTLIST = 'http://127.0.0.1:8802';
+const SID = '5f0c2a8e-0000-4000-8000-000000000001';
+/** castlist の設定（$TPM_CASTLIST_URL）と session の id を足した周り。 */
+const seated = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({ ...ctx, env: { ...ctx.env, TPM_CASTLIST_URL: CASTLIST, CLAUDE_CODE_SESSION_ID: SID, ...env } });
+
+describe('tpm page put の送り手（pagetray 0.6.0 の actor_issuer・actor_ref）', () => {
+  test('castlist の設定と session の id があれば、issuer と claude.session:<id> を、URL の引数に符号にして付ける', () => {
+    const s = setup();
+    pagePut(seated(s.role), s.html, { kind: 'plan' });
+    const issuer = castlistIssuer(s.w.tpm.state.dir);
+    expect(issuer).toMatch(/^tpm\./);
+    expect(s.store.posts.map(q => [q.get('actor_issuer'), q.get('actor_ref')])).toEqual([[issuer, `claude.session:${SID}`]]);
+    expect(s.curls()[0]?.at(-1)).toContain(`&actor_issuer=${encodeURIComponent(issuer)}&actor_ref=claude.session%3A${SID}`);
+    expect(s.stored(`/${s.project}/t-x7k2/plan-1.html`)).toMatchObject({ role: 'software-engineer', workspace: 'file:1' });
+  });
+
+  test('設定の castlist（config.jsonc）でも付ける。TPM 担当が置く時も付ける。字は符号にする', () => {
+    const s = setup();
+    const tpm: Context = { ...s.tpm, config: { ...s.tpm.config, castlist: CASTLIST }, env: { ...s.tpm.env, CLAUDE_CODE_SESSION_ID: 'a&b=c d' } };
+    pagePut(tpm, s.html, { kind: 'brief', key: 't-x7k2' });
+    expect(s.store.posts[0]?.get('actor_ref')).toBe('claude.session:a&b=c d');
+    expect(s.curls()[0]?.at(-1)).toContain('actor_ref=claude.session%3Aa%26b%3Dc+d');
+  });
+
+  test('castlist の設定が無い・session の id が無い（空も）時は、今までどおり付けない', () => {
+    const s = setup();
+    pagePut({ ...s.role, env: { ...s.role.env, CLAUDE_CODE_SESSION_ID: SID } }, s.html, { kind: 'plan' });
+    pagePut(seated(s.role, { CLAUDE_CODE_SESSION_ID: undefined }), s.html, { kind: 'plan' });
+    pagePut(seated(s.role, { CLAUDE_CODE_SESSION_ID: '' }), s.html, { kind: 'plan' });
+    expect(s.store.posts.map(q => [q.has('actor_issuer'), q.has('actor_ref')])).toEqual([[false, false], [false, false], [false, false]]);
+    expect(s.store.pages.size).toBe(3);
+  });
+
+  test('置き場が castlist に聞けない（503）と、ページを置かずに 1 行で止まる。castlist が起きてから打ち直し、続けば台帳に挙げるよう言う', () => {
+    const s = setup();
+    s.store.sender = 'unreachable';
+    let message = '';
+    try {
+      pagePut(seated(s.role), s.html, { kind: 'result' });
+    }
+    catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toMatch(/置き場（http:\/\/127\.0\.0\.1:8801）が castlist に送り手を聞けませんでした（503）。ページは置けていません。.*castlist が起きてから.*打ち直して.*tpm report incident/);
+    expect(message).not.toContain('\n');
+    expect(s.store.pages.size).toBe(0);
+    expect(existsSync(join(s.dir, s.project))).toBe(false);
+    expect(s.store.posts).toHaveLength(1);
+  });
+
+  test('置き場が、この session は castlist に登録が無いと答える（422）と、ページを置かずに 1 行で止まる。打ち直し、続けば台帳に挙げるよう言う', () => {
+    const s = setup();
+    s.store.sender = 'unregistered';
+    let message = '';
+    try {
+      pagePut(seated(s.role), s.html, { kind: 'result' });
+    }
+    catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toMatch(new RegExp(`この session（claude\\.session:${SID}）は castlist に登録が無いと、置き場が答えました（422）。ページは置けていません。.*guard.*Bash.*打ち直して.*tpm report incident`));
+    expect(message).not.toContain('\n');
+    expect(s.store.pages.size).toBe(0);
+    expect(existsSync(join(s.dir, s.project))).toBe(false);
+  });
+
+  test('送り手を付けない時の 503・422 は、今までどおり置き場の訳を出す', () => {
+    const s = setup();
+    s.store.refuse = { code: 503, body: '{"error":"混んでいる"}' };
+    expect(() => pagePut(s.role, s.html, { kind: 'result' })).toThrow('置き場がページを受け取りませんでした（503）: 混んでいる');
+  });
+
+  test('取り込み（tpm page import）は、送り手を付けない（置いた担当はわからない）', () => {
+    const s = setup();
+    const folder = join(s.dir, s.project, 't-x7k2');
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(join(folder, 'result-1.html'), HTML);
+    pageImport(seated(s.tpm));
+    expect(s.store.posts.map(q => q.has('actor_ref'))).toEqual([false]);
   });
 });
 
