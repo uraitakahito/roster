@@ -105,6 +105,23 @@ flowchart TB
 - **castlist が止まっている時**: `tpm start`・`tpm assign`・`tpm audit start`・`tpm hello` は、起こさず・名乗らずに止まり、Product Manager が自分の terminal で打つ 1 行を出す（container が在れば `container start castlist`、無ければ `container run …`。castlist を起こすのは Product Manager だけ）。`tpm assign` は、TPM 担当が `tpm wait pm "castlist を起こす" --hand` で Product Manager に頼むよう添える。hook は何も送らずに終わり（Claude Code を止めない）、登録までは `tpm guard` が Bash を同じ 1 行を添えて止める。登録した後も、送る物（見た model と effort など）があるのに止まっていれば止める。`tpm close` は止めず、送れなかったと 1 行出す。
 - **時計**: 起こす前に見る `/healthz` の時刻と Mac の時計が 2 秒より離れていれば、`tpm report incident` で台帳に挙げるよう 1 行出す（止めない。`tpm start` は stderr に出す）。
 
+### 監査の検索を読む
+
+Auditor が、件の記録に残っている物（Key・役割・時刻）で castlist を引くための、読むだけの命令（コードは `cli/src/commands/castlist-read.ts`。castlist の側は API の「監査の検索」）。どれも GET だけを送り、castlist にも状態の folder にも書かない（Auditor の guard も止めない）。旗は castlist の引数の名にそのまま写し、値を確かめて断るのは castlist。
+
+| 命令 | 聞く所 | 出す物 |
+|---|---|---|
+| `tpm castlist find` | `GET /v1/actors`。`--label <鍵:値>`（何度でも）・`--binding <種類:値>`・`--at`・`--active-from`・`--active-to`・`--active <true\|false>`・`--model`・`--effort`・`--launched-by`・`--skewed`・`--kind`・`--sort`・`--order`・`--limit`・`--after` | アクター 1 つを 1 行（名・種類・居るか・初めの登場と最後の退場・最新の model と effort・ラベル・プロフィールの画面の URL `<castlist>/actors/<id>`）。続きがあれば、`--after` に渡す `next` |
+| `tpm castlist show <名か id>` | `GET /v1/actors/<id>` と `GET /v1/actors/<id>/lineage` | ラベル・付随する id（種類ごとの最新）・今の状態・最新の model と effort・線の要約（上は人まで、下は 1 段）・プロフィールの画面の URL |
+| `tpm castlist lineage <名か id>` | `GET /v1/actors/<id>/lineage`。`--direction`・`--depth`・`--type` | 点（名と URL）と線 |
+| `tpm castlist events` | `GET /v1/events`。`--type`（何度でも）・`--actor`・`--from`・`--to`・`--reason`・`--source`・`--skewed`・`--limit`・`--after` | 出来事 1 つを 1 行（受けた時刻・アクターの名・種類・detail・URL） |
+| `tpm castlist settings` | `--actor` が無ければ `GET /v1/settings`（`--model`・`--effort`・`--source`・`--from`・`--to`・`--mismatch`・`--skewed`・`--limit`・`--after`）、あれば `GET /v1/actors/<id>/settings`（`--at` でその時に効いていた 1 行） | model と effort の行（受けた時刻・アクターの名・model と effort と source・URL） |
+
+- **名**: castlist には名で引く道が無い。`show`・`lineage` の引数と `--actor`・`--launched-by` の名（`t-23zs-swe.1` など）は、この project の tpm が登録して控えた物（状態の folder の `sessions/`）で id にする。控えに無い字は id とみなす（castlist に無ければ、404 の訳に `tpm castlist find` で探すよう添える）。Product Manager のアクターは控えないので、`find --kind human` などで id を探す。
+- **時刻**: 時刻の条件は RFC 3339（`2026-11-22T11:00:00+09:00` など）。castlist が受けた時刻（`received_at`）と比べる。
+- `--json` は castlist の答えの字をそのまま出す（`show --json` は `GET /v1/actors/<id>` の答え）。
+- castlist が断ったら（400・404）訳をそのまま出し、止まっていれば `castlist に聞けない（<URL> が応えない）` の 1 行、設定が無ければ設定していないと言う 1 行で、どれも exit 1 で止まる。
+
 ## 状態
 
 各担当は、連携の道具の表示（cmux ならサイドバー）に `model` と `wait` の 2 つだけを出す。`wait` は「今、誰が何を待っているか」を 1 つだけ出し、状況が変わるたびに上書きする（`tpm wait` などのやりとりの命令が出す。字の形は `protocol.md` の「状態」）。
@@ -190,7 +207,7 @@ Auditor（役割 `auditor`。題は `Audit`、課題の Key は `audit`。skill 
 - 見直す（`tpm incident review`）・tag を足す（`tpm incident tag`）・扱いを決める（`tpm incident assign`・`tpm incident drop`・`tpm incident close`）のは、TPM 担当と Auditor（役割 `auditor`）。ほかの担当の居場所からは止まる。扱いを決めると、件に誰が決めたか（`decidedBy`。課題の Key と役割）が残る。
 - **種類のある件（出来事）を「調べない」「済み」にできるのは Auditor だけ**（`tpm incident drop`・`tpm incident close`。TPM 担当の誤りの件を、TPM 担当が自分で決めないため。tag で分けると、付けなければすり抜けるので、役割で分ける）。種類の無い件（「残り」と「PM の手」）は TPM 担当も決められる。名指した件に出来事が 1 つでも混じっていれば、どれも書き替えない。tag を足す・振り先を結ぶのは、TPM 担当もできる。
 - `tpm incident follow` は、追いかけの一覧を出す（読むだけ。TPM 担当と Auditor）。振ったまま（振った件と、振り先が名簿に居るか・最後に返した【done】【end】【merged】）、済みの後の再発（tag ごとに、いちばん新しい済みの後に起きた件）、古い残り（未決の「残り」と「PM の手」を古い順に）、TPM 担当の決め（TPM 担当が調べない・済みにした件。`--since <日付>` で、前の監査より後に絞る）。`--json` もある。
-- `tpm incident timeline <番号|Key>` が、時系列のページ（種類は `timeline`）を置く（`cli/src/commands/timeline.ts`）。番号なら、引き金のメッセージ（`--msg`）の前後 30 分（`--minutes`）の、その Key の記録を拾い、件に URL を結ぶ。引き金の無い件は、出来事がいつかが分からない（件は出来事のしばらく後に書かれる）ので、その Key の初めから、件を書いた 30 分後までを拾う。Key なら、その Key の記録をみな拾う。並べるのは `log.jsonl`（`deliveries.jsonl` の届いた時刻を添える）・`tracker.jsonl`・`guard.jsonl`・`gate.jsonl`・`waits.jsonl`・`infra.jsonl`・台帳。あるメッセージが届く前に、相手（向きが逆）が送ったメッセージがあれば「行き違い」の印を付ける。作る前に、届いた時刻を連携の道具から写す。
+- `tpm incident timeline <番号|Key>` が、時系列のページ（種類は `timeline`）を置く（`cli/src/commands/timeline.ts`）。番号なら、引き金のメッセージ（`--msg`）の前後 30 分（`--minutes`）の、その Key の記録を拾い、件に URL を結ぶ。引き金の無い件は、出来事がいつかが分からない（件は出来事のしばらく後に書かれる）ので、その Key の初めから、件を書いた 30 分後までを拾う。Key なら、その Key の記録をみな拾う。並べるのは `log.jsonl`（`deliveries.jsonl` の届いた時刻を添える）・`tracker.jsonl`・`guard.jsonl`・`gate.jsonl`・`waits.jsonl`・`infra.jsonl`・台帳。あるメッセージが届く前に、相手（向きが逆）が送ったメッセージがあれば「行き違い」の印を付ける。作る前に、届いた時刻を連携の道具から写す。castlist を設定した project では「アクター」の欄を足し、行ごとに、その時刻にその席（担当は課題の Key、TPM 担当は `tpm`）に居たアクターを castlist に聞いて（`GET /v1/actors?label=tpm.project:<project>&label=tpm.key:<Key>&active_from=<時刻>&active_to=<時刻>`）、プロフィールの画面への link で出す。castlist が止まっていれば欄に「castlist に聞けない」と書き、ページは置く。
 - 原因の調べは、Auditor がする（上の「Auditor の席」。Product Manager が `Audit` の席で `/audit` を呼ぶ）。Auditor は監査のページ（種類は `audit`）を置き、`tpm report audit` で報告する。Product Manager が「する」とした改善は、TPM 担当が課題にして振り、`tpm incident assign` で件に振り先を結ぶ。入ったと確かめて `tpm incident close` で済みにするのは、次の監査の Auditor。
 - 【incident】は課題管理に記録を書かない。台帳の中身と時系列のページは、この Mac の外に写さない。
 

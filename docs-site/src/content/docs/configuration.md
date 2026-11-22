@@ -170,7 +170,7 @@ export TPM_EFFORT=medium
 アクターの台帳（別の repo の [castlist](https://uraitakahito.github.io/castlist/)）は、Claude Code の session 1 つ（TPM 担当・担当・Auditor）と人の Product Manager を、それぞれアクターとして残す、この Mac だけのサーバー。誰が誰を起こしたか・どの model と effort で動いたかを、Auditor が後から引く。`tpm` が何をいつ送るかは [担当のあいだの決まり](/protocol/#アクターの台帳castlist)。
 
 - project の folder の `.claude/roles/config.jsonc` に `"castlist": "http://127.0.0.1:8802"` を書くと、`tpm` が castlist に送る。直下の folder の設定に書いた値は読まない（連携と同じ）。
-- 書かなければ、`tpm` は castlist に何も送らない。hook の命令（`tpm castlist session-start`・`tpm castlist session-end`）はどの席にも付くが、何もしない。
+- 書かなければ、`tpm` は castlist に何も送らない。hook の命令（`tpm castlist session-start`・`tpm castlist session-end`）はどの席にも付くが、何もしない。castlist を読む命令（`tpm castlist find` など。[担当のあいだの決まり](/protocol/#監査の検索を読む)）は、設定していないと言う 1 行で止まり、`tpm incident timeline` はアクターの欄を出さない。
 - 環境変数 `TPM_CASTLIST_URL` があれば、設定の値より先に使う（試験と、port を替えた時のため）。
 
 | 環境変数 | 決める物 | 無いとき |

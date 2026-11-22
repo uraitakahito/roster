@@ -68,6 +68,8 @@ cd <TPM 担当を起こした folder>
 - 担当の居場所では、guard が Bash を止め、担当が TPM 担当に 1 行を渡す。TPM 担当は `tpm wait pm "castlist を起こす" --hand` で Product Manager に頼む。
 - Mac を起こし直すと止まったままになる。`container system start` の後に `container start castlist` を打つ。
 - 止めている間の session の始まりと終わりは、castlist に残らない（hook は送らずに終わる）。起きた後の初めの Bash で、guard が登録する。
+- 監査では、Auditor が `tpm castlist find`・`tpm castlist show`・`tpm castlist lineage`・`tpm castlist events`・`tpm castlist settings` でアクターを引く（読むだけ。[担当のあいだの決まり](/protocol/#監査の検索を読む)）。止まっている間は `castlist に聞けない` の 1 行で止まり、`tpm incident timeline` はアクターの欄に「castlist に聞けない」と書いてページを置く。
+- 答えを手で確かめ直す時だけ、castlist を動かす機械の terminal で、同じ GET を `curl` で打つ（例 `curl -s 'http://127.0.0.1:8802/v1/actors?label=tpm.key%3At-23zs'`。時刻の `+` は `%2B` に。引数は castlist の docs の [API](https://uraitakahito.github.io/castlist/api.html)）。ふだんは `tpm castlist …` を使う（名を id にし、行ごとにプロフィールの画面の URL を添える）。書く要求（POST・PUT）は手で送らない。
 
 ## ページの置き場（pagetray）
 
