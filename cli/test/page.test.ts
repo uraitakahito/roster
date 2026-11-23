@@ -19,7 +19,7 @@ const PNG = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('
 
 /** 控えを一時の folder にし、偽の置き場に向けた、t-x7k2 の Software Engineer 担当（居場所 file:1）と TPM 担当の周り。 */
 function setup() {
-  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-pages-')));
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'roster-pages-')));
   const w = world();
   const wire = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({ ...ctx, env: { ...ctx.env, TPM_PAGES_DIR: dir, ...env } });
   const role = wire(w.role('t-x7k2', 'file:1'), { TPM_ROLE: 'software-engineer' });
@@ -36,7 +36,7 @@ function setup() {
   return { dir, w, store: w.store, role, tpm, project, html, curls, stored };
 }
 
-describe('tpm page put', () => {
+describe('roster page put', () => {
   test('担当が置くと、置き場が番号を決め、役割と居場所が記録に入り、控えに写る。2 度目は -2', () => {
     const s = setup();
     const path = join(s.dir, s.project, 't-x7k2', 'proposal-1.html');
@@ -90,14 +90,14 @@ describe('tpm page put', () => {
   test('置き場が応えなければ置けない。控えも書かず、DevOps に頼むよう言う', () => {
     const s = setup();
     s.store.down = true;
-    expect(() => pagePut(s.role, s.html, { kind: 'result' })).toThrow(/置き場（http:\/\/127\.0\.0\.1:8801）が応えません。ページは置けていません.*tpm ask devops/);
+    expect(() => pagePut(s.role, s.html, { kind: 'result' })).toThrow(/置き場（http:\/\/127\.0\.0\.1:8801）が応えません。ページは置けていません.*roster ask devops/);
     expect(existsSync(join(s.dir, s.project))).toBe(false);
   });
 
   test('置き場の API の版が違えば、答えを使わずに止まる。控えも書かない', () => {
     const s = setup();
     s.store.api = '2';
-    expect(() => pagePut(s.role, s.html, { kind: 'result' })).toThrow(/API の版は 2 で、この tpm が話せるのは 1 です.*\.pagetray-version.*tpm ask devops/);
+    expect(() => pagePut(s.role, s.html, { kind: 'result' })).toThrow(/API の版は 2 で、この roster が話せるのは 1 です.*\.pagetray-version.*roster ask devops/);
     expect(existsSync(join(s.dir, s.project))).toBe(false);
     expect(() => pageList(s.role, {})).toThrow(/API の版は 2/);
   });
@@ -178,9 +178,9 @@ describe('tpm page put', () => {
     expect(pagePut(s.tpm, s.html, { kind: 'confirm', key: 't-zzzz' })[1]).toContain('/t-zzzz/confirm-1.html');
   });
 
-  test('tpm を使う project でない folder（scratchpad など）からは、置き場に頼む前に止める', () => {
+  test('roster を使う project でない folder（scratchpad など）からは、置き場に頼む前に止める', () => {
     const s = setup();
-    const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-scratch-')));
+    const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'roster-scratch-')));
     const stray = { ...s.tpm, project: scratch, state: new State(join(s.tpm.state.dir, '..', basename(scratch))) };
     expect(() => pagePut(stray, s.html, { kind: 'brief', key: 't-x7k2' })).toThrow('$TPM_PROJECT');
     expect(s.curls()).toEqual([]);
@@ -197,13 +197,13 @@ describe('tpm page put', () => {
   });
 });
 
-/** 送り手の試験の castlist の URL（置き場に聞かせるだけで、tpm からは送らない）と、Claude Code の session の id。 */
+/** 送り手の試験の castlist の URL（置き場に聞かせるだけで、roster からは送らない）と、Claude Code の session の id。 */
 const CASTLIST = 'http://127.0.0.1:8802';
 const SID = '5f0c2a8e-0000-4000-8000-000000000001';
 /** castlist の設定（$TPM_CASTLIST_URL）と session の id を足した周り。 */
 const seated = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({ ...ctx, env: { ...ctx.env, TPM_CASTLIST_URL: CASTLIST, CLAUDE_CODE_SESSION_ID: SID, ...env } });
 
-describe('tpm page put の送り手（pagetray 0.6.0 の actor_issuer・actor_ref）', () => {
+describe('roster page put の送り手（pagetray 0.6.0 の actor_issuer・actor_ref）', () => {
   test('castlist の設定と session の id があれば、issuer と claude.session:<id> を、URL の引数に符号にして付ける', () => {
     const s = setup();
     pagePut(seated(s.role), s.html, { kind: 'plan' });
@@ -241,7 +241,7 @@ describe('tpm page put の送り手（pagetray 0.6.0 の actor_issuer・actor_re
     catch (e) {
       message = (e as Error).message;
     }
-    expect(message).toMatch(/置き場（http:\/\/127\.0\.0\.1:8801）が castlist に送り手を聞けませんでした（503）。ページは置けていません。.*castlist が起きてから.*打ち直して.*tpm report incident/);
+    expect(message).toMatch(/置き場（http:\/\/127\.0\.0\.1:8801）が castlist に送り手を聞けませんでした（503）。ページは置けていません。.*castlist が起きてから.*打ち直して.*roster report incident/);
     expect(message).not.toContain('\n');
     expect(s.store.pages.size).toBe(0);
     expect(existsSync(join(s.dir, s.project))).toBe(false);
@@ -258,7 +258,7 @@ describe('tpm page put の送り手（pagetray 0.6.0 の actor_issuer・actor_re
     catch (e) {
       message = (e as Error).message;
     }
-    expect(message).toMatch(new RegExp(`この session（claude\\.session:${SID}）は castlist に登録が無いと、置き場が答えました（422）。ページは置けていません。.*guard.*Bash.*打ち直して.*tpm report incident`));
+    expect(message).toMatch(new RegExp(`この session（claude\\.session:${SID}）は castlist に登録が無いと、置き場が答えました（422）。ページは置けていません。.*guard.*Bash.*打ち直して.*roster report incident`));
     expect(message).not.toContain('\n');
     expect(s.store.pages.size).toBe(0);
     expect(existsSync(join(s.dir, s.project))).toBe(false);
@@ -270,7 +270,7 @@ describe('tpm page put の送り手（pagetray 0.6.0 の actor_issuer・actor_re
     expect(() => pagePut(s.role, s.html, { kind: 'result' })).toThrow('置き場がページを受け取りませんでした（503）: 混んでいる');
   });
 
-  test('取り込み（tpm page import）は、送り手を付けない（置いた担当はわからない）', () => {
+  test('取り込み（roster page import）は、送り手を付けない（置いた担当はわからない）', () => {
     const s = setup();
     const folder = join(s.dir, s.project, 't-x7k2');
     mkdirSync(folder, { recursive: true });
@@ -280,7 +280,7 @@ describe('tpm page put の送り手（pagetray 0.6.0 の actor_issuer・actor_re
   });
 });
 
-describe('tpm page path', () => {
+describe('roster page path', () => {
   test('控えにあるページは、置き場に聞かずに path を返す', () => {
     const s = setup();
     const url = pagePut(s.role, s.html, { kind: 'confirm' })[1]?.replace('URL: ', '') ?? '';
@@ -337,11 +337,11 @@ describe('tpm page path', () => {
   test('控えに無く、置き場も応えなければ、DevOps に頼むよう言う', () => {
     const s = setup();
     s.store.down = true;
-    expect(() => pagePath(s.role, `${BASE}/${s.project}/t-x7k2/plan-1.html`)).toThrow(/応えません。控え（.*plan-1\.html）もありません。.*tpm ask devops/);
+    expect(() => pagePath(s.role, `${BASE}/${s.project}/t-x7k2/plan-1.html`)).toThrow(/応えません。控え（.*plan-1\.html）もありません。.*roster ask devops/);
   });
 });
 
-describe('tpm page path と、ページが参照する file', () => {
+describe('roster page path と、ページが参照する file', () => {
   /** 画像を t-x7k2 と t-y に上げ、それを参照するページを置いて、別の機械（控えが空）の周りを返す。 */
   function referenced(body: (key: string) => string) {
     const s = setup();
@@ -398,7 +398,7 @@ describe('tpm page path と、ページが参照する file', () => {
   });
 });
 
-describe('tpm page list', () => {
+describe('roster page list', () => {
   /** 役割・Key・種類の違う 3 枚を置く。 */
   function seeded() {
     const s = setup();
@@ -437,11 +437,11 @@ describe('tpm page list', () => {
   test('置き場が応えなければ、DevOps に頼むよう言う', () => {
     const s = seeded();
     s.store.down = true;
-    expect(() => pageList(s.role, {})).toThrow('tpm ask devops');
+    expect(() => pageList(s.role, {})).toThrow('roster ask devops');
   });
 });
 
-describe('tpm page import', () => {
+describe('roster page import', () => {
   /** 前の置き場の形（控えの folder に file だけがある）を作る。 */
   function legacy() {
     const s = setup();
@@ -492,7 +492,7 @@ describe('tpm page import', () => {
     writeFileSync(join(s.folder, 'plan-2.html'), '<title>別の計画</title>');
     const lines = pageImport(s.tpm);
     expect(lines[0]).toContain('入れた: 0 枚・もう入っていた: 2 枚・消したページ: 0 枚・ぶつかった: 1 枚');
-    expect(lines[1]).toBe(`! 同じ番号に別の中身がある（入れていない。要るなら tpm page put で置き直す）: ${join(s.folder, 'plan-2.html')}`);
+    expect(lines[1]).toBe(`! 同じ番号に別の中身がある（入れていない。要るなら roster page put で置き直す）: ${join(s.folder, 'plan-2.html')}`);
     expect(s.store.pages.get('/-Users-me-projects-x/AI-14/plan-2.html')?.body.toString()).toBe('<title>計画</title>');
   });
 
@@ -508,7 +508,7 @@ describe('tpm page import', () => {
   test('置き場が応えなければ止まる', () => {
     const s = legacy();
     s.store.down = true;
-    expect(() => pageImport(s.tpm)).toThrow('tpm ask devops');
+    expect(() => pageImport(s.tpm)).toThrow('roster ask devops');
   });
 
   test('控えの <Key>/files/ の file も、同じ番号と時刻で入れる。打ち直しても増えず、ぶつかった物・消した物は入れない', () => {
@@ -532,7 +532,7 @@ describe('tpm page import', () => {
     s.store.removedFiles.add('/-Users-me-projects-x/AI-14/files/shot-2.png');
     expect(pageImport(s.tpm).slice(-2)).toEqual([
       'file: 入れた: 0 個・もう入っていた: 0 個・消した file: 1 個・ぶつかった: 1 個',
-      `! 同じ番号に別の中身がある（入れていない。要るなら tpm file put で上げ直す）: ${join(s.folder, 'files', 'log-1.txt')}`,
+      `! 同じ番号に別の中身がある（入れていない。要るなら roster file put で上げ直す）: ${join(s.folder, 'files', 'log-1.txt')}`,
     ]);
   });
 
@@ -546,7 +546,7 @@ describe('tpm page import', () => {
   });
 });
 
-describe('tpm page delete', () => {
+describe('roster page delete', () => {
   /** t-x7k2 に 3 枚、t-y に 1 枚、ほかの project に 1 枚を置いた周り。 */
   function placed() {
     const s = setup();
@@ -562,7 +562,7 @@ describe('tpm page delete', () => {
   test('担当の居場所からは消せない。TPM 担当に頼むよう言い、置き場に頼まない', () => {
     const s = placed();
     const before = s.curls().length;
-    expect(() => pageDelete(s.role, [s.url('t-x7k2', 'plan-1.html')], { yes: true })).toThrow('tpm ask tpm');
+    expect(() => pageDelete(s.role, [s.url('t-x7k2', 'plan-1.html')], { yes: true })).toThrow('roster ask tpm');
     expect(s.curls()).toHaveLength(before);
     expect(s.store.pages.size).toBe(5);
   });
@@ -685,7 +685,7 @@ describe('tpm page delete', () => {
   test('置き場が応えなければ、消さずに DevOps に頼むよう言う', () => {
     const s = placed();
     s.store.down = true;
-    expect(() => pageDelete(s.tpm, [], { key: 't-x7k2', yes: true })).toThrow('tpm ask devops');
+    expect(() => pageDelete(s.tpm, [], { key: 't-x7k2', yes: true })).toThrow('roster ask devops');
     expect(existsSync(join(s.dir, s.project, 't-x7k2'))).toBe(true);
   });
 });

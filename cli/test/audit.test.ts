@@ -18,14 +18,14 @@ const hook = (source: string): string => JSON.stringify({ hook_event_name: 'Sess
 
 /** skill /audit がある（か、無い）skills の repo に見立てた folder。 */
 function fakeRoot(skill: boolean): string {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-root-')));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'roster-root-')));
   const skills = join(root, 'skill-sets', 'core', '.claude', 'skills');
   mkdirSync(join(skills, 'audit'), { recursive: true });
   if (skill) writeFileSync(join(skills, 'audit', 'SKILL.md'), '# audit');
   return root;
 }
 
-/** Product Manager が Audit の席を起こし、Auditor が名乗った世界。tpm が false なら、TPM 担当は起きていない。 */
+/** Product Manager が Audit の席を起こし、Auditor が名乗った世界。roster が false なら、TPM 担当は起きていない。 */
 function seated(tpm = true): World & { root: string, pm: Context, auditor: Context, se: Context } {
   const w = world();
   if (tpm) hello(w.tpm, TPM);
@@ -48,13 +48,13 @@ function at(w: { tpm: Context, auditor: Context }, iso: string): void {
 }
 
 describe('この repo の skill', () => {
-  test('tpm audit start が起こす skill /audit と、Auditor が読む規程・手順がある', () => {
+  test('roster audit start が起こす skill /audit と、Auditor が読む規程・手順がある', () => {
     const skills = join(import.meta.dirname, '..', '..', 'skill-sets', 'core', '.claude', 'skills');
     for (const file of ['audit/SKILL.md', '_shared/audit-charter.md', '_shared/audit.md']) expect(existsSync(join(skills, file)), file).toBe(true);
   });
 });
 
-describe('tpm audit start', () => {
+describe('roster audit start', () => {
   test('Product Manager が打つと、名簿に Auditor の行を書き、居場所を作る。記録に残る', () => {
     const w = world();
     hello(w.tpm, TPM);
@@ -63,9 +63,9 @@ describe('tpm audit start', () => {
       '起こした: Audit（file:1・Fable 5.2 · high）',
       `folder: ${w.project}`,
       'この席で /audit（定期の監査）か /audit <件の番号…>（臨時の監査）を呼ぶ。2 度目からは、先に /clear を打つ',
-      '名乗り（tpm hello）は待っていない',
+      '名乗り（roster hello）は待っていない',
     ]);
-    expect(w.wire.command('file:1')).toBe(`${pm.root}/cli/bin/tpm run-role audit --project ${w.project} --state ${w.tpm.state.dir}`);
+    expect(w.wire.command('file:1')).toBe(`${pm.root}/cli/bin/roster run-role audit --project ${w.project} --state ${w.tpm.state.dir}`);
     expect(w.wire.seats()).toEqual([{ address: 'file:1', title: 'Audit' }]);
     expect(readAudits(w.tpm)).toEqual([{ at: '2026-11-20T12:00:00.000Z', kind: 'start', address: 'file:1' }]);
   });
@@ -80,7 +80,7 @@ describe('tpm audit start', () => {
     const w = seated();
     expect(() => auditStart(w.pm, { wait: 0 })).toThrow(/Audit の席はもうあります（file:1）。その席で \/clear を打ってから、\/audit を呼んでください/);
     w.wire.close('file:1');
-    expect(roles(w.tpm)).toContain('- audit  Audit  消えた（居場所が無い。起こし直すのは Product Manager: tpm audit start）');
+    expect(roles(w.tpm)).toContain('- audit  Audit  消えた（居場所が無い。起こし直すのは Product Manager: roster audit start）');
     expect(auditStart(w.pm, { wait: 0 })[0]).toBe('起こし直した: Audit（file:2・Fable 5.2 · high）');
   });
 
@@ -92,16 +92,16 @@ describe('tpm audit start', () => {
 
   test('TPM 担当は、Auditor の席を起こせない・依頼書を送れない・【dismiss】を送れない・閉じられない。答えは返せる', () => {
     const w = seated();
-    expect(() => assign(w.tpm, 'audit', { role: 'auditor', brief: BRIEF, wait: 0 })).toThrow(/Product Manager が tpm audit start で起こします/);
+    expect(() => assign(w.tpm, 'audit', { role: 'auditor', brief: BRIEF, wait: 0 })).toThrow(/Product Manager が roster audit start で起こします/);
     expect(() => dismiss(w.tpm, 'audit', { handover: false })).toThrow(/Auditor の席に【dismiss】は送れません/);
     expect(() => dismiss(w.tpm, 'audit', { handover: true })).toThrow(/Auditor の席に【dismiss】は送れません/);
-    expect(() => close(w.tpm, 'audit')).toThrow(/tpm close では閉じられません/);
+    expect(() => close(w.tpm, 'audit')).toThrow(/roster close では閉じられません/);
     expect(w.wire.seats()).toEqual([{ address: 'file:1', title: 'Audit' }]);
     expect(notify(w.tpm, 'audit', { text: '受け取った' })).toEqual(['送った: 【notify】→ file:1（相手の手が空いた時に届く。送り直さない）']);
   });
 });
 
-describe('Auditor の tpm hello', () => {
+describe('Auditor の roster hello', () => {
   test('題と状態を出し、監査の材料を返す', () => {
     const w = seated();
     expect(hello(w.auditor)).toEqual([
@@ -140,7 +140,7 @@ describe('監査の 1 周（始める → 報告 → 決定）', () => {
       `監査の手順: 無い（${w.root}/skill-sets/core/.claude/skills/_shared/audit.md）`,
       '前の監査: まだ無い（次が最初の監査）',
       '台帳: 未決 1（出来事 1・残りと PM の手 0）・振った 0',
-      '見直す: tpm incident review／追いかける: tpm incident follow',
+      '見直す: roster incident review／追いかける: roster incident follow',
     ]);
     expect(reportAudit(w.auditor, { url: PAGE, summary: '権限の件は仕組みが止めていない', items: ['R1 をするか', 'R2 を受け入れるか'] })).toEqual([
       '送った: 【audit】→ file:tpm（相手の手が空いた時に届く。送り直さない）',
@@ -171,7 +171,7 @@ describe('監査の 1 周（始める → 報告 → 決定）', () => {
       `前の監査: ${PAGE}（11-20 12:00 に報告。3 日前）`,
       `答えの出ていない報告: ${PAGE}（11-20 12:00 に報告。決めてほしいこと: R1 をするか）。Product Manager に聞き直す`,
       '台帳: 未決 0（出来事 0・残りと PM の手 0）・振った 0',
-      '見直す: tpm incident review／追いかける: tpm incident follow --since 2026-11-20T12:00:00.000Z',
+      '見直す: roster incident review／追いかける: roster incident follow --since 2026-11-20T12:00:00.000Z',
     ]);
     expect(readAudits(w.tpm).filter(e => e.kind === 'fresh').map(e => e.source)).toEqual(['startup', 'clear']);
   });
@@ -206,10 +206,10 @@ describe('誰が打てるか', () => {
     const w = seated();
     assign(w.tpm, 't-x7k2', { role: 'software-engineer', title: '題', brief: BRIEF, wait: 0 });
     hello(w.se);
-    expect(() => auditBegin(w.se, [])).toThrow(/tpm audit begin は Auditor（Audit の席）が打ちます/);
+    expect(() => auditBegin(w.se, [])).toThrow(/roster audit begin は Auditor（Audit の席）が打ちます/);
     expect(() => auditBegin(w.tpm, [])).toThrow(/Auditor（Audit の席）が打ちます/);
-    expect(() => reportAudit(w.se, { url: PAGE, summary: 's', items: [] })).toThrow(/tpm report audit は Auditor（Audit の席）が打ちます/);
-    expect(() => reportDecided(w.se, { url: PAGE, adopted: ['R1'], accepted: [], later: [] })).toThrow(/tpm report decided は Auditor/);
+    expect(() => reportAudit(w.se, { url: PAGE, summary: 's', items: [] })).toThrow(/roster report audit は Auditor（Audit の席）が打ちます/);
+    expect(() => reportDecided(w.se, { url: PAGE, adopted: ['R1'], accepted: [], later: [] })).toThrow(/roster report decided は Auditor/);
     auditFresh(w.se, hook('clear'));
     auditFresh(w.tpm, hook('startup'));
     expect(readAudits(w.tpm).map(e => e.kind)).toEqual(['start']);
@@ -218,11 +218,11 @@ describe('誰が打てるか', () => {
   test('Auditor は、PR や【done】の命令を打たない。問いと【incident】は打てる', () => {
     const w = seated();
     for (const [command, run] of [
-      ['tpm report done', () => reportDone(w.auditor, { kind: 'audit', summary: 's', remaining: 'なし', decisions: 'なし', points: [] })],
-      ['tpm report end', () => reportEnd(w.auditor, { prs: [], removed: [], left: 'なし' })],
-      ['tpm report merged', () => reportMerged(w.auditor, { pr: 'https://github.com/o/r/pull/7', note: 'x' })],
-      ['tpm report doc-fix', () => reportDocFix(w.auditor, { pr: 'https://github.com/o/r/pull/7', note: 'x' })],
-      ['tpm ask pm', () => askPm(w.auditor, { url: PAGE, items: ['x'], waitingFor: 'x' })],
+      ['roster report done', () => reportDone(w.auditor, { kind: 'audit', summary: 's', remaining: 'なし', decisions: 'なし', points: [] })],
+      ['roster report end', () => reportEnd(w.auditor, { prs: [], removed: [], left: 'なし' })],
+      ['roster report merged', () => reportMerged(w.auditor, { pr: 'https://github.com/o/r/pull/7', note: 'x' })],
+      ['roster report doc-fix', () => reportDocFix(w.auditor, { pr: 'https://github.com/o/r/pull/7', note: 'x' })],
+      ['roster ask pm', () => askPm(w.auditor, { url: PAGE, items: ['x'], waitingFor: 'x' })],
     ] as const) expect(run, command).toThrow(`Auditor は ${command} を打ちません`);
     expect(w.wire.inbox('file:tpm')).toEqual([]);
     expect(askTpm(w.auditor, { text: 'この件の依頼書の URL を教えてほしい', waitingFor: '依頼書の URL' })[0]).toBe('送った: 【ask-tpm】→ file:tpm（相手の手が空いた時に届く。送り直さない）');

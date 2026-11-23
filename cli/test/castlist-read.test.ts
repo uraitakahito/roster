@@ -1,5 +1,5 @@
-// castlist の監査の検索を読む命令（tpm castlist find・show・lineage・events・settings）と、tpm incident timeline のアクターの欄。
-// 試験は偽の castlist（castlist-fake.ts）に直に書いて下ごしらえし、tpm の命令が送る GET と、出す字を見る。本物の castlist（8802）には触らない。
+// castlist の監査の検索を読む命令（roster castlist find・show・lineage・events・settings）と、roster incident timeline のアクターの欄。
+// 試験は偽の castlist（castlist-fake.ts）に直に書いて下ごしらえし、roster の命令が送る GET と、出す字を見る。本物の castlist（8802）には触らない。
 import { spawnSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { join } from 'node:path';
@@ -16,7 +16,7 @@ import { deadUrl, startFakeCastlist, type CastlistRequest, type FakeCastlist } f
 import { world, type World } from './helpers.ts';
 
 const READS = ['castlist find', 'castlist show', 'castlist lineage', 'castlist events', 'castlist settings'];
-const tpmBin = join(realpathSync(join(import.meta.dirname, '..')), 'bin', 'tpm');
+const tpmBin = join(realpathSync(join(import.meta.dirname, '..')), 'bin', 'roster');
 
 let fake: FakeCastlist;
 let dead: string;
@@ -101,7 +101,7 @@ function auditorWorld(url = fake.url): { w: World, auditor: Context } {
 const page = (url: string): string => `${fake.url}${url}`;
 
 describe('命令の一覧', () => {
-  test('tpm castlist find・show・lineage・events・settings が命令の木と COMMANDS に在る', () => {
+  test('roster castlist find・show・lineage・events・settings が命令の木と COMMANDS に在る', () => {
     const paths = commandPaths(buildProgram());
     for (const c of READS) {
       expect(paths).toContain(c);
@@ -110,7 +110,7 @@ describe('命令の一覧', () => {
   });
 });
 
-describe('tpm castlist find', () => {
+describe('roster castlist find', () => {
   test('旗を GET /v1/actors の引数にする（--label は何度でも）。行ごとにプロフィールの画面の URL を出す', async () => {
     const { w, auditor } = auditorWorld();
     const p = w.project;
@@ -222,7 +222,7 @@ describe('tpm castlist find', () => {
   });
 });
 
-describe('tpm castlist show', () => {
+describe('roster castlist show', () => {
   test('id で 1 つのアクター: ラベル・付随する id・今の状態・最新の model と effort・線の要約・プロフィールの URL', async () => {
     const { w, auditor } = auditorWorld();
     const pm = await seed(w, 'product-manager', { 'tpm.project': w.project }, undefined, undefined, { kind: 'human' });
@@ -249,7 +249,7 @@ describe('tpm castlist show', () => {
     expect(text).toContain(`${pm.name} → ${tpm.name}（launched`);
   });
 
-  test('名でも引ける（この project の tpm が登録して控えたアクター）。castlist には名で引く道が無いので、無い名は id とみなし、無ければ find を勧める', () => {
+  test('名でも引ける（この project の roster が登録して控えたアクター）。castlist には名で引く道が無いので、無い名は id とみなし、無ければ find を勧める', () => {
     const w = world({ castlist: fake.url });
     startTpm(w.tpm);
     const sid = 'cccccccc-0000-4000-8000-000000000001';
@@ -266,7 +266,7 @@ describe('tpm castlist show', () => {
     expect(text).toContain('claude-opus-5-5');
     const missing = thrown(() => castlistShow(w.tpm, 'nobody.1', {}));
     expect(missing).toMatch(/^そのアクターは無い/);
-    expect(missing).toContain('tpm castlist find');
+    expect(missing).toContain('roster castlist find');
   });
 
   test('--json は GET /v1/actors/{id} の答えをそのまま出す', async () => {
@@ -277,7 +277,7 @@ describe('tpm castlist show', () => {
   });
 });
 
-describe('tpm castlist lineage', () => {
+describe('roster castlist lineage', () => {
   test('GET /v1/actors/{id}/lineage の旗を写し、点（名と URL）と線を出す', async () => {
     const { w, auditor } = auditorWorld();
     const pm = await seed(w, 'product-manager', { 'tpm.project': w.project }, undefined, undefined, { kind: 'human' });
@@ -299,7 +299,7 @@ describe('tpm castlist lineage', () => {
   });
 });
 
-describe('tpm castlist events', () => {
+describe('roster castlist events', () => {
   test('旗を GET /v1/events の引数にし（--type は何度でも）、行ごとに出来事とアクターの名と URL を出す', async () => {
     const { w, auditor } = auditorWorld();
     const a = await seed(w, 't-ev01-swe', { 'tpm.project': w.project }, '2026-11-20T11:00:00.000Z', '2026-11-20T11:30:00.000Z');
@@ -318,7 +318,7 @@ describe('tpm castlist events', () => {
   });
 });
 
-describe('tpm castlist settings', () => {
+describe('roster castlist settings', () => {
   test('--mismatch などは GET /v1/settings に、--actor は GET /v1/actors/{id}/settings（--at）にする', async () => {
     const { w, auditor } = auditorWorld();
     const a = await seed(w, 't-st01-swe', { 'tpm.project': w.project }, '2026-11-20T11:00:00.000Z', undefined, { model: 'claude-opus-5-5', effort: 'high' });
@@ -361,7 +361,7 @@ describe('読むだけ', () => {
     expect(w.tpm.state.list('sessions')).toEqual([]);
   });
 
-  test('tpm の命令として打つ: 止まっていれば exit 1 で 1 行、断られれば castlist の訳、--json は答えのまま', async () => {
+  test('roster の命令として打つ: 止まっていれば exit 1 で 1 行、断られれば castlist の訳、--json は答えのまま', async () => {
     const w = world({ castlist: fake.url });
     await seed(w, 't-cl01-swe', { 'tpm.project': w.project, 'tpm.key': 't-cl01' }, '2026-11-20T11:00:00.000Z');
     const env = (url: string): NodeJS.ProcessEnv => ({
@@ -375,10 +375,10 @@ describe('読むだけ', () => {
     const run = (args: string[], url = fake.url) => spawnSync(tpmBin, ['castlist', ...args], { cwd: w.project, encoding: 'utf8', env: env(url) });
     const down = run(['find', '--label', 'tpm.key:t-cl01'], dead);
     expect(down.status).toBe(1);
-    expect(down.stderr).toBe(`tpm: castlist に聞けない（${dead} が応えない）\n`);
+    expect(down.stderr).toBe(`roster: castlist に聞けない（${dead} が応えない）\n`);
     const refused = run(['find']);
     expect(refused.status).toBe(1);
-    expect(refused.stderr).toBe('tpm: 絞る条件を 1 つ以上付ける（label・binding・active_from・active_to・active=true・model・effort・launched_by・skewed のどれか）\n');
+    expect(refused.stderr).toBe('roster: 絞る条件を 1 つ以上付ける（label・binding・active_from・active_to・active=true・model・effort・launched_by・skewed のどれか）\n');
     const json = run(['find', '--label', 'tpm.key:t-cl01', '--label', `tpm.project:${w.project}`, '--json']);
     expect(json.status).toBe(0);
     expect((JSON.parse(json.stdout) as { actors: unknown[] }).actors).toHaveLength(1);
@@ -388,7 +388,7 @@ describe('読むだけ', () => {
   });
 });
 
-describe('tpm incident timeline のアクターの欄', () => {
+describe('roster incident timeline のアクターの欄', () => {
   /** t-tl01 の記録: 担当の問い（12:00:10）・wait（12:00:20）・TPM 担当の知らせ（12:01:00）・/clear の後の担当の wait（12:02:30）・登場の前の guard（11:58:00）。 */
   function records(w: World): void {
     const s = w.tpm.state;

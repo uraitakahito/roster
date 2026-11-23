@@ -2,7 +2,7 @@
 // Product Manager と TPM 担当が、TPM 担当を通らないレビューのやりとりを、置き場の一覧の UI で追うための物。
 // 書くのは判定の語・見た物の URL・時刻だけ（見てほしい所・判定の一言・メッセージの字は写さない。中身はレビューのページにある）。
 // 印を付けられなくても（置き場が古い・応えない・誤りを返す）、命令は止めない（印が付かないだけ。メッセージを送った後に呼ばれるため）。
-// 応えない時は、待ちの印を TPM 担当が後で直す手（tpm page reply … --on review）を、直す依頼書ごとに出す。判定と見た物は手では書けない。
+// 応えない時は、待ちの印を TPM 担当が後で直す手（roster page reply … --on review）を、直す依頼書ごとに出す。判定と見た物は手では書けない。
 import type { Context } from '../context.ts';
 import { openReviews, type Review, type Verdict } from '../reviews.ts';
 import { TpmError } from '../skill-sets.ts';
@@ -12,7 +12,7 @@ import { call, inStore, pagesUrl, reason, storeAtLeast } from './store.ts';
 /** 古い置き場で持てない物の字。 */
 const OLD = `レビューの印を持てない（${PARTY_SINCE} から）`;
 /** 判定と見た物を書けなかった時に添える字（手では書けない）。 */
-const BY_HAND = '判定と見た物は手では書けない。tpm review list と、レビューのページ・依頼書で見る';
+const BY_HAND = '判定と見た物は手では書けない。roster review list と、レビューのページ・依頼書で見る';
 
 /** 頼みの見る物を、置き場に書く形にする: 置き場のページは path（`/<project>/<Key>/<種類>-<番号>.html`。前の置き場の URL でも同じ path）、PR はそのままの URL。 */
 function target(ctx: Context, url: string): string {
@@ -52,7 +52,7 @@ function replyMark(ctx: Context, url: string, state: 'waiting' | 'answered', on:
     const result = setReply(ctx, url, state, on);
     if (result === 'done') return [`置き場の印: ${done} ${url}`];
     if (result === 'conflict' && ignoreConflict) return [];
-    return markFailure(url, result, `tpm page reply ${url} --${state} --on ${on}`, OLD);
+    return markFailure(url, result, `roster page reply ${url} --${state} --on ${on}`, OLD);
   });
 }
 
@@ -66,7 +66,7 @@ function unmarked(url: string, since: 'old' | 'down', fixes: string[]): string[]
 }
 
 /**
- * 頼みを依頼書にした時（tpm ask review・席の起こし直し・tpm assign --role staff-engineer）: 依頼書に見る物を書き、「レビュー待ち」にする。
+ * 頼みを依頼書にした時（roster ask review・席の起こし直し・roster assign --role staff-engineer）: 依頼書に見る物を書き、「レビュー待ち」にする。
  * previous は、頼みが前に持っていた依頼書（起こし直しで置き換えた物）。まだ返っていない頼みがほかに残っていなければ、待ちを外す。
  * 席を起こす道では、居場所ができた後に呼ぶ（起こせなかった回に、依頼書の待ちを残さない）。
  */
@@ -78,7 +78,7 @@ export function markBrief(ctx: Context, url: string, asks: Review[], previous: s
     const replaced = [...new Set(previous)].filter(old => old !== url && !held.has(old));
     const since = storeAtLeast(ctx, PARTY_SINCE);
     if (since !== 'yes') {
-      return unmarked(url, since, [`tpm page reply ${url} --waiting --on review`, ...replaced.map(old => `tpm page reply ${old} --answered --on review`)]);
+      return unmarked(url, since, [`roster page reply ${url} --waiting --on review`, ...replaced.map(old => `roster page reply ${old} --answered --on review`)]);
     }
     const wrote = postMarks(ctx, url, { targets: asks.map(r => target(ctx, r.url)) });
     const lines: string[] = [];
@@ -92,12 +92,12 @@ export function markBrief(ctx: Context, url: string, asks: Review[], previous: s
   });
 }
 
-/** 判定を返した時（tpm report review）: レビューのページに判定と見た物を書き、済ませた頼みの依頼書の「レビュー待ち」を外す。 */
+/** 判定を返した時（roster report review）: レビューのページに判定と見た物を書き、済ませた頼みの依頼書の「レビュー待ち」を外す。 */
 export function markVerdict(ctx: Context, page: string, verdict: Verdict, asks: Review[]): string[] {
   return safely(() => {
     const briefs = [...new Set(asks.flatMap(r => r.brief === undefined ? [] : [r.brief]))];
     const since = storeAtLeast(ctx, PARTY_SINCE);
-    if (since !== 'yes') return unmarked(page, since, briefs.map(brief => `tpm page reply ${brief} --answered --on review`));
+    if (since !== 'yes') return unmarked(page, since, briefs.map(brief => `roster page reply ${brief} --answered --on review`));
     const wrote = postMarks(ctx, page, { verdict, targets: asks.map(r => target(ctx, r.url)) });
     const lines = wrote.result === 'done'
       ? [`置き場の印: 判定と見た物を書いた ${page}`]
@@ -111,11 +111,11 @@ export function markVerdict(ctx: Context, page: string, verdict: Verdict, asks: 
   });
 }
 
-/** 判定を受けずに TPM 担当に上げた時（tpm ask tpm --review）: レビューのページを「上げた」（TPM 担当の返事待ち）にする。TPM 担当が決めたら tpm page reply --answered --on tpm で外す。 */
+/** 判定を受けずに TPM 担当に上げた時（roster ask tpm --review）: レビューのページを「上げた」（TPM 担当の返事待ち）にする。TPM 担当が決めたら roster page reply --answered --on tpm で外す。 */
 export function markEscalated(ctx: Context, page: string): string[] {
   return safely(() => {
     const since = storeAtLeast(ctx, PARTY_SINCE);
-    if (since !== 'yes') return since === 'old' ? markFailure(page, 'old', '', OLD) : markFailure(page, 'down', `tpm page reply ${page} --waiting --on tpm`, OLD);
+    if (since !== 'yes') return since === 'old' ? markFailure(page, 'old', '', OLD) : markFailure(page, 'down', `roster page reply ${page} --waiting --on tpm`, OLD);
     return replyMark(ctx, page, 'waiting', 'tpm', '上げた（TPM 担当の返事待ち）にした');
   });
 }

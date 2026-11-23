@@ -1,4 +1,4 @@
-// tpm infra …: インフラの環境の宣言と承認を見る・書く。tpm guard: hook から呼ばれる guard。
+// roster infra …: インフラの環境の宣言と承認を見る・書く。roster guard: hook から呼ばれる guard。
 import { OWN_LABEL } from '../config.ts';
 import type { Context } from '../context.ts';
 import { recordGuardStop } from '../evidence.ts';
@@ -11,21 +11,21 @@ import { pagesDir } from './store.ts';
 
 const GUARD_LABEL = { 'free': '自由', 'tpm': 'TPM に相談（DevOps Engineer 担当だけ）', 'pm': 'PM の承認（DevOps Engineer 担当だけ）', 'pm-only': 'PM だけ（どの担当も打てない）' } as const;
 
-/** 打った担当。$TPM_ROLE が無ければ、TPM 担当か、tpm が起こしていない session。 */
+/** 打った担当。$TPM_ROLE が無ければ、TPM 担当か、roster が起こしていない session。 */
 export function roleOf(env: NodeJS.ProcessEnv): RoleName | undefined {
   return (ROLE_NAMES as string[]).includes(env.TPM_ROLE ?? '') ? env.TPM_ROLE as RoleName : undefined;
 }
 
 function requireEnv(ctx: Context, name: string) {
   const env = ctx.config.infra[name];
-  if (env === undefined) throw new TpmError(`設定の infra に環境がありません: ${name}（tpm infra list で見る）`);
+  if (env === undefined) throw new TpmError(`設定の infra に環境がありません: ${name}（roster infra list で見る）`);
   return env;
 }
 
 /** 承認を書いてよいのは TPM 担当だけ（Product Manager が決めた後に書く）。 */
-const requireApprover = (ctx: Context, command: string): void => requireTpmSide(ctx, command, '承認を書くのは TPM 担当です（Product Manager が決めた後）。担当は tpm ask pm で頼んでください');
+const requireApprover = (ctx: Context, command: string): void => requireTpmSide(ctx, command, '承認を書くのは TPM 担当です（Product Manager が決めた後）。担当は roster ask pm で頼んでください');
 
-/** 設定にある環境と手続き、「PM の承認」の環境なら今の承認を並べる（`tpm infra list`）。 */
+/** 設定にある環境と手続き、「PM の承認」の環境なら今の承認を並べる（`roster infra list`）。 */
 export function infraList(ctx: Context): string[] {
   const names = Object.keys(ctx.config.infra);
   if (names.length === 0) return ['環境の宣言は無い（設定の infra に書く）'];
@@ -41,9 +41,9 @@ export function infraList(ctx: Context): string[] {
   });
 }
 
-/** 「PM の承認」の環境に、minutes 分だけ効く承認を書く（`tpm infra approve`）。TPM 担当だけが打てる。 */
+/** 「PM の承認」の環境に、minutes 分だけ効く承認を書く（`roster infra approve`）。TPM 担当だけが打てる。 */
 export function infraApprove(ctx: Context, name: string, options: { minutes: number, note?: string }): string[] {
-  requireApprover(ctx, 'tpm infra approve');
+  requireApprover(ctx, 'roster infra approve');
   const guardOf = requireEnv(ctx, name).guard;
   if (guardOf === 'pm-only') throw new TpmError(`環境 ${name} の手は Product Manager だけのものなので、承認を書いても担当は打てません（Product Manager が自分の terminal で直に打つ）`);
   if (guardOf !== 'pm') throw new TpmError(`環境 ${name} の手続きは「PM の承認」ではないので、承認は要りません`);
@@ -53,9 +53,9 @@ export function infraApprove(ctx: Context, name: string, options: { minutes: num
   return [`承認を書いた: ${name}（${until} まで）`];
 }
 
-/** 環境の承認を、切れる前に消す（`tpm infra revoke`）。TPM 担当だけが打てる。 */
+/** 環境の承認を、切れる前に消す（`roster infra revoke`）。TPM 担当だけが打てる。 */
 export function infraRevoke(ctx: Context, name: string): string[] {
-  requireApprover(ctx, 'tpm infra revoke');
+  requireApprover(ctx, 'roster infra revoke');
   requireEnv(ctx, name);
   removeApproval(ctx.state, name);
   return [`承認を消した: ${name}`];

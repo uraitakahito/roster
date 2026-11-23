@@ -1,4 +1,4 @@
-// 置き場のページの返事の状態（返事待ち・答えた）: tpm ask pm が返事待ちにし、tpm answer が答えたにする。
+// 置き場のページの返事の状態（返事待ち・答えた）: roster ask pm が返事待ちにし、roster answer が答えたにする。
 import { writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
@@ -35,7 +35,7 @@ function started() {
   return { w, se, tpm: w.tpm, confirm, state, texts, project };
 }
 
-describe('tpm ask pm と tpm answer が、置き場のページの返事の状態を書く', () => {
+describe('roster ask pm と roster answer が、置き場のページの返事の状態を書く', () => {
   test('レビュー待ち・上げた件（待ちの相手が Product Manager でない物）は、answer と --supersede の数に入らない', () => {
     const s = started();
     const url = s.confirm('案を選ぶ');
@@ -134,7 +134,7 @@ describe('返事の状態を持てない置き場でも、メッセージは送�
     // 前の置き場は reply の絞りを読まずに 2 枚とも返すが、返事待ちとは数えない（止まらない）。
     expect(answer(s.tpm, 't-x7k2', { text: '案 A' })).toEqual(['送った: 【answer】→ file:1（相手の手が空いた時に届く。送り直さない）']);
     expect(pageList(s.tpm, { reply: 'waiting' })).toEqual(['合うページは無い']);
-    expect(() => pageReply(s.tpm, [first], { waiting: true })).toThrow(/版が古く[\s\S]*tpm ask devops/);
+    expect(() => pageReply(s.tpm, [first], { waiting: true })).toThrow(/版が古く[\s\S]*roster ask devops/);
   });
 
   test('止まっている置き場: 印は付けず、ask pm も answer も dismiss も通る', () => {
@@ -142,7 +142,7 @@ describe('返事の状態を持てない置き場でも、メッセージは送�
     const url = s.confirm('案を選ぶ');
     s.w.store.down = true;
     const out = askPm(s.se, { url, items: ['案の選択'], waitingFor: '案の選択' });
-    expect(out[1]).toMatch(new RegExp(`^置き場の印: 付けていない（置き場が応えない。[\\s\\S]*tpm page reply ${url} --waiting`));
+    expect(out[1]).toMatch(new RegExp(`^置き場の印: 付けていない（置き場が応えない。[\\s\\S]*roster page reply ${url} --waiting`));
     expect(s.texts('file:tpm').at(-1)).toMatch(/^【ask-pm】/);
     expect(answer(s.tpm, 't-x7k2', { text: '案 A' })).toEqual(['送った: 【answer】→ file:1（相手の手が空いた時に届く。送り直さない）']);
     expect(() => pageReply(s.tpm, [url], { waiting: true })).toThrow(/置き場（.*）が応えません。返事の状態は書いていません。/);
@@ -151,7 +151,7 @@ describe('返事の状態を持てない置き場でも、メッセージは送�
   });
 });
 
-describe('tpm page reply と tpm dismiss', () => {
+describe('roster page reply と roster dismiss', () => {
   test('TPM 担当が手で直せる。担当からは止まる。旗は 1 つだけ', () => {
     const s = started();
     const url = s.confirm('案を選ぶ');
@@ -178,12 +178,12 @@ describe('tpm page reply と tpm dismiss', () => {
       '送った: 【dismiss】→ file:1（相手の手が空いた時に届く。送り直さない）',
       '置き場に、t-x7k2 の返事待ちのページが 1 枚残っています:',
       url,
-      'もう答えが要らなければ、tpm page reply <URL>… --answered で印を外す',
+      'もう答えが要らなければ、roster page reply <URL>… --answered で印を外す',
     ]);
   });
 });
 
-describe('tpm ask pm --supersede: 置き換えた古い確認の印を外す', () => {
+describe('roster ask pm --supersede: 置き換えた古い確認の印を外す', () => {
   test('新しい確認を返事待ちにし、名指した古い確認を答えたにする。置き換えはメッセージ（log）にも載る', () => {
     const s = started();
     const old = s.confirm('plan-9 で進むか');
@@ -233,6 +233,6 @@ describe('tpm ask pm --supersede: 置き換えた古い確認の印を外す', (
     s.w.store.down = true;
     const out = askPm(s.se, { url: next, items: ['b'], waitingFor: 'b', supersede: [old] });
     expect(out[0]).toBe('送った: 【ask-pm】→ file:tpm（相手の手が空いた時に届く。送り直さない）');
-    expect(out[2]).toMatch(new RegExp(`^置き場の印: 付けていない（置き場が応えない。[\\s\\S]*tpm page reply ${old} --answered`));
+    expect(out[2]).toMatch(new RegExp(`^置き場の印: 付けていない（置き場が応えない。[\\s\\S]*roster page reply ${old} --answered`));
   });
 });

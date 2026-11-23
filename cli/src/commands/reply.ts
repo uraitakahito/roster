@@ -1,5 +1,5 @@
 // 置き場（pagetray 0.5.0 から）のページの、返事の状態（返事待ち・答えた）を書く・読む。
-// tpm ask pm が確認のページを返事待ちにし、tpm answer が答えたにする。Product Manager は、置き場の一覧の UI の印と件数で、返事が要るページを見分ける。
+// roster ask pm が確認のページを返事待ちにし、roster answer が答えたにする。Product Manager は、置き場の一覧の UI の印と件数で、返事が要るページを見分ける。
 // 待ちの相手（pagetray 0.8.0 から）: レビューの依頼書はレビューの席を、上げたレビューは TPM 担当を待つ（review-marks.ts）。Product Manager の数には入らない。
 // 状態を書けない置き場（0.5.0 より前・止まっている）でも、メッセージを送る命令は止めない（印は付かないだけ）。
 import { basename } from 'node:path';
@@ -119,7 +119,7 @@ export function waitingByParty(ctx: Context, key: string): Record<Party, string[
   return { pm, review: of('review') ?? [], tpm: of('tpm') ?? [] };
 }
 
-/** 返事待ちのページの、相手ごとの言い方（tpm dismiss が並べる時の字）。 */
+/** 返事待ちのページの、相手ごとの言い方（roster dismiss が並べる時の字）。 */
 export const WAITING_PAGES: Record<Party, string> = {
   pm: '返事待ちのページ',
   review: 'レビュー待ちの依頼書',
@@ -133,7 +133,7 @@ export const WAITING_PAGES: Record<Party, string> = {
 export function replyLine(ctx: Context, url: string, state: ReplyState, done?: string, on: Party = 'pm'): string[] {
   const result = setReply(ctx, url, state, on);
   if (result === 'done') return [`置き場の印: ${done ?? `${REPLY_LABELS[on][state]}にした`} ${url}`];
-  return markFailure(url, result, `tpm page reply ${url} --${state}${on === 'pm' ? '' : ` --on ${on}`}`, on === 'pm' ? '返事の状態を持てない' : `レビューの印を持てない（${PARTY_SINCE} から）`);
+  return markFailure(url, result, `roster page reply ${url} --${state}${on === 'pm' ? '' : ` --on ${on}`}`, on === 'pm' ? '返事の状態を持てない' : `レビューの印を持てない（${PARTY_SINCE} から）`);
 }
 
 /**
@@ -143,7 +143,7 @@ export function replyLine(ctx: Context, url: string, state: ReplyState, done?: s
 export function markFailure(url: string, result: ReplyResult, fix: string, old: string): string[] {
   switch (result) {
     case 'done': return [];
-    case 'old': return [`置き場の印: 付けていない（置き場の版が古く、${old}。メッセージは送った。置き場の版を上げるのは tpm ask devops）`];
+    case 'old': return [`置き場の印: 付けていない（置き場の版が古く、${old}。メッセージは送った。置き場の版を上げるのは roster ask devops）`];
     case 'down': return [`置き場の印: 付けていない（置き場が応えない。メッセージは送った。後で TPM 担当が ${fix} で直せる）`];
     case 'missing': return [`置き場の印: 付けていない（そのページは置き場に無い: ${url}）`];
     case 'conflict': return [`置き場の印: 付けていない（${url} は、その相手の返事を待っていなかった。置き場は何も替えていない）`];

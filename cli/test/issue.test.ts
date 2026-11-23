@@ -24,7 +24,7 @@ const JIRA = JSON.stringify({
   },
 });
 
-describe('tpm issue view', () => {
+describe('roster issue view', () => {
   test('課題管理が none の project でも、Jira の Key なら acli で読む', () => {
     const { exec, calls } = fake({ stdout: JIRA });
     const ctx = { ...world().tpm, exec };

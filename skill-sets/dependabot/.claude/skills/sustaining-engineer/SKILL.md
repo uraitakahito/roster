@@ -1,6 +1,6 @@
 ---
 name: sustaining-engineer
-description: Sustaining Engineer 担当として、Dependabot の PR 1 本を受け持つ（72 時間の確かめ・直し・CI を緑に・TPM 担当に merge を頼む）。TPM 担当の /dependabot-triage が `tpm assign` で起こした Claude Code が、最初の入力 `/sustaining-engineer` で使う。
+description: Sustaining Engineer 担当として、Dependabot の PR 1 本を受け持つ（72 時間の確かめ・直し・CI を緑に・TPM 担当に merge を頼む）。TPM 担当の /dependabot-triage が `roster assign` で起こした Claude Code が、最初の入力 `/sustaining-engineer` で使う。
 disable-model-invocation: true
 ---
 
@@ -11,10 +11,10 @@ disable-model-invocation: true
 ## 0. 名乗る・設定を読む（最初に必ず）
 
 ```sh
-tpm hello
+roster hello
 ```
 
-- **これが最初の手。** 状態を出し、TPM 担当に名乗りを届け、受け持ちを返す。「課題の Key」が受け持つ PR（`<repo>#<PR 番号>`）。誤りで止まったら（`tpm assign` で起こされていない）、何もせずにそのことを画面に書いて止まる。
+- **これが最初の手。** 状態を出し、TPM 担当に名乗りを届け、受け持ちを返す。「課題の Key」が受け持つ PR（`<repo>#<PR 番号>`）。誤りで止まったら（`roster assign` で起こされていない）、何もせずにそのことを画面に書いて止まる。
 - 居場所の題は TPM 担当が `Sustaining <repo>#<PR>` の形で付けてある。
 
 以下、`<repo>#<PR>` を「この PR」と書きます。
@@ -42,9 +42,9 @@ node "${CLAUDE_SKILL_DIR}/../../../../../cli/src/release-age.ts" <config.owner>/
 | 終了コード | 意味 | すること |
 |---|---|---|
 | 0 | 対象（いちばん新しい version の公開から `config.hours` 時間を過ぎた） | 先へ進む |
-| 10 | まだ | `tpm report not-yet "eligibleAt <時刻>"` を送り、止まる（直さない） |
-| 20 | 判定できない（Docker など・時刻が読めない） | `tpm ask tpm "判定できない・<出力の JSON>" --waiting-for "72 時間の判定"` |
-| 1 | 道具の誤り | 出力を添えて `tpm ask tpm` |
+| 10 | まだ | `roster report not-yet "eligibleAt <時刻>"` を送り、止まる（直さない） |
+| 20 | 判定できない（Docker など・時刻が読めない） | `roster ask tpm "判定できない・<出力の JSON>" --waiting-for "72 時間の判定"` |
+| 1 | 道具の誤り | 出力を添えて `roster ask tpm` |
 
 - 時間は **依存の version の公開から** 数える（PR の作成からではない）。version は PR の差分（lockfile・workflow）から読み、依存の依存も数える。
 - 出力の `depsSource` が `commit-message` なら、差分から version が取れず Dependabot の commit の本文に戻った。本文は PR の作り直しで古いことがあるので、merge を頼む前に差分を目で見る。
@@ -66,9 +66,9 @@ node "${CLAUDE_SKILL_DIR}/../../../../../cli/src/release-age.ts" <config.owner>/
 
 1. **衝突なら、まず数分待つ。** Dependabot は衝突を頼まれなくても自分で rebase する（公式「By default, Dependabot automatically rebases pull requests to resolve any conflicts」）。
 2. **人が commit を足した PR では `@dependabot rebase` を打たない。** Dependabot は余分な commit のある PR をもう rebase しない（公式。`[dependabot skip]` などの印の commit なら上書きされる）。打っても空振りする。代わりに worktree で `git merge origin/main` して push する（**force push はしない**）。
-3. **打ったら、応じた印 👍 を待つ。** 時間は決まっていない（公式は「several minutes」。実測では 1 回目 20 分無反応・2 回目 4 分、10 分無反応のこともあった）。**待つのは `config.rebaseWaitMinutes` 分まで。** 越えたら `tpm report not-yet "rebase に <分> 分応じない"` か `tpm ask tpm` を送る。待つ間は `tpm wait work "rebase を待つ（<打った時刻>）"`。
+3. **打ったら、応じた印 👍 を待つ。** 時間は決まっていない（公式は「several minutes」。実測では 1 回目 20 分無反応・2 回目 4 分、10 分無反応のこともあった）。**待つのは `config.rebaseWaitMinutes` 分まで。** 越えたら `roster report not-yet "rebase に <分> 分応じない"` か `roster ask tpm` を送る。待つ間は `roster wait work "rebase を待つ（<打った時刻>）"`。
 4. **rebase で緑が赤になることがある。** audit がいまの勧告の DB で流れ直すため。新しい勧告で audit が赤の間は、衝突していない PR は rebase しない。
-5. **group の PR は閉じて新しい番号で作り直されることがある**（docs には無い・実測）。72 時間は version の公開から数えるので判定は変わらない。作り直されたら、`tpm report recreated "旧 #N → 新 #M" --title "Sustaining <repo>#<新>"` で知らせ（居場所の題も替わる。名簿の Key は元の番号のまま）、新しい PR で 2 からやり直す。
+5. **group の PR は閉じて新しい番号で作り直されることがある**（docs には無い・実測）。72 時間は version の公開から数えるので判定は変わらない。作り直されたら、`roster report recreated "旧 #N → 新 #M" --title "Sustaining <repo>#<新>"` で知らせ（居場所の題も替わる。名簿の Key は元の番号のまま）、新しい PR で 2 からやり直す。
 6. merge されないまま 30 日たった PR は、Dependabot がもう rebase しない（公式）。
 
 ## 4. merge を頼む
@@ -76,21 +76,21 @@ node "${CLAUDE_SKILL_DIR}/../../../../../cli/src/release-age.ts" <config.owner>/
 CI が全部緑で、2 の判定が 0 のとき:
 
 ```sh
-tpm report merge-request "<PR の URL>／CI: 緑／公開から <最も新しい version の hours> 時間（eligibleAt <時刻>・depsSource <diff か commit-message>）／変えた物: <無し か 足した commit・別の PR>"
+roster report merge-request "<PR の URL>／CI: 緑／公開から <最も新しい version の hours> 時間（eligibleAt <時刻>・depsSource <diff か commit-message>）／変えた物: <無し か 足した commit・別の PR>"
 ```
 
 TPM 担当に【merge-request】が行き、状態が `回答待ち(TPM): merge` になる。
 
 ## 5. 困ったら
 
-- 迷ったら `tpm ask tpm "<何に困っているか・試したこと・案と推し>" --waiting-for "<何を>"`。
-- Product Manager の判断が要るときは、protocol.md の「Product Manager に確かめる」で `tpm ask pm` を送る。
-- 段の区切り（PR を出す前・merge を頼む前）に `tpm inbox` で、まだ届いていないメッセージを見る。
+- 迷ったら `roster ask tpm "<何に困っているか・試したこと・案と推し>" --waiting-for "<何を>"`。
+- Product Manager の判断が要るときは、protocol.md の「Product Manager に確かめる」で `roster ask pm` を送る。
+- 段の区切り（PR を出す前・merge を頼む前）に `roster inbox` で、まだ届いていないメッセージを見る。
 
 ## 6. 終わり
 
 TPM 担当から merge 済みのメッセージ（【notify】）を受けたら:
 
 1. 3 で作った worktree があれば消す。
-2. `tpm report end --pr <PR の URL> --removed <消した worktree> … --left "<merge の commit／残した物>"` を打つ（PR 1 本の担当は、【dismiss】を待たずに【end】を送ってよい）。
+2. `roster report end --pr <PR の URL> --removed <消した worktree> … --left "<merge の commit／残した物>"` を打つ（PR 1 本の担当は、【dismiss】を待たずに【end】を送ってよい）。
 3. **居場所は自分で閉じない。** TPM 担当が報告を受け取った後に閉じる。

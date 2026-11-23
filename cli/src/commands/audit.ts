@@ -1,6 +1,6 @@
-// tpm audit …: Auditor の席を起こす（start。Product Manager が打つ）・監査を始める（begin。Auditor が打つ）・新しい文脈になった印を書く（fresh。hook が呼ぶ）。
-// Auditor は TPM 担当の回し方も見るので、席は TPM 担当の手を通さない: 起こすのも閉じるのも Product Manager で、tpm assign・dismiss・close はこの席を断る。
-// 報告と決定の命令（tpm report audit・tpm report decided）は messages.ts にある。
+// roster audit …: Auditor の席を起こす（start。Product Manager が打つ）・監査を始める（begin。Auditor が打つ）・新しい文脈になった印を書く（fresh。hook が呼ぶ）。
+// Auditor は TPM 担当の回し方も見るので、席は TPM 担当の手を通さない: 起こすのも閉じるのも Product Manager で、roster assign・dismiss・close はこの席を断る。
+// 報告と決定の命令（roster report audit・roster report decided）は messages.ts にある。
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Command } from 'commander';
@@ -23,12 +23,12 @@ const coreSkill = (ctx: Context, ...path: string[]): string => join(skillSetDir(
 /** MM-DD HH:MM（台帳の 1 行と同じ形）。 */
 const stamp = (iso: string): string => iso.slice(5, 16).replace('T', ' ');
 
-/** `tpm audit start` の旗。 */
+/** `roster audit start` の旗。 */
 export interface StartOptions {
   model?: string
   effort?: string
   permissionMode?: string
-  /** 起こした Auditor の tpm hello を待つ秒。0 なら待たない。 */
+  /** 起こした Auditor の roster hello を待つ秒。0 なら待たない。 */
   wait: number
 }
 
@@ -56,7 +56,7 @@ export function auditStart(ctx: Context, options: StartOptions): string[] {
     ...resolveSettings('auditor', { flags: options, config: ctx.config.roles.auditor, env: ctx.env }),
   };
   // castlist を設定していれば、起きているかを見る（止まっていれば、席を起こさずに止まる）。
-  const skew = requireUp(ctx, 'Audit の席は起こしていません。', ['打ってから、もう 1 度 tpm audit start を打ってください。']);
+  const skew = requireUp(ctx, 'Audit の席は起こしていません。', ['打ってから、もう 1 度 roster audit start を打ってください。']);
   const lines = launch(ctx, record, existing !== undefined, options.wait, ['この席で /audit（定期の監査）か /audit <件の番号…>（臨時の監査）を呼ぶ。2 度目からは、先に /clear を打つ', ...skew], PM_REF);
   appendAudit(ctx, { kind: 'start', address: record.address ?? '' });
   return lines;
@@ -80,7 +80,7 @@ function materials(ctx: Context, events: AuditEvent[]): string[] {
 }
 
 /**
- * Auditor が名乗る（tpm hello から呼ばれる）。居場所の題と状態を出し、名簿に宛先と時刻を書き、監査の材料を返す。
+ * Auditor が名乗る（roster hello から呼ばれる）。居場所の題と状態を出し、名簿に宛先と時刻を書き、監査の材料を返す。
  * TPM 担当が起きていなくても名乗れる（Auditor の席は TPM 担当に頼らない）。
  */
 export function auditorHello(ctx: Context, record: RoleRecord): string[] {
@@ -107,7 +107,7 @@ export function auditorHello(ctx: Context, record: RoleRecord): string[] {
  * 前の報告の後に新しい文脈（席を起こした・/clear した）になっていなければ、始めずに止まる。通れば、監査の材料を返す。
  */
 export function auditBegin(ctx: Context, numbers: string[]): string[] {
-  requireAuditor(ctx, 'tpm audit begin');
+  requireAuditor(ctx, 'roster audit begin');
   const events = readAudits(ctx);
   const stale = staleReport(events);
   if (stale !== undefined) {
@@ -127,7 +127,7 @@ export function auditBegin(ctx: Context, numbers: string[]): string[] {
     `監査を始めた: ${incidents.length === 0 ? '定期' : `臨時（${incidents.map(n => `#${n}`).join('・')}）`}`,
     ...materials(ctx, events),
     `台帳: 未決 ${open.length}（出来事 ${open.filter(i => i.type !== undefined).length}・残りと PM の手 ${open.filter(i => i.type === undefined).length}）・振った ${all.filter(i => i.status === 'assigned').length}`,
-    `見直す: tpm incident review／追いかける: tpm incident follow${last === undefined ? '' : ` --since ${last.at}`}`,
+    `見直す: roster incident review／追いかける: roster incident follow${last === undefined ? '' : ` --since ${last.at}`}`,
   ];
 }
 
@@ -141,14 +141,14 @@ export function auditFresh(ctx: Context, stdin: string): void {
   if (source === 'startup' || source === 'clear') appendAudit(ctx, { kind: 'fresh', source });
 }
 
-/** `tpm audit` の命令を命令の木に足す。readStdin は hook の標準入力を読む。 */
+/** `roster audit` の命令を命令の木に足す。readStdin は hook の標準入力を読む。 */
 export function registerAudit(program: Command, print: (lines: string[]) => void, readStdin: () => string): void {
   const audit = program.command('audit').description('Auditor の席（Product Manager が起こす）と、監査の始まり');
   audit.command('start').description('Product Manager が Auditor の席を起こす（居場所を作り、名乗るまで待つ。席は project に 1 つ）')
     .option('--model <model>', 'Auditor の model（既定は config.jsonc の auditor の欄・$TPM_MODEL・役割の既定の順）')
     .option('--effort <effort>', 'Auditor の effort（同じ順）')
     .option('--permission-mode <mode>', 'Auditor の permission mode（同じ順）')
-    .option('--wait <秒>', '起こした Auditor の tpm hello を待つ秒（0 なら待たない）', '90')
+    .option('--wait <秒>', '起こした Auditor の roster hello を待つ秒（0 なら待たない）', '90')
     .action((options: Omit<StartOptions, 'wait'> & { wait: string }) => print(auditStart(createContext(), { ...options, wait: Number(options.wait) })));
   audit.command('begin [numbers...]').description('Auditor が監査を始める（番号があれば、その件の臨時の監査）。前の報告の後に /clear していなければ止まる')
     .action((numbers: string[]) => print(auditBegin(createContext(), numbers)));
@@ -159,7 +159,7 @@ export function registerAudit(program: Command, print: (lines: string[]) => void
         auditFresh(createContext(), readStdin());
       }
       catch (e) {
-        process.stderr.write(`tpm audit fresh: ${(e as Error).message}\n`);
+        process.stderr.write(`roster audit fresh: ${(e as Error).message}\n`);
       }
     });
 }

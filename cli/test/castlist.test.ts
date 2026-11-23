@@ -64,7 +64,7 @@ const bashInput = (sid: string, extra: Record<string, unknown> = {}): string =>
 /** 外の命令のうち、castlist に触る物（container と、置き場でない URL への curl）。 */
 const castlistCalls = (w: World) => w.calls.filter(c => c.cmd === 'container' || (c.cmd === 'curl' && !/127\.0\.0\.1:880[01]/.test(c.args.at(-1) ?? '')));
 
-/** TPM 担当の周り: tpm start の 1 行が付ける環境変数を持つ。 */
+/** TPM 担当の周り: roster start の 1 行が付ける環境変数を持つ。 */
 const tpmSeat = (w: World): Context => withEnv(w.tpm, {
   CLAUDE_CODE_SESSION_ID: TPM_SID,
   TPM_LAUNCH: 'launch-tpm',
@@ -74,7 +74,7 @@ const tpmSeat = (w: World): Context => withEnv(w.tpm, {
   TPM_LAUNCH_FRESH: '1',
 });
 
-/** 担当の周り: tpm run-role が付ける環境変数（roleEnv）と、Claude Code の session。 */
+/** 担当の周り: roster run-role が付ける環境変数（roleEnv）と、Claude Code の session。 */
 function seat(w: World, key: string, sid: string, extra: NodeJS.ProcessEnv = {}): Context {
   const base = w.role(key, 'file:1');
   const record = requireRole(w.tpm, key);
@@ -82,7 +82,7 @@ function seat(w: World, key: string, sid: string, extra: NodeJS.ProcessEnv = {})
   return { ...base, env: { ...env, CLAUDE_CODE_SESSION_ID: sid, ...extra } };
 }
 
-/** castlist を設定した世界で、tpm start（PM の登録）・TPM 担当の登場・担当 1 人の assign までを済ませる。 */
+/** castlist を設定した世界で、roster start（PM の登録）・TPM 担当の登場・担当 1 人の assign までを済ませる。 */
 function launched(config: Record<string, unknown> = {}): { w: World, tpm: Context, record: RoleRecord } {
   const w = world({ castlist: fake.url, ...config });
   startTpm(w.tpm);
@@ -94,7 +94,7 @@ function launched(config: Record<string, unknown> = {}): { w: World, tpm: Contex
 }
 
 describe('castlist を設定していない時', () => {
-  test('tpm start・assign・hello・guard・close・session の hook は、castlist に触らない', () => {
+  test('roster start・assign・hello・guard・close・session の hook は、castlist に触らない', () => {
     const before = fake.requests().length;
     const w = world();
     const tpm = tpmSeat(w);
@@ -119,7 +119,7 @@ describe('castlist を設定していない時', () => {
 });
 
 describe('castlist が止まっている時', () => {
-  test('tpm start は 1 行を出さず、Product Manager が打つ container start を出す（container が在る時）', () => {
+  test('roster start は 1 行を出さず、Product Manager が打つ container start を出す（container が在る時）', () => {
     const w = world({ castlist: dead });
     w.answers.set('container inspect castlist.box', { status: 0, stdout: '[{}]', stderr: '' });
     expect(() => startTpm(w.tpm)).toThrow(/castlist/);
@@ -168,16 +168,16 @@ describe('castlist が止まっている時', () => {
     expect(message).toContain('https://uraitakahito.github.io/castlist/');
   });
 
-  test('tpm assign は担当を起こさず、1 行と tpm wait pm "castlist を起こす" --hand を出す', () => {
+  test('roster assign は担当を起こさず、1 行と roster wait pm "castlist を起こす" --hand を出す', () => {
     const w = world({ castlist: dead });
     hello(w.tpm);
-    expect(() => assign(w.tpm, 't-x7k2', SE)).toThrow(/tpm wait pm "castlist を起こす" --hand/);
+    expect(() => assign(w.tpm, 't-x7k2', SE)).toThrow(/roster wait pm "castlist を起こす" --hand/);
     expect(() => assign(w.tpm, 't-x7k2', SE)).toThrow(/^container start castlist\.box$/m);
     expect(w.wire.seats()).toEqual([]);
     expect(readRole(w.tpm, 't-x7k2')).toBeUndefined();
   });
 
-  test('tpm audit start は席を起こさない', () => {
+  test('roster audit start は席を起こさない', () => {
     const w = world({ castlist: dead });
     w.answers.set('container inspect castlist.box', { status: 1, stdout: '', stderr: '' });
     w.answers.set('container inspect castlist', { status: 1, stdout: '', stderr: '' });
@@ -186,7 +186,7 @@ describe('castlist が止まっている時', () => {
     expect(readRole(w.tpm, 'audit')).toBeUndefined();
   });
 
-  test('tpm hello は名乗らずに止まる', () => {
+  test('roster hello は名乗らずに止まる', () => {
     const w = world({ castlist: dead });
     expect(() => hello(tpmSeat(w))).toThrow(/^container start castlist\.box$/m);
     expect(w.tpm.state.read('tpm.jsonc')).toBeUndefined();
@@ -209,13 +209,13 @@ describe('castlist が止まっている時', () => {
 });
 
 describe('時計', () => {
-  test('castlist の時刻と 2 秒より離れていれば、tpm report incident を勧める 1 行を出す（止めない）', () => {
+  test('castlist の時刻と 2 秒より離れていれば、roster report incident を勧める 1 行を出す（止めない）', () => {
     const w = world({ castlist: fake.url });
     try {
       fake.setNow('2026-11-20T12:00:05.000Z');
       const { warnings, line } = startTpm(w.tpm);
       expect(warnings).toHaveLength(1);
-      expect(warnings[0]).toMatch(/5 秒.*tpm report incident/);
+      expect(warnings[0]).toMatch(/5 秒.*roster report incident/);
       expect(line).toContain('claude --model');
       fake.setNow('2026-11-20T11:59:58.500Z');
       expect(startTpm(w.tpm).warnings).toEqual([]);
@@ -226,7 +226,7 @@ describe('時計', () => {
   });
 });
 
-describe('tpm start', () => {
+describe('roster start', () => {
   test('/healthz を見て、Product Manager を人のアクターとして登録する（2 度目も同じアクター）。1 行に起こした印の環境変数を付ける', () => {
     const w = world({ castlist: fake.url });
     const got = mark();
@@ -281,7 +281,7 @@ describe('名の決まり', () => {
   });
 });
 
-describe('課題の担当が tpm ask review で起こした Staff Engineer 担当の席', () => {
+describe('課題の担当が roster ask review で起こした Staff Engineer 担当の席', () => {
   test('起こした者（launchedBy）は、課題の担当の session（TPM 担当ではない）', () => {
     const { w } = launched();
     const se = { ...seat(w, 't-x7k2', SID), root: staffRoot() };
@@ -414,7 +414,7 @@ describe('session-end', () => {
 
 /** 写しの JSONL を書く（Claude Code の transcript に見立てる）。 */
 function transcript(lines: unknown[]): string {
-  const file = join(mkdtempSync(join(tmpdir(), 'tpm-transcript-')), 'session.jsonl');
+  const file = join(mkdtempSync(join(tmpdir(), 'roster-transcript-')), 'session.jsonl');
   writeFileSync(file, lines.map(l => `${JSON.stringify(l)}\n`).join(''));
   return file;
 }
@@ -535,28 +535,28 @@ describe('model の別名を断る', () => {
 });
 
 describe('hook の settings', () => {
-  const hooks = (role?: RoleName) => (JSON.parse(guardSettings('/r/cli/bin/tpm', role)) as { hooks: Record<string, { matcher?: string, hooks: { command: string }[] }[]> }).hooks;
+  const hooks = (role?: RoleName) => (JSON.parse(guardSettings('/r/cli/bin/roster', role)) as { hooks: Record<string, { matcher?: string, hooks: { command: string }[] }[]> }).hooks;
 
-  test.each<[string, RoleName | undefined]>([['TPM 担当', undefined], ['担当', 'software-engineer'], ['Auditor', 'auditor']])('%s: session の始まりと終わりに tpm castlist を呼ぶ', (_label, role) => {
+  test.each<[string, RoleName | undefined]>([['TPM 担当', undefined], ['担当', 'software-engineer'], ['Auditor', 'auditor']])('%s: session の始まりと終わりに roster castlist を呼ぶ', (_label, role) => {
     const h = hooks(role);
-    expect(h.SessionStart?.flatMap(g => g.hooks.map(x => x.command))).toContain('/r/cli/bin/tpm castlist session-start');
-    expect(h.SessionEnd?.flatMap(g => g.hooks.map(x => x.command))).toEqual(['/r/cli/bin/tpm castlist session-end']);
-    expect(h.PreToolUse?.[0]?.hooks.map(x => x.command)).toEqual(['/r/cli/bin/tpm guard']);
+    expect(h.SessionStart?.flatMap(g => g.hooks.map(x => x.command))).toContain('/r/cli/bin/roster castlist session-start');
+    expect(h.SessionEnd?.flatMap(g => g.hooks.map(x => x.command))).toEqual(['/r/cli/bin/roster castlist session-end']);
+    expect(h.PreToolUse?.[0]?.hooks.map(x => x.command)).toEqual(['/r/cli/bin/roster guard']);
   });
 
-  test('Auditor の席は、始まりに tpm audit fresh も呼ぶ', () => {
-    expect(hooks('auditor').SessionStart?.flatMap(g => g.hooks.map(x => x.command))).toEqual(['/r/cli/bin/tpm audit fresh', '/r/cli/bin/tpm castlist session-start', '/r/cli/bin/tpm returned check']);
+  test('Auditor の席は、始まりに roster audit fresh も呼ぶ', () => {
+    expect(hooks('auditor').SessionStart?.flatMap(g => g.hooks.map(x => x.command))).toEqual(['/r/cli/bin/roster audit fresh', '/r/cli/bin/roster castlist session-start', '/r/cli/bin/roster returned check']);
   });
 });
 
-describe('tpm castlist の命令（hook が bin/tpm を動かす）', () => {
-  /** 試験を流す担当の居場所の TPM_* と cmux・Claude Code の変数を抜いた環境で、folder の中で tpm を動かす。 */
+describe('roster castlist の命令（hook が bin/roster を動かす）', () => {
+  /** 試験を流す担当の居場所の TPM_* と cmux・Claude Code の変数を抜いた環境で、folder の中で roster を動かす。 */
   const run = (dir: string, args: string[], input: string) => {
     const env: NodeJS.ProcessEnv = { PATH: process.env.PATH, HOME: process.env.HOME, XDG_STATE_HOME: join(dir, 'state') };
-    return spawnSync(join(import.meta.dirname, '..', 'bin', 'tpm'), args, { cwd: dir, env, input, encoding: 'utf8' });
+    return spawnSync(join(import.meta.dirname, '..', 'bin', 'roster'), args, { cwd: dir, env, input, encoding: 'utf8' });
   };
   const folder = (config: Record<string, unknown>): string => {
-    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-castlist-cli-')));
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'roster-castlist-cli-')));
     mkdirSync(join(dir, '.claude', 'roles'), { recursive: true });
     writeFileSync(join(dir, '.claude', 'roles', 'config.jsonc'), JSON.stringify({ transport: 'file', ...config }));
     return dir;
@@ -597,7 +597,7 @@ describe('担当を起こす環境変数', () => {
     for (const name of ['TPM_LAUNCH', 'TPM_LAUNCHED_BY', 'TPM_LAUNCH_MODEL', 'TPM_LAUNCH_EFFORT', 'TPM_LAUNCH_FRESH']) expect(env).not.toHaveProperty(name);
   });
 
-  test('tpm audit start の起こした者は Product Manager', () => {
+  test('roster audit start の起こした者は Product Manager', () => {
     const w = world({ castlist: fake.url });
     startTpm(w.tpm);
     auditStart(w.tpm, { wait: 0 });
@@ -774,7 +774,7 @@ describe('落ちた session の突き合わせ（推しの幕引き）', () => {
     expect(inferredCloses(got())).toEqual([]);
   });
 
-  test('自分の session の id が無い所（tpm の起こした session の外）で打っても、突き合わせない', () => {
+  test('自分の session の id が無い所（roster の起こした session の外）で打っても、突き合わせない', () => {
     const { tpmIn } = world2();
     const outside = tpmIn({ [TPM_AT.uuid]: TPM_AT.ref });
     const got = mark();
@@ -801,7 +801,7 @@ describe('落ちた session の突き合わせ（推しの幕引き）', () => {
     expect(lines.join('\n')).toContain('落ちたと推した幕引きを送れませんでした（t-x7k2-swe.1）');
   });
 
-  test('推しで閉じた session が tpm hello を打てば、名乗りより前に再登場を送る', () => {
+  test('推しで閉じた session が roster hello を打てば、名乗りより前に再登場を送る', () => {
     const { se, tpmIn } = world2();
     roles(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref }));
     const got = mark();
@@ -811,7 +811,7 @@ describe('落ちた session の突き合わせ（推しの幕引き）', () => {
     expect(writes(got()).find(r => r.body?.type === 'reentered')?.body?.detail).toEqual({ source: 'hello' });
   });
 
-  test('退場・交代・tpm close の後の session が Bash を打っても、再登場を送らない', () => {
+  test('退場・交代・roster close の後の session が Bash を打っても、再登場を送らない', () => {
     const { w, se } = world2();
     sessionEnd(se, endInput('other', SID));
     const got = mark();
@@ -820,7 +820,7 @@ describe('落ちた session の突き合わせ（推しの幕引き）', () => {
     expect(readSession(w.tpm, SID)?.present).toBe(false);
   });
 
-  test('推しで閉じて戻った session も、tpm close の幕引きは castlist に残る（推しの id と別）', () => {
+  test('推しで閉じて戻った session も、roster close の幕引きは castlist に残る（推しの id と別）', () => {
     const { se, tpmIn } = world2();
     roles(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref }));
     guard(inCmux(se, { ref: 'workspace:12', uuid: SE_AT.uuid }, () => ({})), bashInput(SID));

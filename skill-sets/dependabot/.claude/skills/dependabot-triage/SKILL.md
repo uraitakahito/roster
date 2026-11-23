@@ -53,7 +53,7 @@ Skill tool で `dependabot-scan` を呼ぶ（引数なし）。PR を集めて�
 
 ## 3. 起こす
 
-「対象」の PR を次の順に並べ、いま動いている Sustaining Engineer 担当（`tpm roles` の名簿で Sustaining Engineer の行）と合わせて上限に届くまで、1 本ずつ起こす。上限に届いたら、残りは表に「待ち」と書いて、誰かが終わるのを待つ。
+「対象」の PR を次の順に並べ、いま動いている Sustaining Engineer 担当（`roster roles` の名簿で Sustaining Engineer の行）と合わせて上限に届くまで、1 本ずつ起こす。上限に届いたら、残りは表に「待ち」と書いて、誰かが終わるのを待つ。
 
 1. CI が全部緑の PR（直しが無く、早く閉じられる）を先に。
 2. 次に、赤が試験や build の PR（直しが要る）。
@@ -64,14 +64,14 @@ Skill tool で `dependabot-scan` を呼ぶ（引数なし）。PR を集めて�
 起こす 1 行（`<cwd>` は `config.cwd`、無ければ `${CLAUDE_PROJECT_DIR}`）。Key は `<repo>#<PR>`（`#` があるので引用する）:
 
 ```sh
-tpm assign "<repo>#<PR>" --role sustaining-engineer --cwd <cwd> \
+roster assign "<repo>#<PR>" --role sustaining-engineer --cwd <cwd> \
   --model <config.model> --effort <config.effort> --permission-mode <config.permissionMode>
 ```
 
-- `config.model`・`config.effort`・`config.permissionMode` は、書いてある物の旗だけを付ける（無い欄の旗は付けない。`tpm assign` が環境変数 `TPM_MODEL` などかコードの既定で決める）。
+- `config.model`・`config.effort`・`config.permissionMode` は、書いてある物の旗だけを付ける（無い欄の旗は付けない。`roster assign` が環境変数 `TPM_MODEL` などかコードの既定で決める）。
 
 - skill セットは、起こした folder の `.claude/roles/config.jsonc` の `skill-sets` に書いた物が足される（core と dependabot。protocol.md は core の skill セット、`/sustaining-engineer` は dependabot の skill セットにある）。
-- `tpm assign` は、新しい担当が名乗るまで 90 秒待ち、結果を返す:
+- `roster assign` は、新しい担当が名乗るまで 90 秒待ち、結果を返す:
   - 「信頼のダイアログで止まっていたので閉じた」: この roster の repo が信頼されていない（別の git の repo なので、信頼済みの folder の下に置いても信頼は及ばない）。出た folder で 1 度 Claude Code を対話で起こして信頼するよう Product Manager に頼む（`${CLAUDE_SKILL_DIR}/../../../../../docs-site/src/content/docs/getting-started.md` の「信頼のダイアログ」）。
   - 「Unknown command」: `skill-sets` に `"dependabot"` が書かれていない。閉じてある。Product Manager に知らせる。
 - ほかの作業と順番がぶつかるとき（`rules.md` に書いてある物）は、起こすのを遅らせてよい。
@@ -82,9 +82,9 @@ Sustaining Engineer 担当から届くメッセージ:
 
 | 見出し | すること |
 |---|---|
-| 【merge-request】 | CI が緑か（`gh pr checks`）、`release-age.ts` がまだ 0 か、差分が依頼のとおりかを自分で見てから `gh pr merge <PR> --repo <config.owner>/<repo> --<config.mergeMethod>`（repo の作法が違えばそれに従う）。merge の commit を `tpm notify "<repo>#<PR>" "merge した: <commit>"` で返す。 |
-| 【ask-tpm】 | 答える（`tpm notify`）。Product Manager の判断が要るなら、Product Manager に聞いてから答える。 |
-| 【ask-pm】 | Product Manager に、確認のページの URL と項目を伝える（その場で開いて見せる時だけ `tpm show <URL>`）。答えを `tpm answer` で返す（置き場の返事待ちの確認のページが「答えた」になる）。 |
+| 【merge-request】 | CI が緑か（`gh pr checks`）、`release-age.ts` がまだ 0 か、差分が依頼のとおりかを自分で見てから `gh pr merge <PR> --repo <config.owner>/<repo> --<config.mergeMethod>`（repo の作法が違えばそれに従う）。merge の commit を `roster notify "<repo>#<PR>" "merge した: <commit>"` で返す。 |
+| 【ask-tpm】 | 答える（`roster notify`）。Product Manager の判断が要るなら、Product Manager に聞いてから答える。 |
+| 【ask-pm】 | Product Manager に、確認のページの URL と項目を伝える（その場で開いて見せる時だけ `roster show <URL>`）。答えを `roster answer` で返す（置き場の返事待ちの確認のページが「答えた」になる）。 |
 | 【not-yet】 | 時間の【not-yet】なら表の「待ち」に戻し、その担当は 5 と同じに閉じる。`rebase に … 分応じない` の【not-yet】なら、もう一度待たせるか、worktree で `origin/main` を merge させるかを決めて返す。 |
 | 【recreated】 | group の PR が閉じて新しい番号で作り直された。表の行を新しい番号に替え、同じ Sustaining Engineer 担当に新しい番号で続けさせる（居場所の題は担当が替える。名簿の Key は元の `<repo>#<旧>` のまま）。判定は変わらない。 |
 | 【end】 | 5 へ。 |
@@ -107,7 +107,7 @@ Sustaining Engineer 担当の手順（`${CLAUDE_SKILL_DIR}/../sustaining-enginee
 【end】（か【not-yet】）を受け取ったら:
 
 ```sh
-tpm close "<repo>#<PR>"
+roster close "<repo>#<PR>"
 ```
 
 Key は起こしたときの番号（【recreated】の後も元の番号）。閉じた後、表の「待ち」に対象の PR があれば 3 に戻る。

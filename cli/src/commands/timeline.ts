@@ -1,5 +1,5 @@
-// tpm incident timeline <番号|Key>: 件の前後に起きたことを、state の記録から時刻の順に 1 枚のページにして置く。
-// TPM 担当は読まずに、監査の依頼書に URL を貼る（原因を調べるのは担当）。メッセージの本文が入るので、tpm を動かす機械の外に写さない。
+// roster incident timeline <番号|Key>: 件の前後に起きたことを、state の記録から時刻の順に 1 枚のページにして置く。
+// TPM 担当は読まずに、監査の依頼書に URL を貼る（原因を調べるのは担当）。メッセージの本文が入るので、roster を動かす機械の外に写さない。
 // castlist を設定していれば、行ごとに、その時刻にその席に居たアクターを castlist に聞いて欄に出す（聞けなければ、そう書いてページは置く）。
 import { castlistUrl } from '../castlist.ts';
 import type { Context } from '../context.ts';
@@ -65,11 +65,11 @@ const seconds = (from: string, to: string): number => Math.round((Date.parse(to)
 const cut = (text: string): string => text.length > TEXT_LIMIT ? `${text.slice(0, TEXT_LIMIT)}…（続きは log.jsonl）` : text;
 /** 見た時刻の欄。配った時刻は「届いた」、見せた時刻は「見た」と書き分ける。 */
 function seenNote(m: Sent, seen: Seen | undefined, returned: Set<string>): string {
-  if (returned.has(m.id)) return '届け違いで返した（宛先の担当は見ていない。tpm returned show）';
+  if (returned.has(m.id)) return '届け違いで返した（宛先の担当は見ていない。roster returned show）';
   // 後ろ半分は、前の版の行が送った時に「まだ届いていない」と書いた時だけ（今の版の行は、送る時に見ない）。
   if (seen === undefined) return `届いた時刻: 分からない${m.delivered === false ? '（送った時は、まだ届いていない）' : ''}`;
   if (seen.by === 'legacy') return '送った時に届いた';
-  if (seen.by === 'shown') return `見た: ${hms(seen.at)}（${seconds(m.at, seen.at)} 秒後。届く前に tpm が見せた）`;
+  if (seen.by === 'shown') return `見た: ${hms(seen.at)}（${seconds(m.at, seen.at)} 秒後。届く前に roster が見せた）`;
   return `届いた: ${hms(seen.at)}（${seconds(m.at, seen.at)} 秒後）`;
 }
 
@@ -182,7 +182,7 @@ td.t{white-space:nowrap;font-variant-numeric:tabular-nums}.note{color:var(--mute
 </style></head><body>
 <h1>${esc(title)}</h1>
 ${lead.map(l => `<p>${esc(l)}</p>`).join('\n')}
-<p class="note">時刻は UTC（日本の時刻は +9 時間）。tpm が state に残した記録から作った。メッセージの本文が入るので、tpm を動かす機械の外に写さない。色の付いた行は、件の引き金のメッセージ。</p>
+<p class="note">時刻は UTC（日本の時刻は +9 時間）。roster が state に残した記録から作った。メッセージの本文が入るので、roster を動かす機械の外に写さない。色の付いた行は、件の引き金のメッセージ。</p>
 <div class="scroll"><table>
 <tr><th>時刻</th><th>記録</th><th>誰が</th>${actors === undefined ? '' : '<th>アクター</th>'}<th>何を</th></tr>
 ${rows.join('\n')}

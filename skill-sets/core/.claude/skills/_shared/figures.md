@@ -80,7 +80,7 @@ figcaption{color:var(--mute);font-size:13px}
   <g font-size="14">
     <rect x="10" y="20" width="150" height="46" rx="8" fill="none" stroke="var(--line)" stroke-width="2"/><text x="85" y="48" text-anchor="middle">決まりを読む</text>
     <rect x="200" y="20" width="150" height="46" rx="8" fill="none" stroke="var(--a)" stroke-width="2"/><text x="275" y="48" text-anchor="middle">図を描く</text>
-    <rect x="390" y="20" width="150" height="46" rx="8" fill="none" stroke="var(--line)" stroke-width="2"/><text x="465" y="48" text-anchor="middle">tpm page put</text>
+    <rect x="390" y="20" width="150" height="46" rx="8" fill="none" stroke="var(--line)" stroke-width="2"/><text x="465" y="48" text-anchor="middle">roster page put</text>
     <rect x="580" y="20" width="130" height="46" rx="8" fill="none" stroke="var(--line)" stroke-width="2"/><text x="645" y="48" text-anchor="middle">PM が読む</text>
     <line x1="160" y1="43" x2="198" y2="43" stroke="var(--mute)" stroke-width="2" marker-end="url(#arrow)"/>
     <line x1="350" y1="43" x2="388" y2="43" stroke="var(--mute)" stroke-width="2" marker-end="url(#arrow)"/>
@@ -169,12 +169,12 @@ figcaption{color:var(--mute);font-size:13px}
 
 ## 画面の写しを撮る（画面を変えた結果）
 
-画面（置き場の一覧の UI・docs の site など）を変えた結果は、前と後の写しを png にして `tpm file put <file> --reviewed` で上げ、ページから `<img src="files/<語>-<n>.png">` で参照する（`protocol.md` の「ページ」の file の項）。tpm を動かす機械の Chrome の headless で撮れる:
+画面（置き場の一覧の UI・docs の site など）を変えた結果は、前と後の写しを png にして `roster file put <file> --reviewed` で上げ、ページから `<img src="files/<語>-<n>.png">` で参照する（`protocol.md` の「ページ」の file の項）。roster を動かす機械の Chrome の headless で撮れる:
 
 ```sh
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --disable-gpu --hide-scrollbars \
   --user-data-dir="$TMPDIR/shot-chrome" --window-size=900,700 --screenshot="$TMPDIR/shot.png" "<URL か file:// の path>"
 ```
 
-- 写るのは開いたページだけ（ほかの窓や通知は写らない）。それでも上げる前に Read で見て、token・鍵・個人の情報・tpm を動かす機械の path が写っていないか確かめる。
+- 写るのは開いたページだけ（ほかの窓や通知は写らない）。それでも上げる前に Read で見て、token・鍵・個人の情報・roster を動かす機械の path が写っていないか確かめる。
 - 暗い画面で撮るときは `--force-dark-mode` を足す。長いページは `--window-size` の高さを増やす。

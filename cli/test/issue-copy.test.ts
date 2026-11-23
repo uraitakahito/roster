@@ -1,4 +1,4 @@
-// tpm assign が課題の写しのページ（issue-<番号>.html）を作って担当に渡すこと。
+// roster assign が課題の写しのページ（issue-<番号>.html）を作って担当に渡すこと。
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
@@ -49,8 +49,8 @@ describe('課題の写しのページ', () => {
   });
 });
 
-describe('tpm assign が課題の写しを作る', () => {
-  test('課題管理が none でも、Jira の Key なら写しを置き、名簿・担当の hello・tpm roles に URL を出す', () => {
+describe('roster assign が課題の写しを作る', () => {
+  test('課題管理が none でも、Jira の Key なら写しを置き、名簿・担当の hello・roster roles に URL を出す', () => {
     const w = world();
     const tpm = withAcli(w.tpm, { status: 0, stdout: JIRA, stderr: '' });
     hello(tpm, TPM);

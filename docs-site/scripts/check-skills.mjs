@@ -28,7 +28,7 @@
 // 次も止める（2026-11-22 t-4zk5）:
 //
 // 11. context: fork でない skill が model か effort の欄を持つ（呼んだ turn だけ効き、次の入力で
-//     戻る。担当の model・effort は config.jsonc か tpm assign の旗で決める）
+//     戻る。担当の model・effort は config.jsonc か roster assign の旗で決める）
 //
 // context: fork は、skill を会話の外の subagent に任せ、結果だけを受け取る欄。subagent には SKILL.md の本文と
 // 引数だけが渡り、担当の環境変数と guard の hook は受け継ぐ。次も止める（2026-11-22 t-hf43）:
@@ -37,7 +37,7 @@
 // 13. context: fork の skill が disable-model-invocation: true（担当の skill を fork にすると、手順が subagent の
 //     中に消え、【brief】や【answer】が届く 2 turn 目からの会話は手順を知らない）
 // 14. context: fork の skill が background: false を書かない（既定は裏で動き、呼んだ担当が結果を待たずに進む）
-// 15. context: fork の skill の本文が、読む物のほかの tpm の命令を書く（subagent の tpm は呼んだ担当として
+// 15. context: fork の skill の本文が、読む物のほかの roster の命令を書く（subagent の roster は呼んだ担当として
 //     動くので、知らせ・状態・名簿が呼んだ担当の名で変わる。知らせるのは呼んだ担当）
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -46,8 +46,8 @@ import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-// 15. fork の skill の本文で打ってよい tpm の命令（読むだけの物と、Auditor が証拠に使う時系列のページ）。
-// ここに無い命令は止まるので、tpm に命令が増えても、知らせる命令が fork に入り込まない
+// 15. fork の skill の本文で打ってよい roster の命令（読むだけの物と、Auditor が証拠に使う時系列のページ）。
+// ここに無い命令は止まるので、roster に命令が増えても、知らせる命令が fork に入り込まない
 const FORK_COMMANDS = [
   "page path",
   "page list",
@@ -70,7 +70,7 @@ const { COMMANDS } = await import(join(REPO, "cli", "src", "protocol.ts"));
 for (const c of FORK_COMMANDS)
   if (!COMMANDS.includes(c))
     throw new Error(
-      `FORK_COMMANDS の tpm ${c} が cli/src/protocol.ts の COMMANDS に無い`,
+      `FORK_COMMANDS の roster ${c} が cli/src/protocol.ts の COMMANDS に無い`,
     );
 const GROUPS = new Set(
   COMMANDS.filter((c) => c.includes(" ")).map((c) => c.split(" ")[0]),
@@ -115,11 +115,11 @@ function usesArguments(body, fm) {
   });
 }
 
-/** 本文が書く tpm の命令（check-refs.mjs の 10 と同じ数え方。「tpm の命令」のような字は数えない） */
+/** 本文が書く roster の命令（check-refs.mjs の 10 と同じ数え方。「roster の命令」のような字は数えない） */
 function tpmCommands(body) {
   const found = [];
   for (const m of body.matchAll(
-    /(?<![\w/=-])tpm[ \t]+([a-z][a-z-]*)(?:[ \t]+([a-z][a-z-]*))?/g,
+    /(?<![\w/=-])roster[ \t]+([a-z][a-z-]*)(?:[ \t]+([a-z][a-z-]*))?/g,
   ))
     found.push(GROUPS.has(m[1]) && m[2] ? `${m[1]} ${m[2]}` : m[1]);
   return found;
@@ -192,7 +192,7 @@ export function checkSkill(file, text) {
   const turnOnly = ["model", "effort"].filter((key) => Object.hasOwn(fm, key));
   if (turnOnly.length > 0 && fm.context !== "fork")
     errors.push(
-      `${file}: ${turnOnly.join("・")} は context: fork の skill にだけ書く（呼んだ turn だけ効き、次の入力で戻る。担当の model は config.jsonc か tpm assign --model で）`,
+      `${file}: ${turnOnly.join("・")} は context: fork の skill にだけ書く（呼んだ turn だけ効き、次の入力で戻る。担当の model は config.jsonc か roster assign --model で）`,
     );
 
   if (Object.hasOwn(fm, "context") && fm.context !== "fork")
@@ -225,7 +225,7 @@ export function checkSkill(file, text) {
     ];
     if (denied.length > 0)
       errors.push(
-        `${file}: context: fork の skill の本文に tpm ${denied.join("・tpm ")} がある（subagent の tpm は呼んだ担当として動く。知らせ・状態・名簿の命令は呼んだ担当が打つ）`,
+        `${file}: context: fork の skill の本文に roster ${denied.join("・roster ")} がある（subagent の roster は呼んだ担当として動く。知らせ・状態・名簿の命令は呼んだ担当が打つ）`,
       );
   }
   return errors;

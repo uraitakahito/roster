@@ -97,8 +97,8 @@ describe('CmuxTransport', () => {
 
   test('spawn は居場所を作って宛先を返し、focus を奪わない', () => {
     const { transport, calls } = fake([['--json workspace create', json({ workspace_ref: 'workspace:12', surface_ref: 'surface:3' })]]);
-    expect(transport.spawn({ title: 'SWE t-x7k2: 題', cwd: '/w', command: 'tpm run-role t-x7k2' })).toBe('workspace:12');
-    expect(calls[0]?.args).toEqual(['--json', 'workspace', 'create', '--name', 'SWE t-x7k2: 題', '--cwd', '/w', '--command', 'tpm run-role t-x7k2', '--focus', 'false']);
+    expect(transport.spawn({ title: 'SWE t-x7k2: 題', cwd: '/w', command: 'roster run-role t-x7k2' })).toBe('workspace:12');
+    expect(calls[0]?.args).toEqual(['--json', 'workspace', 'create', '--name', 'SWE t-x7k2: 題', '--cwd', '/w', '--command', 'roster run-role t-x7k2', '--focus', 'false']);
   });
 
   test('spawn は説明を create に渡す。setColor は名指した居場所に色を付ける', () => {

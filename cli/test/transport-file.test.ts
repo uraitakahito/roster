@@ -9,7 +9,7 @@ let state: State;
 const at = (self: string): FileTransport => new FileTransport(state, self);
 
 beforeEach(() => {
-  state = new State(realpathSync(mkdtempSync(join(tmpdir(), 'tpm-file-transport-'))));
+  state = new State(realpathSync(mkdtempSync(join(tmpdir(), 'roster-file-transport-'))));
 });
 
 describe('FileTransport', () => {
@@ -26,11 +26,11 @@ describe('FileTransport', () => {
 
   test('spawn は別々の宛先を返し、命令は動かさずに覚える', () => {
     const tpm = at('file:tpm');
-    const a = tpm.spawn({ title: 'SWE t-a3b4: 題', cwd: '/w', command: 'tpm run-role t-a3b4' });
-    const b = tpm.spawn({ title: 'DevOps', cwd: '/w', command: 'tpm run-role devops' });
+    const a = tpm.spawn({ title: 'SWE t-a3b4: 題', cwd: '/w', command: 'roster run-role t-a3b4' });
+    const b = tpm.spawn({ title: 'DevOps', cwd: '/w', command: 'roster run-role devops' });
     expect(a).not.toBe(b);
     expect(tpm.seats()).toEqual([{ address: a, title: 'SWE t-a3b4: 題' }, { address: b, title: 'DevOps' }]);
-    expect(tpm.command(a)).toBe('tpm run-role t-a3b4');
+    expect(tpm.command(a)).toBe('roster run-role t-a3b4');
   });
 
   test('状態は自分の居場所に出し、ほかの居場所から読める', () => {

@@ -47,11 +47,11 @@ describe('時系列を集める', () => {
     expect(collect(w.tpm, 't-b2c3')).toEqual([]);
   });
 
-  test('配られる前に tpm が見せていれば「見た」と出し、見た後に相手が送った物は行き違いにしない（台帳 #110）', () => {
+  test('配られる前に roster が見せていれば「見た」と出し、見た後に相手が送った物は行き違いにしない（台帳 #110）', () => {
     const w = crossed();
     // 担当は 12:01:30 に、送る前の検査で【notify】を見た（cmux が配ったのは 12:05:00）
     w.tpm.state.write('shown/file-1.jsonc', [{ id: 'm1-file-1', at: '2026-11-20T12:01:30.000Z' }]);
-    expect(collect(w.tpm, 't-x7k2').find(e => e.what.includes('（id m1-file-1）'))?.notes).toEqual(['見た: 12:01:30（30 秒後。届く前に tpm が見せた）', '返事の先: m1-file-tpm']);
+    expect(collect(w.tpm, 't-x7k2').find(e => e.what.includes('（id m1-file-1）'))?.notes).toEqual(['見た: 12:01:30（30 秒後。届く前に roster が見せた）', '返事の先: m1-file-tpm']);
     // 見る前に相手が送っていれば、「見る前に」の行き違い
     w.tpm.state.write('shown/file-1.jsonc', [{ id: 'm1-file-1', at: '2026-11-20T12:03:00.000Z' }]);
     expect(collect(w.tpm, 't-x7k2').find(e => e.what.includes('（id m1-file-1）'))?.notes.at(-1)).toBe('行き違い: これを見る前に、相手が 1 件送った（【merged】12:02:00）');
@@ -66,7 +66,7 @@ describe('時系列を集める', () => {
     const notes = (id: string): string[] | undefined => collect(w.tpm, 't-x7k2').find(e => e.what.includes(`（id ${id}）`))?.notes;
     expect(notes('old-yes')).toEqual(['送った時に届いた']);
     expect(notes('old-no')).toEqual(['届いた時刻: 分からない（送った時は、まだ届いていない）']);
-    expect(notes('m1-file-1')?.[0]).toBe('届け違いで返した（宛先の担当は見ていない。tpm returned show）');
+    expect(notes('m1-file-1')?.[0]).toBe('届け違いで返した（宛先の担当は見ていない。roster returned show）');
   });
 
   test('guard・入口の検査・課題管理・台帳の行も入る', () => {
@@ -88,7 +88,7 @@ describe('時系列を集める', () => {
   });
 });
 
-describe('tpm incident timeline', () => {
+describe('roster incident timeline', () => {
   test('件の番号: 引き金のメッセージの前後を拾ってページを置き、件に URL を結ぶ', () => {
     const w = crossed();
     w.tpm.now = clock('12:30:00');

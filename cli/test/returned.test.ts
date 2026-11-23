@@ -71,7 +71,7 @@ describe('送りの記録に、送り手と届く担当を書く', () => {
   });
 });
 
-describe('新しい session の始まりに、届け違いを見つけて返す（tpm returned check）', () => {
+describe('新しい session の始まりに、届け違いを見つけて返す（roster returned check）', () => {
   test('今朝の 6 通: 復元された居場所で TPM 担当が起きる → 6 通を既読にして配らせず、示し、台帳に書く（自分が TPM 担当なので【returned】は送らない）', () => {
     const w = morning();
     const ai = asTpm(w.role('t-8b6j', 'file:1'), 'L2');
@@ -212,20 +212,20 @@ describe('新しい session の始まりに、届け違いを見つけて返す�
     w.tpm.state.write('tpm.jsonc', { address: 'file:gone' });
     const se = as(w.role('t-4q2b', 'file:1'), { TPM_LAUNCH: 'L9' });
     for (const s of log(w)) w.wire.mark(s.id, { state: 'delivered', deliveredVia: 'claude.wake', deliveredAt: NOW });
-    expect(checkStart(se)?.systemMessage).toMatch(/TPM 担当に返せませんでした（TPM 担当の居場所がありません）。tpm ask tpm で、台帳 #1 の届け違いを知らせてください。/);
+    expect(checkStart(se)?.systemMessage).toMatch(/TPM 担当に返せませんでした（TPM 担当の居場所がありません）。roster ask tpm で、台帳 #1 の届け違いを知らせてください。/);
     expect(w.tpm.state.lines('returned.jsonl')).toEqual([]);
     expect(checkStart(se)).toBeDefined();
   });
 });
 
 describe('hook と、返った物を読む命令', () => {
-  test('どの席の SessionStart にも tpm returned check が付く', () => {
-    const start = (role?: Parameters<typeof guardSettings>[1]): string[] => (JSON.parse(guardSettings('/r/tpm', role)) as { hooks: { SessionStart: { hooks: { command: string }[] }[] } }).hooks.SessionStart.flatMap(h => h.hooks.map(c => c.command));
-    expect(start()).toContain('/r/tpm returned check');
-    expect(start('software-engineer')).toContain('/r/tpm returned check');
+  test('どの席の SessionStart にも roster returned check が付く', () => {
+    const start = (role?: Parameters<typeof guardSettings>[1]): string[] => (JSON.parse(guardSettings('/r/roster', role)) as { hooks: { SessionStart: { hooks: { command: string }[] }[] } }).hooks.SessionStart.flatMap(h => h.hooks.map(c => c.command));
+    expect(start()).toContain('/r/roster returned check');
+    expect(start('software-engineer')).toContain('/r/roster returned check');
   });
 
-  test('tpm returned show が宛先と全文を出し、担当の session からは断る', () => {
+  test('roster returned show が宛先と全文を出し、担当の session からは断る', () => {
     const w = morning();
     const id = log(w)[5]?.id ?? '';
     expect(showReturned(w.tpm, id)).toEqual([`id: ${id}`, expect.stringMatching(/Technical Program Manager から file:1 へ。課題の Key: t-8b6j/), '宛先の担当: t-8b6j の担当（起こし L1…）', '【notify】ER 図の案を 3 つ']);

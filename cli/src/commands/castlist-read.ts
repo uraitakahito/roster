@@ -1,8 +1,8 @@
-// tpm castlist find・show・lineage・events・settings: castlist の監査の検索（castlist の docs/src/api.md の「監査の検索」）を読むだけの命令。
+// roster castlist find・show・lineage・events・settings: castlist の監査の検索（castlist の docs/src/api.md の「監査の検索」）を読むだけの命令。
 // 送るのは GET だけで、castlist にも状態の folder にも書かない（Auditor の席から打つ物）。旗は castlist の引数の名にそのまま写し、値は確かめない（断るのは castlist）。
 // 答えは 1 件 1 行の字にし、アクターにはプロフィールの画面の URL（<castlist>/actors/<id>）を添える。--json は castlist の答えの字をそのまま出す。
 // castlist が断った（400・404）ら訳をそのまま、止まっていれば「castlist に聞けない」の 1 行で止まる。
-// castlist には名で引く道が無いので、名（t-23zs-swe.1 など）は、この project の tpm が登録して控えた物（状態の folder の sessions/）から id にする。
+// castlist には名で引く道が無いので、名（t-23zs-swe.1 など）は、この project の roster が登録して控えた物（状態の folder の sessions/）から id にする。
 import { castlistUrl, request } from '../castlist.ts';
 import type { Context } from '../context.ts';
 import { TpmError } from '../skill-sets.ts';
@@ -13,7 +13,7 @@ export interface JsonOption {
   json?: boolean
 }
 
-/** `tpm castlist find` の旗（GET /v1/actors の引数）。 */
+/** `roster castlist find` の旗（GET /v1/actors の引数）。 */
 export interface FindOptions extends JsonOption {
   label?: string[]
   binding?: string
@@ -32,14 +32,14 @@ export interface FindOptions extends JsonOption {
   after?: string
 }
 
-/** `tpm castlist lineage` の旗。 */
+/** `roster castlist lineage` の旗。 */
 export interface LineageOptions extends JsonOption {
   direction?: string
   depth?: string
   type?: string
 }
 
-/** `tpm castlist events` の旗（GET /v1/events の引数）。 */
+/** `roster castlist events` の旗（GET /v1/events の引数）。 */
 export interface EventsOptions extends JsonOption {
   type?: string[]
   actor?: string
@@ -52,7 +52,7 @@ export interface EventsOptions extends JsonOption {
   after?: string
 }
 
-/** `tpm castlist settings` の旗。actor があれば GET /v1/actors/<id>/settings、無ければ GET /v1/settings の引数。 */
+/** `roster castlist settings` の旗。actor があれば GET /v1/actors/<id>/settings、無ければ GET /v1/settings の引数。 */
 export interface SettingsOptions extends JsonOption {
   actor?: string
   at?: string
@@ -156,7 +156,7 @@ const flag = (on: boolean | undefined): string | undefined => on === true ? 'tru
 const many = (name: string, values: string[] | undefined): Params => (values ?? []).map(v => [name, v]);
 const or = (value: string | null | undefined): string => value ?? '-';
 
-/** 名（この project の tpm が控えた物）なら id にし、ほかはそのまま id とみなす。 */
+/** 名（この project の roster が控えた物）なら id にし、ほかはそのまま id とみなす。 */
 function actorId(ctx: Context, nameOrId: string): string {
   for (const file of ctx.state.list('sessions')) {
     const record = ctx.state.read<SessionRecord>(`sessions/${file}.jsonc`);
@@ -185,7 +185,7 @@ function edgeLine(names: Map<string, string>, e: Edge): string {
 
 const settingLine = (url: string, s: SettingRow): string => [s.received_at, s.actor_name, `${s.model}・${s.effort}（${s.source}）`, profileUrl(url, s.actor_id)].join('  ');
 
-/** `tpm castlist find`: アクターを探す（GET /v1/actors）。 */
+/** `roster castlist find`: アクターを探す（GET /v1/actors）。 */
 export function castlistFind(ctx: Context, options: FindOptions): string[] {
   const url = requireUrl(ctx);
   const { body, text } = must(ask<{ as_of: string, actors: ActorItem[], next: unknown }>(ctx, url, '/v1/actors', [
@@ -209,14 +209,14 @@ export function castlistFind(ctx: Context, options: FindOptions): string[] {
   return [head('アクター', body.actors.length, body.as_of), ...body.actors.map(a => actorLine(url, a)), ...more(body.next)];
 }
 
-/** `tpm castlist show`: 1 つのアクター（GET /v1/actors/<id>）と、線の要約（GET /v1/actors/<id>/lineage。上は人まで・下は 1 段）。 */
+/** `roster castlist show`: 1 つのアクター（GET /v1/actors/<id>）と、線の要約（GET /v1/actors/<id>/lineage。上は人まで・下は 1 段）。 */
 export function castlistShow(ctx: Context, target: string, options: JsonOption): string[] {
   const url = requireUrl(ctx);
   const id = actorId(ctx, target);
   const path = `/v1/actors/${encodeURIComponent(id)}`;
   const answer = ask<ActorDetail>(ctx, url, path);
   if (answer.kind === 'failed' && !answer.down) {
-    throw new TpmError(`${answer.reason}（${target}）。名で引けるのは、この project の tpm が登録して控えたアクター（状態の folder の sessions/）だけ（castlist には名で引く道が無い）。id は tpm castlist find で探す`);
+    throw new TpmError(`${answer.reason}（${target}）。名で引けるのは、この project の roster が登録して控えたアクター（状態の folder の sessions/）だけ（castlist には名で引く道が無い）。id は roster castlist find で探す`);
   }
   const { body: a, text } = must(answer);
   if (options.json === true) return [text];
@@ -239,7 +239,7 @@ export function castlistShow(ctx: Context, target: string, options: JsonOption):
   ];
 }
 
-/** `tpm castlist lineage`: 誰が起こしたか・誰を起こしたか（GET /v1/actors/<id>/lineage）。 */
+/** `roster castlist lineage`: 誰が起こしたか・誰を起こしたか（GET /v1/actors/<id>/lineage）。 */
 export function castlistLineage(ctx: Context, target: string, options: LineageOptions): string[] {
   const url = requireUrl(ctx);
   const id = actorId(ctx, target);
@@ -259,7 +259,7 @@ export function castlistLineage(ctx: Context, target: string, options: LineageOp
   ];
 }
 
-/** `tpm castlist events`: 出来事を、アクターをまたいで（GET /v1/events）。 */
+/** `roster castlist events`: 出来事を、アクターをまたいで（GET /v1/events）。 */
 export function castlistEvents(ctx: Context, options: EventsOptions): string[] {
   const url = requireUrl(ctx);
   const { body, text } = must(ask<{ as_of: string, events: EventRow[], next: unknown }>(ctx, url, '/v1/events', [
@@ -282,7 +282,7 @@ export function castlistEvents(ctx: Context, options: EventsOptions): string[] {
 }
 
 /**
- * `tpm castlist settings`: model と effort の行。--actor があれば、そのアクターの行（GET /v1/actors/<id>/settings。--at でその時に効いていた 1 行）、
+ * `roster castlist settings`: model と effort の行。--actor があれば、そのアクターの行（GET /v1/actors/<id>/settings。--at でその時に効いていた 1 行）、
  * 無ければアクターをまたいで（GET /v1/settings）。どちらにも、ほかの旗をそのまま送る（受けない引数は castlist が断る）。
  */
 export function castlistSettings(ctx: Context, options: SettingsOptions): string[] {
@@ -312,7 +312,7 @@ export function castlistSettings(ctx: Context, options: SettingsOptions): string
 }
 
 /**
- * 時刻 at に、席 seat（担当は課題の Key、TPM 担当は tpm）に居たアクター（tpm incident timeline のアクターの欄）。
+ * 時刻 at に、席 seat（担当は課題の Key、TPM 担当は tpm）に居たアクター（roster incident timeline のアクターの欄）。
  * この project のラベル（tpm.project と、tpm.key か tpm.role=tpm）で、居た間がその時刻に掛かる者を聞く。
  */
 export function seatActorsAt(ctx: Context, url: string, seat: string, at: string): Answer<{ actors: ActorItem[] }> {

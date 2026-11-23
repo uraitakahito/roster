@@ -1,4 +1,4 @@
-// tpm castlist …（hook が呼ぶ）と、ほかの命令（guard・hello・close）が castlist に送る物。送る物の形は castlist の docs/src/api.md。
+// roster castlist …（hook が呼ぶ）と、ほかの命令（guard・hello・close）が castlist に送る物。送る物の形は castlist の docs/src/api.md。
 // session 1 つが castlist のアクター 1 つ。登録の答え（id と名）は状態の folder の sessions/<session の id>.jsonc に控え、
 // 起こし 1 回（$TPM_LAUNCH）ごとの session の並びを launches/<起こしの id>.jsonc に控える（/clear と fork の継ぐ線を、前の session から引くため）。
 // 出来事・線・model と effort の id は、issuer・session・種類（と、何度も起きる物は番号）で決める。送り直しても同じ id なので、castlist は 2 度足さない
@@ -29,7 +29,7 @@ export interface SessionRecord {
   modelUnreadable?: boolean
   /** 登録した時の cmux の居場所（ref は起こし直しで替わり、uuid は復元で残る）。 */
   workspace?: { ref?: string, uuid?: string }
-  /** 推しの幕引き（tpm が、落ちたと推して送った幕引き）で居ないにした。guard が、その session の Bash で再登場を送る印。 */
+  /** 推しの幕引き（roster が、落ちたと推して送った幕引き）で居ないにした。guard が、その session の Bash で再登場を送る印。 */
   endedBy?: 'inferred'
 }
 
@@ -72,7 +72,7 @@ const text = (value: unknown): string | undefined => typeof value === 'string' &
 /** 答えを、送った結果にする。断られた物（422 など）は、castlist は起きているので止めず、stderr に書いて進む。同じ id で違う本文（409）は、もう在るので済んだとみなす。 */
 function settle(reply: Reply, what: string): Sent {
   if (reply.kind === 'down' || reply.kind === 'busy') return reply.kind;
-  if (reply.kind === 'refused' && reply.code !== 409) process.stderr.write(`tpm castlist: ${what} を castlist が断りました（${reply.code}: ${reply.error}）\n`);
+  if (reply.kind === 'refused' && reply.code !== 409) process.stderr.write(`roster castlist: ${what} を castlist が断りました（${reply.code}: ${reply.error}）\n`);
   return 'ok';
 }
 
@@ -120,7 +120,7 @@ function workspaceRef(ctx: Context): string | undefined {
 /**
  * session を登録し（鍵は session。何度登録しても同じアクター）、きっかけの出来事と線を送る。控えには、その時の居場所（cmux の ref と uuid）も書く。
  * revive なら、推しの幕引きで居ないにした session を、今の居場所で登録し直して、番号つきの再登場（source は guard）だけを送る（線は送らない）。
- * 頼んだ model と effort（$TPM_LAUNCH_MODEL・$TPM_LAUNCH_EFFORT）は、tpm が起こしたばかりの process（$TPM_LAUNCH_FRESH）の初めの登録でだけ送る
+ * 頼んだ model と effort（$TPM_LAUNCH_MODEL・$TPM_LAUNCH_EFFORT）は、roster が起こしたばかりの process（$TPM_LAUNCH_FRESH）の初めの登録でだけ送る
  * （/clear の後の session は同じ環境変数を持つが、その後に /model で替えたかもしれないので送らない）。
  */
 function enter(ctx: Context, url: string, sid: string, source: Source, revive = false): Sent {
@@ -199,12 +199,12 @@ function quietly(name: string, run: () => void): void {
     run();
   }
   catch (e) {
-    process.stderr.write(`tpm castlist ${name}: ${(e as Error).message}\n`);
+    process.stderr.write(`roster castlist ${name}: ${(e as Error).message}\n`);
   }
 }
 
 /**
- * SessionStart の hook（`tpm castlist session-start`）。session を登録し、source ごとの出来事と線を送る。
+ * SessionStart の hook（`roster castlist session-start`）。session を登録し、source ごとの出来事と線を送る。
  * castlist が止まっていれば何もせずに終わる（hook で Claude Code を止めない。登録まで、guard が Bash を止める）。
  */
 export function sessionStart(ctx: Context, stdin: string): void {
@@ -219,7 +219,7 @@ export function sessionStart(ctx: Context, stdin: string): void {
   });
 }
 
-/** SessionEnd の hook（`tpm castlist session-end`）。/clear は交代、ほかは退場（訳は detail.reason）。 */
+/** SessionEnd の hook（`roster castlist session-end`）。/clear は交代、ほかは退場（訳は detail.reason）。 */
 export function sessionEnd(ctx: Context, stdin: string): void {
   quietly('session-end', () => {
     const url = castlistUrl(ctx);
@@ -278,7 +278,7 @@ export function castlistGuard(ctx: Context, stdin: string): Verdict {
 }
 
 /**
- * tpm hello の castlist の分: 名乗り（reported_in）を送り、`アクター: <名>` の行を返す。控えが無い session は先に登録する。
+ * roster hello の castlist の分: 名乗り（reported_in）を送り、`アクター: <名>` の行を返す。控えが無い session は先に登録する。
  * castlist が止まっていれば、名乗らずに止まる。
  */
 function reportIn(ctx: Context, url: string, sid: string): string[] {
@@ -298,7 +298,7 @@ function reportIn(ctx: Context, url: string, sid: string): string[] {
 }
 
 /**
- * tpm hello（TPM 担当・担当・Auditor）の castlist の分: 起きているかを見て（時計がずれていれば 1 行足す）、名乗りを送る。設定が無ければ空。
+ * roster hello（TPM 担当・担当・Auditor）の castlist の分: 起きているかを見て（時計がずれていれば 1 行足す）、名乗りを送る。設定が無ければ空。
  * Claude Code の session の id（$CLAUDE_CODE_SESSION_ID）が無ければ、どのアクターかわからないので、castlist に聞かずに 1 行だけ返す。
  */
 export function castlistHello(ctx: Context): string[] {
@@ -310,17 +310,17 @@ export function castlistHello(ctx: Context): string[] {
   return [...reportIn(ctx, url, sid), ...skew];
 }
 
-/** tpm close の castlist の分: その担当の起こしのアクターのうち、まだ居る物に幕引き（closed）を送る。送れなければ 1 行を返す（閉じるのは止めない）。 */
+/** roster close の castlist の分: その担当の起こしのアクターのうち、まだ居る物に幕引き（closed）を送る。送れなければ 1 行を返す（閉じるのは止めない）。 */
 export function closeLaunch(ctx: Context, role: RoleRecord): string[] {
   const url = castlistUrl(ctx);
   if (url === undefined || role.launch === undefined) return [];
   const launched = ctx.state.read<LaunchRecord>(launchFile(role.launch));
   const present = (launched?.sessions ?? []).map(sid => readSession(ctx, sid)).filter(r => r?.present === true);
   const failed = present.filter(record => record !== undefined && event(ctx, url, record, 'closed', {}) !== 'ok');
-  return failed.length === 0 ? [] : [`castlist（${url}）に幕引きを送れませんでした（${failed.map(r => r?.name).join('・')}）。castlist が起きてから送る道は無いので、台帳に要るなら tpm report incident で挙げる`];
+  return failed.length === 0 ? [] : [`castlist（${url}）に幕引きを送れませんでした（${failed.map(r => r?.name).join('・')}）。castlist が起きてから送る道は無いので、台帳に要るなら roster report incident で挙げる`];
 }
 
-/** 1 つの命令の中で、突き合わせを 1 度だけにする（tpm hello は名簿も出すので、2 度呼ばれる）。 */
+/** 1 つの命令の中で、突き合わせを 1 度だけにする（roster hello は名簿も出すので、2 度呼ばれる）。 */
 const swept = new WeakSet<Context>();
 
 /** 居場所の組。 */
@@ -346,12 +346,12 @@ function placeOf(ctx: Context, url: string, record: SessionRecord): Place | unde
 }
 
 /**
- * 落ちた session の突き合わせ（tpm hello・roles・assign が呼ぶ）。cmux の居場所の一覧（uuid → ref）と、控えで「居る」ままの session を突き合わせ、
+ * 落ちた session の突き合わせ（roster hello・roles・assign が呼ぶ）。cmux の居場所の一覧（uuid → ref）と、控えで「居る」ままの session を突き合わせ、
  * 次のどちらかなら推しの幕引き（closed。detail は inferred: true と訳）を番号つきの id で送り、控えを居ないにする。送った session の名の行を返す。
  * - workspace_gone: 居場所の uuid が一覧に無い。
  * - superseded: uuid は残り ref が替わった（cmux が起こし直され、居場所を復元した）うえ、今の組（uuid と今の ref）に別の session が登録した
  *   （今の ref は起こし直しの後に振られたので、その session は後から来た）。ref が替わっただけでは送らない（cmux が session を続けることがある）。
- * 自分の session は見ない。自分の session の id が無い（tpm の起こした session の外で打った）・一覧が引けない・自分の組が一覧に無い（一覧を信じられない）時は、
+ * 自分の session は見ない。自分の session の id が無い（roster の起こした session の外で打った）・一覧が引けない・自分の組が一覧に無い（一覧を信じられない）時は、
  * 何もしない。castlist が止まっている・混んでいれば、そこでやめる。送れなくても命令は止めず、送れなかった session を 1 行で出す。
  */
 export function sweep(ctx: Context): string[] {
@@ -372,7 +372,7 @@ export function sweep(ctx: Context): string[] {
   const records = ctx.state.list('sessions')
     .map(name => ctx.state.read<SessionRecord>(`sessions/${name}.jsonc`))
     .filter((r): r is SessionRecord => r !== undefined && r.session !== mine);
-  const stopped = (): string[] => [`castlist（${url}）が応えないので、落ちた session の突き合わせをやめました（次の tpm roles などで、また見ます）`];
+  const stopped = (): string[] => [`castlist（${url}）が応えないので、落ちた session の突き合わせをやめました（次の roster roles などで、また見ます）`];
   const places = new Map<string, Place | undefined>();
   for (const r of records.filter(r => r.present)) {
     const p = placeOf(ctx, url, r);
@@ -408,6 +408,6 @@ export function sweep(ctx: Context): string[] {
   }
   return [
     ...(closed.length === 0 ? [] : [`castlist: 落ちたと推して幕引きを送った: ${closed.join('・')}`]),
-    ...(failed.length === 0 ? [] : [`castlist（${url}）に、落ちたと推した幕引きを送れませんでした（${failed.join('・')}）。castlist が応えないので、残りもやめました（次の tpm roles などで、また見ます）`]),
+    ...(failed.length === 0 ? [] : [`castlist（${url}）に、落ちたと推した幕引きを送れませんでした（${failed.join('・')}）。castlist が応えないので、残りもやめました（次の roster roles などで、また見ます）`]),
   ];
 }

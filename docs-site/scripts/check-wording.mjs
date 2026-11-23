@@ -1,8 +1,8 @@
-// repo の字（docs・skill・tpm の code と試験・README・workflow）に、読む人の機械や、ある人の手元を前提にした
+// repo の字（docs・skill・roster の code と試験・README・workflow）に、読む人の機械や、ある人の手元を前提にした
 // 言い方が無いかを見る（pnpm run check）。roster はだれの機械でも動かせる物として公開するので、「この Mac」のように
 // 1 台を指す字や、ある人の home の path を書かない（2026-11-23 t-q5mh。castlist の ci/check-wording.sh と同じ考え）。
 //
-// 1. 語の Mac（macOS・MacOS は当てない）。機械は「tpm を動かす機械」、バナーは「通知のバナー」と書く
+// 1. 語の Mac（macOS・MacOS は当てない）。機械は「roster を動かす機械」、バナーは「通知のバナー」と書く
 // 2. /Users/<名> と、それを folder の名にした -Users-<名>（見本の名 me は当てない）
 //
 // 見るのは git が追跡する物と add 前の新しい物（check-refs.mjs と同じ数え方）。lockfile と、この file は見ない。
@@ -16,7 +16,7 @@ const SELF = relative(REPO, fileURLToPath(import.meta.url));
 const RULES = [
   {
     re: /(^|[^A-Za-z])Mac([^A-Za-z]|$)/,
-    hint: "1 台の機械を指す「Mac」がある。「tpm を動かす機械」、バナーは「通知のバナー」と書く",
+    hint: "1 台の機械を指す「Mac」がある。「roster を動かす機械」、バナーは「通知のバナー」と書く",
   },
   {
     re: /[-/]Users[-/](?!me(?:[^A-Za-z]|$))[A-Za-z]/,

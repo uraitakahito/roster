@@ -70,7 +70,7 @@ const SECRETS = [
 ];
 
 /** 置き場が file を扱えない（0.4.0 より前の置き場は、file のエンドポイントに 404 を返す）時の文。 */
-const oldStore = (): TpmError => new TpmError('置き場（pagetray）の版が古く、file を扱えません。tpm ask devops で置き場の版を上げるよう頼んでください');
+const oldStore = (): TpmError => new TpmError('置き場（pagetray）の版が古く、file を扱えません。roster ask devops で置き場の版を上げるよう頼んでください');
 
 /** 置き場の file の名（`<語>-<番号>.<拡張子>`）を分ける。形でないか、受けない拡張子なら undefined。 */
 export function parseStoredName(name: string): { stem: string, n: string, ext: string } | undefined {
@@ -120,7 +120,7 @@ function postFile(ctx: Context, file: string, ext: string, query: URLSearchParam
   throw new TpmError(`置き場が file を受け取りませんでした（${r.code}）: ${reason(r.body)}`);
 }
 
-/** `tpm file put` の旗。 */
+/** `roster file put` の旗。 */
 export interface FilePutOptions {
   /** 置き場での名（`<語>.<拡張子>`）。無ければ元の file の名から作る。 */
   name?: string
@@ -148,7 +148,7 @@ export function filePut(ctx: Context, file: string, options: FilePutOptions): st
   const key = requireKey(ctx, options.key);
   const body = readFileSync(file);
   if (NEEDS_REVIEW.has(ext) && !options.reviewed) {
-    throw new TpmError(`画像と PDF は、上げる前に中身を見てください。Read tool でその file を見て、token・鍵・個人の情報・ほかの人の画面・tpm を動かす機械の path が写っていないか確かめてから --reviewed を付けて打つ: ${file}`);
+    throw new TpmError(`画像と PDF は、上げる前に中身を見てください。Read tool でその file を見て、token・鍵・個人の情報・ほかの人の画面・roster を動かす機械の path が写っていないか確かめてから --reviewed を付けて打つ: ${file}`);
   }
   const secrets = NEEDS_REVIEW.has(ext) ? [] : secretLines(body.toString('utf8'));
   if (secrets.length > 0 && !options.allowSecret) {
@@ -166,7 +166,7 @@ export function filePut(ctx: Context, file: string, options: FilePutOptions): st
     `置いた: ${path}`,
     `URL: ${url}`,
     `ページからの参照: files/${basename(record.path)}`,
-    ...(ext === 'jpg' || ext === 'jpeg') && hasExif(body) ? ['注意: この写真には EXIF があり、撮った所の位置が入っているかもしれない。消すなら sips などで消して上げ直し、前の物は tpm ask tpm で消してもらう'] : [],
+    ...(ext === 'jpg' || ext === 'jpeg') && hasExif(body) ? ['注意: この写真には EXIF があり、撮った所の位置が入っているかもしれない。消すなら sips などで消して上げ直し、前の物は roster ask tpm で消してもらう'] : [],
     ...secrets.length > 0 ? [`注意: 秘密の形に当たる行（${secrets.join('・')} 行目）をそのまま上げた（--allow-secret）`] : [],
   ];
 }
@@ -215,7 +215,7 @@ export function fileRefs(html: string, key: string): { key: string, name: string
 }
 
 /**
- * 控えのページ（project・key の）が参照する file のうち、控えに無い物を置き場から取って控えに写す（`tpm page path`）。
+ * 控えのページ（project・key の）が参照する file のうち、控えに無い物を置き場から取って控えに写す（`roster page path`）。
  * 取れなくてもページは読めるので止まらず、注意の行を返す。控えにある参照の file は、その path を返す。
  */
 export function copyRefs(ctx: Context, project: string, key: string, page: string): string[] {
@@ -242,7 +242,7 @@ export function findFiles(ctx: Context, query: URLSearchParams): FileRecord[] | 
   return (JSON.parse(r.body) as { files: FileRecord[] }).files;
 }
 
-/** `tpm file list` の旗。 */
+/** `roster file list` の旗。 */
 export interface FileListOptions {
   key?: string
   role?: string
@@ -300,7 +300,7 @@ function referrers(ctx: Context, files: FileRecord[]): string[] {
  * まず消す物と、それを参照しているページ（消すと図やリンクが切れる）を出し、--yes を付けたときだけ置き場に頼む。置き場は番号を残すので、消した URL は 410 になる。控えの file も消す。
  */
 export function fileDelete(ctx: Context, urls: string[], options: { yes?: boolean }): string[] {
-  if (roleOf(ctx.env) !== undefined) throw new TpmError('file を消せるのは TPM 担当だけです。消す file の URL と訳を、tpm ask tpm で TPM 担当に送って頼んでください');
+  if (roleOf(ctx.env) !== undefined) throw new TpmError('file を消せるのは TPM 担当だけです。消す file の URL と訳を、roster ask tpm で TPM 担当に送って頼んでください');
   if (urls.length === 0) throw new TpmError('消す file の URL を書いてください');
   const targets = [...new Map(urls.map(url => parseFileUrl(ctx, url)).map(t => [t.storePath, t])).values()];
   const listed = targets.flatMap((t) => {
@@ -329,7 +329,7 @@ export function fileDelete(ctx: Context, urls: string[], options: { yes?: boolea
 }
 
 /**
- * 控えの folder の `<project>/<Key>/files/` にあって置き場に無い file を、同じ番号・file の時刻で置き場に入れる（`tpm page import`）。
+ * 控えの folder の `<project>/<Key>/files/` にあって置き場に無い file を、同じ番号・file の時刻で置き場に入れる（`roster page import`）。
  * 消した file（置き場が 410 を返す番号）は入れない。上げた担当はわからないので、役割は unknown、居場所は空で入る。控えに file が無ければ置き場に聞かない。
  */
 export function fileImport(ctx: Context): string[] {
@@ -367,6 +367,6 @@ export function fileImport(ctx: Context): string[] {
   return [
     `file: 入れた: ${added.length} 個・もう入っていた: ${counts.same} 個・消した file: ${counts.removed} 個・ぶつかった: ${conflicts.length} 個`,
     ...added.map(path => `+ ${pagesUrl(ctx.env)}${path}`),
-    ...conflicts.map(file => `! 同じ番号に別の中身がある（入れていない。要るなら tpm file put で上げ直す）: ${file}`),
+    ...conflicts.map(file => `! 同じ番号に別の中身がある（入れていない。要るなら roster file put で上げ直す）: ${file}`),
   ];
 }

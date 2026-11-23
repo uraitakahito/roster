@@ -148,7 +148,7 @@ describe('課題への記録（GitHub の Issue）', () => {
   });
 });
 
-describe('tpm report done --kind', () => {
+describe('roster report done --kind', () => {
   test('page put と同じ語（proposal・plan・result・audit）を受ける', () => {
     expect(['proposal', 'plan', 'result', 'audit'].map(doneKind)).toEqual(['proposal', 'plan', 'result', 'audit']);
   });
@@ -322,7 +322,7 @@ describe('入口の検査: 送る前に、読んでいないメッセージを�
     askTpm(w.se, { text: 'q', waitingFor: 'a' });
   });
 
-  test('担当: tpm inbox で見た後は止まらない', () => {
+  test('担当: roster inbox で見た後は止まらない', () => {
     const w = started();
     w.wire.hold('file:1');
     notify(w.tpm, 't-x7k2', { text: '知らせ' });
@@ -426,7 +426,7 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
     const sent = texts(w, 'file:1').length;
     expect(() => dismiss(w.tpm, 't-x7k2', { handover: true })).toThrow([
       't-x7k2 の担当に、まだ済んでいない物があります。送っていません。',
-      '--- まだ見ていない（届いておらず、tpm も見せていない。2026-11-20T12:00:00.000Z に送った。id m1-file-1）',
+      '--- まだ見ていない（届いておらず、roster も見せていない。2026-11-20T12:00:00.000Z に送った。id m1-file-1）',
       `【brief】${B4}`,
       `--- 【done】が返っていない依頼書: brief-4（${B4}）`,
       '--- ここまで',
@@ -459,7 +459,7 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
     w.wire.hold('file:1');
     notify(w.tpm, 't-x7k2', { text: '受け取った' });
     notify(w.tpm, 't-x7k2', { text: 'お勧めのとおりで' });
-    // 担当が tpm inbox で 2 通を見た（shown/ に入る）。cmux はまだ配っていない
+    // 担当が roster inbox で 2 通を見た（shown/ に入る）。cmux はまだ配っていない
     expect(inbox(w.se)).toHaveLength(4);
     dismiss(w.tpm, 't-x7k2', { handover: false });
     expect(gates(w)).toEqual([]);
@@ -484,7 +484,7 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
     notify(w.tpm, 't-x7k2', { text: '今の担当への知らせ' });
     expect(() => dismiss(w.tpm, 't-x7k2', { handover: false })).toThrow([
       't-x7k2 の担当に、まだ済んでいない物があります。送っていません。',
-      '--- 届け違いで返した（2026-11-20T12:00:00.000Z に送った。id m1-file-1。tpm returned show m1-file-1。送り直したか、要らないと決めたなら --supersede）',
+      '--- 届け違いで返した（2026-11-20T12:00:00.000Z に送った。id m1-file-1。roster returned show m1-file-1。送り直したか、要らないと決めたなら --supersede）',
       '【notify】前の担当への知らせ',
       '--- ここまで',
     ].join('\n'));
@@ -499,7 +499,7 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
     notify(w.tpm, 't-x7k2', { text: '受け取った' });
     expect(() => dismiss(w.tpm, 't-x7k2', { handover: false })).toThrow([
       't-x7k2 の担当に、まだ済んでいない物があります。送っていません。',
-      '--- まだ見ていない（届いておらず、tpm も見せていない。2026-11-20T12:00:00.000Z に送った。id m1-file-1）',
+      '--- まだ見ていない（届いておらず、roster も見せていない。2026-11-20T12:00:00.000Z に送った。id m1-file-1）',
       '【notify】受け取った',
       '--- ここまで',
     ].join('\n'));
@@ -635,7 +635,7 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
     expect(gates(w)).toEqual([]);
   });
 
-  test('#36 の形: 画面に届く前に tpm inbox で読んで済ませた依頼書は、済んだと数える', () => {
+  test('#36 の形: 画面に届く前に roster inbox で読んで済ませた依頼書は、済んだと数える', () => {
     const w = sentBrief4(true);
     w.se.now = at(60);
     expect(inbox(w.se)).toEqual(['--- Technical Program Manager（id m1-file-1）', `【brief】${B4}`]);
@@ -694,7 +694,7 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
     expect(() => assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B5, wait: 0, after: true })).toThrow(/済んでいない物はありません。--after/);
   });
 
-  test('最初の依頼書（tpm hello で受けた物）も、【done】が無ければ dismiss は止まり、あれば通る', () => {
+  test('最初の依頼書（roster hello で受けた物）も、【done】が無ければ dismiss は止まり、あれば通る', () => {
     const w = started();
     expect(() => dismiss(w.tpm, 't-x7k2', { handover: false })).toThrow(/【done】が返っていない依頼書: brief-1/);
     reportDone(w.se, { kind: 'result', summary: '済んだ', remaining: 'なし', decisions: 'なし', points: [] });
@@ -716,17 +716,17 @@ describe('入口の検査: TPM 担当だけの命令は、担当の session か�
     });
     const before = state();
     for (const [command, send] of [
-      ['tpm notify', () => notify(w.se, 't-b2c3', { text: 'TPM 担当の名で届く字' })],
-      ['tpm answer', () => answer(w.se, 't-b2c3', { text: '案 A' })],
-      ['tpm dismiss', () => dismiss(w.se, 't-b2c3', { handover: false })],
-      ['tpm assign', () => assign(w.se, 't-b2c3', { role: 'software-engineer', brief: BRIEF, wait: 0 })],
-      ['tpm close', () => close(w.se, 't-b2c3')],
+      ['roster notify', () => notify(w.se, 't-b2c3', { text: 'TPM 担当の名で届く字' })],
+      ['roster answer', () => answer(w.se, 't-b2c3', { text: '案 A' })],
+      ['roster dismiss', () => dismiss(w.se, 't-b2c3', { handover: false })],
+      ['roster assign', () => assign(w.se, 't-b2c3', { role: 'software-engineer', brief: BRIEF, wait: 0 })],
+      ['roster close', () => close(w.se, 't-b2c3')],
     ] as const) {
-      expect(send).toThrow(`${command} は TPM 担当の命令です。担当の session（t-x7k2）からは打てません。TPM 担当に頼むことは、tpm ask tpm で送ってください`);
+      expect(send).toThrow(`${command} は TPM 担当の命令です。担当の session（t-x7k2）からは打てません。TPM 担当に頼むことは、roster ask tpm で送ってください`);
       expect(state()).toEqual(before);
     }
     // 止めた回は、入口の検査の記録に残る
-    expect(w.tpm.state.lines<{ gate: string, by: string, detail: string }>('gate.jsonl').filter(l => l.gate === 'tpm-only').map(l => `${l.by} ${l.detail}`)).toEqual(['t-x7k2 tpm notify', 't-x7k2 tpm answer', 't-x7k2 tpm dismiss', 't-x7k2 tpm assign', 't-x7k2 tpm close']);
+    expect(w.tpm.state.lines<{ gate: string, by: string, detail: string }>('gate.jsonl').filter(l => l.gate === 'tpm-only').map(l => `${l.by} ${l.detail}`)).toEqual(['t-x7k2 roster notify', 't-x7k2 roster answer', 't-x7k2 roster dismiss', 't-x7k2 roster assign', 't-x7k2 roster close']);
   });
 });
 

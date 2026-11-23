@@ -81,7 +81,7 @@ describe('入口の検査が止めた回（gate.jsonl）と、返事の先（log
 });
 
 describe('wait の移り（waits.jsonl）', () => {
-  test('tpm wait と、【done】の後の待ちを順に残す', () => {
+  test('roster wait と、【done】の後の待ちを順に残す', () => {
     const w = started();
     wait(w.se, 'work', '実装');
     reportDone(w.se, { kind: 'result', summary: 's', remaining: 'なし', decisions: 'なし', points: [] });

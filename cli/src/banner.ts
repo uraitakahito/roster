@@ -17,7 +17,7 @@ export const CATEGORY_TRIGGER: Record<string, Trigger> = {
   'needs-permission': 'ask',
 };
 
-/** show は出す、hide は消す、pm-wait はその回に tpm wait pm を打った時だけ出す。 */
+/** show は出す、hide は消す、pm-wait はその回に roster wait pm を打った時だけ出す。 */
 export const CHOICES = ['show', 'hide', 'pm-wait'] as const;
 /** 1 つのきっかけの出し方。 */
 export type Choice = typeof CHOICES[number];
@@ -99,7 +99,7 @@ export function choiceOf(config: BannerConfig, role: string, trigger: Trigger): 
 export interface BannerInput {
   role: string
   trigger: Trigger
-  /** その居場所が最後に打った tpm wait の種類と時刻。 */
+  /** その居場所が最後に打った roster wait の種類と時刻。 */
   lastWait?: { kind: string, at: string }
   /** その居場所の前の「答え終わった」の時刻。 */
   lastTurn?: string
@@ -111,7 +111,7 @@ export interface BannerDecision {
   reason: string
 }
 
-/** 出すか消すかを決める。pm-wait は、前の「答え終わった」より後に tpm wait pm を打っていれば出す。前の回の記録が無ければ出す（漏らさない側に倒す）。 */
+/** 出すか消すかを決める。pm-wait は、前の「答え終わった」より後に roster wait pm を打っていれば出す。前の回の記録が無ければ出す（漏らさない側に倒す）。 */
 export function decide(config: BannerConfig, input: BannerInput): BannerDecision {
   const choice = choiceOf(config, input.role, input.trigger);
   if (choice !== 'pm-wait') return { show: choice === 'show', reason: `${input.role}.${input.trigger}=${choice}` };

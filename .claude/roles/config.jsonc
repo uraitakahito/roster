@@ -20,7 +20,7 @@
       ],
     },
     // 手元で image を build する builder（Apple Container の container build が使う container。名は buildkit）。
-    // tpm を動かす機械に 1 つで、並べて動く担当がみな使う。止める・消す・作り直すと、ほかの担当の build が途中で落ちる。
+    // roster を動かす機械に 1 つで、並べて動く担当がみな使う。止める・消す・作り直すと、ほかの担当の build が途中で落ちる。
     // container build は builder が止まっていれば自分で起こすので、担当は builder start を打たない（CPU・メモリなどの旗を付けた start は、
     // 動いている builder を止めて作り直す）。container build と container builder status は止めない（どの match も含まない）。
     // build に -c・-m・--ssh・--dns を付けても作り直すが、字 1 つでは止められないので、docs-site の運用のページに書く。

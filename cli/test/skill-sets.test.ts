@@ -14,7 +14,7 @@ const config = (text: string): string => {
 };
 
 beforeAll(() => {
-  root = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-skill-sets-')));
+  root = realpathSync(mkdtempSync(join(tmpdir(), 'roster-skill-sets-')));
   for (const s of ['core', 'dependabot', 'a-1']) mkdirSync(join(root, 'skill-sets', s, '.claude', 'skills'), { recursive: true });
 });
 

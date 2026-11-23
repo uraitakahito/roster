@@ -26,7 +26,7 @@ const URL = process.env.TPM_E2E_PAGES_URL ?? '';
 const FILES = URL !== '' && execFileSync('curl', ['-s', '-o', '/dev/null', '-w', '%{http_code}', `${URL}/api/files?limit=1`], { encoding: 'utf8' }) === '200';
 /**
  * 置き場が返事の状態を持てるか（pagetray 0.5.0 から）。引数の無い POST に、持てる置き場は 400、前の置き場は 405（その道が無い）を返す。
- * 持てない置き場には、「印を付けずに通る」方の試験を流す（新しい tpm が古い置き場に当たった時の振る舞い）。
+ * 持てない置き場には、「印を付けずに通る」方の試験を流す（新しい roster が古い置き場に当たった時の振る舞い）。
  */
 const REPLY = URL !== '' && execFileSync('curl', ['-s', '-o', '/dev/null', '-w', '%{http_code}', '-X', 'POST', `${URL}/api/pages/reply`], { encoding: 'utf8' }) === '400';
 /**
@@ -43,7 +43,7 @@ const PNG = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('
 /** 本物の curl で本物の置き場に向けた周り。project の名（状態の folder の名）は world ごとに違う。 */
 function setup() {
   const w = world();
-  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-e2e-pages-')));
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'roster-e2e-pages-')));
   const real = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({ ...ctx, exec, env: { ...ctx.env, TPM_PAGES_URL: URL, TPM_PAGES_DIR: dir, ...env } });
   const html = join(dir, 'src.html');
   const put = (ctx: Context, kind: string, text: string, key?: string): string => {
@@ -155,7 +155,7 @@ describe.skipIf(!FILES)('cli と pagetray のつなぎ（file。置き場が 0.4
   const files = (s: ReturnType<typeof setup>, options: Parameters<typeof fileList>[1]): (FileRecord & { url: string })[] =>
     JSON.parse(fileList(s.tpm, { ...options, json: true }).join('\n')) as (FileRecord & { url: string })[];
 
-  test('上げると番号が付き、控えを消しても読み戻せる。ページの <img> の参照も tpm page path が控えに写す', () => {
+  test('上げると番号が付き、控えを消しても読み戻せる。ページの <img> の参照も roster page path が控えに写す', () => {
     const s = setup();
     const ctx = s.real(s.w.role('K-6', 'file:1'), { TPM_ROLE: 'software-engineer' });
     const url = upload(s, ctx, 'shot.png');
@@ -222,7 +222,7 @@ describe.skipIf(!FILES)('cli と pagetray のつなぎ（file。置き場が 0.4
 
     expect(setReply(se, first, 'waiting')).toBe('done');
     expect(pageReply(s.tpm, [second], { waiting: true })).toEqual([`返事待ちにした: ${second}`]);
-    // 古い順に返る（tpm answer が、止まった時に並べる順）。
+    // 古い順に返る（roster answer が、止まった時に並べる順）。
     expect(waitingUrls(s.tpm, 'K-9')).toEqual([first, second]);
     expect(s.list(s.tpm, { reply: 'waiting' }).map(p => p.url)).toEqual([second, first]);
 

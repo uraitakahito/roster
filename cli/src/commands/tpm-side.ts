@@ -1,4 +1,4 @@
-// TPM 担当が打つ命令: 名乗る（tpmHello。tpm hello から呼ばれる）・名簿を見る（roles）・Key を作る（newKey）・課題を担当に振る（assign）・閉じる（close）。
+// TPM 担当が打つ命令: 名乗る（tpmHello。roster hello から呼ばれる）・名簿を見る（roles）・Key を作る（newKey）・課題を担当に振る（assign）・閉じる（close）。
 import { randomInt } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { assertSummary } from '../brief.ts';
@@ -23,7 +23,7 @@ import { markBrief } from './review-marks.ts';
 import { launchStaff, markBriefed, putStaffBrief, relabelStaff, STAFF, staffSubject } from './staff.ts';
 
 /**
- * TPM 担当が名乗る（$TPM_KEY の無い tpm hello）: 居場所の題と状態を出し、自分の宛先を状態に書く。続けて名簿を出す。
+ * TPM 担当が名乗る（$TPM_KEY の無い roster hello）: 居場所の題と状態を出し、自分の宛先を状態に書く。続けて名簿を出す。
  * 状態の model は、旗が無ければ起こす 1 行と同じ決め方（resolveSettings）。effort は、旗が無ければ Claude Code が入れる $CLAUDE_EFFORT（実際の effort）を旗と同じに扱う。
  * castlist を設定していれば、名乗りを送り、`アクター: <名>` の行を頭に出す（castlist が止まっていれば、名乗らずに止まる）。
  */
@@ -83,7 +83,7 @@ export function configLines(ctx: Context): string[] {
     ...sources.map(s => `- ${sourceLabel(s)}  ${sourceSummary(ctx, s)}`),
     `課題管理: Jira の Key（AI-12 の形）→ ${declared(trackers.jira, 'jira')}／gh- の Key → ${github}／t- の Key → 記録しない`,
     transportLine,
-    ...(envs.length === 0 ? [] : [`infra: ${envs.join('・')}（手続きは tpm infra list）`]),
+    ...(envs.length === 0 ? [] : [`infra: ${envs.join('・')}（手続きは roster infra list）`]),
   ];
 }
 
@@ -99,9 +99,9 @@ export function bannerHint(ctx: Context, cmuxFile?: string): string[] {
   if (ctx.config.transport !== 'cmux') return [];
   try {
     const hook = findHook(cmuxFile);
-    if (hook === undefined) return ['通知のバナー: cmux.json に tpm の hook がありません。tpm banner setup の字を足すと、Product Manager に要るバナーだけになる（Product Manager に伝える）'];
+    if (hook === undefined) return ['通知のバナー: cmux.json に roster の hook がありません。roster banner setup の字を足すと、Product Manager に要るバナーだけになる（Product Manager に伝える）'];
     const stale = staleHook(hook.command, ctx.root, ctx.env);
-    return stale === undefined ? [] : [`通知のバナー: cmux.json の hook の命令が${stale}。tpm banner setup の字に替える（Product Manager に伝える）`];
+    return stale === undefined ? [] : [`通知のバナー: cmux.json の hook の命令が${stale}。roster banner setup の字に替える（Product Manager に伝える）`];
   }
   catch (e) {
     return [`通知のバナー: cmux.json を読めません（${(e as Error).message}）`];
@@ -119,7 +119,7 @@ export function roles(ctx: Context): string[] {
   return ['名簿:', ...records.map((r) => {
     const alive = r.address !== undefined && seats.some(s => s.address === r.address);
     const wait = alive && r.address !== undefined ? ctx.transport.status(r.address)?.wait : undefined;
-    const gone = r.role === 'auditor' ? '消えた（居場所が無い。起こし直すのは Product Manager: tpm audit start）' : '消えた（居場所が無い。tpm assign で起こし直すか、tpm close で名簿から消す）';
+    const gone = r.role === 'auditor' ? '消えた（居場所が無い。起こし直すのは Product Manager: roster audit start）' : '消えた（居場所が無い。roster assign で起こし直すか、roster close で名簿から消す）';
     const where = alive ? `${r.address}（${wait ?? '状態なし'}）` : gone;
     return `- ${r.key}  ${r.title}  ${where}${r.dismissed ? `  dismiss 済み（${r.dismissed === 'handover' ? '交代' : '終わり'}）` : ''}${r.brief ? `  依頼書: ${r.brief}` : ''}${r.issuePage ? `  課題の写し: ${r.issuePage}` : ''}`;
   }), ...swept, ...lastAuditLine(ctx), ...openLine(ctx)];
@@ -142,7 +142,7 @@ export function newKey(ctx: Context, pick: (n: number) => number = randomInt): s
   throw new TpmError(`使われていない Key を ${KEY_TRIES} 回で作れませんでした`);
 }
 
-/** `tpm assign` の旗。 */
+/** `roster assign` の旗。 */
 export interface AssignOptions {
   role: RoleName
   /** 居場所の題に付ける短い題（Software Engineer 担当だけが使う）。 */
@@ -161,7 +161,7 @@ export interface AssignOptions {
   after?: boolean
   /** 課題の写しを作らずに振る訳（--no-issue-copy の訳）。 */
   noIssueCopy?: string
-  /** 起こした担当の tpm hello を待つ秒。0 なら待たない。 */
+  /** 起こした担当の roster hello を待つ秒。0 なら待たない。 */
   wait: number
 }
 
@@ -169,7 +169,7 @@ export interface AssignOptions {
  * 課題を担当に振る。同じ Key の担当が動いていれば、その担当に【brief】で新しい依頼書を送る（背景を知っているため）。
  * いなければ（居場所が消えていても）起こし、名乗るまで待つ。
  * Staff Engineer 担当（--role staff-engineer）は、課題の担当と並べるために、名簿の Key を `<課題の Key>.staff` にして起こす（subjectKey は、どの役割でも課題の Key）。
- * その依頼書は、課題の担当のレビューの頼み（tpm ask review）から命令が作る（--brief は受けない）。いつもは tpm ask review が席を起こし、じかに頼みを届けるので、
+ * その依頼書は、課題の担当のレビューの頼み（roster ask review）から命令が作る（--brief は受けない）。いつもは roster ask review が席を起こし、じかに頼みを届けるので、
  * TPM 担当がこの形で打つのは、返っていない頼みがあるのに席が落ちた時の起こし直し。
  */
 export function assign(ctx: Context, subjectKey: string, options: AssignOptions): string[] {
@@ -178,14 +178,14 @@ export function assign(ctx: Context, subjectKey: string, options: AssignOptions)
   return [...lines, ...sweep(ctx)];
 }
 
-/** tpm assign の本体（上の assign が、終わりに落ちた session の突き合わせを足す）。 */
+/** roster assign の本体（上の assign が、終わりに落ちた session の突き合わせを足す）。 */
 function assignSeat(ctx: Context, subjectKey: string, options: AssignOptions): string[] {
-  requireTpmSide(ctx, 'tpm assign');
+  requireTpmSide(ctx, 'roster assign');
   assertKey(subjectKey);
   if (!Number.isFinite(options.wait) || options.wait < 0) throw new TpmError('--wait は 0 以上の数にしてください（0 なら待たない）');
   // Auditor は TPM 担当の回し方も見るので、TPM 担当の手では起こさない・依頼書も送らない。
-  if (options.role === 'auditor' || subjectKey === AUDIT_KEY) throw new TpmError('Auditor の席（Key audit）は、Product Manager が tpm audit start で起こします。tpm assign では起こせません・依頼書も送れません');
-  if (isStaffKey(subjectKey)) throw new TpmError(`${subjectKey} は Staff Engineer 担当の席の Key です。席を起こす・依頼書を送るのは tpm assign <課題の Key> --role staff-engineer`);
+  if (options.role === 'auditor' || subjectKey === AUDIT_KEY) throw new TpmError('Auditor の席（Key audit）は、Product Manager が roster audit start で起こします。roster assign では起こせません・依頼書も送れません');
+  if (isStaffKey(subjectKey)) throw new TpmError(`${subjectKey} は Staff Engineer 担当の席の Key です。席を起こす・依頼書を送るのは roster assign <課題の Key> --role staff-engineer`);
   const subject = options.role === STAFF ? staffSubject(ctx, subjectKey) : undefined;
   // 名簿の Key。Staff Engineer 担当の席だけ、課題の Key と違う。
   const key = subject === undefined ? subjectKey : staffKey(subjectKey);
@@ -194,13 +194,13 @@ function assignSeat(ctx: Context, subjectKey: string, options: AssignOptions): s
   // Staff に渡す頼み: まだ依頼書にしていない物。席が無い時（消えたら、起こし直して渡し直す）と、前の依頼書を取り消す時（--supersede）は、依頼書にしたが返っていない物も。
   const asks = subject === undefined ? [] : openReviews(ctx, subjectKey).filter(r => r.brief === undefined || !alive || options.supersede === true);
   if (subject !== undefined) {
-    if (options.brief !== undefined) throw new TpmError('Staff Engineer 担当への依頼書は、レビューの頼み（tpm ask review）から命令が作ります。--brief は書かないでください');
+    if (options.brief !== undefined) throw new TpmError('Staff Engineer 担当への依頼書は、レビューの頼み（roster ask review）から命令が作ります。--brief は書かないでください');
     if (options.title !== undefined) throw new TpmError('Staff Engineer 担当の席の題は、レビューの頼みから命令が作ります。--title は書かないでください');
-    if (asks.length === 0) throw new TpmError(`${subjectKey} に、まだ依頼書にしていないレビューの頼みがありません。頼むのは課題の担当（tpm ask review）。今の頼みは tpm review list --key ${subjectKey}`);
+    if (asks.length === 0) throw new TpmError(`${subjectKey} に、まだ依頼書にしていないレビューの頼みがありません。頼むのは課題の担当（roster ask review）。今の頼みは roster review list --key ${subjectKey}`);
   }
   // 名簿にある担当（前の決まりの長い Key を含む）は、そのまま動き続けられるよう形を問わない。
   if (existing === undefined && subject === undefined && key.startsWith('t-') && !LOCAL_KEY.test(key)) {
-    throw new TpmError(`課題管理の課題が無いときの Key は、t- と英小文字・数字 4 文字にしてください（tpm key で作る）: ${key}`);
+    throw new TpmError(`課題管理の課題が無いときの Key は、t- と英小文字・数字 4 文字にしてください（roster key で作る）: ${key}`);
   }
   if (existing !== undefined && alive) {
     if (options.brief === undefined && subject === undefined) throw new TpmError(`${key} の担当はもう動いています（${existing.address}）。新しい依頼書を --brief で渡してください`);
@@ -220,8 +220,8 @@ function assignSeat(ctx: Context, subjectKey: string, options: AssignOptions): s
   if (options.issue !== undefined && !ctx.tracker.owns(options.issue)) {
     throw new TpmError(`${options.issue} に記録を書く課題管理が、どの設定にもありません（読んだ設定: ${describeTrackers(ctx.config.sources)}）。記録するなら、その課題を扱う repo の .claude/roles/config.jsonc に "tracker"（jira・github）を書いてください`);
   }
-  const castlistHint = [`この 1 行を Product Manager に頼み、tpm wait pm "castlist を起こす" --hand で待ってから、もう 1 度 tpm assign を打ってください。`];
-  // Staff Engineer 担当の席の起こし直し（返っていない頼みがあるのに席が落ちた時）。いつもは、課題の担当の tpm ask review が起こす。
+  const castlistHint = [`この 1 行を Product Manager に頼み、roster wait pm "castlist を起こす" --hand で待ってから、もう 1 度 roster assign を打ってください。`];
+  // Staff Engineer 担当の席の起こし直し（返っていない頼みがあるのに席が落ちた時）。いつもは、課題の担当の roster ask review が起こす。
   if (subject !== undefined) {
     return launchStaff(ctx, subject, asks, {
       flags: options,
@@ -263,10 +263,10 @@ function assignSeat(ctx: Context, subjectKey: string, options: AssignOptions): s
 
 /** 担当の居場所を閉じ、名簿から消す。課題の担当を閉じる時は、その課題の Staff Engineer 担当の席が残っていれば、一緒に閉じる。 */
 export function close(ctx: Context, key: string): string[] {
-  requireTpmSide(ctx, 'tpm close');
+  requireTpmSide(ctx, 'roster close');
   const record = readRole(ctx, key);
   if (record === undefined) throw new TpmError(`名簿に担当がいません: ${key}`);
-  if (record.role === 'auditor') throw new TpmError('Auditor の席は、Product Manager が起こし、閉じます。tpm close では閉じられません（居場所が消えていたら、Product Manager が tpm audit start で起こし直す）');
+  if (record.role === 'auditor') throw new TpmError('Auditor の席は、Product Manager が起こし、閉じます。roster close では閉じられません（居場所が消えていたら、Product Manager が roster audit start で起こし直す）');
   const alive = record.address !== undefined && ctx.transport.seats().some(s => s.address === record.address);
   // 閉じる前に、この担当とのメッセージの届いた時刻を写す。
   syncDeliveries(ctx);

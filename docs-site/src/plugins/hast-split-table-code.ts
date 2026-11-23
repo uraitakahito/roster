@@ -2,7 +2,7 @@
 //
 // src/styles/tables.css は、表の中の code を inline-block・nowrap にして、code の中では
 // 折り返さず code と code の間で折り返す。そのままだと、空白を含む長い code
-// （`tpm assign "<repo>#<PR>" --role sustaining-engineer` など）の長さがそのまま列の最小の幅になり、
+// （`roster assign "<repo>#<PR>" --role sustaining-engineer` など）の長さがそのまま列の最小の幅になり、
 // 表が本文の幅からあふれて、日本語の列が数字ずつに細る（行がとても高くなる）。
 // 原稿で code を空白ごとに分ける決まりは、文を直すうちに破れるので、ここで分ける。
 //

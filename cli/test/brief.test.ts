@@ -1,4 +1,4 @@
-// tpm assign が新しい担当を起こす前に、依頼書の課題の概要の節を確かめること。
+// roster assign が新しい担当を起こす前に、依頼書の課題の概要の節を確かめること。
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
@@ -32,7 +32,7 @@ describe('summaryText', () => {
   });
 });
 
-describe('tpm assign が依頼書の課題の概要の節を確かめる', () => {
+describe('roster assign が依頼書の課題の概要の節を確かめる', () => {
   test('節が無ければ、居場所を作らずに止まる', () => {
     const w = world();
     hello(w.tpm, TPM);
@@ -55,7 +55,7 @@ describe('tpm assign が依頼書の課題の概要の節を確かめる', () =>
   test('置き場の外の URL は止まる', () => {
     const w = world();
     hello(w.tpm, TPM);
-    expect(() => assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: 'https://claude.ai/artifact/b1', wait: 0 })).toThrow(/依頼書は置き場のページにしてください（tpm page put <file> --kind brief --key t-x7k2/);
+    expect(() => assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: 'https://claude.ai/artifact/b1', wait: 0 })).toThrow(/依頼書は置き場のページにしてください（roster page put <file> --kind brief --key t-x7k2/);
   });
 
   test('続きの【brief】では確かめない（担当はもう背景を知っている）', () => {

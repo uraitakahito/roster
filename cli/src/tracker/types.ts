@@ -36,7 +36,7 @@ export interface TrackerComment {
   created?: string
 }
 
-/** 課題 1 件の中身（tpm issue view が出す）。 */
+/** 課題 1 件の中身（roster issue view が出す）。 */
 export interface TrackerIssue {
   key: string
   /** 道具の名（Jira・GitHub の Issue）。 */

@@ -1,5 +1,5 @@
-// 偽の castlist: 127.0.0.1 の空いた port で待つ node の http サーバー。tpm が curl で送る要求を記録し、本物（castlist の docs/src/api.md）の決まりの要る所だけで答える。
-// tpm の命令は同期（spawnSync で curl を待つ）なので、同じ thread のサーバーは答えられない。サーバーは worker の thread で動かす。
+// 偽の castlist: 127.0.0.1 の空いた port で待つ node の http サーバー。roster が curl で送る要求を記録し、本物（castlist の docs/src/api.md）の決まりの要る所だけで答える。
+// roster の命令は同期（spawnSync で curl を待つ）なので、同じ thread のサーバーは答えられない。サーバーは worker の thread で動かす。
 // 記録は worker が file に 1 行ずつ足し、試験はそれを読む。castlist の時刻（/healthz の now と、書いた物の received_at）は、試験が書く file を worker が要求ごとに読む。
 // 書く 4 つの道は、送り手の時刻を 0.2.0 の名 sent_at で受け、前の名 at は断る（本物は移る間 at も受ける）。
 // 監査の検索（GET /v1/actors など）も、引数の名・1 つだけの引数の重なり・読めない時刻・limit の範囲を本物と同じ字で断る。頁の印（next）は本物と違う字（中は読まない決まりなので）。
@@ -37,7 +37,7 @@ const ENTER = ['entered', 'reentered', 'forked'];
 const EXIT = ['cleared', 'exited', 'closed'];
 const EVENT_TYPES = ['entered', 'reentered', 'forked', 'compacted', 'cleared', 'exited', 'closed', 'reported_in', 'model_unreadable', 'retracted'];
 const ACTOR_PARAMS = ['label', 'binding', 'at', 'active_from', 'active_to', 'kind', 'model', 'effort', 'active', 'launched_by', 'skewed', 'sort', 'order', 'limit', 'after'];
-// 送り手の時刻は sent_at（castlist 0.2.0）。本物は移る間 0.1.x の名 at も受けるが、偽物は断る（tpm が前の名に戻ったら試験で分かるように）。
+// 送り手の時刻は sent_at（castlist 0.2.0）。本物は移る間 0.1.x の名 at も受けるが、偽物は断る（roster が前の名に戻ったら試験で分かるように）。
 const OLD_AT = 'at は 0.1.x の名。送り手の時刻は sent_at で送る（偽の castlist は前の名を受けない）';
 const refOk = (issuer, ref) => typeof ref === 'string' && keys.has(issuer + ' ' + ref);
 const bad = (error) => { throw { status: 400, error }; };
@@ -392,7 +392,7 @@ export interface FakeCastlist {
 
 /** 偽の castlist を起こす。now は /healthz が返す時刻（既定は world の時計の時刻）。 */
 export async function startFakeCastlist(now = '2026-11-20T12:00:00.000Z'): Promise<FakeCastlist> {
-  const dir = mkdtempSync(join(tmpdir(), 'tpm-castlist-'));
+  const dir = mkdtempSync(join(tmpdir(), 'roster-castlist-'));
   const log = join(dir, 'requests.jsonl');
   const control = join(dir, 'control.json');
   writeFileSync(log, '');

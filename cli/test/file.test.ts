@@ -17,8 +17,8 @@ const TOKEN = ['gh', 'p_', 'a'.repeat(36)].join('');
 
 /** 控えを一時の folder にし、偽の置き場に向けた、t-x7k2 の Software Engineer 担当（居場所 file:1）と TPM 担当の周り。 */
 function setup() {
-  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-files-')));
-  const src = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-files-src-')));
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'roster-files-')));
+  const src = realpathSync(mkdtempSync(join(tmpdir(), 'roster-files-src-')));
   const w = world();
   const wire = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({ ...ctx, env: { ...ctx.env, TPM_PAGES_DIR: dir, ...env } });
   const role = wire(w.role('t-x7k2', 'file:1'), { TPM_ROLE: 'software-engineer' });
@@ -37,11 +37,11 @@ function setup() {
   return { dir, src, w, store: w.store, role, tpm, project, source, curls, put };
 }
 
-describe('tpm file put', () => {
+describe('roster file put', () => {
   test('画像は --reviewed が無ければ、置き場に頼む前に、Read で見るよう言って止まる', () => {
     const s = setup();
     const file = s.source('screen.png', PNG);
-    expect(() => filePut(s.role, file, {})).toThrow(/Read tool でその file を見て、token・鍵・個人の情報・ほかの人の画面・tpm を動かす機械の path が写っていないか確かめてから --reviewed を付けて打つ/);
+    expect(() => filePut(s.role, file, {})).toThrow(/Read tool でその file を見て、token・鍵・個人の情報・ほかの人の画面・roster を動かす機械の path が写っていないか確かめてから --reviewed を付けて打つ/);
     expect(() => filePut(s.role, s.source('doc.pdf', '%PDF-1.4'), {})).toThrow('--reviewed');
     expect(s.curls()).toEqual([]);
   });
@@ -145,12 +145,12 @@ describe('tpm file put', () => {
     expect(() => s.put(s.role, 'a.png')).toThrow('置き場が file を受け取りませんでした（415）: 中身が拡張子の形でない');
     s.store.refuse = undefined;
     s.store.down = true;
-    expect(() => s.put(s.role, 'a.png')).toThrow(/応えません。file は上げていません.*tpm ask devops/);
+    expect(() => s.put(s.role, 'a.png')).toThrow(/応えません。file は上げていません.*roster ask devops/);
     expect(existsSync(join(s.dir, s.project))).toBe(false);
   });
 });
 
-describe('tpm file put の送り手（pagetray 0.6.0 の actor_issuer・actor_ref）', () => {
+describe('roster file put の送り手（pagetray 0.6.0 の actor_issuer・actor_ref）', () => {
   const SID = '5f0c2a8e-0000-4000-8000-000000000002';
   const seated = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({ ...ctx, env: { ...ctx.env, TPM_CASTLIST_URL: 'http://127.0.0.1:8802', CLAUDE_CODE_SESSION_ID: SID, ...env } });
 
@@ -172,9 +172,9 @@ describe('tpm file put の送り手（pagetray 0.6.0 の actor_issuer・actor_re
   test('503 は castlist に聞けない、422 は登録が無い。どちらも file を上げずに 1 行で止まり、控えも書かない', () => {
     const s = setup();
     s.store.sender = 'unreachable';
-    expect(() => s.put(seated(s.role), 'a.png')).toThrow(/^置き場（http:\/\/127\.0\.0\.1:8801）が castlist に送り手を聞けませんでした（503）。file は上げていません。.*castlist が起きてから.*打ち直して.*tpm report incident[^\n]*$/);
+    expect(() => s.put(seated(s.role), 'a.png')).toThrow(/^置き場（http:\/\/127\.0\.0\.1:8801）が castlist に送り手を聞けませんでした（503）。file は上げていません。.*castlist が起きてから.*打ち直して.*roster report incident[^\n]*$/);
     s.store.sender = 'unregistered';
-    expect(() => s.put(seated(s.role), 'a.png')).toThrow(new RegExp(`^この session（claude\\.session:${SID}）は castlist に登録が無いと、置き場が答えました（422）。file は上げていません。.*guard.*Bash.*打ち直して.*tpm report incident[^\\n]*$`));
+    expect(() => s.put(seated(s.role), 'a.png')).toThrow(new RegExp(`^この session（claude\\.session:${SID}）は castlist に登録が無いと、置き場が答えました（422）。file は上げていません。.*guard.*Bash.*打ち直して.*roster report incident[^\\n]*$`));
     expect(s.store.files.size).toBe(0);
     expect(existsSync(join(s.dir, s.project))).toBe(false);
   });
@@ -184,7 +184,7 @@ describe('置き場が 0.4.0 より前（file のエンドポイントが無い�
   test('put・path・list・delete は、置き場の版を上げるよう DevOps に頼むよう言って止まる', () => {
     const s = setup();
     s.store.noFiles = true;
-    const old = '置き場（pagetray）の版が古く、file を扱えません。tpm ask devops で置き場の版を上げるよう頼んでください';
+    const old = '置き場（pagetray）の版が古く、file を扱えません。roster ask devops で置き場の版を上げるよう頼んでください';
     expect(() => s.put(s.role, 'a.png')).toThrow(old);
     expect(() => filePath(s.role, `${BASE}/${s.project}/t-x7k2/files/a-1.png`)).toThrow(old);
     expect(() => fileList(s.role, {})).toThrow(old);
@@ -193,7 +193,7 @@ describe('置き場が 0.4.0 より前（file のエンドポイントが無い�
   });
 });
 
-describe('tpm file path', () => {
+describe('roster file path', () => {
   test('控えにあれば置き場に聞かない。無ければ置き場から取って写す', () => {
     const s = setup();
     const url = s.put(s.role, 'screen.png');
@@ -222,14 +222,14 @@ describe('tpm file path', () => {
     expect(s.curls()).toHaveLength(before);
   });
 
-  test('tpm page path に file の URL を渡すと、tpm file path に回すよう言う', () => {
+  test('roster page path に file の URL を渡すと、roster file path に回すよう言う', () => {
     const s = setup();
     const url = s.put(s.role, 'screen.png');
-    expect(() => pagePath(s.role, url)).toThrow(`tpm file path ${url}`);
+    expect(() => pagePath(s.role, url)).toThrow(`roster file path ${url}`);
   });
 });
 
-describe('tpm file list', () => {
+describe('roster file list', () => {
   test('今の project の file を新しい順に出す。旗で絞り、--json は url を足した記録', () => {
     const s = setup();
     s.put(s.role, 'a.png');
@@ -244,7 +244,7 @@ describe('tpm file list', () => {
   });
 });
 
-describe('tpm file delete', () => {
+describe('roster file delete', () => {
   /** t-x7k2 に file 2 つと、それを参照するページ・しないページを置いた周り。 */
   function placed() {
     const s = setup();
@@ -263,7 +263,7 @@ describe('tpm file delete', () => {
   test('担当の居場所からは消せない。TPM 担当に頼むよう言い、置き場に頼まない', () => {
     const s = placed();
     const before = s.curls().length;
-    expect(() => fileDelete(s.role, [s.shot], { yes: true })).toThrow('file を消せるのは TPM 担当だけです。消す file の URL と訳を、tpm ask tpm で TPM 担当に送って頼んでください');
+    expect(() => fileDelete(s.role, [s.shot], { yes: true })).toThrow('file を消せるのは TPM 担当だけです。消す file の URL と訳を、roster ask tpm で TPM 担当に送って頼んでください');
     expect(s.curls()).toHaveLength(before);
   });
 

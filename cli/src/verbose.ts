@@ -1,9 +1,9 @@
-// --verbose で stderr に出す説明。tpm が何をどこから読み、どの skill セットの skill を足すかを並べる。
+// --verbose で stderr に出す説明。roster が何をどこから読み、どの skill セットの skill を足すかを並べる。
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { skillSetDir } from './skill-sets.ts';
 
-/** 説明に使う、tpm が求めた値。 */
+/** 説明に使う、roster が求めた値。 */
 export interface Resolved {
   /** 利用者が渡した folder。渡さなければ undefined。 */
   given: string | undefined
@@ -26,7 +26,7 @@ export function listSkills(skillSetDir: string): string[] {
     .sort();
 }
 
-/** 説明の行を返す（先頭の `tpm: ` は付けない）。 */
+/** 説明の行を返す（先頭の `roster: ` は付けない）。 */
 export function explain(r: Resolved): string[] {
   const skillSets = ['core', ...r.skillSets];
   // skill セットの名前の欄は、上の行の見出しとそろえる。

@@ -77,11 +77,11 @@ describe('環境の手続き', () => {
   });
 
   test('止めた訳に、次にすることを書く', () => {
-    expect(ask('wmill sync push', 'software-engineer')).toEqual({ allow: false, reason: expect.stringContaining('tpm ask devops') as string });
-    expect(ask('aws s3 rm x', 'devops-engineer')).toEqual({ allow: false, reason: expect.stringContaining('tpm infra approve aws-staging') as string });
+    expect(ask('wmill sync push', 'software-engineer')).toEqual({ allow: false, reason: expect.stringContaining('roster ask devops') as string });
+    expect(ask('aws s3 rm x', 'devops-engineer')).toEqual({ allow: false, reason: expect.stringContaining('roster infra approve aws-staging') as string });
     expect(ask('aws s3 rm x', 'devops-engineer', expired)).toEqual({ allow: false, reason: expect.stringContaining('承認は 2026-11-20T11:59:59.000Z で切れた') as string });
     expect(ask('container stop castlist', 'devops-engineer')).toEqual({ allow: false, reason: expect.stringContaining('Product Manager が自分の terminal で') as string });
-    expect(ask('container stop castlist', 'devops-engineer')).toEqual({ allow: false, reason: expect.stringContaining('tpm ask pm') as string });
+    expect(ask('container stop castlist', 'devops-engineer')).toEqual({ allow: false, reason: expect.stringContaining('roster ask pm') as string });
   });
 });
 
@@ -115,7 +115,7 @@ describe('道具の直打ち', () => {
     'eval cmux set-status wait x',
     'cat <<EOF\nhi\nEOF\ncmux set-status wait x',
   ])('止める: %s', (command) => {
-    expect(ask(command, 'software-engineer')).toEqual({ allow: false, reason: expect.stringContaining('代わりに: tpm ') as string });
+    expect(ask(command, 'software-engineer')).toEqual({ allow: false, reason: expect.stringContaining('代わりに: roster ') as string });
   });
 
   test.each([
@@ -125,7 +125,7 @@ describe('道具の直打ち', () => {
     'cmux --json agent inbox --surface workspace:1 --limit 3',
     'acli jira workitem view AI-1 --fields comment --json',
     'gh pr create --title x',
-    'tpm report done --summary "cmux の adapter を直した"',
+    'roster report done --summary "cmux の adapter を直した"',
     // 道具の名が、命令でない字（文・型・中身）に入るだけなら止めない。
     'git commit -m "acli jira workitem comment create と cmux set-status を止める"',
     'git commit -F msg.txt && git push',
@@ -137,7 +137,7 @@ describe('道具の直打ち', () => {
     'python3 - <<EOF\nprint("cmux set-status")\nEOF\nls',
     'cat <<-EOF\n\tcmux set-status wait x\n\tEOF',
     'ls # cmux set-status wait x',
-    'tpm ask tpm "acli jira workitem transition を打ってよいか"',
+    'roster ask tpm "acli jira workitem transition を打ってよいか"',
     'echo hi > cmux',
   ])('通す: %s', (command) => {
     expect(ask(command, 'software-engineer').allow).toBe(true);
@@ -244,34 +244,34 @@ describe('hook の入力と settings', () => {
     expect(commandOf(JSON.stringify({ tool_name: 'Read', tool_input: { file_path: '/x' } }))).toBeUndefined();
   });
 
-  test('settings は Bash の前に tpm guard を呼ぶ hook と、session の始まりと終わりに tpm castlist を呼ぶ hook', () => {
-    expect(JSON.parse(guardSettings('/r/cli/bin/tpm'))).toEqual({ hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: '/r/cli/bin/tpm guard' }] }], SessionStart: [{ hooks: [{ type: 'command', command: '/r/cli/bin/tpm castlist session-start' }, { type: 'command', command: '/r/cli/bin/tpm returned check' }] }], SessionEnd: [{ hooks: [{ type: 'command', command: '/r/cli/bin/tpm castlist session-end' }] }] } });
+  test('settings は Bash の前に roster guard を呼ぶ hook と、session の始まりと終わりに roster castlist を呼ぶ hook', () => {
+    expect(JSON.parse(guardSettings('/r/cli/bin/roster'))).toEqual({ hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: '/r/cli/bin/roster guard' }] }], SessionStart: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-start' }, { type: 'command', command: '/r/cli/bin/roster returned check' }] }], SessionEnd: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-end' }] }] } });
   });
 
   test('path に空白などがあれば、hook の命令の中で引用する', () => {
-    expect(hookCommand(guardSettings('/my repo/cli/bin/tpm'))).toBe('\'/my repo/cli/bin/tpm\' guard');
+    expect(hookCommand(guardSettings('/my repo/cli/bin/roster'))).toBe('\'/my repo/cli/bin/roster\' guard');
   });
 
-  // Claude Code は hook の命令を shell で動かす。空白・引用符・$ を含む folder に置いた tpm でも、guard として動くこと。
-  test('空白・引用符・$ を含む path の tpm でも、hook の命令が guard として動く', () => {
-    const dir = join(mkdtempSync(join(tmpdir(), 'tpm-guard-')), 'my repo', 'it\'s $HOME');
+  // Claude Code は hook の命令を shell で動かす。空白・引用符・$ を含む folder に置いた roster でも、guard として動くこと。
+  test('空白・引用符・$ を含む path の roster でも、hook の命令が guard として動く', () => {
+    const dir = join(mkdtempSync(join(tmpdir(), 'roster-guard-')), 'my repo', 'it\'s $HOME');
     mkdirSync(dir, { recursive: true });
-    const tpmBin = join(dir, 'tpm');
-    symlinkSync(realpathSync(join(import.meta.dirname, '..', 'bin', 'tpm')), tpmBin);
+    const tpmBin = join(dir, 'roster');
+    symlinkSync(realpathSync(join(import.meta.dirname, '..', 'bin', 'roster')), tpmBin);
     const command = hookCommand(guardSettings(tpmBin));
-    // 止めた記録（guard.jsonl）を、tpm を動かす機械の本物の状態の folder でなく、一時の folder に書かせる。
-    const state = mkdtempSync(join(tmpdir(), 'tpm-guard-state-'));
+    // 止めた記録（guard.jsonl）を、roster を動かす機械の本物の状態の folder でなく、一時の folder に書かせる。
+    const state = mkdtempSync(join(tmpdir(), 'roster-guard-state-'));
     const env = { ...process.env, TPM_PROJECT: undefined, TPM_STATE: undefined, TPM_KEY: undefined, TPM_ROLE: undefined, XDG_STATE_HOME: state };
     const run = (cmd: string) => spawnSync('/bin/sh', ['-c', command], { cwd: dir, env, encoding: 'utf8', input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: cmd } }) });
     const denied = run(['cmux', 'set-status', 'x'].join(' '));
-    expect(denied.stderr).toContain('tpm wait');
+    expect(denied.stderr).toContain('roster wait');
     expect(denied.status).toBe(2);
     expect(run('ls').status).toBe(0);
     expect(existsSync(join(state, 'tpm'))).toBe(true);
   });
 
-  test('Auditor の席の settings は、file を書き替える道具の前にも tpm guard を呼ぶ', () => {
-    const matcher = (role?: RoleName): string => (JSON.parse(guardSettings('/r/cli/bin/tpm', role)) as { hooks: { PreToolUse: { matcher: string }[] } }).hooks.PreToolUse[0]?.matcher ?? '';
+  test('Auditor の席の settings は、file を書き替える道具の前にも roster guard を呼ぶ', () => {
+    const matcher = (role?: RoleName): string => (JSON.parse(guardSettings('/r/cli/bin/roster', role)) as { hooks: { PreToolUse: { matcher: string }[] } }).hooks.PreToolUse[0]?.matcher ?? '';
     expect(matcher('auditor')).toBe('Bash|Edit|Write|NotebookEdit');
     expect(matcher('software-engineer')).toBe('Bash');
   });
@@ -287,12 +287,12 @@ describe('hook の入力と settings', () => {
 });
 
 describe('Audit の席を起こす命令', () => {
-  test('TPM 担当と担当が道具として打つ tpm audit start は止める（TPM_RAW=1 も効かない）。ほかの tpm audit は通す', () => {
+  test('TPM 担当と担当が道具として打つ roster audit start は止める（TPM_RAW=1 も効かない）。ほかの roster audit は通す', () => {
     for (const role of [undefined, 'software-engineer', 'devops-engineer', 'auditor'] as const) {
-      expect(ask('tpm audit start', role), String(role)).toEqual({ allow: false, reason: expect.stringContaining('Audit の席を起こすのは Product Manager です') as string });
+      expect(ask('roster audit start', role), String(role)).toEqual({ allow: false, reason: expect.stringContaining('Audit の席を起こすのは Product Manager です') as string });
     }
-    for (const command of ['cd /w && /r/cli/bin/tpm audit start --model claude-opus-5-5', 'TPM_RAW=1 tpm audit start', 'sh -c "tpm audit start"']) expect(ask(command).allow, command).toBe(false);
-    for (const command of ['tpm audit begin', 'tpm audit begin 7 9', 'echo "tpm audit start"', 'grep -rn "tpm audit start" docs-site', 'tpm roles']) expect(ask(command).allow, command).toBe(true);
+    for (const command of ['cd /w && /r/cli/bin/roster audit start --model claude-opus-5-5', 'TPM_RAW=1 roster audit start', 'sh -c "roster audit start"']) expect(ask(command).allow, command).toBe(false);
+    for (const command of ['roster audit begin', 'roster audit begin 7 9', 'echo "roster audit start"', 'grep -rn "roster audit start" docs-site', 'roster roles']) expect(ask(command).allow, command).toBe(true);
   });
 });
 
@@ -331,11 +331,11 @@ describe('Auditor は repo を変えない', () => {
     ['gh api repos/o/r/labels -f name=x', false],
     ['TPM_RAW=1 git push', false],
     // castlist を読むだけの命令（監査の検索）は通す
-    ['tpm castlist find --label tpm.key:t-23zs --active-from 2026-11-22T11:00:00+09:00', true],
-    ['tpm castlist show t-23zs-swe.1', true],
-    ['tpm castlist lineage 019a0000-0000-7000-8000-000000000000 --direction up', true],
-    ['tpm castlist events --type exited --type cleared', true],
-    ['tpm castlist settings --mismatch', true],
+    ['roster castlist find --label tpm.key:t-23zs --active-from 2026-11-22T11:00:00+09:00', true],
+    ['roster castlist show t-23zs-swe.1', true],
+    ['roster castlist lineage 019a0000-0000-7000-8000-000000000000 --direction up', true],
+    ['roster castlist events --type exited --type cleared', true],
+    ['roster castlist settings --mismatch', true],
   ])('%s', (command, allow) => {
     expect(ask(command, 'auditor').allow).toBe(allow);
   });
@@ -349,10 +349,10 @@ describe('Auditor は repo を変えない', () => {
   const roots = (base: string) => [{ name: 'project の folder', dir: join(base, 'project') }, { name: '状態の folder', dir: join(base, 'state') }];
 
   test('project と状態の folder の下への書き込みを止め、外への書き込みは通す', () => {
-    const base = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-audit-')));
+    const base = realpathSync(mkdtempSync(join(tmpdir(), 'roster-audit-')));
     mkdirSync(join(base, 'project', 'skills'), { recursive: true });
     const write = (path: string | undefined) => judgeWrite({ tool: 'Write', path }, 'auditor', roots(base));
-    expect(write(join(base, 'project', 'skills', 'README.md'))).toEqual({ allow: false, reason: expect.stringMatching(/^Auditor は、project の folder の下を書き替えません.*tpm page put/) as string });
+    expect(write(join(base, 'project', 'skills', 'README.md'))).toEqual({ allow: false, reason: expect.stringMatching(/^Auditor は、project の folder の下を書き替えません.*roster page put/) as string });
     // まだ無い folder の中の file と、状態の folder（まだ無い）も止める。
     expect(write(join(base, 'project', 'new', 'dir', 'a.md')).allow).toBe(false);
     expect(write(join(base, 'state', 'incidents', '1.jsonc')).allow).toBe(false);
@@ -364,7 +364,7 @@ describe('Auditor は repo を変えない', () => {
   });
 
   test('symbolic link を通した書き込みも止める。ほかの担当と TPM 担当は通す', () => {
-    const base = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-audit-')));
+    const base = realpathSync(mkdtempSync(join(tmpdir(), 'roster-audit-')));
     mkdirSync(join(base, 'project'), { recursive: true });
     symlinkSync(join(base, 'project'), join(base, 'link'));
     expect(judgeWrite({ tool: 'Edit', path: join(base, 'link', 'a.md') }, 'auditor', roots(base)).allow).toBe(false);
@@ -381,7 +381,7 @@ describe('Staff Engineer 担当は repo を変えない', () => {
     ['gh pr diff 141', true],
     ['gh pr view 141 --json files', true],
     ['gh pr checks 141', true],
-    ['tpm page put /tmp/review.html --kind result', true],
+    ['roster page put /tmp/review.html --kind result', true],
     ['git commit -m x', false],
     ['git checkout ai-8/impl', false],
     ['git worktree add ../w ai-8/impl', false],
@@ -399,7 +399,7 @@ describe('Staff Engineer 担当は repo を変えない', () => {
   });
 
   test('project の folder の下への書き込みを止め、外への書き込みは通す', () => {
-    const base = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-staff-')));
+    const base = realpathSync(mkdtempSync(join(tmpdir(), 'roster-staff-')));
     mkdirSync(join(base, 'project'), { recursive: true });
     const roots = [{ name: 'project の folder', dir: join(base, 'project') }];
     const write = (path: string | undefined) => judgeWrite({ tool: 'Edit', path }, 'staff-engineer', roots);
@@ -408,15 +408,15 @@ describe('Staff Engineer 担当は repo を変えない', () => {
     expect(write(undefined)).toEqual({ allow: false, reason: expect.stringContaining('Staff Engineer 担当の Edit の書く先を読めない') as string });
   });
 
-  test('席の settings は、file を書き替える道具の前にも tpm guard を呼ぶ。audit fresh は Auditor の席だけ', () => {
-    const settings = (role: RoleName) => JSON.parse(guardSettings('/r/cli/bin/tpm', role)) as { hooks: { PreToolUse: { matcher: string }[], SessionStart: { hooks: { command: string }[] }[] } };
+  test('席の settings は、file を書き替える道具の前にも roster guard を呼ぶ。audit fresh は Auditor の席だけ', () => {
+    const settings = (role: RoleName) => JSON.parse(guardSettings('/r/cli/bin/roster', role)) as { hooks: { PreToolUse: { matcher: string }[], SessionStart: { hooks: { command: string }[] }[] } };
     expect(settings('staff-engineer').hooks.PreToolUse[0]?.matcher).toBe('Bash|Edit|Write|NotebookEdit');
-    expect(settings('staff-engineer').hooks.SessionStart[0]?.hooks.map(h => h.command)).toEqual(['/r/cli/bin/tpm castlist session-start', '/r/cli/bin/tpm returned check']);
-    expect(settings('auditor').hooks.SessionStart[0]?.hooks.map(h => h.command)).toEqual(['/r/cli/bin/tpm audit fresh', '/r/cli/bin/tpm castlist session-start', '/r/cli/bin/tpm returned check']);
+    expect(settings('staff-engineer').hooks.SessionStart[0]?.hooks.map(h => h.command)).toEqual(['/r/cli/bin/roster castlist session-start', '/r/cli/bin/roster returned check']);
+    expect(settings('auditor').hooks.SessionStart[0]?.hooks.map(h => h.command)).toEqual(['/r/cli/bin/roster audit fresh', '/r/cli/bin/roster castlist session-start', '/r/cli/bin/roster returned check']);
   });
 });
 
-describe('tpm infra と tpm guard', () => {
+describe('roster infra と roster guard', () => {
   const hook = (command: string): string => JSON.stringify({ tool_name: 'Bash', tool_input: { command } });
   const devops = (w: ReturnType<typeof world>) => ({ ...w.role('devops', 'file:1'), env: { TPM_KEY: 'devops', TPM_ROLE: 'devops-engineer' } });
 
@@ -493,10 +493,10 @@ describe('直下の folder の設定の infra', () => {
   const hook = (command: string): string => JSON.stringify({ tool_name: 'Bash', tool_input: { command } });
   const store = { store: { guard: 'tpm', match: ['container stop store'] } };
 
-  test('上の folder で起きた担当にも、直下の folder の宣言が効く。止めた文と tpm infra list に、宣言した設定を出す', () => {
+  test('上の folder で起きた担当にも、直下の folder の宣言が効く。止めた文と roster infra list に、宣言した設定を出す', () => {
     const w = world({}, {}, { skills: { infra: store }, web: {} });
     const verdict = guard({ ...w.role('t-x7k2', 'file:1'), env: { TPM_KEY: 't-x7k2', TPM_ROLE: 'software-engineer' } }, hook('cd web && container stop store'));
-    expect(verdict).toEqual({ allow: false, reason: '環境 store（skills の設定） を変えてよいのは DevOps Engineer 担当だけです。tpm ask devops --what … --why … で TPM 担当に頼んでください。' });
+    expect(verdict).toEqual({ allow: false, reason: '環境 store（skills の設定） を変えてよいのは DevOps Engineer 担当だけです。roster ask devops --what … --why … で TPM 担当に頼んでください。' });
     expect(infraList(w.tpm)).toEqual(['- store  TPM に相談（DevOps Engineer 担当だけ）  match: "container stop store"  宣言: skills']);
   });
 

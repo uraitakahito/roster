@@ -1,4 +1,4 @@
-// tpm の命令の木。cli.ts がこれを動かし、試験が命令の一覧（protocol.ts の COMMANDS）と揃っているかを見る。
+// roster の命令の木。cli.ts がこれを動かし、試験が命令の一覧（protocol.ts の COMMANDS）と揃っているかを見る。
 import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { Command, CommanderError } from 'commander';
@@ -43,11 +43,11 @@ function resolveFolder(folder: string): string {
   throw new TpmError(`folder がありません: ${folder}`);
 }
 
-/** `tpm` の命令の木を組む。 */
+/** `roster` の命令の木を組む。 */
 export function buildProgram(): Command {
   const print = (lines: string[]): void => console.log(lines.join('\n'));
   const program = new Command()
-    .name('tpm')
+    .name('roster')
     .description('担当（Claude Code）のあいだの決まりを受け持つ: 担当を起こす・メッセージを送る・課題に記録する・共有の環境を守る')
     .exitOverride((err: CommanderError) => {
       process.exit(err.exitCode === 0 ? 0 : EXIT_USAGE);
@@ -60,12 +60,12 @@ export function buildProgram(): Command {
       const sources = readConfigSources(dir);
       const skillSets = composeSkillSets(sources, root);
       if (options.verbose) {
-        for (const line of explain({ given: folder, dir, root, configFiles: sources.map(s => s.file), skillSets })) process.stderr.write(`tpm: ${line}\n`);
+        for (const line of explain({ given: folder, dir, root, configFiles: sources.map(s => s.file), skillSets })) process.stderr.write(`roster: ${line}\n`);
       }
       // 担当の居場所の中で打っても、その担当の project と状態の folder を受け継がない（設定と状態は、渡した folder の物）。
       const ctx = createContext({ ...process.env, TPM_PROJECT: dir, TPM_STATE: undefined }, dir);
       const { warnings, line } = startTpm(ctx);
-      for (const warning of warnings) process.stderr.write(`tpm: ${warning}\n`);
+      for (const warning of warnings) process.stderr.write(`roster: ${warning}\n`);
       console.log(line);
     });
 
@@ -85,7 +85,7 @@ export function buildProgram(): Command {
     .option('--supersede', '続きの【brief】で、済んでいない前の依頼書を取り消す（本文に「取り消す: …」と載る）')
     .option('--after', '続きの【brief】で、済んでいない前の依頼書を済ませてから、これをさせる（本文に載る）')
     .option('--no-issue-copy <訳>', '課題（Jira・GitHub の Issue の Key）の写しのページを作らずに振る。訳は担当に届く')
-    .option('--wait <秒>', '起こした担当の tpm hello を待つ秒（0 なら待たない）', '90')
+    .option('--wait <秒>', '起こした担当の roster hello を待つ秒（0 なら待たない）', '90')
     .action((key: string, { issueCopy, ...options }: Omit<AssignOptions, 'wait' | 'role' | 'noIssueCopy'> & { wait: string, role: string, issueCopy: true | string }) => {
       if (!(ROLE_NAMES as string[]).includes(options.role)) throw new TpmError(`--role は ${ROLE_NAMES.join('・')} のどれかにしてください`);
       // commander は --no-issue-copy <訳> を issueCopy（既定 true・付けたら訳の字）にする。
@@ -94,8 +94,8 @@ export function buildProgram(): Command {
     });
   program.command('close <key>').description('担当の居場所を閉じ、名簿から消す').action((key: string) => print(close(createContext(), key)));
   program.command('hello').description('名乗る（TPM 担当は宛先を状態に書いて名簿を出す。担当は受け持ちを返す）')
-    .option('--model <model>', 'TPM 担当の model（既定は tpm start が起こす model。$TPM_MODEL があればそれ）')
-    .option('--effort <effort>', 'TPM 担当の effort（既定は $CLAUDE_EFFORT、無ければ tpm start が起こす effort）')
+    .option('--model <model>', 'TPM 担当の model（既定は roster start が起こす model。$TPM_MODEL があればそれ）')
+    .option('--effort <effort>', 'TPM 担当の effort（既定は $CLAUDE_EFFORT、無ければ roster start が起こす effort）')
     .action((options: { model?: string, effort?: string }) => print(hello(createContext(), options)));
   program.command('inbox').description('自分宛てで、まだ届いていないメッセージを出す（段の区切りに見る）').action(() => print(inbox(createContext())));
   registerMessages(program, print);
@@ -110,7 +110,7 @@ export function buildProgram(): Command {
     .option('--note <一言>', '何の承認か')
     .action((name: string, options: { minutes: string, note?: string }) => print(infraApprove(createContext(), name, { ...options, minutes: Number(options.minutes) })));
   infra.command('revoke <env>').description('TPM 担当が承認を消す').action((name: string) => print(infraRevoke(createContext(), name)));
-  infra.command('run <env> <command...>').description('環境を名指して命令を打ち、記録を残す（tpm infra run <env> -- <命令>）')
+  infra.command('run <env> <command...>').description('環境を名指して命令を打ち、記録を残す（roster infra run <env> -- <命令>）')
     .action((name: string, command: string[]) => {
       const r = infraRun(createContext(), name, command);
       print(r.lines);
@@ -141,7 +141,7 @@ export function buildProgram(): Command {
     .option('--on <相手>', '--reply で絞る時の待ちの相手（pm＝既定・review はレビューの席・tpm は TPM 担当。置き場 0.8.0 から）')
     .option('--json', '記録を JSON で出す')
     .action((options: PageListOptions) => print(pageList(createContext(), options)));
-  page.command('reply <urls...>').description('ページの返事の状態を手で直す（TPM 担当だけ。いつもは tpm ask pm と tpm answer が書く）')
+  page.command('reply <urls...>').description('ページの返事の状態を手で直す（TPM 担当だけ。いつもは roster ask pm と roster answer が書く）')
     .option('--waiting', '返事待ちにする（既定は Product Manager の返事待ち）')
     .option('--answered', '答えたにする')
     .option('--on <相手>', '待ちの相手（pm＝既定・review はレビューの席・tpm は TPM 担当。上げた件が決まったら --answered --on tpm。置き場 0.8.0 から）')
@@ -187,7 +187,7 @@ export function buildProgram(): Command {
         verdict = { allow: false, reason: `guard が命令を見られません: ${(e as Error).message}` };
       }
       if (verdict.allow) return;
-      process.stderr.write(`tpm guard: ${verdict.reason}\n`);
+      process.stderr.write(`roster guard: ${verdict.reason}\n`);
       process.exit(2);
     });
   const returned = program.command('returned').description('届け違い: 新しい session の始まりに、前の session 宛てに届いたメッセージを見つけて TPM 担当へ返す（check は hook が呼ぶ）・返った物の全文を読む（show）');
@@ -199,7 +199,7 @@ export function buildProgram(): Command {
         if (out !== undefined) console.log(JSON.stringify(out));
       }
       catch (e) {
-        process.stderr.write(`tpm returned check: ${(e as Error).message}\n`);
+        process.stderr.write(`roster returned check: ${(e as Error).message}\n`);
       }
     });
   returned.command('show').description('返った物（【returned】の id）の宛先と全文を、送った記録から出す（TPM 担当。読むだけ）').argument('<id>', 'メッセージの id（頭の数字だけでもよい）')
@@ -212,7 +212,7 @@ export function buildProgram(): Command {
         sessionStart(createContext(), readFileSync(0, 'utf8'));
       }
       catch (e) {
-        process.stderr.write(`tpm castlist session-start: ${(e as Error).message}\n`);
+        process.stderr.write(`roster castlist session-start: ${(e as Error).message}\n`);
       }
     });
   castlist.command('session-end').description('（SessionEnd の hook が呼ぶ）/clear なら交代、ほかは退場を送る')
@@ -221,7 +221,7 @@ export function buildProgram(): Command {
         sessionEnd(createContext(), readFileSync(0, 'utf8'));
       }
       catch (e) {
-        process.stderr.write(`tpm castlist session-end: ${(e as Error).message}\n`);
+        process.stderr.write(`roster castlist session-end: ${(e as Error).message}\n`);
       }
     });
   // 監査の検索を読む命令（GET だけ）。旗は castlist の引数にそのまま写す（時刻は RFC 3339。値を確かめて断るのは castlist）。
@@ -244,7 +244,7 @@ export function buildProgram(): Command {
     .option('--after <next>', '前の答えの next（続きの頁）')
     .option('--json', 'castlist の答えをそのまま出す')
     .action((options: FindOptions) => print(castlistFind(createContext(), options)));
-  castlist.command('show <名か-id>').description('1 つのアクター: ラベル・付随する id・今の状態・最新の model と effort・線の要約（名は、この project の tpm が登録して控えた物だけ引ける）')
+  castlist.command('show <名か-id>').description('1 つのアクター: ラベル・付随する id・今の状態・最新の model と effort・線の要約（名は、この project の roster が登録して控えた物だけ引ける）')
     .option('--json', 'castlist の答え（GET /v1/actors/{id}）をそのまま出す')
     .action((target: string, options: JsonOption) => print(castlistShow(createContext(), target, options)));
   castlist.command('lineage <名か-id>').description('誰が起こしたか・誰を起こしたか（GET /v1/actors/{id}/lineage。上は人まで、下は既定で 1 段）')
@@ -296,7 +296,7 @@ export function buildProgram(): Command {
         out = bannerHook(readFileSync(0, 'utf8'), { env: process.env, exec, now: new Date() });
       }
       catch (e) {
-        process.stderr.write(`tpm banner hook: ${(e as Error).message}\n`);
+        process.stderr.write(`roster banner hook: ${(e as Error).message}\n`);
       }
       process.stdout.write(`${out}\n`);
     });

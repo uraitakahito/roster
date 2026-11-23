@@ -1,5 +1,5 @@
-// レビューの 1 周: 課題の担当が頼む（tpm ask review。Staff の席が無ければ起こし、居ればじかに届ける）→ Staff が返す（tpm report review。課題の担当へじかに届く）→ 数える（tpm review list）。
-// どちらも TPM 担当を通らない。受けない時だけ、課題の担当が tpm ask tpm --review で上げる。
+// レビューの 1 周: 課題の担当が頼む（roster ask review。Staff の席が無ければ起こし、居ればじかに届ける）→ Staff が返す（roster report review。課題の担当へじかに届く）→ 数える（roster review list）。
+// どちらも TPM 担当を通らない。受けない時だけ、課題の担当が roster ask tpm --review で上げる。
 import { mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -33,7 +33,7 @@ function started(config: Record<string, unknown> = {}, issue?: string): Seats {
   assign(tpm, 'AI-8', { role: 'software-engineer', title: '計画と実装', brief: BRIEF, wait: 0, ...(issue === undefined ? {} : { issue }) });
   const se = { ...w.role('AI-8', 'file:1'), root: staffRoot(), env: { ...w.role('AI-8', 'file:1').env, TPM_ROLE: 'software-engineer' } };
   hello(se);
-  const html = join(realpathSync(mkdtempSync(join(tmpdir(), 'tpm-review-'))), 'p.html');
+  const html = join(realpathSync(mkdtempSync(join(tmpdir(), 'roster-review-'))), 'p.html');
   writeFileSync(html, '<title>試し</title>');
   const put = (ctx: Context, kind: string): string => pagePut(ctx, html, { kind }).find(l => l.startsWith('URL: '))?.slice(5) ?? '';
   const staffAt = (address: string): Context => {
@@ -54,13 +54,13 @@ function asked(config: Record<string, unknown> = {}, issue?: string): Seats & { 
 
 const texts = (w: World, address: string): string[] => w.wire.inbox(address).map(m => m.text);
 
-describe('tpm ask review（席が無い時: 命令が席を起こす）', () => {
+describe('roster ask review（席が無い時: 命令が席を起こす）', () => {
   test('頼みから依頼書を作って置き、それで席を起こす。TPM 担当には何も届かない', () => {
     const w = started({ tracker: 'jira' }, 'AI-8');
     expect(askReview(w.se, { url: w.plan, focus: '名簿の Key の決め方', wait: 0 })).toEqual([
       '起こした: レビュー AI-8: 計画 plan-1（file:2・Opus 5.5 · high）',
       `folder: ${w.project}`,
-      '名乗り（tpm hello）は待っていない',
+      '名乗り（roster hello）は待っていない',
       expect.stringMatching(/^置き場の印: レビュー待ちにした http:\/\/127\.0\.0\.1:8801\/.+\/AI-8\/brief-1\.html$/) as string,
       '状態: 回答待ち(レビュー): 計画 plan-1',
     ]);
@@ -95,7 +95,7 @@ describe('tpm ask review（席が無い時: 命令が席を起こす）', () => 
 
   test('起こした席が名乗らなければ、訳を出して止まる。頼みは残る（依頼書は渡してある）', () => {
     const w = started();
-    expect(() => askReview(w.se, { url: w.plan, wait: 4 })).toThrow(/レビュー AI-8: 計画 plan-1（file:2）が 4 秒たっても名乗りません。[\s\S]*頼み #1 は残してあります。Staff Engineer 担当の席が名乗らないことを、tpm ask tpm で TPM 担当に知らせてください（TPM 担当が、残った居場所を tpm close AI-8\.staff で閉じてから起こし直す）。/);
+    expect(() => askReview(w.se, { url: w.plan, wait: 4 })).toThrow(/レビュー AI-8: 計画 plan-1（file:2）が 4 秒たっても名乗りません。[\s\S]*頼み #1 は残してあります。Staff Engineer 担当の席が名乗らないことを、roster ask tpm で TPM 担当に知らせてください（TPM 担当が、残った居場所を roster close AI-8\.staff で閉じてから起こし直す）。/);
     expect(readReviews(w.tpm)[0]).toMatchObject({ n: 1, brief: expect.stringMatching(/brief-1\.html$/) as string });
   });
 
@@ -123,10 +123,10 @@ describe('tpm ask review（席が無い時: 命令が席を起こす）', () => 
     const w = asked();
     expect(() => askReview(w.se, { url: 'cli/src/guard.ts' })).toThrow(/--url は、置き場のページか PR の URL にしてください/);
     expect(() => askReview(w.se, { url: w.plan })).toThrow(/同じ物のレビューを、もう頼んであります（#1。[\s\S]*判定は Staff Engineer 担当から【review】で届きます/);
-    expect(() => askReview(w.staff, { url: w.plan })).toThrow(/Staff Engineer 担当は tpm ask review を打ちません/);
+    expect(() => askReview(w.staff, { url: w.plan })).toThrow(/Staff Engineer 担当は roster ask review を打ちません/);
     const auditor = { ...w.se, env: { ...w.se.env, TPM_KEY: 'audit', TPM_ROLE: 'auditor' } };
     w.tpm.state.write('roles/audit.jsonc', { ...requireRole(w.tpm, 'AI-8'), key: 'audit', role: 'auditor', title: 'Audit' });
-    expect(() => askReview(auditor, { url: w.plan })).toThrow(/Auditor は tpm ask review を打ちません/);
+    expect(() => askReview(auditor, { url: w.plan })).toThrow(/Auditor は roster ask review を打ちません/);
   });
 
   test('頼みの番号は、同じ番号の file を「在れば失敗」で作って決める（同時に頼んでも重ならない）', () => {
@@ -138,7 +138,7 @@ describe('tpm ask review（席が無い時: 命令が席を起こす）', () => 
   });
 });
 
-describe('tpm ask review（席が居る時: じかに届ける）', () => {
+describe('roster ask review（席が居る時: じかに届ける）', () => {
   test('【ask-review】が席へじかに届き、席の題と説明が替わる。TPM 担当には何も届かない', () => {
     const w = asked();
     w.staff.now = () => new Date('2026-11-20T12:05:00.000Z');
@@ -242,11 +242,11 @@ describe('tpm ask review（席が居る時: じかに届ける）', () => {
   });
 });
 
-describe('tpm assign --role staff-engineer（TPM 担当の起こし直し）', () => {
+describe('roster assign --role staff-engineer（TPM 担当の起こし直し）', () => {
   test('頼みが無ければ止まる。渡してある頼みを 2 度は依頼書にしない。--brief は書けない', () => {
     const w = started();
-    expect(() => assign(w.tpm, 'AI-8', STAFF)).toThrow(/AI-8 に、まだ依頼書にしていないレビューの頼みがありません。頼むのは課題の担当（tpm ask review）/);
-    expect(() => assign(w.tpm, 'AI-8', { ...STAFF, brief: BRIEF })).toThrow(/Staff Engineer 担当への依頼書は、レビューの頼み（tpm ask review）から命令が作ります。--brief は書かない/);
+    expect(() => assign(w.tpm, 'AI-8', STAFF)).toThrow(/AI-8 に、まだ依頼書にしていないレビューの頼みがありません。頼むのは課題の担当（roster ask review）/);
+    expect(() => assign(w.tpm, 'AI-8', { ...STAFF, brief: BRIEF })).toThrow(/Staff Engineer 担当への依頼書は、レビューの頼み（roster ask review）から命令が作ります。--brief は書かない/);
     askReview(w.se, { url: w.plan, wait: 0 });
     hello(w.staffAt('file:2'));
     expect(() => assign(w.tpm, 'AI-8', STAFF)).toThrow(/まだ依頼書にしていないレビューの頼みがありません/);
@@ -287,7 +287,7 @@ describe('tpm assign --role staff-engineer（TPM 担当の起こし直し）', (
   });
 });
 
-describe('tpm report review', () => {
+describe('roster report review', () => {
   test('課題の担当へじかに【review】を送り、判定を記録に書き、次の頼みを待つ。TPM 担当には何も届かない', () => {
     const w = asked();
     const page = w.put(w.staff, 'review');
@@ -316,7 +316,7 @@ describe('tpm report review', () => {
     const w = asked({ tracker: 'jira' }, 'AI-8');
     w.tpm.transport.close('file:1');
     const comments = (): number => w.tpm.state.lines<{ kind?: string }>('tracker.jsonl').filter(l => l.kind === 'レビュー').length;
-    expect(() => reportReview(w.staff, { url: w.put(w.staff, 'review'), verdict: 'approve', summary: 'よい' })).toThrow('AI-8 の居場所がありません。送っていません・記録も書いていません。tpm ask tpm で TPM 担当に知らせてください');
+    expect(() => reportReview(w.staff, { url: w.put(w.staff, 'review'), verdict: 'approve', summary: 'よい' })).toThrow('AI-8 の居場所がありません。送っていません・記録も書いていません。roster ask tpm で TPM 担当に知らせてください');
     expect(comments()).toBe(0);
     expect(readReviews(w.tpm)[0]?.verdict).toBeUndefined();
   });
@@ -324,9 +324,9 @@ describe('tpm report review', () => {
   test('打てるのは Staff だけ。判定は 4 つの語、ページは置き場のレビューのページ、返す頼みが要る', () => {
     const w = asked();
     const page = w.put(w.staff, 'review');
-    expect(() => reportReview(w.se, { url: page, verdict: 'approve', summary: 'x' })).toThrow(/tpm report review は Staff Engineer 担当（Staff の席）が打ちます/);
+    expect(() => reportReview(w.se, { url: page, verdict: 'approve', summary: 'x' })).toThrow(/roster report review は Staff Engineer 担当（Staff の席）が打ちます/);
     expect(() => reportReview(w.staff, { url: page, verdict: 'ok', summary: 'x' })).toThrow(/--verdict は approve・concerns・reject・not-assessed のどれかにしてください/);
-    expect(() => reportReview(w.staff, { url: w.plan, verdict: 'approve', summary: 'x' })).toThrow(/--url は、tpm page put --kind review で置いたレビューのページの URL にしてください/);
+    expect(() => reportReview(w.staff, { url: w.plan, verdict: 'approve', summary: 'x' })).toThrow(/--url は、roster page put --kind review で置いたレビューのページの URL にしてください/);
     const other = page.replace('/AI-8/', '/AI-9/');
     expect(() => reportReview(w.staff, { url: other, verdict: 'approve', summary: 'x' })).toThrow(/AI-8 のレビューのページにしてください/);
     reportReview(w.staff, { url: page, verdict: 'not-assessed', summary: 'PR が読めない' });
@@ -336,7 +336,7 @@ describe('tpm report review', () => {
 });
 
 describe('じかの 2 通の、届いた時刻の写し', () => {
-  test('tpm ask review と tpm report review の後に、deliveries.jsonl にじかの 2 通が載る', () => {
+  test('roster ask review と roster report review の後に、deliveries.jsonl にじかの 2 通が載る', () => {
     const w = asked();
     reportReview(w.staff, { url: w.put(w.staff, 'review'), verdict: 'approve', summary: 'よい' });
     w.wire.hold('file:2');
@@ -400,7 +400,7 @@ describe('時系列の行き違いの印（じかの 2 通）', () => {
   });
 });
 
-describe('tpm ask tpm --review（判定を受けずに上げる）', () => {
+describe('roster ask tpm --review（判定を受けずに上げる）', () => {
   test('本文にレビューのページの URL が入り、頼みの記録に上げた時刻が残る', () => {
     const w = asked();
     const page = w.put(w.staff, 'review');
@@ -436,7 +436,7 @@ describe('tpm ask tpm --review（判定を受けずに上げる）', () => {
   });
 });
 
-describe('tpm review list', () => {
+describe('roster review list', () => {
   test('頼みごとの行と、合わせた数を出す', () => {
     const w = asked();
     w.staff.now = () => new Date('2026-11-20T12:07:00.000Z');
@@ -533,7 +533,7 @@ describe('置き場のレビューの印（pagetray 0.8.0 から）', () => {
     expect(record(w, 'brief-2')?.answered_at).toBeDefined();
   });
 
-  test('TPM 担当の起こし直し（tpm assign --role staff-engineer）でも、新しい依頼書を待ちにし、前の依頼書の待ちを外す', () => {
+  test('TPM 担当の起こし直し（roster assign --role staff-engineer）でも、新しい依頼書を待ちにし、前の依頼書の待ちを外す', () => {
     const w = asked();
     w.tpm.transport.close('file:2');
     const out = assign(w.tpm, 'AI-8', STAFF);
@@ -559,7 +559,7 @@ describe('置き場のレビューの印（pagetray 0.8.0 から）', () => {
     const w = asked();
     const out = dismiss(w.tpm, 'AI-8', { handover: false, supersede: true });
     expect(out).toContain('置き場に、AI-8 のレビュー待ちの依頼書が 1 枚残っています:');
-    expect(out).toContain('もう答えが要らなければ、tpm page reply <URL>… --answered --on review で印を外す');
+    expect(out).toContain('もう答えが要らなければ、roster page reply <URL>… --answered --on review で印を外す');
     expect(out.join('\n')).not.toMatch(/の返事待ちのページが/);
   });
 
@@ -567,7 +567,7 @@ describe('置き場のレビューの印（pagetray 0.8.0 から）', () => {
     const w = started();
     w.store.version = '0.7.0';
     const out = askReview(w.se, { url: w.plan, wait: 0 });
-    expect(out).toContain('置き場の印: 付けていない（置き場の版が古く、レビューの印を持てない（0.8.0 から）。メッセージは送った。置き場の版を上げるのは tpm ask devops）');
+    expect(out).toContain('置き場の印: 付けていない（置き場の版が古く、レビューの印を持てない（0.8.0 から）。メッセージは送った。置き場の版を上げるのは roster ask devops）');
     expect(record(w, 'brief-1')?.asked_at).toBeUndefined();
     expect(w.calls.some(c => c.args.some(a => a.includes('/api/pages/reply') || a.includes('/api/pages/review')))).toBe(false);
     // 手で直す命令も、古い置き場には --on を送らずに止まる
@@ -582,7 +582,7 @@ describe('置き場のレビューの印（pagetray 0.8.0 から）', () => {
     reportReview(w.staff, { url: page, verdict: 'reject', summary: '依頼と違う' });
     w.store.down = true;
     const out = askTpm(w.se, { text: '受けない', waitingFor: 'レビューの食い違い', review: 1 });
-    expect(out).toContain(`置き場の印: 付けていない（置き場が応えない。メッセージは送った。後で TPM 担当が tpm page reply ${page} --waiting --on tpm で直せる）`);
+    expect(out).toContain(`置き場の印: 付けていない（置き場が応えない。メッセージは送った。後で TPM 担当が roster page reply ${page} --waiting --on tpm で直せる）`);
   });
 });
 
@@ -625,8 +625,8 @@ describe('置き場の印を付けられない時（review-3 の指摘）', () =
     const brief = requireRole(w.tpm, 'AI-8.staff').brief ?? '';
     w.store.failVersion = 503;
     const out = reportReview(w.staff, { url: page, verdict: 'approve', summary: 'よい' });
-    expect(out).toContain('置き場の印: 付けていない（置き場が応えない。メッセージは送った。判定と見た物は手では書けない。tpm review list と、レビューのページ・依頼書で見る）');
-    expect(out).toContain(`  後で TPM 担当が直せる: tpm page reply ${brief} --answered --on review`);
+    expect(out).toContain('置き場の印: 付けていない（置き場が応えない。メッセージは送った。判定と見た物は手では書けない。roster review list と、レビューのページ・依頼書で見る）');
+    expect(out).toContain(`  後で TPM 担当が直せる: roster page reply ${brief} --answered --on review`);
     // 起き直す間の 503 は「版が古い」とみなさない
     expect(out.join('\n')).not.toMatch(/版が古く/);
   });

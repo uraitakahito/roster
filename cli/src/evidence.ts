@@ -1,10 +1,10 @@
-// 証拠: 後から「何が・いつ・誰の手で起きたか」を言えるように、tpm が自分のした事を状態の folder に足していく記録。
+// 証拠: 後から「何が・いつ・誰の手で起きたか」を言えるように、roster が自分のした事を状態の folder に足していく記録。
 // どれも 1 行 1 件の .jsonl（担当が同時に書いてもぶつからない）。書くだけで、命令の動きは変えない。
-// 中身にはメッセージや命令の字が入るので、tpm を動かす機械の外（課題のコメント・PR の本文）には写さない。
+// 中身にはメッセージや命令の字が入るので、roster を動かす機械の外（課題のコメント・PR の本文）には写さない。
 import type { Context } from './context.ts';
 import type { MessageTrace } from './transport/types.ts';
 
-/** 記録に書く「誰が」: 担当は課題の Key と役割、TPM 担当（と tpm が起こしていない session）は tpm。 */
+/** 記録に書く「誰が」: 担当は課題の Key と役割、TPM 担当（と roster が起こしていない session）は tpm。 */
 export const actor = (env: NodeJS.ProcessEnv): { by: string, role: string } => ({ by: env.TPM_KEY || 'tpm', role: env.TPM_ROLE || 'tpm' });
 
 /** guard が止めた命令に残す字の長さ（here-document などの長い命令を丸ごと残さない）。 */

@@ -8,7 +8,7 @@ import { migrateLegacyJson, State, stateDir } from '../src/state.ts';
 let state: State;
 
 beforeEach(() => {
-  state = new State(realpathSync(mkdtempSync(join(tmpdir(), 'tpm-state-'))));
+  state = new State(realpathSync(mkdtempSync(join(tmpdir(), 'roster-state-'))));
 });
 
 describe('stateDir', () => {

@@ -1,4 +1,4 @@
-// 依頼書の「課題の概要」の節を確かめる（tpm assign が新しい担当を起こす前）。
+// 依頼書の「課題の概要」の節を確かめる（roster assign が新しい担当を起こす前）。
 // 節は `<section id="summary">`（tpm/brief-template.md）。字の一致で見て、HTML の parser は使わない。中身の良し悪しは見ない。
 import { readFileSync } from 'node:fs';
 import type { Context } from './context.ts';
@@ -25,14 +25,14 @@ export function summaryText(html: string): string | undefined {
 /** 依頼書（置き場のページ）に概要の節があり、SUMMARY_MIN 字以上あるかを確かめる。無ければ、直し方を添えて止まる。 */
 export function assertSummary(ctx: Context, key: string, url: string): void {
   if (!isPageUrl(ctx.env, url)) {
-    throw new TpmError(`依頼書は置き場のページにしてください（tpm page put <file> --kind brief --key ${key} で置き、出た URL を --brief に書く）: ${url}`);
+    throw new TpmError(`依頼書は置き場のページにしてください（roster page put <file> --kind brief --key ${key} で置き、出た URL を --brief に書く）: ${url}`);
   }
   const [path = ''] = pagePath(ctx, url);
   const text = summaryText(readFileSync(path, 'utf8'));
   if (text === undefined) {
     throw new TpmError([
       `依頼書（${url}）に課題の概要の節がありません。`,
-      `振る前に課題を読み（Jira・GitHub の Issue の Key なら tpm issue view <Key>）、依頼書に <section id="summary"> を書いてください（ひな形は tpm/brief-template.md の「課題の概要の節」）。`,
+      `振る前に課題を読み（Jira・GitHub の Issue の Key なら roster issue view <Key>）、依頼書に <section id="summary"> を書いてください（ひな形は tpm/brief-template.md の「課題の概要の節」）。`,
       '課題が無い仕事（t- の Key）では、Product Manager の言葉から概要を書きます。',
     ].join('\n'));
   }

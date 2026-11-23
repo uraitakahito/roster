@@ -1,5 +1,5 @@
 // JSONC（コメントと末尾のカンマを許す JSON）を読む。
-// 依存を足さない（足すと、pull の後に pnpm install し直すまで tpm が import で落ちる）。
+// 依存を足さない（足すと、pull の後に pnpm install し直すまで roster が import で落ちる）。
 // コメントと末尾のカンマを同じ長さの空白に替えて（改行は残す）JSON.parse に渡すので、誤りの行・列はそのまま合う。
 
 /** JSONC の text を読む。読めなければ JSON.parse と同じ SyntaxError を投げる。 */

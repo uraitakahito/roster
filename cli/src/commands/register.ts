@@ -24,14 +24,14 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
   ask.command('tpm <text>').description('【ask-tpm】困っていること・試したこと・案とお勧め')
     .requiredOption('--waiting-for <何を>', '状態に出す、待っている物')
     .option('--reply-to <id>', '返事の先のメッセージの id')
-    .option('--review <番号>', 'レビューの判定（直すべき など）を受けずに上げる時の、頼みの番号（tpm review list で見る）。レビューのページの URL が本文に付く')
+    .option('--review <番号>', 'レビューの判定（直すべき など）を受けずに上げる時の、頼みの番号（roster review list で見る）。レビューのページの URL が本文に付く')
     .action((text: string, options: { waitingFor: string, replyTo?: string, review?: string }) => {
       const { review, ...rest } = options;
       if (review !== undefined && !/^[1-9]\d*$/.test(review)) throw new TpmError('--review は、レビューの頼みの番号（1 以上の数）にしてください');
       print(askTpm(createContext(), { text, ...rest, ...(review === undefined ? {} : { review: Number(review) }) }));
     });
   ask.command('pm').description('【ask-pm】確認のページを送る（課題に「確認」の記録も書く）')
-    .requiredOption('--url <URL>', '確認のページ（tpm page put で置いた URL）')
+    .requiredOption('--url <URL>', '確認のページ（roster page put で置いた URL）')
     .requiredOption('--item <題>', '決めてほしい項目の題（繰り返せる）', collect, [] as string[])
     .requiredOption('--waiting-for <何を>', '状態に出す、待っている物')
     .option('--supersede <URL>', 'この確認で置き換える古い確認（同じ Key の返事待ち。繰り返せる）。送った後、その返事待ちの印を外す', collect, [] as string[])
@@ -54,7 +54,7 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
     .option('--unchecked <訳>', 'PR が merge 済みかを gh で確かめずに送る（gh で読めない PR。確かめた方法を書く）')
     .action((options: { pr: string, note: string, unchecked?: string }) => print(reportDocFix(createContext(), options)));
   report.command('done').description('【done】依頼書 1 つの成果を出した')
-    .option('--url <URL>', '成果のページ（tpm page put で置いた URL）')
+    .option('--url <URL>', '成果のページ（roster page put で置いた URL）')
     .option('--kind <種類>', `成果の種類（${Object.keys(DONE_KINDS).join('・')}。課題には ${Object.values(DONE_KINDS).join('・')} の記録を書く）`, 'result')
     .requiredOption('--summary <要点>')
     .option('--remaining <残り>', '依頼の外で直すとよい物・やらなかった物・merge していない PR（無ければ「なし」）')
@@ -67,7 +67,7 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
       print(reportDone(createContext(), { ...rest, kind, points: options.point, ...(briefs === undefined ? {} : { briefs: briefs.split(',').map(b => b.trim()).filter(b => b !== '') }) }));
     });
   report.command('end').description('【end】【dismiss】を受けて片付けた（課題を閉じる）')
-    .option('--url <URL>', '成果のページ（tpm page put で置いた URL）')
+    .option('--url <URL>', '成果のページ（roster page put で置いた URL）')
     .option('--pr <URL>', 'merge した PR（繰り返せる）', collect, [] as string[])
     .option('--removed <worktree>', '消した worktree（繰り返せる）', collect, [] as string[])
     .option('--left <残っている物>', '残っている物（無ければ「なし」）')
@@ -79,7 +79,7 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
     .option('--severe', 'すぐ止めないと害が広がる', false)
     .action((text: string, options: { type: string, tag: string[], severe: boolean }) => print(reportIncident(createContext(), { ...options, text, tags: options.tag })));
   report.command('audit').description('【audit】（Auditor）監査のページを Product Manager へじかに報告した。記録を残し、TPM 担当に写しを送る')
-    .requiredOption('--url <URL>', '監査のページ（tpm page put --kind audit で置いた URL）')
+    .requiredOption('--url <URL>', '監査のページ（roster page put --kind audit で置いた URL）')
     .requiredOption('--summary <要点>')
     .option('--item <題>', 'Product Manager に決めてほしい項目の題（繰り返せる）', collect, [] as string[])
     .action((options: { url: string, summary: string, item: string[] }) => print(reportAudit(createContext(), { url: options.url, summary: options.summary, items: options.item })));
@@ -90,7 +90,7 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
     .option('--later <勧告の題>', '見送る（今は決めない。繰り返せる）', collect, [] as string[])
     .action((options: { url: string, do: string[], accept: string[], later: string[] }) => print(reportDecided(createContext(), { url: options.url, adopted: options.do, accepted: options.accept, later: options.later })));
   report.command('review').description('【review】（Staff Engineer 担当）レビューのページと判定を、頼んだ課題の担当へじかに返す（課題に「レビュー」の記録も書く）')
-    .requiredOption('--url <URL>', 'レビューのページ（tpm page put --kind review で置いた URL）')
+    .requiredOption('--url <URL>', 'レビューのページ（roster page put --kind review で置いた URL）')
     .requiredOption('--verdict <判定>', Object.entries(VERDICTS).map(([id, label]) => `${id}（${label}）`).join('・'))
     .requiredOption('--summary <一言>')
     .action((options: { url: string, verdict: string, summary: string }) => print(reportReview(createContext(), options)));
