@@ -67,6 +67,8 @@ export interface Sent {
    * 前の版の行には無い（届いた所で比べない）。
    */
   recipient?: Party
+  /** 【done】の行だけ: 担当が --briefs で名指して済ませた依頼書の URL（渡された時の字のまま）。無ければ、見ていた依頼書のいちばん古い 1 つを済ませる。 */
+  briefs?: string[]
 }
 
 /** 同じメッセージの 2 度送りとみなす間（秒）。 */
@@ -90,7 +92,7 @@ function assertNotRepeat(ctx: Context, id: HeadingId, from: string, to: string, 
 const notRepeatToTpm = (ctx: Context, self: RoleRecord, id: HeadingId, body: string): void => assertNotRepeat(ctx, id, self.title, requireTpm(ctx).address, body);
 
 /** メッセージを送り、送った記録を log.jsonl に足す。recipient は届く担当（返事の形なら元の行の送り手に替える）、extra は記録の行に足す欄。 */
-function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: string, body: string, recipient: Party, replyTo?: string, extra: Pick<Sent, 'settle' | 'peer'> = {}): string {
+function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: string, body: string, recipient: Party, replyTo?: string, extra: Pick<Sent, 'settle' | 'peer' | 'briefs'> = {}): string {
   assertNotRepeat(ctx, id, from, to, body, replyTo);
   const text = message(id, body);
   const receiving = replyTo === undefined ? recipient : ctx.state.lines<Sent>('log.jsonl').findLast(l => l.id === replyTo)?.sender;
@@ -113,8 +115,8 @@ function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: str
 }
 
 /** 担当から TPM 担当へ。 */
-function toTpm(ctx: Context, self: RoleRecord, id: HeadingId, body: string, replyTo?: string): string {
-  return deliver(ctx, id, self.key, self.title, requireTpm(ctx).address, body, { key: TPM_PARTY }, replyTo);
+function toTpm(ctx: Context, self: RoleRecord, id: HeadingId, body: string, replyTo?: string, extra: Pick<Sent, 'briefs'> = {}): string {
+  return deliver(ctx, id, self.key, self.title, requireTpm(ctx).address, body, { key: TPM_PARTY }, replyTo, extra);
 }
 
 /**
@@ -280,6 +282,7 @@ interface OpenBrief {
  * - 【brief】は積む（--after で送った物も、旗を付けずに送った物も）。--supersede で送った物は、それより前を取り消してから積む。【dismiss】は全部を取り消す。
  * - Staff Engineer 担当の席には、課題の担当がじかに送った【ask-review】（頭が依頼書の URL）も積む。
  * - 【done】は、その時刻までに担当が見ていた依頼書のうち、いちばん古い物を 1 つ済ませる（担当は積まれた順にこなす）。まだ見ていない依頼書の分には数えない（行き違いで出た、前の依頼書の分）。【end】は全部を済ませる。
+ * - 担当が --briefs で名指した【done】は、名指した依頼書をみな済ませる（見た時刻は問わない。名指したことが見た証し。1 通で依頼書いくつかを済ませた時。台帳 #110）。
  * 見た時刻は、見た時刻の口（seen.ts の seenTimes）が決める: 画面に届いた時刻と、tpm inbox・tpm hello・送る前の検査が見せた時刻（shown/）の早い方。
  * 担当は画面に届く前に tpm inbox で読んで済ませることがあるので、届いた時刻だけでは【done】が依頼書より前に見える（台帳 #36）。
  * 前の版が時刻を書かずに覚えた物（shown/ の id だけの項目）は、送った時刻に見せた物とする。見せたのは確かで、担当の送る命令は未読をすべて見せてからでないと送れないので、
@@ -311,6 +314,11 @@ function openBriefs(role: RoleRecord, address: string, log: Sent[], seenAt: Seen
       if (l.heading === 'end') open = [];
       // Staff Engineer 担当は、依頼書 1 つの成果を【review】で返す（【done】は送らない）。
       if (l.heading !== 'done' && l.heading !== 'review') continue;
+      if (l.heading === 'done' && l.briefs !== undefined) {
+        const named = l.briefs;
+        open = open.filter(b => !named.includes(b.url));
+        continue;
+      }
       const i = open.findIndex(b => b.seen !== undefined && b.seen <= l.at);
       if (i >= 0) open.splice(i, 1);
     }
@@ -610,7 +618,50 @@ export interface DoneOptions {
   /** 【ask-pm】で送った項目の題。無ければ「なし」。 */
   decisions?: string
   points: string[]
+  /** 1 通で済ませた依頼書（名か URL）。無ければ、見ていた依頼書のいちばん古い 1 つを済ませる。 */
+  briefs?: string[]
 }
+
+/** 誤りで止まったら undefined を返す（止めずに済ませる物のため）。 */
+function quietly<T>(f: () => T): T | undefined {
+  try {
+    return f();
+  }
+  catch (e) {
+    if (e instanceof TpmError) return undefined;
+    throw e;
+  }
+}
+
+/** 担当（自分）に渡されていて、【done】が返っていない依頼書。見たかは、TPM 担当の検査（unsettled）と同じ見た時刻の口で決める。 */
+function ownOpenBriefs(ctx: Context, self: RoleRecord): OpenBrief[] {
+  const address = self.address ?? ctx.transport.whoami();
+  return openBriefs(self, address, ctx.state.lines<Sent>('log.jsonl'), seenTimes(ctx, { live: true }));
+}
+
+/**
+ * --briefs に名指した依頼書を、済んでいない依頼書の URL に引き当てる。URL は置き場の同じページか（前の置き場の URL も）で、名（brief-2）は当たるのが 1 つの時だけ受ける。
+ * 当たらない・2 つ当たる時は、送らずに止まる（うその「済ませた」を送らない）。
+ */
+function namedBriefs(ctx: Context, open: OpenBrief[], specs: string[]): string[] {
+  const list = open.length === 0 ? '無し' : open.map(b => `${briefName(b.url)}（${b.url}）`).join('・');
+  const urls = specs.map((spec) => {
+    // 同じ URL の依頼書が 2 つ積まれていても（送り直した時）、同じ依頼書なので 1 つに数える。
+    const hits = [...new Set(open.filter(b => /^https?:\/\//.test(spec) ? b.url === spec || samePage(ctx, b.url, spec) : briefName(b.url) === spec).map(b => b.url))];
+    if (hits.length > 1) throw new TpmError(`--briefs の ${spec} に当たる依頼書が ${hits.length} つあります。URL で名指してください。送っていません。\n済んでいない依頼書: ${list}`);
+    const [hit] = hits;
+    if (hit === undefined) throw new TpmError(`--briefs の ${spec} は、渡されていて済んでいない依頼書にありません。送っていません。\n済んでいない依頼書: ${list}`);
+    return hit;
+  });
+  // 名と URL で同じ依頼書を 2 度名指しても、1 つにまとめる。
+  return [...new Set(urls)];
+}
+
+/** 本文で依頼書を見せる字。名が済んでいない依頼書の中で 2 つ以上に当たる時だけ、URL を添える（TPM 担当がどれか分かるように）。 */
+const briefLabel = (open: OpenBrief[], url: string): string => {
+  const name = briefName(url);
+  return new Set(open.filter(b => briefName(b.url) === name).map(b => b.url)).size > 1 ? `${name}（${url}）` : name;
+};
 
 /** 依頼書 1 つの成果を出した。TPM 担当は「残り」と「決めてほしいこと」で【dismiss】を送るかを決めるので、どちらも必ず書く。 */
 export function reportDone(ctx: Context, options: DoneOptions): string[] {
@@ -619,7 +670,11 @@ export function reportDone(ctx: Context, options: DoneOptions): string[] {
   const remaining = required(options.remaining, '--remaining（残り）');
   const decisions = required(options.decisions, '--decisions（決めてほしいこと）');
   const kind = DONE_KINDS[options.kind];
-  const body = `${options.url === undefined ? '' : `${options.url} `}要点: ${options.summary}／残り: ${remaining}／決めてほしいこと: ${decisions}`;
+  const naming = options.briefs !== undefined && options.briefs.length > 0;
+  // 名指した時は、引き当てが誤りで止まれば送らない。名指さない時の数えは案内のためだけなので、連携の道具が誤りで止まっても送る（今までどおり）。
+  const open = naming ? ownOpenBriefs(ctx, self) : quietly(() => ownOpenBriefs(ctx, self)) ?? [];
+  const named = naming ? namedBriefs(ctx, open, options.briefs ?? []) : undefined;
+  const body = `${options.url === undefined ? '' : `${options.url} `}要点: ${options.summary}／残り: ${remaining}／決めてほしいこと: ${decisions}${named === undefined ? '' : `／済ませた依頼書: ${named.map(u => briefLabel(open, u)).join('・')}`}`;
   notRepeatToTpm(ctx, self, 'done', body);
   const recorded = record(ctx, self, {
     kind,
@@ -628,9 +683,12 @@ export function reportDone(ctx: Context, options: DoneOptions): string[] {
     links: options.url === undefined ? [] : [{ label: kind, url: options.url }],
     points: options.points,
   });
-  const sent = toTpm(ctx, self, 'done', body);
+  const sent = toTpm(ctx, self, 'done', body, undefined, named === undefined ? {} : { briefs: named });
   showWait(ctx, WAIT_NEXT_BRIEF);
-  return [...recorded, sent, ...keepRemaining(ctx, self, 'done', remaining), `状態: ${WAIT_NEXT_BRIEF}（次の【brief】か【dismiss】を待つ。自分から【end】を送らない）`];
+  // 名指さず、見ていて済んでいない依頼書がいくつもあれば、済んだのは古い 1 つだけと知らせる（止めない。1 通で済ませた時の名指し忘れ）。
+  const seenOpen = named === undefined ? open.filter(b => b.seen !== undefined) : [];
+  const hint = seenOpen.length < 2 ? [] : [`済ませた依頼書がいくつもあれば --briefs で名指す（今は ${briefName(seenOpen[0]?.url ?? '')} だけを済ませた。済んでいない: ${seenOpen.slice(1).map(b => briefName(b.url)).join('・')}）`];
+  return [...recorded, sent, ...keepRemaining(ctx, self, 'done', remaining), ...hint, `状態: ${WAIT_NEXT_BRIEF}（次の【brief】か【dismiss】を待つ。自分から【end】を送らない）`];
 }
 
 /** `tpm report end` の旗。 */

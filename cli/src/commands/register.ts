@@ -60,9 +60,11 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
     .option('--remaining <残り>', '依頼の外で直すとよい物・やらなかった物・merge していない PR（無ければ「なし」）')
     .option('--decisions <決めてほしいこと>', '【ask-pm】で送った項目の題（無ければ「なし」）')
     .option('--point <要点>', '課題の記録に書く要点（3 つまで・繰り返せる）', collect, [] as string[])
-    .action((options: { url?: string, kind: string, summary: string, remaining?: string, decisions?: string, point: string[] }) => {
+    .option('--briefs <依頼書>', '1 通で済ませた依頼書（brief-2,brief-3 のように名か URL を「,」で並べる。無ければ、見ていた依頼書のいちばん古い 1 つを済ませる）')
+    .action((options: { url?: string, kind: string, summary: string, remaining?: string, decisions?: string, point: string[], briefs?: string }) => {
       const kind = doneKind(options.kind);
-      print(reportDone(createContext(), { ...options, kind, points: options.point }));
+      const { briefs, ...rest } = options;
+      print(reportDone(createContext(), { ...rest, kind, points: options.point, ...(briefs === undefined ? {} : { briefs: briefs.split(',').map(b => b.trim()).filter(b => b !== '') }) }));
     });
   report.command('end').description('【end】【dismiss】を受けて片付けた（課題を閉じる）')
     .option('--url <URL>', '成果のページ（tpm page put で置いた URL）')
