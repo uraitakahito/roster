@@ -3,11 +3,13 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { beforeAll, describe, expect, test } from 'vitest';
+import { Command } from 'commander';
+import { beforeAll, describe, expect, test, vi } from 'vitest';
 import { missingCastlistWarning } from '../src/castlist.ts';
 import { composeRolesConfig } from '../src/config.ts';
-import { buildProgram, commandPaths } from '../src/program.ts';
+import { buildProgram, commandPaths, runProgram } from '../src/program.ts';
 import { COMMANDS } from '../src/protocol.ts';
+import { TpmError } from '../src/skill-sets.ts';
 import { withoutRosterEnv } from '../src/env.ts';
 
 /** cli/ の folder（bin/roster と src/ がある）と、その 1 つ上の repo。 */
@@ -256,5 +258,56 @@ describe('命令の一覧', () => {
     const r = spawnSync(entry, ['init'], { cwd: scratch, encoding: 'utf8' });
     expect(r.status).toBe(2);
     expect(r.stderr).toContain('unknown command \'init\'');
+  });
+});
+
+describe('命令の入口（runProgram）は、非同期の誤りも同期の誤りと同じに扱う', () => {
+  /** program を動かし、stderr に書いた字と、process.exit に渡した終了コード（呼ばなければ undefined）を返す。process.env は env に替え、後で戻す。 */
+  const runIn = async (program: Command, args: string[], env: NodeJS.ProcessEnv = {}): Promise<{ stderr: string, status: number | undefined }> => {
+    let stderr = '';
+    let status: number | undefined;
+    const write = vi.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Uint8Array) => {
+      stderr += String(chunk);
+      return true;
+    });
+    const exit = vi.spyOn(process, 'exit').mockImplementation((code?: string | number | null) => {
+      status ??= Number(code ?? 0);
+      return undefined as never;
+    });
+    const saved = process.env;
+    // 試験を流す担当の居場所の roster の環境変数と cmux の変数は渡さない（本物の project と状態の folder を読まない）。
+    process.env = { ...Object.fromEntries(Object.entries(withoutRosterEnv(saved)).filter(([name]) => !name.startsWith('CMUX_'))), ...env };
+    try {
+      await runProgram(['node', 'roster', ...args], program);
+    }
+    finally {
+      process.env = saved;
+      write.mockRestore();
+      exit.mockRestore();
+    }
+    return { stderr, status };
+  };
+
+  test.each([
+    ['同期', () => {
+      throw new TpmError('決まりの誤り');
+    }],
+    ['非同期', async () => {
+      await Promise.resolve();
+      throw new TpmError('決まりの誤り');
+    }],
+  ])('命令が%sに TpmError を投げれば、roster: で始まる 1 行を出して exit 1', async (_, action) => {
+    const program = new Command().name('roster');
+    program.command('boom').action(action);
+    expect(await runIn(program, ['boom'])).toEqual({ stderr: 'roster: 決まりの誤り\n', status: 1 });
+  });
+
+  test('guard の決めが非同期に誤っても、roster guard: で止めて exit 2', async () => {
+    const d = folder(null);
+    const stdin = JSON.stringify({ session_id: 's-async', tool_name: 'Bash', tool_input: { command: 'ls' }, cwd: d });
+    // castlist の URL の形の誤りは、castlist の分（Bash を通すと決めた後）で投げる。
+    const r = await runIn(buildProgram(() => stdin), ['guard'], { ROSTER_PROJECT: d, ROSTER_STATE: mkdirp(join(d, 'state')), ROSTER_CASTLIST_URL: 'http://example.com:1' });
+    expect(r.status).toBe(2);
+    expect(r.stderr).toBe('roster guard: guard が命令を見られません: $ROSTER_CASTLIST_URL は http://127.0.0.1:<port> か http://localhost:<port> の形にしてください: http://example.com:1\n');
   });
 });
