@@ -4,11 +4,12 @@ import { mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { askTpm, notify, reportDone, toPeer } from '../src/commands/messages.ts';
-import { pagePath, pagePut } from '../src/commands/page.ts';
+import { askTpm, dismiss, notify, reportDone, toPeer } from '../src/commands/messages.ts';
+import { pageList, pagePath, pagePut, pageReply, type PageRecord } from '../src/commands/page.ts';
 import { reviewList } from '../src/commands/review.ts';
 import { hello } from '../src/commands/role-side.ts';
 import { askReview, reportReview } from '../src/commands/staff.ts';
+import { atLeast } from '../src/commands/store.ts';
 import { collect } from '../src/commands/timeline.ts';
 import { assign, close } from '../src/commands/tpm-side.ts';
 import type { Context } from '../src/context.ts';
@@ -60,6 +61,7 @@ describe('tpm ask review（席が無い時: 命令が席を起こす）', () => 
       '起こした: レビュー AI-8: 計画 plan-1（file:2・Opus 5.5 · high）',
       `folder: ${w.project}`,
       '名乗り（tpm hello）は待っていない',
+      expect.stringMatching(/^置き場の印: レビュー待ちにした http:\/\/127\.0\.0\.1:8801\/.+\/AI-8\/brief-1\.html$/) as string,
       '状態: 回答待ち(レビュー): 計画 plan-1',
     ]);
     expect(texts(w, 'file:tpm')).toEqual([]);
@@ -142,7 +144,7 @@ describe('tpm ask review（席が居る時: じかに届ける）', () => {
     w.staff.now = () => new Date('2026-11-20T12:05:00.000Z');
     reportReview(w.staff, { url: w.put(w.staff, 'review'), verdict: 'approve', summary: 'このままでよい' });
     w.se.now = () => new Date('2026-11-20T12:10:00.000Z');
-    expect(askReview(w.se, { url: PR })).toEqual(['送った: 【ask-review】→ file:2（相手の手が空いた時に届く。送り直さない）', '状態: 回答待ち(レビュー): PR #7']);
+    expect(askReview(w.se, { url: PR })).toEqual(['送った: 【ask-review】→ file:2（相手の手が空いた時に届く。送り直さない）', expect.stringMatching(/^置き場の印: レビュー待ちにした http:\/\/127\.0\.0\.1:8801\/.+\/AI-8\/brief-2\.html$/) as string, '状態: 回答待ち(レビュー): PR #7']);
     const got = w.wire.inbox('file:2').at(-1);
     expect(got?.from).toBe(SE_TITLE);
     expect(got?.text).toMatch(new RegExp(`^【ask-review】http://127\\.0\\.0\\.1:8801/.+/AI-8/brief-2\\.html 頼み: #2 ${PR}$`));
@@ -225,7 +227,7 @@ describe('tpm ask review（席が居る時: じかに届ける）', () => {
       throw new Error('Workspace ref not found');
     };
     const se = { ...w.se, transport: Object.assign(Object.create(w.se.transport) as Context['transport'], { relabel }) };
-    expect(askReview(se, { url: PR })).toEqual(['送った: 【ask-review】→ file:2（相手の手が空いた時に届く。送り直さない）', '居場所の題を替えられなかった（名簿の題は レビュー AI-8: 計画 plan-1 のまま）: Workspace ref not found', '状態: 回答待ち(レビュー): PR #7']);
+    expect(askReview(se, { url: PR })).toEqual(['送った: 【ask-review】→ file:2（相手の手が空いた時に届く。送り直さない）', '居場所の題を替えられなかった（名簿の題は レビュー AI-8: 計画 plan-1 のまま）: Workspace ref not found', expect.stringMatching(/^置き場の印: レビュー待ちにした http:\/\/127\.0\.0\.1:8801\/.+\/AI-8\/brief-2\.html$/) as string, '状態: 回答待ち(レビュー): PR #7']);
     expect(requireRole(w.tpm, 'AI-8.staff').title).toBe('レビュー AI-8: 計画 plan-1');
     expect(readReviews(w.tpm)[1]?.brief).toMatch(/brief-2\.html$/);
   });
@@ -291,7 +293,12 @@ describe('tpm report review', () => {
     const page = w.put(w.staff, 'review');
     expect(page).toMatch(/\/AI-8\/review-1\.html$/);
     w.staff.now = () => new Date('2026-11-20T12:07:00.000Z');
-    expect(reportReview(w.staff, { url: page, verdict: 'concerns', summary: 'Key の形に抜けが 1 つ' })).toEqual(['送った: 【review】→ file:1（相手の手が空いた時に届く。送り直さない）', '状態: 回答待ち(レビュー): 次の頼み']);
+    expect(reportReview(w.staff, { url: page, verdict: 'concerns', summary: 'Key の形に抜けが 1 つ' })).toEqual([
+      '送った: 【review】→ file:1（相手の手が空いた時に届く。送り直さない）',
+      `置き場の印: 判定と見た物を書いた ${page}`,
+      expect.stringMatching(/^置き場の印: レビュー済みにした http:\/\/127\.0\.0\.1:8801\/.+\/AI-8\/brief-1\.html$/) as string,
+      '状態: 回答待ち(レビュー): 次の頼み',
+    ]);
     expect(w.wire.inbox('file:1').at(-1)).toMatchObject({ from: 'レビュー AI-8: 計画 plan-1', text: `【review】${page} 判定: 気になる所あり（concerns）／一言: Key の形に抜けが 1 つ／頼み: #1` });
     expect(texts(w, 'file:tpm')).toEqual([]);
     expect(readReviews(w.tpm)[0]).toMatchObject({ n: 1, verdict: 'concerns', page, summary: 'Key の形に抜けが 1 つ', reviewedAt: '2026-11-20T12:07:00.000Z' });
@@ -400,7 +407,11 @@ describe('tpm ask tpm --review（判定を受けずに上げる）', () => {
     w.staff.now = () => new Date('2026-11-20T12:07:00.000Z');
     reportReview(w.staff, { url: page, verdict: 'reject', summary: '依頼と違う' });
     w.se.now = () => new Date('2026-11-20T12:15:00.000Z');
-    expect(askTpm(w.se, { text: '指摘 1 は依頼書の範囲の外。お勧め: 直さない', waitingFor: 'レビューの食い違い', review: 1 })).toEqual(['送った: 【ask-tpm】→ file:tpm（相手の手が空いた時に届く。送り直さない）', '状態: 回答待ち(TPM): レビューの食い違い']);
+    expect(askTpm(w.se, { text: '指摘 1 は依頼書の範囲の外。お勧め: 直さない', waitingFor: 'レビューの食い違い', review: 1 })).toEqual([
+      '送った: 【ask-tpm】→ file:tpm（相手の手が空いた時に届く。送り直さない）',
+      `置き場の印: 上げた（TPM 担当の返事待ち）にした ${page}`,
+      '状態: 回答待ち(TPM): レビューの食い違い',
+    ]);
     expect(texts(w, 'file:tpm')).toEqual([`【ask-tpm】レビュー #1（判定: 直すべき。${page}）を受けない: 指摘 1 は依頼書の範囲の外。お勧め: 直さない`]);
     expect(readReviews(w.tpm)[0]).toMatchObject({ n: 1, verdict: 'reject', escalatedAt: '2026-11-20T12:15:00.000Z' });
     // 2 度目に上げても、最初に上げた時刻を残す
@@ -481,5 +492,161 @@ describe('Staff の席の題と説明（reviewLabel）', () => {
     const long = 'あ'.repeat(30);
     expect(reviewLabel([ask(1, page('plan-1'), long)]).description).toBe(`${'あ'.repeat(24)}…`);
     expect(reviewLabel([ask(1, page('plan-1'), 'い'.repeat(24))]).description).toBe('い'.repeat(24));
+  });
+});
+
+describe('置き場のレビューの印（pagetray 0.8.0 から）', () => {
+  /** 置き場の中の、AI-8 のページの記録。 */
+  const record = (w: World, page: string): PageRecord | undefined => w.store.pages.get(`/${basename(w.tpm.state.dir)}/AI-8/${page}.html`)?.record;
+  /** 置き場の中の path（見た物に書く形）。 */
+  const path = (w: World, url: string): string => url.replace('http://127.0.0.1:8801', '');
+
+  test('頼むと、依頼書に見る物を書いてレビュー待ちにする。Product Manager の返事待ちには入らない', () => {
+    const w = asked();
+    expect(record(w, 'brief-1')).toMatchObject({ waits_on: 'review', targets: [path(w, w.plan)] });
+    expect(record(w, 'brief-1')?.asked_at).toBeDefined();
+    expect(pageList(w.tpm, { key: 'AI-8', reply: 'waiting' })).toEqual(['合うページは無い']);
+    expect(pageList(w.tpm, { key: 'AI-8', reply: 'waiting', on: 'review' })[0]).toMatch(/brief-1\.html/);
+  });
+
+  test('判定を返すと、レビューのページに判定と見た物を書き、依頼書をレビュー済みにする', () => {
+    const w = asked();
+    const page = w.put(w.staff, 'review');
+    reportReview(w.staff, { url: page, verdict: 'concerns', summary: '1 つ' });
+    expect(record(w, 'review-1')).toMatchObject({ verdict: 'concerns', targets: [path(w, w.plan)] });
+    expect(record(w, 'brief-1')).toMatchObject({ waits_on: 'review' });
+    expect(record(w, 'brief-1')?.answered_at).toBeDefined();
+  });
+
+  test('頼みが 2 つの依頼書は、見た物を 2 つ書く。起こし直しでは、新しい依頼書を待ちにし、前の依頼書の待ちを外す', () => {
+    const w = asked();
+    w.tpm.transport.close('file:2');
+    w.se.now = () => new Date('2026-11-20T12:10:00.000Z');
+    const out = askReview(w.se, { url: PR, wait: 0 });
+    expect(out).toContainEqual(expect.stringMatching(/^置き場の印: 置き換えたので、前の依頼書のレビュー待ちを外した .+\/brief-1\.html$/));
+    expect(record(w, 'brief-2')).toMatchObject({ waits_on: 'review', targets: [path(w, w.plan), PR] });
+    expect(record(w, 'brief-1')?.answered_at).toBeDefined();
+    // 判定は、2 つの見た物をみな書く
+    hello(w.staffAt('file:3'));
+    reportReview(w.staffAt('file:3'), { url: w.put(w.staffAt('file:3'), 'review'), verdict: 'approve', summary: 'よい' });
+    expect(record(w, 'review-1')).toMatchObject({ verdict: 'approve', targets: [path(w, w.plan), PR] });
+    expect(record(w, 'brief-2')?.answered_at).toBeDefined();
+  });
+
+  test('TPM 担当の起こし直し（tpm assign --role staff-engineer）でも、新しい依頼書を待ちにし、前の依頼書の待ちを外す', () => {
+    const w = asked();
+    w.tpm.transport.close('file:2');
+    const out = assign(w.tpm, 'AI-8', STAFF);
+    expect(out).toContainEqual(expect.stringMatching(/^置き場の印: レビュー待ちにした .+\/brief-2\.html$/));
+    expect(record(w, 'brief-2')).toMatchObject({ waits_on: 'review', targets: [path(w, w.plan)] });
+    expect(record(w, 'brief-1')?.answered_at).toBeDefined();
+  });
+
+  test('上げると、レビューのページを TPM 担当の待ち（上げた）にする。TPM 担当が --on tpm で外す', () => {
+    const w = asked();
+    const page = w.put(w.staff, 'review');
+    reportReview(w.staff, { url: page, verdict: 'reject', summary: '依頼と違う' });
+    askTpm(w.se, { text: '受けない', waitingFor: 'レビューの食い違い', review: 1 });
+    expect(record(w, 'review-1')).toMatchObject({ waits_on: 'tpm', verdict: 'reject' });
+    expect(pageList(w.tpm, { key: 'AI-8', reply: 'waiting', on: 'tpm' })[0]).toMatch(/review-1\.html/);
+    // 相手を違えて外そうとすると止まり、何も替えない
+    expect(() => pageReply(w.tpm, [page], { answered: true })).toThrow(/--on pm の相手の返事を待っていません/);
+    expect(pageReply(w.tpm, [page], { answered: true, on: 'tpm' })).toEqual([`決まったにした: ${page}`]);
+    expect(record(w, 'review-1')?.answered_at).toBeDefined();
+  });
+
+  test('【dismiss】は、残ったレビュー待ち・上げた件も、待ちの相手ごとに並べる', () => {
+    const w = asked();
+    const out = dismiss(w.tpm, 'AI-8', { handover: false, supersede: true });
+    expect(out).toContain('置き場に、AI-8 のレビュー待ちの依頼書が 1 枚残っています:');
+    expect(out).toContain('もう答えが要らなければ、tpm page reply <URL>… --answered --on review で印を外す');
+    expect(out.join('\n')).not.toMatch(/の返事待ちのページが/);
+  });
+
+  test('0.8.0 より前の置き場には、待ちの相手を送らない（Product Manager の返事待ちにしない）。命令は止めない', () => {
+    const w = started();
+    w.store.version = '0.7.0';
+    const out = askReview(w.se, { url: w.plan, wait: 0 });
+    expect(out).toContain('置き場の印: 付けていない（置き場の版が古く、レビューの印を持てない（0.8.0 から）。メッセージは送った。置き場の版を上げるのは tpm ask devops）');
+    expect(record(w, 'brief-1')?.asked_at).toBeUndefined();
+    expect(w.calls.some(c => c.args.some(a => a.includes('/api/pages/reply') || a.includes('/api/pages/review')))).toBe(false);
+    // 手で直す命令も、古い置き場には --on を送らずに止まる
+    const brief = requireRole(w.tpm, 'AI-8.staff').brief ?? '';
+    expect(() => pageReply(w.tpm, [brief], { waiting: true, on: 'review' })).toThrow(/待ちの相手（--on）を持てません（0\.8\.0 から）。何も書いていません/);
+    expect(record(w, 'brief-1')?.asked_at).toBeUndefined();
+  });
+
+  test('置き場が応えない時の直す手には、待ちの相手が付く', () => {
+    const w = asked();
+    const page = w.put(w.staff, 'review');
+    reportReview(w.staff, { url: page, verdict: 'reject', summary: '依頼と違う' });
+    w.store.down = true;
+    const out = askTpm(w.se, { text: '受けない', waitingFor: 'レビューの食い違い', review: 1 });
+    expect(out).toContain(`置き場の印: 付けていない（置き場が応えない。メッセージは送った。後で TPM 担当が tpm page reply ${page} --waiting --on tpm で直せる）`);
+  });
+});
+
+describe('置き場の印を付けられない時（review-3 の指摘）', () => {
+  /** 置き場の中の、AI-8 のページの記録。 */
+  const record = (w: World, page: string): PageRecord | undefined => w.store.pages.get(`/${basename(w.tpm.state.dir)}/AI-8/${page}.html`)?.record;
+
+  test('席を起こす前に止まった回は、依頼書をレビュー待ちにしない（頼みも消えるので、待ちが残り続けないように）', () => {
+    const w = started();
+    w.se.transport.spawn = () => {
+      throw new Error('居場所を作れない');
+    };
+    expect(() => askReview(w.se, { url: w.plan, wait: 0 })).toThrow('居場所を作れない');
+    expect(record(w, 'brief-1')?.asked_at).toBeUndefined();
+  });
+
+  test('席が名乗らなかった回は、頼みが残るので依頼書をレビュー待ちにする', () => {
+    const w = started();
+    expect(() => askReview(w.se, { url: w.plan, wait: 4 })).toThrow(/名乗りません/);
+    expect(record(w, 'brief-1')).toMatchObject({ waits_on: 'review' });
+  });
+
+  test('送った後に置き場が誤りを返しても、命令は止めずに 1 行で知らせる（状態も書く）', () => {
+    const w = asked();
+    const page = w.put(w.staff, 'review');
+    w.store.failMarks = 500;
+    const out = reportReview(w.staff, { url: page, verdict: 'reject', summary: '依頼と違う' });
+    expect(out[0]).toMatch(/^送った: 【review】/);
+    expect(out).toContainEqual(expect.stringMatching(/^置き場の印: 判定と見た物を書いていない（置き場が断った: 500 置き場の中の誤り）$/));
+    expect(out.at(-1)).toBe('状態: 回答待ち(レビュー): 次の頼み');
+    expect(w.wire.status('file:2')?.wait).toBe('回答待ち(レビュー): 次の頼み');
+    const escalated = askTpm(w.se, { text: '受けない', waitingFor: 'レビューの食い違い', review: 1 });
+    expect(escalated).toContainEqual(expect.stringMatching(/^置き場の印: 付けていない（置き場が誤りを返した: .+。メッセージは送った）$/));
+    expect(escalated.at(-1)).toBe('状態: 回答待ち(TPM): レビューの食い違い');
+  });
+
+  test('置き場が応えない時、判定を返すと、外せなかった依頼書ごとに直す手を出す（判定と見た物は手で書けないと別に書く）', () => {
+    const w = asked();
+    const page = w.put(w.staff, 'review');
+    const brief = requireRole(w.tpm, 'AI-8.staff').brief ?? '';
+    w.store.failVersion = 503;
+    const out = reportReview(w.staff, { url: page, verdict: 'approve', summary: 'よい' });
+    expect(out).toContain('置き場の印: 付けていない（置き場が応えない。メッセージは送った。判定と見た物は手では書けない。tpm review list と、レビューのページ・依頼書で見る）');
+    expect(out).toContain(`  後で TPM 担当が直せる: tpm page reply ${brief} --answered --on review`);
+    // 起き直す間の 503 は「版が古い」とみなさない
+    expect(out.join('\n')).not.toMatch(/版が古く/);
+  });
+
+  test('ほかの相手を待っているページを --waiting で移そうとすると、待ちを移さないと止まる', () => {
+    const w = asked();
+    const brief = requireRole(w.tpm, 'AI-8.staff').brief ?? '';
+    expect(() => pageReply(w.tpm, [brief], { waiting: true })).toThrow(/今ほかの相手の返事を待っています（置き場は待ちを移さない。何も替えていない）/);
+    expect(record(w, 'brief-1')).toMatchObject({ waits_on: 'review' });
+  });
+});
+
+describe('置き場の版の比べ（atLeast）', () => {
+  test('数で比べる（0.10.0 は 0.8.0 より後）。形の違う字は、古いとみなす', () => {
+    expect(atLeast('0.8.0', '0.8.0')).toBe(true);
+    expect(atLeast('0.10.0', '0.8.0')).toBe(true);
+    expect(atLeast('1.0.0', '0.8.0')).toBe(true);
+    expect(atLeast('0.7.9', '0.8.0')).toBe(false);
+    expect(atLeast('', '0.8.0')).toBe(false);
+    expect(atLeast('0.8', '0.8.0')).toBe(false);
+    expect(atLeast('0.8.0-dev', '0.8.0')).toBe(true);
   });
 });

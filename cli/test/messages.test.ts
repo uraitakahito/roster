@@ -69,8 +69,12 @@ describe('1 つの課題の 1 周（課題管理なし）', () => {
       '【dismiss】この課題に続きは無い。worktree と課題を片付けて【end】を返す。',
     ]);
     expect(roles(w.tpm)).toEqual(['名簿: 担当はいない']);
-    // 外へ打つ命令は、【dismiss】の時に置き場へ返事待ちのページを聞く 1 回だけ（課題管理には何も書かない）。
-    expect(w.calls.map(c => [c.cmd, new URL(c.args.at(-1) ?? '').searchParams.get('reply')])).toEqual([['curl', 'waiting']]);
+    // 外へ打つ命令は、【dismiss】の時に置き場へ返事待ちのページを、待ちの相手ごとに聞く物だけ（課題管理には何も書かない）。
+    // Product Manager の分・置き場の版・レビュー待ち・上げた件の順。
+    expect(w.calls.map((c) => {
+      const url = new URL(c.args.at(-1) ?? '');
+      return [c.cmd, url.pathname, url.searchParams.get('reply'), url.searchParams.get('on')];
+    })).toEqual([['curl', '/api/pages', 'waiting', null], ['curl', '/api/version', null, null], ['curl', '/api/pages', 'waiting', 'review'], ['curl', '/api/pages', 'waiting', 'tpm']]);
     // 送ったメッセージは log.jsonl に残る
     expect(w.tpm.state.lines<{ heading: string }>('log.jsonl').map(l => l.heading)).toEqual(['ask-tpm', 'notify', 'merged', 'done', 'brief', 'done', 'dismiss', 'end']);
   });

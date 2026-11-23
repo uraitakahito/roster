@@ -19,6 +19,7 @@ import { castlistHello, closeLaunch, sweep } from './castlist.ts';
 import { issueCopy, launch, paint, roleDefaults } from './launch.ts';
 import { assertRead, assertSettled, brief } from './messages.ts';
 import { pageFolder } from './page.ts';
+import { markBrief } from './review-marks.ts';
 import { launchStaff, markBriefed, putStaffBrief, relabelStaff, STAFF, staffSubject } from './staff.ts';
 
 /**
@@ -213,8 +214,8 @@ function assignSeat(ctx: Context, subjectKey: string, options: AssignOptions): s
     // 送る前の検査を通ってから、頼みを依頼書にする（止まった回に、渡した事にしない）。
     const url = subject === undefined ? options.brief ?? '' : putStaffBrief(ctx, subject, asks);
     const sent = brief(ctx, existing, url, options.note, settled === undefined || choice === undefined ? undefined : { text: settled, choice });
-    markBriefed(ctx, asks, url);
-    return subject === undefined ? sent : [...sent, ...relabelStaff(ctx, existing, subjectKey, asks)];
+    const previous = markBriefed(ctx, asks, url);
+    return subject === undefined ? sent : [...sent, ...relabelStaff(ctx, existing, subjectKey, asks), ...markBrief(ctx, url, asks, previous)];
   }
   if (options.issue !== undefined && !ctx.tracker.owns(options.issue)) {
     throw new TpmError(`${options.issue} に記録を書く課題管理が、どの設定にもありません（読んだ設定: ${describeTrackers(ctx.config.sources)}）。記録するなら、その課題を扱う repo の .claude/roles/config.jsonc に "tracker"（jira・github）を書いてください`);

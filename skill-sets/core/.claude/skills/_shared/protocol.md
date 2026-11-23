@@ -187,7 +187,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 - 置く: `tpm page put <file> --kind <brief|confirm|proposal|plan|result|review|audit|issue>`（`review` は Staff Engineer 担当のレビューのページ）。担当の Key は今の課題の Key。TPM 担当は `--key <Key>` を付ける。出た `URL:` を、`tpm assign --brief`・`tpm ask pm --url`・`tpm report done --url` に書く。番号は置き場が決める。同じ種類を置き直すと次の番号になり、前の版は残る。置いた担当の役割と居場所の宛先も、置き場が覚える。
 - 読む: `tpm page path <URL>` で file の path にして Read tool で読む（tpm を動かす機械の控えの path。控えに無ければ置き場から取る。前の置き場の `8800` の URL も読める）。
 - 時系列のページ（種類は `timeline`）は、`tpm incident timeline` が state の記録から作って置く（下の「思わぬ出来事」）。手では置かない。
-- 探す: `tpm page list`（今の project の新しい順）。`--key <Key>`・`--role <役割>`・`--workspace <宛先>`・`--kind <種類>`・`--q <語>`・`--reply <waiting|answered>`（返事の状態）で絞り、`--json` で記録を出す。Product Manager は、置き場の一覧の UI（`http://127.0.0.1:8801/`）で同じように絞って見る。
+- 探す: `tpm page list`（今の project の新しい順）。`--key <Key>`・`--role <役割>`・`--workspace <宛先>`・`--kind <種類>`・`--q <語>`・`--reply <waiting|answered>`（返事の状態）・`--on <pm|review|tpm>`（`--reply` の待ちの相手。既定は Product Manager）で絞り、`--json` で記録を出す。Product Manager は、置き場の一覧の UI（`http://127.0.0.1:8801/`）で同じように絞って見る。
 - 開く: ページは自動では開かない（`tpm ask pm`・`tpm report done` も開かない）。Product Manager は、置き場の一覧の UI（`http://127.0.0.1:8801/`）を 1 つ開いておき、新着の印で気づいて読む。その場で開いて人に見せる時だけ `tpm show <URL>`。
 - 返事の状態: Product Manager の返事が要るページ（確認のページ）には、置き場が「返事待ち」「答えた」の状態を持つ（pagetray 0.5.0 から）。**担当は手で書かない。**`tpm ask pm` が、送った確認のページを返事待ちにし、TPM 担当の `tpm answer` が答えたにする。Product Manager は、置き場の一覧の UI の「返事待ち N 件」と行の印で、返事が要るページを見分ける。
   - 置いただけの確認のページには印が付かない。`tpm ask pm` で送って初めて返事待ちになる。
@@ -195,6 +195,10 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
   - `tpm answer` は、その Key の返事待ちのページが 1 枚なら、それを答えたにする。2 枚以上ある時は、送る前に止まって URL を並べるので、どのページへの答えかを `--url <確認の URL>`（何度でも）で書くか、みなへの答えなら `--all` を付けて打ち直す。
   - 置き場が応えない・版が古い（0.5.0 より前）時は、印は付かないが、メッセージは送られる（`置き場の印: 付けていない` と出る）。
   - 手で直すのは TPM 担当だけ: `tpm page reply <URL>… --waiting|--answered`。`tpm answer` を通らずに済んだ確認（取り下げた・次の依頼書で答えた）を答えたにする時と、置き場が応えない間に送った確認を返事待ちにする時に使う。`tpm dismiss` は、その Key に返事待ちのページが残っていれば URL を出す。担当は `tpm ask tpm` で頼む。
+- レビューの印（pagetray 0.8.0 から）: 置き場は、返事待ちの相手も持つ（Product Manager・レビューの席・TPM 担当）。**担当は手で書かない。**命令が書き、Product Manager の「返事待ち N 件」と `tpm answer` の数には入らない。置き場に写すのは、判定の語・見た物の URL・時刻だけ（見てほしい所・判定の一言は写さない）。
+  - `tpm ask review`（と、席の起こし直し）が、レビューの依頼書に見る物を書いて「レビュー待ち」にする（置き換えた前の依頼書の待ちは外す）。`tpm report review` が、レビューのページに判定と見た物を書き、依頼書を「レビュー済み」にする。置き場の一覧の UI は、行に判定の印と「見た物:」の link を、見られたページの行に「レビュー: review-N 判定」を出す。
+  - `tpm ask tpm --review <番号>` が、レビューのページを「上げた」（TPM 担当の返事待ち）にする。TPM 担当は、決めたら `tpm page reply <レビューのページの URL> --answered --on tpm` で「決まった」にする。今の上げた件は `tpm page list --reply waiting --on tpm`。
+  - 手で直す時（置き場が応えない間に送った頼みなど）は、`tpm page reply` に `--on review` か `--on tpm` を付ける（付けないと Product Manager の返事待ちになる）。置き場が 0.8.0 より前なら、命令は待ちの相手を送らず（`置き場の印: 付けていない（置き場の版が古く、レビューの印を持てない…）`）、`tpm page reply --on` は止まる。
 - 消す: **消してよいのは TPM 担当だけ**（戻せない。Auditor が置いたページは、Product Manager の言葉を添えなければ TPM 担当も消せない。上の「監査」）。試しに置いた・置き間違えたページは、担当は自分で消さず、`tpm ask tpm` で URL と訳を送って頼む（担当の居場所からの `tpm page delete` と、置き場に消す要求を直に送る `curl`、置き場の CLI の `pagetray page delete` は止まる）。TPM 担当は `tpm page delete <URL>…`（Key ごとなら `--key <Key>`、project ごとなら `--project <名>`。その Key・project の file も一緒に消える）で消す物を見て、`--yes` を付けて消す。控えの file も消える。消したページの URL は 410 を返し、その番号は 2 度使われない。
 - 送り手: project に castlist の設定があれば、`tpm page put`・`tpm file put` は、自分の session を指す付随する id を付けて置く（置き場が castlist に聞き、ページと file の記録に送り手として残す。担当は何も足さない）。置き場が断ると、ページも file も置かれていない（`tpm` は送り直さない）。
   - 「castlist に送り手を聞けませんでした（503）」: 置き場が castlist に届かない。castlist が起きてから打ち直す（止まっていれば、下の「アクターの台帳」のとおり guard も止まる）。castlist が起きているのに続く時は、`tpm report incident` で台帳に挙げる。

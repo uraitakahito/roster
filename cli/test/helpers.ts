@@ -46,6 +46,14 @@ export class FakeStore {
   noFiles = false;
   /** true の間、返事の状態を持てない（0.5.0 より前の置き場。書く道は 405 を返し、一覧は reply の絞りを読まずにみな返す）。 */
   noReply = false;
+  /**
+   * 置き場の版（GET /api/version の version）。undefined は、版を答えない置き場（404）。
+   * 0.8.0 より前は、待ちの相手（on）を読まずに捨て、レビューの印の道（POST /api/pages/review）が無い（405）。
+   */
+  version: string | undefined = '0.8.0';
+  /** 置けば、印を書く要求（POST /api/pages/reply・/api/pages/review）と版を聞く要求に、この code で誤りを返す（置き場が誤りを返す・起き直す間の試験）。 */
+  failMarks: number | undefined;
+  failVersion: number | undefined;
   /** 置く要求（ページと file の POST）の引数。送った順。 */
   posts: URLSearchParams[] = [];
   /**
@@ -53,6 +61,12 @@ export class FakeStore {
    * known は登録のあるアクター（置く）、unregistered は登録が無い（422）、unreachable は castlist に聞けない（503）。どちらも何も置かない。
    */
   sender: 'known' | 'unregistered' | 'unreachable' = 'known';
+
+  /** 待ちの相手とレビューの印を持てる版（0.8.0 から）か。 */
+  private marks(): boolean {
+    const [major = 0, minor = 0] = (this.version ?? '0.0.0').split('.').map(Number);
+    return major > 0 || minor >= 8;
+  }
 
   /** 返事の状態を書いた回数（時刻をずらすため）。 */
   private replies = 0;
@@ -80,23 +94,49 @@ export class FakeStore {
       if (this.noFiles) return reply(404, '');
       return this.file(args, url, reply);
     }
+    if (this.failVersion !== undefined && url.pathname === '/api/version') return reply(this.failVersion, '{"error":"起き直している"}');
+    if (this.failMarks !== undefined && (url.pathname === '/api/pages/reply' || url.pathname === '/api/pages/review')) return reply(this.failMarks, '{"error":"置き場の中の誤り"}');
+    if (url.pathname === '/api/version') {
+      return this.version === undefined ? reply(404, '{"error":"そのページは無い"}') : reply(200, JSON.stringify({ api: 1, version: this.version }));
+    }
     if (url.pathname === '/api/pages/reply') {
       if (this.noReply || !args.includes('POST')) return reply(405, '');
       const page = this.pages.get(`/${q.get('project')}/${q.get('key')}/${q.get('kind')}-${q.get('n')}.html`);
       if (page === undefined) return reply(404, '{"error":"そのページは無い"}');
       const now = `2026-11-20T13:00:${String(this.replies += 1).padStart(2, '0')}.000Z`;
       const r = page.record;
+      // 0.8.0 より前の置き場は、on を読まずに捨てる（Product Manager の待ちになる）。
+      const on = this.marks() ? q.get('on') ?? 'pm' : 'pm';
+      const now_on = r.waits_on ?? 'pm';
       if (q.get('state') === 'waiting') {
+        // 今ほかの相手を待っていれば、待ちを移さない（0.8.0 から）。
+        if (r.asked_at !== undefined && r.answered_at === undefined && on !== now_on) return reply(409, '{"error":"そのページは、on の相手の返事を待っていない（何も替えていない）"}');
         if (r.asked_at === undefined || r.answered_at !== undefined) r.asked_at = now;
         delete r.answered_at;
+        if (on === 'pm') delete r.waits_on;
+        else r.waits_on = on;
       }
       else if (q.get('state') === 'answered') {
+        if (on !== now_on || (on !== 'pm' && r.asked_at === undefined)) return reply(409, '{"error":"そのページは、on の相手の返事を待っていない（何も替えていない）"}');
         r.asked_at ??= now;
         r.answered_at ??= now;
       }
       else {
         return reply(400, '{"error":"state は waiting か answered"}');
       }
+      return reply(200, JSON.stringify(r));
+    }
+    if (url.pathname === '/api/pages/review') {
+      if (!this.marks()) return reply(405, '');
+      const page = this.pages.get(`/${q.get('project')}/${q.get('key')}/${q.get('kind')}-${q.get('n')}.html`);
+      if (page === undefined) return reply(404, '{"error":"そのページは無い"}');
+      const marks = JSON.parse(String(options?.input ?? '{}')) as { verdict?: string, targets?: string[] };
+      if (marks.verdict !== undefined && q.get('kind') !== 'review') return reply(400, '{"error":"判定を書けるのは、kind が review のページだけ"}');
+      if ((marks.targets ?? []).some(t => !t.startsWith('/') && !t.startsWith('https://'))) return reply(400, '{"error":"targets は、置き場のページの path か https の URL"}');
+      const r = page.record;
+      if (marks.verdict !== undefined) r.verdict = marks.verdict;
+      const targets = [...(r.targets ?? []), ...(marks.targets ?? [])];
+      if (targets.length > 0) r.targets = [...new Set(targets)];
       return reply(200, JSON.stringify(r));
     }
     if (args.includes('DELETE')) {
@@ -141,6 +181,8 @@ export class FakeStore {
         .filter(r => (['project', 'key', 'kind', 'role', 'workspace'] as const).every(f => !q.has(f) || q.get(f) === r[f]))
         .filter(r => !q.has('q') || r.title.includes(q.get('q') ?? ''))
         .filter(r => this.noReply || !q.has('reply') || (q.get('reply') === 'answered' ? r.answered_at !== undefined : r.asked_at !== undefined && r.answered_at === undefined))
+        // 0.8.0 からの置き場は、on の無い reply を Product Manager の分だけにする。
+        .filter(r => !this.marks() || !q.has('reply') || (r.waits_on ?? 'pm') === (q.get('on') ?? 'pm'))
         .sort((a, b) => (q.get('sort') === 'created_at' ? 1 : -1) * a.created_at.localeCompare(b.created_at))
         .slice(0, Number(q.get('limit') ?? 100));
       return reply(200, JSON.stringify({ pages: found }));

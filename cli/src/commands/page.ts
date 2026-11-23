@@ -11,7 +11,7 @@ import { readRole } from '../roster.ts';
 import { copyRefs, fileImport, findFiles, removeFiles } from './file.ts';
 import { roleOf } from './infra.ts';
 import { assertRead } from './messages.ts';
-import { inState, isStorePage, REPLY_LABEL, setReply, type ReplyState } from './reply.ts';
+import { inState, isStorePage, PARTY_SINCE, party, REPLY_LABELS, setReply, type Party, type ReplyState } from './reply.ts';
 import { call, compareStored, down, fetchTo, inStore, KEY, localPath, pagesDir, pagesUrl, PROJECT, reason, removeLocal, requireKey, selfAddress, sender, senderRefused, writeCopy } from './store.ts';
 
 /** ページの種類。file の名の頭になる（`<種類>-<番号>.html`）。置き場は名の一覧を持たないので、種類を足すのはここだけ。 */
@@ -46,6 +46,12 @@ export interface PageRecord {
   asked_at?: string
   /** 答えた時刻（tpm answer）。まだ答えていなければ無い。 */
   answered_at?: string
+  /** 誰の返事を待つか（review・tpm）。Product Manager を待つページと、0.8.0 より前の置き場の答えには無い。 */
+  waits_on?: string
+  /** レビューの判定（tpm report review）。0.8.0 から。 */
+  verdict?: string
+  /** 見た物・見てほしい物（置き場のページの path か https の URL）。0.8.0 から。無ければ欄が無い。 */
+  targets?: string[]
 }
 
 /** 課題の Key のページの控えを置く folder（`<控えの folder>/<状態の folder の名>/<Key>`）。 */
@@ -163,7 +169,17 @@ export interface PageListOptions {
   allProjects?: boolean
   /** 返事の状態で絞る（waiting は返事待ち、answered は答えた物だけ）。 */
   reply?: string
+  /** --reply で絞る時の待ちの相手（pm・review・tpm。既定は pm）。 */
+  on?: string
   json?: boolean
+}
+
+/** `--on` の値を読む。無ければ Product Manager。 */
+function partyOption(value: string | undefined): Party {
+  if (value === undefined) return 'pm';
+  const on = party(value);
+  if (on === undefined) throw new TpmError('--on は pm（Product Manager）・review（レビューの席）・tpm（TPM 担当）のどれかにしてください');
+  return on;
 }
 
 /** `--reply` の値を読む。 */
@@ -182,13 +198,16 @@ export function pageList(ctx: Context, options: PageListOptions): string[] {
   }
   if (options.oldest) query.set('sort', 'created_at');
   const reply = options.reply === undefined ? undefined : replyState(options.reply);
+  if (options.on !== undefined && reply === undefined) throw new TpmError('--on は --reply と一緒に付けてください（待ちの相手で、返事の状態を絞る）');
+  const on = partyOption(options.on);
   if (reply !== undefined) query.set('reply', reply);
+  if (on !== 'pm') query.set('on', on);
   const r = call(ctx, [`${pagesUrl(ctx.env)}/api/pages?${query.toString()}`]);
   if (r.code === '000') throw down(ctx, '');
   if (r.code !== '200') throw new TpmError(`置き場が一覧を返しませんでした（${r.code}）: ${reason(r.body)}`);
   const pages = (JSON.parse(r.body) as { pages: PageRecord[] }).pages
-    // 0.5.0 より前の置き場は reply の絞りを読まずにみな返すので、記録の欄でも絞る。
-    .filter(p => reply === undefined || inState(p, reply))
+    // 0.5.0 より前の置き場は reply の絞りを、0.8.0 より前の置き場は on を読まずに返すので、記録の欄でも絞る。
+    .filter(p => reply === undefined || inState(p, reply, on))
     .map(p => ({ ...p, url: `${pagesUrl(ctx.env)}${p.path}` }));
   if (options.json) return [JSON.stringify(pages, null, 2)];
   if (pages.length === 0) return ['合うページは無い'];
@@ -199,19 +218,29 @@ export function pageList(ctx: Context, options: PageListOptions): string[] {
  * ページの返事の状態を、手で直す（TPM 担当だけ）。いつもは tpm ask pm が返事待ちに、tpm answer が答えたにする。
  * 使うのは、tpm answer を通らずに済んだ確認（取り下げた・次の依頼書で答えた）と、置き場が応えない間に送った確認。
  */
-export function pageReply(ctx: Context, urls: string[], options: { waiting?: boolean, answered?: boolean }): string[] {
+export function pageReply(ctx: Context, urls: string[], options: { waiting?: boolean, answered?: boolean, on?: string }): string[] {
   if (roleOf(ctx.env) !== undefined) throw new TpmError('ページの返事の状態を手で直せるのは TPM 担当だけです。直すページの URL と訳を、tpm ask tpm で TPM 担当に送って頼んでください');
   if (options.waiting === options.answered) throw new TpmError('--waiting（返事待ちにする）か --answered（答えたにする）の、どちらか 1 つを付けてください');
   if (urls.length === 0) throw new TpmError('ページの URL を 1 つ以上書いてください');
   const state: ReplyState = options.answered ? 'answered' : 'waiting';
+  const on = partyOption(options.on);
   // 書く前に、みな置き場のページの URL かを見る（途中まで書いて止まらないように）。
   const foreign = urls.find(url => !isStorePage(ctx, url));
   if (foreign !== undefined) throw new TpmError(`置き場（${pagesUrl(ctx.env)}）のページの URL ではありません: ${foreign}`);
   return urls.map((url) => {
-    const result = setReply(ctx, url, state);
-    if (result === 'done') return `${REPLY_LABEL[state]}にした: ${url}`;
+    const result = setReply(ctx, url, state, on);
+    if (result === 'done') return `${REPLY_LABELS[on][state]}にした: ${url}`;
     if (result === 'down') throw down(ctx, '返事の状態は書いていません。');
-    if (result === 'old') throw new TpmError('置き場（pagetray）の版が古く、返事の状態を持てません（0.5.0 から）。tpm ask devops で置き場の版を上げるよう頼んでください');
+    if (result === 'old') {
+      throw new TpmError(on === 'pm'
+        ? '置き場（pagetray）の版が古く、返事の状態を持てません（0.5.0 から）。tpm ask devops で置き場の版を上げるよう頼んでください'
+        : `置き場（pagetray）の版が古く、待ちの相手（--on）を持てません（${PARTY_SINCE} から）。何も書いていません。tpm ask devops で置き場の版を上げるよう頼んでください`);
+    }
+    if (result === 'conflict') {
+      throw new TpmError(state === 'answered'
+        ? `そのページは、--on ${on} の相手の返事を待っていません（置き場は何も替えていない）: ${url}。今の待ちは tpm page list --reply waiting --on <相手> で見る`
+        : `そのページは、今ほかの相手の返事を待っています（置き場は待ちを移さない。何も替えていない）: ${url}。今の待ちは tpm page list --reply waiting --on <相手> で見る。先にその待ちを --answered --on <相手> で外す`);
+    }
     throw new TpmError(`そのページは置き場にありません: ${url}`);
   });
 }
