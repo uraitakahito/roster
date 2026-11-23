@@ -33,7 +33,7 @@ export function claudeArgs(record: RoleRecord, root: string): string[] {
  * 担当に渡す環境変数。担当の roster は、これで project（設定）・状態の folder・自分の Key を知る。PATH の頭に roster の folder を足す。
  * PAGETRAY_NO_DELETE は、置き場の CLI（pagetray）に「消す命令は何もせずに止まれ」と伝える（消してよいのは TPM 担当だけ。guard と二重に守る）。
  * 名簿に起こしの id（castlist を設定した時に roster assign・roster audit start が書く）があれば、起こしの印（LAUNCH_ENV）を渡す:
- * 起こしの id・起こした者・頼んだ model と effort（claude の --model・--effort と同じ値）・起こしたばかりの印。受け継いだ印（TPM 担当の物）は渡さない。
+ * 起こしの id・起こした者・頼んだ model と effort（claude の --model・--effort と同じ値）・起こしたばかりの印。受け継いだ印（TPM 担当の ROSTER_*）は渡さない。
  */
 export function roleEnv(record: RoleRecord, project: string, state: string, root: string, env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const launch: Partial<Record<EnvName, string | undefined>> = record.launch === undefined

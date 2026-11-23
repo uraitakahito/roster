@@ -67,7 +67,7 @@ const legacyOnly = (env: NodeJS.ProcessEnv, names: readonly EnvName[]): EnvName[
 export function assertNoLegacySeat(env: NodeJS.ProcessEnv): void {
   const names = legacyOnly(env, SEAT_ENV);
   if (names.length === 0) return;
-  throw new TpmError(`道具の名を替える前に起きた居場所です（環境変数 ${names.map(legacyName).join('・')}。roster は古い名を読みません）。この居場所を閉じ、TPM 担当が起こし直してください`);
+  throw new TpmError(`道具の名を替える前に起きた居場所です（環境変数 ${names.map(legacyName).join('・')}。roster は古い名を読みません）。この居場所を閉じ、TPM 担当が起こし直してください（命令の頭に手で付けたなら、${names.map(envName).join('・')} に替える）`);
 }
 
 /**

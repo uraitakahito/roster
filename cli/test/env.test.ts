@@ -44,7 +44,7 @@ describe('legacyEnvNotice', () => {
 describe('assertNoLegacySeat', () => {
   test('担当の名を古い名だけで持つ居場所（道具の名を替える前に起きた担当）は止める。roster のどの命令も（createContext）', () => {
     const old = { TPM_KEY: 't-x7k2', TPM_ROLE: 'software-engineer' };
-    expect(() => assertNoLegacySeat(old)).toThrow('道具の名を替える前に起きた居場所です（環境変数 TPM_KEY・TPM_ROLE。roster は古い名を読みません）。この居場所を閉じ、TPM 担当が起こし直してください');
+    expect(() => assertNoLegacySeat(old)).toThrow('道具の名を替える前に起きた居場所です（環境変数 TPM_KEY・TPM_ROLE。roster は古い名を読みません）。この居場所を閉じ、TPM 担当が起こし直してください（命令の頭に手で付けたなら、ROSTER_KEY・ROSTER_ROLE に替える）');
     expect(() => createContext(old)).toThrow(/道具の名を替える前に起きた居場所です/);
   });
 
