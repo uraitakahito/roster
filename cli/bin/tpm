@@ -11,5 +11,19 @@ case "${1:-} ${2:-}" in
     exec "$here/roster" "$@"
     ;;
 esac
-echo "tpm: 道具の名は roster に替わりました。roster $* を打ってください（この居場所が古い名の skill を読んでいるなら、TPM 担当に起こし直しを頼む）" >&2
+# 案内に出す命令は、引数を shell に写せる形で引用する（空白や引用符を含む引数が割れないように）。
+args=''
+for a in "$@"; do
+  case $a in
+    '' | *[!A-Za-z0-9._/:=@%+,-]*) a="'$(printf %s "$a" | sed "s/'/'\\\\''/g")'" ;;
+  esac
+  args="$args $a"
+done
+# $TPM_KEY が無いのは、TPM 担当の居場所か Product Manager の shell（担当の居場所には roster run-role が付ける）。
+if [ -z "${TPM_KEY:-}" ]; then
+  who='TPM 担当の居場所なら、Product Manager が roster start の 1 行で起こし直す'
+else
+  who='この居場所が古い名の skill を読んでいるなら、TPM 担当に起こし直しを頼む'
+fi
+echo "tpm: 道具の名は roster に替わりました。roster$args を打ってください（入口: $here/roster）。$who" >&2
 exit 1

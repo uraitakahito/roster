@@ -76,7 +76,19 @@ describe('古い入口は、人と担当が打つ命令を止めて新しい名�
     const r = run(OLD_ENTRY, args, env);
     expect(r.status).toBe(1);
     expect(r.stdout).toBe('');
-    expect(r.stderr).toContain(`道具の名は roster に替わりました。roster ${args.join(' ')} を打ってください`);
+    expect(r.stderr).toContain(`道具の名は roster に替わりました。${['roster', ...args].join(' ')} を打ってください（入口: ${NEW_ENTRY}）`);
+  });
+
+  test('案内の命令は、空白や引用符を含む引数を引用して、写して打てる形で出す', () => {
+    const { env } = sandbox();
+    const r = run(OLD_ENTRY, ['ask', 'tpm', 'CI が落ちる 訳は不明', 'it\'s'], env);
+    expect(r.stderr).toContain(`roster ask tpm 'CI が落ちる 訳は不明' 'it'\\''s' を打ってください`);
+  });
+
+  test('$TPM_KEY が無い（TPM 担当の居場所か Product Manager の shell）なら起こし直しは Product Manager、あれば TPM 担当に頼む', () => {
+    const { env } = sandbox();
+    expect(run(OLD_ENTRY, ['hello'], env).stderr).toContain('Product Manager が roster start の 1 行で起こし直す');
+    expect(run(OLD_ENTRY, ['hello'], { ...env, TPM_KEY: 't-x7k2' }).stderr).toContain('TPM 担当に起こし直しを頼む');
   });
 });
 
@@ -87,5 +99,9 @@ describe('バナーの hook の命令が古い入口を指していれば、張�
     expect(staleHook(`"${OLD_ENTRY}" banner hook`, root, {})).toMatch(/古い入口です/);
     expect(staleHook('/elsewhere/cli/bin/roster banner hook', root, {})).toMatch(/在り処と違います/);
     expect(staleHook('/opt/roster/cli/bin/roster banner hook', root, {})).toBeUndefined();
+    // 後ろに書き足してあっても、入口（1 語目）で見分ける
+    expect(staleHook('/opt/roster/cli/bin/roster banner hook 2>/dev/null', root, {})).toMatch(/在り処と違います/);
+    expect(staleHook(`'${OLD_ENTRY}' banner hook 2>/dev/null`, root, {})).toMatch(/古い入口です/);
+    expect(staleHook('"$HOME/r/cli/bin/roster" banner hook 2>/dev/null', root, {})).toMatch(/在り処と違います/);
   });
 });

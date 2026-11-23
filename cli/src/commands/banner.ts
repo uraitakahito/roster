@@ -149,7 +149,9 @@ export function staleHook(command: string, root: string, env: NodeJS.ProcessEnv)
   if (command === hookCommand(root, env)) return undefined;
   if (command.startsWith('PATH=')) return '古い形です（Node と cmux の path を書いた形）';
   // 道具の名を roster に替える前の入口（cli/bin の古い名）。切り替えの間は古い入口が hook を渡すので動くが、張り直すまで知らせる。
-  const entry = command.replace(/ banner hook$/, '').replace(/^["']|["']$/g, '');
+  // 入口は命令の 1 語目（引用を外した物）。後ろに何か書き足してあっても（… banner hook 2>/dev/null など）見分ける。
+  const first = /^\s*(?:"([^"]*)"|'([^']*)'|(\S+))/.exec(command);
+  const entry = first?.[1] ?? first?.[2] ?? first?.[3] ?? '';
   return basename(entry) === 'roster' ? '今の roster の在り処と違います（repo を移した）' : '古い入口です（道具の名を roster に替えた。cli/bin/roster を呼ぶ字に張り直す）';
 }
 

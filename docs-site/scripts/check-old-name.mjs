@@ -32,7 +32,22 @@ const COMMAND_WORDS = [
   ),
 ].join("|");
 
-/** 内の名。当てる前に字から外す。 */
+/** 並べた値の中の tpm を内の名とみなす時に、隣に在るはずの値（役割・待ちの相手・手続き・状態の種類）。 */
+const PEERS = [
+  "pm",
+  "review",
+  "work",
+  "free",
+  "pm-only",
+  "unknown",
+  "software-engineer",
+  "devops-engineer",
+  "staff-engineer",
+  "sustaining-engineer",
+  "auditor",
+].join("|");
+
+/** 内の名。当てる前に字から外す（どの file にも掛ける）。 */
 const INNER = [
   /(?:state|share|\.config)\/tpm(?![\w-])/g,
   /'(?:state|share|\.config)'\),? 'tpm'/g,
@@ -43,19 +58,27 @@ const INNER = [
   ),
   /skills\/tpm(?![\w-])/g,
   /(?<![\w-])tpm-(?:banner|side)/g,
-  /(?<=(?:\bask|\bwait|--on|waiting:|waits on)[ \t]*)tpm(?![\w-])/g,
-  /(?<!\bbin'?,\s?|\.name\()(['"])tpm\1/g,
+  // 2 語目の tpm（roster ask tpm・roster wait tpm・--on tpm）。後ろに命令が続く形（ask tpm hello）は外さない
+  new RegExp(
+    `(?<=(?:\\bask|\\bwait|--on|waiting:|waits on)[ \\t]*)tpm(?![\\w-]|[ \\t]+(?:${COMMAND_WORDS})(?![\\w-]))`,
+    "g",
+  ),
   /file:tpm(?![\w-])/g,
-  /\.tpm(?![\w-])/g,
-  /(?<![\w-])tpm(?=\s*[,;)\]}=?!(]|:\s*(?:[A-Z{'"\[(]|undefined|string|w\b|[a-z]\w*\())/g,
+  // 欄の値の "tpm"（設定の "guard": "tpm"・役割の鍵 role: 'tpm' など）
+  /(?<=:\s*)(["'])tpm\1/g,
+  /(["'])tpm\1(?=\s*:)/g,
   /(?<=command\(')tpm(?= <)/g,
   // 見出しの名・記録の値（ask-tpm・tpm-only・tag の tpm-self）、名の接頭辞の -tpm
   /(?<![\w-])(?:ask-tpm|tpm-only|tpm-self)(?![\w-])/g,
   /(?<=[\w>])-tpm(?![\w-])/g,
   // TPM 担当を指す Key・役割・待ちの相手の値
-  /TPM 担当(?:の手の操作など)?は tpm/g,
+  /TPM 担当(?:の手の操作など)?は tpm(?=[）)。、'"]|$)/g,
   /(?<![\w-])tpm(?=（TPM 担当）| ?は ?TPM 担当)/g,
-  /(?<=[|・（] ?)tpm(?=[|>・）。`])/g,
+  // 並べた値の 1 つ（隣に、並べる相手の値が在る時だけ）
+  new RegExp(
+    `(?<=(?:${PEERS})[ \\t]*[|・][ \\t]*)tpm(?![\\w-])|(?<![\\w-])tpm(?=[ \\t]*[|・][ \\t]*(?:${PEERS})(?![\\w-]))`,
+    "g",
+  ),
   /(?<=PM の手 |前: #1 |役割は |）は )tpm(?![\w-])/g,
   /(?<=['"\s])tpm(?=: turn=)/g,
   /(?<![\w-])tpm(?=\.[`\s-]|\\\.)/g,
@@ -64,7 +87,10 @@ const INNER = [
   /(?<=役割[（:] ?)tpm/g,
   /(?<=写しだけ )tpm/g,
   /(?<=\S  )tpm(?=  )/g,
-  /(?<=[=:])tpm(?![\w-])/g,
+  new RegExp(
+    `(?<=(?:role|waiting|seat|on|by)[=:])tpm(?![\\w-]|[ \\t]+(?:${COMMAND_WORDS})(?![\\w-]))`,
+    "g",
+  ),
   /(?<=[／/] ?)tpm(?=: 並べて)/g,
   // skill の folder と frontmatter の名（TPM 担当の skill）、状態・控え・設定の folder
   /(?<![\w.-])tpm\/(?=brief-template|SKILL|pages|banner|<)/g,
@@ -72,13 +98,24 @@ const INNER = [
   /(?<=_HOME\/)tpm(?=\/)/g,
   /(?<=`)tpm(?=`（道具の名を roster に替えた後も)/g,
 ];
+
+/** code（.ts・.mjs・.js）にだけ掛ける内の名: 識別子（w.tpm・const tpm・tpm: Context）と、引用符で囲んだ値（役割の鍵・待ちの相手）。 */
+const CODE_INNER = [
+  /\.tpm(?![\w-])/g,
+  /(?<![\w-])tpm(?=\s*[;)\]}?!]|\s*,\s*(?:[a-z]\w*[,)]|'|\{|$)|\s*=(?!=)|\s*\(|:\s*(?:Context|Party|string|undefined|w\b|[a-z]\w*\(|\{|\[|'|\())/g,
+  /(?<=(?:const|let|function|\(|\{|,)\s*)tpm(?![\w-])/g,
+  // 引用符の 'tpm'。道具を呼ぶ形（exec・spawn・which の引数・入口の path・命令の木の名）は外さない
+  /(?<!(?:\bbin'?|exec\w*\(|spawn\w*\(|which\(|\.name\()\s*,?\s*)(['"])tpm\1(?!\s*,\s*\[)/g,
+];
+const CODE = /\.(?:ts|mjs|js)$/;
 const OLD = /(?<![A-Za-z0-9_])tpm(?![A-Za-z0-9_])/;
 
 /** 1 つの file の字を見て、古い名が残る行を返す。 */
 export function checkOldName(file, text) {
+  const rules = CODE.test(file) ? [...INNER, ...CODE_INNER] : INNER;
   const errors = [];
   text.split("\n").forEach((line, i) => {
-    const rest = INNER.reduce((s, re) => s.replace(re, ""), line);
+    const rest = rules.reduce((s, re) => s.replace(re, ""), line);
     if (OLD.test(rest))
       errors.push(
         `${file}:${i + 1}: 道具の古い名 tpm がある（roster に替える。内の名なら check-old-name.mjs の INNER に足す）: ${line.trim()}`,
@@ -87,46 +124,65 @@ export function checkOldName(file, text) {
   return errors;
 }
 
-// 見張りが本当に当てるか・当ててはいけない物を当てないかを、毎回先に確かめる
+// 見張りが本当に当てるか・当ててはいけない物を当てないかを、毎回先に確かめる（[file の名, 字]）
 const MUST_HIT = [
-  "tpm hello",
-  "`tpm page put <file>`",
-  "/foo/bar/roster/cli/bin/tpm start",
-  "join(root, 'cli', 'bin', 'tpm')",
-  "guardSettings(join(bin, 'tpm'))",
-  "tpm を動かす機械",
-  "tpm の命令",
-  ".name('tpm')",
-  "~/.local/bin/tpm",
-  "toThrow(/tpm close では閉じられません/)",
-  "`tpm` の CLI",
-  "tpm: $cli/node_modules がありません",
+  ["a.md", "tpm hello"],
+  ["a.md", "`tpm page put <file>`"],
+  ["a.md", "/foo/bar/roster/cli/bin/tpm start"],
+  ["a.ts", "join(root, 'cli', 'bin', 'tpm')"],
+  ["a.ts", "guardSettings(join(bin, 'tpm'))"],
+  ["a.md", "tpm を動かす機械"],
+  ["a.md", "tpm の命令"],
+  ["a.ts", ".name('tpm')"],
+  ["a.md", "~/.local/bin/tpm"],
+  ["a.ts", "toThrow(/tpm close では閉じられません/)"],
+  ["a.md", "`tpm` の CLI"],
+  ["a.sh", "tpm: $cli/node_modules がありません"],
+  ["a.ts", "execFileSync('tpm', ['hello'])"],
+  ["a.ts", 'spawnSync("tpm", args)'],
+  ["a.ts", "process.stderr.write(`tpm: Node が見つかりません`)"],
+  ["a.md", "tpm, roster の順"],
+  ["a.md", "古い名 (tpm) は"],
+  ["a.md", "tpm?"],
+  ["a.md", "道具（tpm）の命令"],
+  ["a.md", "道具・tpm・の名"],
+  ["a.md", "alias tpm=roster"],
+  ["a.md", "role=tpm hello"],
+  ["a.md", "roster ask tpm hello"],
+  ["a.md", "TPM 担当は tpm を打つ"],
 ];
 const MUST_PASS = [
-  'roster ask tpm "…"',
-  'roster wait tpm "merge"',
-  "roster page reply <URL> --answered --on tpm",
-  "~/.local/state/tpm/<project>/tpm.jsonc",
-  "~/.local/share/tpm/pages",
-  "~/.config/tpm/banner.jsonc",
-  "join(env.XDG_STATE_HOME || join(homedir(), '.local', 'state'), 'tpm')",
-  "tpm.person:product-manager・tpm.key・tpm.role・tpm.<project>",
-  "`tpm.${key}`",
-  "最初の入力 /tpm",
-  "skills/tpm/SKILL.md",
-  "id tpm-banner・commands/tpm-side.ts",
-  '"guard": "tpm"',
-  "role === 'tpm'",
-  "TPM 担当・TPM_KEY",
-  "hello(w.tpm, TPM)・file:tpm・const tpm = createContext()",
-  "function painting(tpm: Context)・{ tpm: { turn: 'pm-wait' } }",
+  ["a.md", 'roster ask tpm "…"'],
+  ["a.md", 'roster wait tpm "merge"'],
+  ["a.md", "roster page reply <URL> --answered --on tpm"],
+  ["a.md", "~/.local/state/tpm/<project>/tpm.jsonc"],
+  ["a.md", "~/.local/share/tpm/pages"],
+  ["a.md", "~/.config/tpm/banner.jsonc"],
+  [
+    "a.ts",
+    "join(env.XDG_STATE_HOME || join(homedir(), '.local', 'state'), 'tpm')",
+  ],
+  ["a.md", "tpm.person:product-manager・tpm.key・tpm.role・tpm.<project>"],
+  ["a.ts", "`tpm.${key}`"],
+  ["a.md", "最初の入力 /tpm"],
+  ["a.md", "skills/tpm/SKILL.md"],
+  ["a.md", "id tpm-banner・commands/tpm-side.ts"],
+  ["a.jsonc", '"guard": "tpm"'],
+  ["a.ts", "role === 'tpm'"],
+  ["a.md", "TPM 担当・TPM_KEY"],
+  ["a.ts", "hello(w.tpm, TPM)・file:tpm・const tpm = createContext()"],
+  ["a.ts", "function painting(tpm: Context)・{ tpm: { turn: 'pm-wait' } }"],
+  ["a.md", "待ちの相手（pm・review・tpm。既定は pm）"],
+  ["a.md", "--on <pm|review|tpm>"],
+  ["a.md", "（担当は課題の Key、TPM 担当は tpm）"],
+  ["a.md", "tpm.role=tpm・role:tpm"],
 ];
-for (const s of MUST_HIT)
-  if (checkOldName("self", s).length === 0)
-    throw new Error(`check-old-name の見張りが当てない: ${s}`);
-for (const s of MUST_PASS)
-  if (checkOldName("self", s).length > 0)
-    throw new Error(`check-old-name の見張りが当ててしまう: ${s}`);
+for (const [file, s] of MUST_HIT)
+  if (checkOldName(file, s).length === 0)
+    throw new Error(`check-old-name の見張りが当てない: ${file}: ${s}`);
+for (const [file, s] of MUST_PASS)
+  if (checkOldName(file, s).length > 0)
+    throw new Error(`check-old-name の見張りが当ててしまう: ${file}: ${s}`);
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const files = execFileSync(
