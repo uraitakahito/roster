@@ -68,7 +68,7 @@ const INNER = [
   /(?<![\w-])(?:ask-tpm|tpm-only|tpm-self)(?![\w-])/g,
   /(?<=[\w>])-tpm(?![\w-])/g,
   // TPM 担当を指す Key・役割・待ちの相手の値
-  /TPM 担当(?:の手の操作など)?は tpm(?=[）)。、'"]|$)/g,
+  /TPM 担当(?:の手の操作など)?は `?tpm`?(?=[）)。、'"]|$)/g,
   /(?<![\w-])tpm(?=（TPM 担当）| ?は ?TPM 担当)/g,
   // 並べた値の 1 つ（隣に、並べる相手の値が在る時だけ）
   new RegExp(
@@ -194,6 +194,7 @@ const MUST_PASS = [
   ["a.md", "待ちの相手（pm・review・tpm。既定は pm）"],
   ["a.md", "--on <pm|review|tpm>"],
   ["a.md", "（担当は課題の Key、TPM 担当は tpm）"],
+  ["a.md", "（担当は課題の Key、TPM 担当は `tpm`）"],
   ["a.md", "tpm.role=tpm・role:tpm"],
 ];
 for (const [file, s] of MUST_HIT)
