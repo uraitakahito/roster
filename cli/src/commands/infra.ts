@@ -8,12 +8,14 @@ import { requireTpmSide } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
 import { castlistGuard } from './castlist.ts';
 import { pagesDir } from './store.ts';
+import { envOf } from '../env.ts';
 
 const GUARD_LABEL = { 'free': '自由', 'tpm': 'TPM に相談（DevOps Engineer 担当だけ）', 'pm': 'PM の承認（DevOps Engineer 担当だけ）', 'pm-only': 'PM だけ（どの担当も打てない）' } as const;
 
-/** 打った担当。$TPM_ROLE が無ければ、TPM 担当か、roster が起こしていない session。 */
+/** 打った担当。$ROSTER_ROLE が無ければ、TPM 担当か、roster が起こしていない session。 */
 export function roleOf(env: NodeJS.ProcessEnv): RoleName | undefined {
-  return (ROLE_NAMES as string[]).includes(env.TPM_ROLE ?? '') ? env.TPM_ROLE as RoleName : undefined;
+  const role = envOf(env, 'ROLE');
+  return (ROLE_NAMES as string[]).includes(role ?? '') ? role as RoleName : undefined;
 }
 
 function requireEnv(ctx: Context, name: string) {
@@ -69,7 +71,7 @@ export function infraRun(ctx: Context, name: string, command: string[]): { lines
   if (!verdict.allow) throw new TpmError(verdict.reason);
   const [cmd = '', ...args] = command;
   const r = ctx.exec(cmd, args);
-  ctx.state.append('infra.jsonl', { at: ctx.now().toISOString(), env: name, role: roleOf(ctx.env), key: ctx.env.TPM_KEY, command, status: r.status });
+  ctx.state.append('infra.jsonl', { at: ctx.now().toISOString(), env: name, role: roleOf(ctx.env), key: envOf(ctx.env, 'KEY'), command, status: r.status });
   return { lines: [r.stdout.trimEnd(), r.stderr.trimEnd()].filter(l => l !== ''), status: r.status };
 }
 

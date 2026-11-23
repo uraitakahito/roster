@@ -211,7 +211,7 @@ describe('setup と check', () => {
 
   test('hook の命令は Node と cmux の path を書かず、home の下なら "$HOME/…" で入口を呼ぶ。入口が無ければ何もしない', () => {
     expect(hookCommand(join(home, 'projects', 'roster'), { HOME: home })).toBe(guarded('"$HOME/projects/roster/cli/bin/roster"'));
-    expect(hookEntry(join(home, 'r'), { HOME: home })).toEqual({ id: 'tpm-banner', command: guarded('"$HOME/r/cli/bin/roster"'), timeoutSeconds: 5 });
+    expect(hookEntry(join(home, 'r'), { HOME: home })).toEqual({ id: 'roster-banner', command: guarded('"$HOME/r/cli/bin/roster"'), timeoutSeconds: 5 });
     expect(bannerSetup(root, { HOME: home }).join('\n')).toContain(JSON.stringify(hookEntry(root, { HOME: home })));
     expect(bannerSetup(root, { HOME: home }).join('\n')).not.toMatch(/Node を上げたら/);
   });
@@ -239,16 +239,16 @@ describe('setup と check', () => {
     expect(bannerCheck(root, env, file)).toMatchObject({ ok: false, lines: expect.arrayContaining([expect.stringMatching(/hook がありません/)]) as unknown });
     put([{ ...hookEntry(root, env), enabled: false }]);
     expect(bannerCheck(root, env, file).lines.at(-1)).toMatch(/enabled: false/);
-    put([{ id: 'tpm-banner', command: OLD }]);
+    put([{ id: 'roster-banner', command: OLD }]);
     expect(bannerCheck(root, env, file)).toMatchObject({ ok: false });
     expect(bannerCheck(root, env, file).lines.at(-1)).toMatch(/古い形です（Node と cmux の path/);
     // 入口を呼ぶだけで、入口が無い時の guard が無い形（t-u5k9 から t-eda5 まで setup が出していた形）。
     const unguarded = hookCommand(root, env).replace(/^\[ -x (.+) \] \|\| \{ echo '\{\}'; exit 0; \}; exec \1 banner hook$/, '$1 banner hook');
     expect(unguarded).toMatch(/^\S+ banner hook$/);
-    put([{ id: 'tpm-banner', command: unguarded }]);
+    put([{ id: 'roster-banner', command: unguarded }]);
     expect(bannerCheck(root, env, file)).toMatchObject({ ok: false });
     expect(bannerCheck(root, env, file).lines.at(-1)).toMatch(/古い形です（roster の無い機械で通知のたびに失敗する形）/);
-    put([{ id: 'tpm-banner', command: guarded('/opt/moved/cli/bin/roster') }]);
+    put([{ id: 'roster-banner', command: guarded('/opt/moved/cli/bin/roster') }]);
     expect(bannerCheck(root, env, file).lines.at(-1)).toMatch(/在り処と違います/);
     put([{ id: 'other', command: 'true' }, hookEntry(root, env)]);
     const ok = bannerCheck(root, env, file);
@@ -257,6 +257,21 @@ describe('setup と check', () => {
     expect(ok.lines).toContain('  *: turn=hide idle=hide ask=show');
     expect(ok.lines).toContain('  バナーを消す時に一緒に消す物: sound');
     expect(ok.lines[0]).toBe(`設定: ${join(dir, 'roster', 'banner.jsonc')}（無いので既定）`);
+    expect(ok.lines.join('\n')).not.toMatch(/前の名/);
+    // 前の id（tpm-banner。t-6ydg で替えた）は、命令が合っていれば ok のまま、替える 1 行を足す。
+    put([{ ...hookEntry(root, env), id: 'tpm-banner' }]);
+    const legacy = bannerCheck(root, env, file);
+    expect(legacy.ok).toBe(true);
+    expect(legacy.lines.at(-1)).toBe('cmux.json の hook の id が前の名（tpm-banner）です。roster-banner に替えてください（動きは変わらない）');
+    // 命令が古い時も、id のことを一緒に出す（直す手を 1 回で済ませる）。
+    put([{ id: 'tpm-banner', command: OLD }]);
+    expect(bannerCheck(root, env, file).lines.slice(-2)).toEqual([expect.stringMatching(/古い形です/), expect.stringMatching(/id が前の名/)]);
+    // 新旧の 2 行が並べば、新しい id の行を見て、2 行あると知らせる。
+    put([{ id: 'tpm-banner', command: OLD }, hookEntry(root, env)]);
+    const both = bannerCheck(root, env, file);
+    expect(both.ok).toBe(false);
+    expect(both.lines).toContain(`cmux.json の hook: あり（${file}）`);
+    expect(both.lines.at(-1)).toBe('cmux.json に roster の hook が 2 行あります（通知ごとに重ねて動く）。roster-banner の 1 行だけを残してください');
   });
 
   test('check は古い在り処（~/.config/tpm）の設定を読まず、移す手を出して ok にしない', () => {
@@ -417,9 +432,9 @@ describe('TPM 担当の roster hello の一言', () => {
     expect(bannerHint(cmux, file)).toEqual([expect.stringMatching(/hook がありません。roster banner setup/)]);
     writeFileSync(file, `{ "notifications": { "hooks": [${JSON.stringify(hookEntry(cmux.root, cmux.env))}] } }`);
     expect(bannerHint(cmux, file)).toEqual([]);
-    writeFileSync(file, '{ "notifications": { "hooks": [{ "id": "tpm-banner", "command": "PATH=/n/bin:/usr/bin:/bin /r/cli/bin/roster banner hook" }] } }');
+    writeFileSync(file, '{ "notifications": { "hooks": [{ "id": "roster-banner", "command": "PATH=/n/bin:/usr/bin:/bin /r/cli/bin/roster banner hook" }] } }');
     expect(bannerHint(cmux, file)).toEqual([expect.stringMatching(/hook の命令が古い形です.*roster banner setup/)]);
-    writeFileSync(file, '{ "notifications": { "hooks": [{ "id": "tpm-banner", "command": "/elsewhere/cli/bin/roster banner hook" }] } }');
+    writeFileSync(file, '{ "notifications": { "hooks": [{ "id": "roster-banner", "command": "/elsewhere/cli/bin/roster banner hook" }] } }');
     expect(bannerHint(cmux, file)).toEqual([expect.stringMatching(/hook の命令が今の roster の在り処と違います.*roster banner setup/)]);
     writeFileSync(file, '{ broken');
     expect(bannerHint(cmux, file)).toEqual([expect.stringMatching(/cmux.json を読めません/)]);

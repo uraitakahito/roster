@@ -68,7 +68,7 @@ roster assign "<repo>#<PR>" --role sustaining-engineer --cwd <cwd> \
   --model <config.model> --effort <config.effort> --permission-mode <config.permissionMode>
 ```
 
-- `config.model`・`config.effort`・`config.permissionMode` は、書いてある物の旗だけを付ける（無い欄の旗は付けない。`roster assign` が環境変数 `TPM_MODEL` などかコードの既定で決める）。
+- `config.model`・`config.effort`・`config.permissionMode` は、書いてある物の旗だけを付ける（無い欄の旗は付けない。`roster assign` が環境変数 `ROSTER_MODEL` などかコードの既定で決める）。
 
 - skill セットは、起こした folder の `.claude/roles/config.jsonc` の `skill-sets` に書いた物が足される（core と dependabot。protocol.md は core の skill セット、`/sustaining-engineer` は dependabot の skill セットにある）。
 - `roster assign` は、新しい担当が名乗るまで 90 秒待ち、結果を返す:

@@ -2,11 +2,11 @@
 // 替えた（t-v28j）。命令の形（tpm <命令>）・入口の path（cli/bin/tpm）・道具を指す字（「tpm の命令」など）の残りを落とす。
 //
 // 替えなかった内の名は当てない（当てる前に字から外す）:
-// - 状態と控えの folder の名（~/.local/state/tpm・~/.local/share/tpm）と、設定の古い在り処 ~/.config/tpm（読まずに知らせる。t-4urw）
+// - 状態と控えの folder の古い在り処（~/.local/state/tpm・~/.local/share/tpm。移す 1 行と古い名の symlink の知らせ。t-6ydg）と、設定の古い在り処 ~/.config/tpm（読まずに知らせる。t-4urw）
 // - 名の頭の tpm.（tpm.jsonc・castlist の鍵 tpm.person・ラベル tpm.key と tpm.role・issuer の tpm.<project>）
-// - TPM 担当の skill /tpm（skills/tpm も）・cmux.json の hook の id tpm-banner・file の名 tpm-side
+// - TPM 担当の skill /tpm（skills/tpm も）・cmux.json の hook の前の id tpm-banner（t-6ydg で roster-banner に替え、残っていれば知らせる）・file の名 tpm-side
 // - TPM 担当を指す値: roster ask tpm・roster wait tpm・--on tpm の 2 語目、引用符で囲んだ 'tpm'（役割の鍵・設定の "guard": "tpm"）
-// 環境変数（TPM_KEY など）と TPM 担当は大文字なので、もとから当たらない。
+// TPM 担当は大文字なので、もとから当たらない。環境変数の古い名（TPM_KEY など。t-6ydg で ROSTER_* に替えた）は OLD_ENV で別に当てる。
 //
 // 見るのは git が追跡する物と add 前の新しい物（check-wording.mjs と同じ数え方）。lockfile と、この file は見ない。
 import { execFileSync } from "node:child_process";
@@ -104,6 +104,21 @@ const CODE_INNER = [
   /(?<!(?:\bbin'?|exec\w*\(|spawn\w*\(|which\(|\.name\()\s*,?\s*)(['"])tpm\1(?!\s*,\s*\[)/g,
 ];
 const CODE = /\.(?:ts|mjs|js)$/;
+/** 環境変数の古い名（TPM_KEY など）。TPM 担当を指すコードの名（TPM_TITLE・TPM_COLOR・TPM_SETTINGS・TPM_PARTY）は当てない。 */
+const OLD_ENV =
+  /(?<![A-Za-z0-9_])TPM_(?!(?:TITLE|COLOR|SETTINGS|PARTY)(?![A-Z0-9_]))[A-Z][A-Z0-9_]*/;
+/** 環境変数の古い名を、わざと書く file（古い名を読む所・その試験・移り方の docs）。後始末（t-6ydg の段 5）で減らす。 */
+const OLD_ENV_FILES = new Set([
+  "cli/src/env.ts",
+  "cli/src/guard.ts",
+  "cli/test/castlist.test.ts",
+  "cli/test/cli.test.ts",
+  "cli/test/env.test.ts",
+  "cli/test/roster.test.ts",
+  "cli/test/state.test.ts",
+  "docs-site/src/content/docs/operations.md",
+  "skill-sets/core/.claude/skills/audit-evidence/SKILL.md",
+]);
 const OLD = /(?<![A-Za-z0-9_])tpm(?![A-Za-z0-9_])/;
 
 /** 1 つの file の字を見て、古い名が残る行を返す。 */
@@ -115,6 +130,10 @@ export function checkOldName(file, text) {
     if (OLD.test(rest))
       errors.push(
         `${file}:${i + 1}: 道具の古い名 tpm がある（roster に替える。内の名なら check-old-name.mjs の INNER に足す）: ${line.trim()}`,
+      );
+    if (!OLD_ENV_FILES.has(file) && OLD_ENV.test(line))
+      errors.push(
+        `${file}:${i + 1}: 環境変数の古い名 TPM_* がある（ROSTER_* に替える。古い名をわざと書く file なら check-old-name.mjs の OLD_ENV_FILES に足す）: ${line.trim()}`,
       );
   });
   return errors;
@@ -146,6 +165,9 @@ const MUST_HIT = [
   ["a.md", "role=tpm hello"],
   ["a.md", "roster ask tpm hello"],
   ["a.md", "TPM 担当は tpm を打つ"],
+  ["a.md", "export TPM_MODEL=claude-fable-5-2"],
+  ["a.ts", "envOf(env, 'KEY') || env.TPM_KEY"],
+  ["a.md", "`TPM_RAW=1` を付ける"],
 ];
 const MUST_PASS = [
   ["a.md", 'roster ask tpm "…"'],
@@ -165,7 +187,8 @@ const MUST_PASS = [
   ["a.md", "id tpm-banner・commands/tpm-side.ts"],
   ["a.jsonc", '"guard": "tpm"'],
   ["a.ts", "role === 'tpm'"],
-  ["a.md", "TPM 担当・TPM_KEY"],
+  ["a.md", "TPM 担当・ROSTER_KEY・TPM_TITLE・TPM_SETTINGS"],
+  ["cli/src/env.ts", "env[`TPM_${name}`] と TPM_KEY"],
   ["a.ts", "hello(w.tpm, TPM)・file:tpm・const tpm = createContext()"],
   ["a.ts", "function painting(tpm: Context)・{ tpm: { turn: 'pm-wait' } }"],
   ["a.md", "待ちの相手（pm・review・tpm。既定は pm）"],

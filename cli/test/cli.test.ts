@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { buildProgram, commandPaths } from '../src/program.ts';
 import { COMMANDS } from '../src/protocol.ts';
-import { SETTINGS_ENV } from '../src/settings.ts';
+import { withoutRosterEnv } from '../src/env.ts';
 
 /** cli/ の folder（bin/roster と src/ がある）と、その 1 つ上の repo。 */
 const cli = realpathSync(join(import.meta.dirname, '..'));
@@ -14,12 +14,16 @@ const root = join(cli, '..');
 const entry = join(cli, 'bin', 'roster');
 const head = `PATH=${root}/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"${root}/cli/bin/roster guard"}]}],"SessionStart":[{"hooks":[{"type":"command","command":"${root}/cli/bin/roster castlist session-start"},{"type":"command","command":"${root}/cli/bin/roster returned check"}]}],"SessionEnd":[{"hooks":[{"type":"command","command":"${root}/cli/bin/roster castlist session-end"}]}]}}'`;
 let scratch: string;
+const mkdirp = (dir: string): string => {
+  mkdirSync(dir, { recursive: true });
+  return dir;
+};
 
-/** 試験を流す人の profile の TPM_MODEL などを抜いた環境変数に、extra を足す。 */
+/** 試験を流す人の profile の ROSTER_MODEL など（roster の環境変数を新旧の名とも）を抜いた環境変数に、extra を足す。 */
 const env = (extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv => {
-  const e = { ...process.env, ...extra };
-  for (const name of Object.values(SETTINGS_ENV)) if (!(name in extra)) delete e[name];
-  return e;
+  // 状態と控えの folder は一時の folder にする（試験を流す機械の本物の folder を読まない）。
+  // 試験を流す担当の居場所の roster の環境変数（新旧の名とも）は渡さない（$ROSTER_STATE は XDG_STATE_HOME より先に効く）。
+  return { ...withoutRosterEnv(process.env), XDG_STATE_HOME: join(scratch, 'xdg-state'), XDG_DATA_HOME: join(scratch, 'xdg-data'), ...extra };
 };
 const run = (bin: string, args: string[], cwd: string, extra: NodeJS.ProcessEnv = {}): string =>
   execFileSync(bin, args, { cwd, encoding: 'utf8', env: env(extra) }).trimEnd();
@@ -53,18 +57,18 @@ describe('roster start が出す 1 行', () => {
     expect(run(entry, ['start', d], scratch)).toBe(`cd ${d} && ${head} --add-dir ${root}/skill-sets/core -- /tpm`);
   });
 
-  test('$TPM_MODEL・$TPM_EFFORT・$TPM_PERMISSION_MODE があれば、その値で起こす', () => {
+  test('$ROSTER_MODEL・$ROSTER_EFFORT・$ROSTER_PERMISSION_MODE があれば、その値で起こす', () => {
     const d = folder(null);
-    expect(run(entry, ['start', d], scratch, { TPM_MODEL: 'claude-fable-5-2', TPM_EFFORT: 'high', TPM_PERMISSION_MODE: 'acceptEdits' }))
+    expect(run(entry, ['start', d], scratch, { ROSTER_MODEL: 'claude-fable-5-2', ROSTER_EFFORT: 'high', ROSTER_PERMISSION_MODE: 'acceptEdits' }))
       .toMatch(/ claude --model claude-fable-5-2 --effort high --permission-mode acceptEdits --settings /);
   });
 
-  test('1 回だけ付けた TPM_MODEL などは、1 行を打つと TPM 担当の claude の環境に入る', () => {
+  test('1 回だけ付けた ROSTER_MODEL などは、1 行を打つと TPM 担当の claude の環境に入る', () => {
     const d = folder(null);
     const fake = join(scratch, `fake-claude-${n++}`);
     mkdirSync(fake);
-    writeFileSync(join(fake, 'claude'), '#!/bin/sh\nprintf "%s|%s|%s|%s %s" "$TPM_MODEL" "$TPM_EFFORT" "$TPM_PERMISSION_MODE" "$1" "$2"\n', { mode: 0o755 });
-    const line = run(entry, ['start', d], scratch, { TPM_MODEL: 'claude-fable-5-2', TPM_EFFORT: 'high' });
+    writeFileSync(join(fake, 'claude'), '#!/bin/sh\nprintf "%s|%s|%s|%s %s" "$ROSTER_MODEL" "$ROSTER_EFFORT" "$ROSTER_PERMISSION_MODE" "$1" "$2"\n', { mode: 0o755 });
+    const line = run(entry, ['start', d], scratch, { ROSTER_MODEL: 'claude-fable-5-2', ROSTER_EFFORT: 'high' });
     // 1 行を打つ shell には TPM_* が無い（roster start の前に 1 回だけ付けたとき）
     const out = execFileSync('/bin/sh', ['-c', line], { encoding: 'utf8', env: env({ PATH: `${fake}:${process.env.PATH ?? ''}` }) });
     expect(out).toBe('claude-fable-5-2|high||--model claude-fable-5-2');
@@ -154,8 +158,15 @@ describe('--verbose', () => {
     expect(r.stderr).toMatch(/^roster: dependabot +\S+\/skill-sets\/dependabot → .*\/dependabot-triage/m);
   });
 
+  test('担当の居場所で打っても、受け継いだ状態の folder（古い名 TPM_STATE も）を使わない', () => {
+    // 受け継いだ path が無い folder を指していると、使えば止まる（stateDir の守り）。
+    const r = spawnSync(entry, ['start', folder(null)], { cwd: scratch, encoding: 'utf8', env: env({ TPM_STATE: join(scratch, 'gone'), ROSTER_STATE: join(scratch, 'gone') }) });
+    expect(r.stderr).toBe('');
+    expect(r.status).toBe(0);
+  });
+
   test('旗が無ければ stderr に何も出さない', () => {
-    const r = spawnSync(entry, ['start', folder(null)], { cwd: scratch, encoding: 'utf8' });
+    const r = spawnSync(entry, ['start', folder(null)], { cwd: scratch, encoding: 'utf8', env: env() });
     expect(r.stderr).toBe('');
   });
 });
@@ -206,8 +217,8 @@ describe('古い名の状態', () => {
     mkdirSync(join(state, 'roles'), { recursive: true });
     writeFileSync(join(state, 'tpm.json'), '{ "address": "file:tpm" }');
     writeFileSync(join(state, 'roles', 't-x7k2.json'), JSON.stringify({ key: 't-x7k2', role: 'software-engineer', title: '題', cwd: d, addDirs: [] }));
-    // 試験を流す担当の TPM_KEY などを受け継がない
-    const out = run(entry, ['roles'], d, { TPM_PROJECT: d, TPM_STATE: state, TPM_KEY: '', TPM_ADDRESS: '' });
+    // 試験を流す担当の ROSTER_KEY などを受け継がない
+    const out = run(entry, ['roles'], d, { ROSTER_PROJECT: d, ROSTER_STATE: state, ROSTER_KEY: '', ROSTER_ADDRESS: '' });
     expect(out).toMatch(/^名簿:\n- t-x7k2 {2}題 {2}消えた/);
     expect(readdirSync(state).sort()).toEqual(['roles', 'tpm.jsonc']);
     expect(readdirSync(join(state, 'roles'))).toEqual(['t-x7k2.jsonc']);
@@ -226,10 +237,10 @@ describe('命令の一覧', () => {
   });
 
   test('決まりの誤りは roster: で始まる 1 行を出して exit 1', () => {
-    // scratch の直下には、ほかの試験がわざと誤りを書いた設定がある（集めて読むと止まる）ので、空の folder で打つ。受け継いだ $TPM_PROJECT も消す。
-    const r = spawnSync(entry, ['ask', 'tpm', 'x', '--waiting-for', 'y'], { cwd: folder(null), encoding: 'utf8', env: { ...process.env, TPM_PROJECT: '', TPM_KEY: '', TPM_STATE: join(scratch, 'state') } });
+    // scratch の直下には、ほかの試験がわざと誤りを書いた設定がある（集めて読むと止まる）ので、空の folder で打つ。受け継いだ $ROSTER_PROJECT も消す。
+    const r = spawnSync(entry, ['ask', 'tpm', 'x', '--waiting-for', 'y'], { cwd: folder(null), encoding: 'utf8', env: { ...withoutRosterEnv(process.env), ROSTER_STATE: mkdirp(join(scratch, 'state')) } });
     expect(r.status).toBe(1);
-    expect(r.stderr).toMatch(/^roster: \$TPM_KEY がありません/);
+    expect(r.stderr).toMatch(/^roster: \$ROSTER_KEY がありません/);
   });
 
   test('roster init は無い（TPM 担当も roster hello で名乗る）', () => {

@@ -44,8 +44,8 @@ build は無い。`cli/bin/roster` は `cli/src/cli.ts` を node で直に動か
 - **見出しを足す・変える**: `cli/src/protocol.ts` の `HEADINGS` と、`skill-sets/core/.claude/skills/_shared/protocol.md` の表を合わせる（`check` が揃いを見る）。
 - **命令を足す**: `cli/src/program.ts`（か `cli/src/commands/register.ts`）に足し、`cli/src/protocol.ts` の `COMMANDS` にも書く（試験が命令の木との揃いを、`check` が skill と docs の `roster <命令>` が在るかを見る）。
 - **道具を足す**: `transport/` か `tracker/` に口を満たす adapter を書き、`cli/src/config.ts` の選択肢と `cli/src/context.ts`（課題管理は `cli/src/tracker/routed.ts`）に足す。上の層は変えない。
-- **試し方**: 決まりの命令は、連携を `file`（メッセージ・居場所・状態をファイルに書くだけ）にした project で cmux 無しに試せる（`cli/test/helpers.ts`）。実機で担当を起こして試すときは、`TPM_STATE` を一時の folder に向けて本物の名簿を汚さない。
-- **道具を直に打つ**: `roster` が起こした session では、guard が `cmux` のメッセージ・状態・居場所の命令と、`acli`・`gh issue` の記録と状態の命令の直打ちを止める（課題を読む命令は止めない。見るのは単純な命令の頭だけなので、commit の文や here-document に道具の名を書いても止まらない）。担当が置き場に消す要求（`curl -X DELETE …/api/pages…`・`…/api/files…`）を直に送るのも、置き場の CLI の消す命令（`pagetray page delete`・`pagetray file delete`・`pagetray api -X DELETE`）を打つのも止める（消してよいのは TPM 担当だけ。担当には環境変数 `PAGETRAY_NO_DELETE=1` も渡すので、guard をすり抜けても CLI が消さない）。adapter の開発で直に打つときは、命令の頭に `TPM_RAW=1` を付ける。
+- **試し方**: 決まりの命令は、連携を `file`（メッセージ・居場所・状態をファイルに書くだけ）にした project で cmux 無しに試せる（`cli/test/helpers.ts`）。実機で担当を起こして試すときは、`ROSTER_STATE` を先に作った一時の folder（`mktemp -d` など）に向けて本物の名簿を汚さない（`ROSTER_STATE` の folder が無いと、`roster` は空の状態を作らずに止まる）。担当の居場所の中で試験を流しても、試験は roster の環境変数を新旧の名とも抜いてから `roster` を起こす（`cli/src/env.ts` の `withoutRosterEnv`）。
+- **道具を直に打つ**: `roster` が起こした session では、guard が `cmux` のメッセージ・状態・居場所の命令と、`acli`・`gh issue` の記録と状態の命令の直打ちを止める（課題を読む命令は止めない。見るのは単純な命令の頭だけなので、commit の文や here-document に道具の名を書いても止まらない）。担当が置き場に消す要求（`curl -X DELETE …/api/pages…`・`…/api/files…`）を直に送るのも、置き場の CLI の消す命令（`pagetray page delete`・`pagetray file delete`・`pagetray api -X DELETE`）を打つのも止める（消してよいのは TPM 担当だけ。担当には環境変数 `PAGETRAY_NO_DELETE=1` も渡すので、guard をすり抜けても CLI が消さない）。adapter の開発で直に打つときは、命令の頭に `ROSTER_RAW=1` を付ける。
 
 ## pagetray（ページの置き場のサーバー）とのつなぎ
 
@@ -55,7 +55,7 @@ build は無い。`cli/bin/roster` は `cli/src/cli.ts` を node で直に動か
 - **偽の置き場**: `cli/` のほかの試験は、偽の置き場（`cli/test/helpers.ts` の `FakeStore`）で流す。API の形（URL・引数の名・JSON の欄）が変わったら、`FakeStore` と `page.ts`・`file.ts`・`reply.ts`（返事の状態）を合わせて直す。受ける file の種類（`file.ts` の `FILE_TYPES`）は、pagetray の `crates/api` の一覧と揃える。
 - **API の版**: 置き場は、どの答えにも header `Pagetray-Api` で API の版を付ける（決まりは pagetray の docs の「[API の仕様](https://uraitakahito.github.io/pagetray/api.html)」）。`roster page`・`roster file` は、話せる版（`cli/src/commands/store.ts` の `PAGES_API`）と違う答えを使わずに止まる。header の無い答え（API の版ができる前の置き場）は通す。
 - **pagetray を上げる時**: pagetray で release を出す → この repo で `.pagetray-version` を新しい版と digest にする PR を出す（つなぎの試験が通る）→ [運用](/operations/#版を上げる)の「版を上げる」で container を作り直し、読むだけの試験で一覧の UI を見る。API を変える変更は、古い cli でも新しい cli でも通る順に分ける。
-- **手元で流す**: pagetray の checkout で `PAGETRAY_DB=/tmp/pages.db PAGETRAY_LISTEN=127.0.0.1:18801 cargo run --bin pagetray-server` と起こした後に、`cd cli && TPM_E2E_PAGES_URL=http://127.0.0.1:18801 pnpm exec vitest run test/pagetray-e2e.test.ts`。
+- **手元で流す**: pagetray の checkout で `PAGETRAY_DB=/tmp/pages.db PAGETRAY_LISTEN=127.0.0.1:18801 cargo run --bin pagetray-server` と起こした後に、`cd cli && ROSTER_E2E_PAGES_URL=http://127.0.0.1:18801 pnpm exec vitest run test/pagetray-e2e.test.ts`。
 - **種類と役割の名**: 一覧は `cli/src/` だけが持つ。サーバーは字の形（英小文字で始まり、英小文字・数字・`-` で 32 字まで）だけを見るので、`cli` に種類や役割を足してもサーバーは変えない。
 - **だれが消してよいか**: サーバーは人を見分けない。「消してよいのは TPM 担当だけ」という決まりは、`roster page delete`・`roster file delete` と guard（`cli/src/guard.ts`）が持つ。置き場の CLI（`pagetray`）の消す命令（ページも file も）も、guard と、担当に渡す `PAGETRAY_NO_DELETE=1` で止める。
 

@@ -11,13 +11,14 @@ import { assertKey, readRole, requireTpmSide } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
 import { roleOf } from './infra.ts';
 import { DEFAULT_MINUTES, incidentTimeline } from './timeline.ts';
+import { envOf } from '../env.ts';
 
 /** 台帳に roster incident add で書くのは TPM 担当だけ（担当と Auditor は【incident】で書く）。 */
 const requireAdder = (ctx: Context): void => requireTpmSide(ctx, 'roster incident add', 'roster incident add で書くのは TPM 担当です。担当は roster report incident "<起きた事実>" --type <種類> で書いてください');
 
 /** 台帳を見直す・扱いを決める・追いかけるのは、TPM 担当と Auditor（ほかの担当は書くだけ）。 */
 function requireLedgerSide(ctx: Context): void {
-  if (ctx.env.TPM_KEY && roleOf(ctx.env) !== 'auditor') {
+  if (envOf(ctx.env, 'KEY') && roleOf(ctx.env) !== 'auditor') {
     throw new TpmError('台帳を見直す・扱いを決めるのは TPM 担当と Auditor です。担当は roster report incident "<起きた事実>" --type <種類> で書いてください');
   }
 }

@@ -41,7 +41,7 @@ function reviewed(config: Record<string, unknown> = {}, issue?: string): World &
   const w = started(config, issue);
   assign(w.tpm, 'AI-8', STAFF);
   const base = w.role('AI-8.staff', 'file:2');
-  const staff = { ...base, env: { ...base.env, TPM_ROLE: 'staff-engineer' } };
+  const staff = { ...base, env: { ...base.env, ROSTER_ROLE: 'staff-engineer' } };
   hello(staff);
   return { ...w, staff };
 }
@@ -193,7 +193,7 @@ describe('castlist の名', () => {
     expect(seatPrefix('AI-8', 'staff-engineer')).toBe('ai-8-staff');
     const w = reviewed();
     expect(seatOf(w.staff)).toEqual({ prefix: 'ai-8-staff', role: 'staff-engineer', key: 'AI-8.staff', subject: 'AI-8' });
-    expect(seatOf({ ...w.se, env: { ...w.se.env, TPM_ROLE: 'software-engineer' } })).toEqual({ prefix: 'ai-8-swe', role: 'software-engineer', key: 'AI-8' });
+    expect(seatOf({ ...w.se, env: { ...w.se.env, ROSTER_ROLE: 'software-engineer' } })).toEqual({ prefix: 'ai-8-swe', role: 'software-engineer', key: 'AI-8' });
   });
 });
 

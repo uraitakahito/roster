@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { ROLES, TPM_SETTINGS } from '../src/protocol.ts';
 import { resolveSettings } from '../src/settings.ts';
 
-const ENV = { TPM_MODEL: 'claude-sonnet-5-5', TPM_EFFORT: 'high', TPM_PERMISSION_MODE: 'acceptEdits' };
+const ENV = { ROSTER_MODEL: 'claude-sonnet-5-5', ROSTER_EFFORT: 'high', ROSTER_PERMISSION_MODE: 'acceptEdits' };
 
 describe('resolveSettings', () => {
   test('何も無ければコードの既定（担当ごと・TPM 担当）', () => {
@@ -21,11 +21,11 @@ describe('resolveSettings', () => {
     expect(resolveSettings('software-engineer', {
       flags: { model: 'claude-fable-5-2', effort: undefined },
       config: { model: 'claude-opus-5-5', effort: 'low' },
-      env: { TPM_MODEL: 'claude-sonnet-5-5', TPM_EFFORT: 'high' },
+      env: { ROSTER_MODEL: 'claude-sonnet-5-5', ROSTER_EFFORT: 'high' },
     })).toEqual({ model: 'claude-fable-5-2', effort: 'low', permissionMode: 'bypassPermissions' });
   });
 
   test('空の環境変数は書かなかったものとみなす', () => {
-    expect(resolveSettings('software-engineer', { env: { TPM_MODEL: '', TPM_EFFORT: '' } })).toEqual(ROLES['software-engineer'].defaults);
+    expect(resolveSettings('software-engineer', { env: { ROSTER_MODEL: '', ROSTER_EFFORT: '' } })).toEqual(ROLES['software-engineer'].defaults);
   });
 });

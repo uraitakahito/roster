@@ -15,7 +15,7 @@ function started(config: Record<string, unknown> = {}, issue?: string): World & 
   return { ...w, se };
 }
 /** Auditor の居場所から打つ周り。 */
-const auditorOf = (w: World): ReturnType<World['role']> => ({ ...w.role('audit', 'file:9'), env: { TPM_KEY: 'audit', TPM_ROLE: 'auditor' } });
+const auditorOf = (w: World): ReturnType<World['role']> => ({ ...w.role('audit', 'file:9'), env: { ROSTER_KEY: 'audit', ROSTER_ROLE: 'auditor' } });
 const add = (w: World, key: string, text: string, more: Partial<Parameters<typeof incidentAdd>[2]> = {}): string[] =>
   incidentAdd(w.tpm, key, { text, type: 'efficiency', tags: [], severe: false, ...more });
 

@@ -123,7 +123,9 @@ function changesRepo(words: string[]): boolean {
 const AUDIT_START = /^roster audit start\b/;
 
 /** 命令の頭にこれを書くと、道具の直打ちを通す（roster 自身の開発と試しのため。環境の手続きと、読むだけの担当の守りと、Audit の席を起こす命令には効かない）。 */
-export const RAW = 'TPM_RAW=1';
+export const RAW = 'ROSTER_RAW=1';
+/** 前の名の印（道具の名を替える前に覚えた手のため。t-6ydg の後始末で外す）。 */
+const LEGACY_RAW = 'TPM_RAW=1';
 
 /** guard に聞く 1 件。打った命令と、決めるのに要る設定・承認・時刻。 */
 export interface Asked {
@@ -178,7 +180,7 @@ export function judge(asked: Asked): Verdict {
       return { allow: false, reason: `${reader.name}は repo を変えません（${change.slice(0, 3).join(' ')}）。${reader.instead}` };
     }
   }
-  if (!asked.command.includes(RAW)) {
+  if (!asked.command.includes(RAW) && !asked.command.includes(LEGACY_RAW)) {
     const heads = commands.map(words => words.join(' '));
     if (asked.role !== undefined && heads.some(removesPages)) {
       return { allow: false, reason: `ページと file を消せるのは TPM 担当だけです。消すページや file の URL と訳を、roster ask tpm で TPM 担当に送って頼んでください。roster 自身の開発や試しで直に打つなら、命令の頭に ${RAW} を付けてください。` };

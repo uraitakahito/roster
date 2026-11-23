@@ -26,6 +26,7 @@ import { requireRole } from './roster.ts';
 import { runRole } from './run-role.ts';
 import { TpmError } from './skill-sets.ts';
 import { explain } from './verbose.ts';
+import { withEnv } from './env.ts';
 
 /** この file は <repo>/cli/src/program.ts にある。 */
 const root = join(import.meta.dirname, '..', '..');
@@ -63,7 +64,7 @@ export function buildProgram(): Command {
         for (const line of explain({ given: folder, dir, root, configFiles: sources.map(s => s.file), skillSets })) process.stderr.write(`roster: ${line}\n`);
       }
       // 担当の居場所の中で打っても、その担当の project と状態の folder を受け継がない（設定と状態は、渡した folder の物）。
-      const ctx = createContext({ ...process.env, TPM_PROJECT: dir, TPM_STATE: undefined }, dir);
+      const ctx = createContext(withEnv(process.env, { PROJECT: dir, STATE: undefined }), dir);
       const { warnings, line } = startTpm(ctx);
       for (const warning of warnings) process.stderr.write(`roster: ${warning}\n`);
       console.log(line);
@@ -78,9 +79,9 @@ export function buildProgram(): Command {
     .option('--brief <URL>', '依頼書の URL')
     .option('--issue <課題>', '課題管理の課題の Key')
     .option('--cwd <folder>', '担当を起こす folder（既定は project）')
-    .option('--model <model>', '担当の model（既定は config.jsonc の担当の欄・$TPM_MODEL・担当の既定の順）')
-    .option('--effort <effort>', '担当の effort（既定は config.jsonc の担当の欄・$TPM_EFFORT・担当の既定の順）')
-    .option('--permission-mode <mode>', '担当の permission mode（既定は config.jsonc の担当の欄・$TPM_PERMISSION_MODE・担当の既定の順）')
+    .option('--model <model>', '担当の model（既定は config.jsonc の担当の欄・$ROSTER_MODEL・担当の既定の順）')
+    .option('--effort <effort>', '担当の effort（既定は config.jsonc の担当の欄・$ROSTER_EFFORT・担当の既定の順）')
+    .option('--permission-mode <mode>', '担当の permission mode（既定は config.jsonc の担当の欄・$ROSTER_PERMISSION_MODE・担当の既定の順）')
     .option('--note <一言>', '【brief】に添える一言（担当が動いているとき）')
     .option('--supersede', '続きの【brief】で、済んでいない前の依頼書を取り消す（本文に「取り消す: …」と載る）')
     .option('--after', '続きの【brief】で、済んでいない前の依頼書を済ませてから、これをさせる（本文に載る）')
@@ -94,7 +95,7 @@ export function buildProgram(): Command {
     });
   program.command('close <key>').description('担当の居場所を閉じ、名簿から消す').action((key: string) => print(close(createContext(), key)));
   program.command('hello').description('名乗る（TPM 担当は宛先を状態に書いて名簿を出す。担当は受け持ちを返す）')
-    .option('--model <model>', 'TPM 担当の model（既定は roster start が起こす model。$TPM_MODEL があればそれ）')
+    .option('--model <model>', 'TPM 担当の model（既定は roster start が起こす model。$ROSTER_MODEL があればそれ）')
     .option('--effort <effort>', 'TPM 担当の effort（既定は $CLAUDE_EFFORT、無ければ roster start が起こす effort）')
     .action((options: { model?: string, effort?: string }) => print(hello(createContext(), options)));
   program.command('inbox').description('自分宛てで、まだ届いていないメッセージを出す（段の区切りに見る）').action(() => print(inbox(createContext())));
@@ -124,7 +125,7 @@ export function buildProgram(): Command {
   const page = program.command('page').description('依頼書と成果のページを、置き場（127.0.0.1 の pagetray）に置く・読む・探す・消す');
   page.command('put <file>').description('ページを置き場に置き、控えを写して URL を出す（置き場が応えなければ置けない）')
     .requiredOption('--kind <種類>', PAGE_KINDS.join('・'))
-    .option('--key <Key>', '課題の Key（担当は $TPM_KEY。TPM 担当は要る）')
+    .option('--key <Key>', '課題の Key（担当は $ROSTER_KEY。TPM 担当は要る）')
     .action((file: string, options: { kind: string, key?: string }) => print(pagePut(createContext(), file, options)));
   page.command('path <url>').description('置き場の URL を控えの file の path にする（Read tool で読むため。控えに無ければ置き場から取る）')
     .action((url: string) => print(pagePath(createContext(), url)));
@@ -160,7 +161,7 @@ export function buildProgram(): Command {
     .option('--name <語.拡張子>', '置き場での名（無ければ元の file の名から作る）')
     .option('--reviewed', '画像・PDF の中身を Read tool で見て、秘密が写っていないと確かめた')
     .option('--allow-secret', '秘密の形に当たる字の file を、わかった上で上げる（記録に残る）')
-    .option('--key <Key>', '課題の Key（担当は $TPM_KEY。TPM 担当は要る）')
+    .option('--key <Key>', '課題の Key（担当は $ROSTER_KEY。TPM 担当は要る）')
     .action((path: string, options: FilePutOptions) => print(filePut(createContext(), path, options)));
   file.command('path <url>').description('置き場の file の URL を控えの file の path にする（Read tool で読むため。控えに無ければ置き場から取る）')
     .action((url: string) => print(filePath(createContext(), url)));
@@ -283,7 +284,7 @@ export function buildProgram(): Command {
     .requiredOption('--project <folder>', 'TPM 担当を起こした folder')
     .requiredOption('--state <folder>', '状態の folder')
     .action((key: string, options: { project: string, state: string }) => {
-      const ctx = createContext({ ...process.env, TPM_PROJECT: options.project, TPM_STATE: options.state });
+      const ctx = createContext(withEnv(process.env, { PROJECT: options.project, STATE: options.state }));
       process.exit(runRole(requireRole(ctx, key), ctx.project, ctx.state.dir, ctx.root));
     });
 

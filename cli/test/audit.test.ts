@@ -30,14 +30,14 @@ function seated(tpm = true): World & { root: string, pm: Context, auditor: Conte
   const w = world();
   if (tpm) hello(w.tpm, TPM);
   const root = fakeRoot(true);
-  // Product Manager の手: 担当の環境変数（$TPM_KEY）を持たない。
+  // Product Manager の手: 担当の環境変数（$ROSTER_KEY）を持たない。
   const pm = { ...w.tpm, root };
   auditStart(pm, { wait: 0 });
   const address = w.wire.seats().find(s => s.title === 'Audit')?.address ?? '';
   const base = w.role('audit', address);
-  const auditor = { ...base, root, env: { ...base.env, TPM_ROLE: 'auditor' } };
+  const auditor = { ...base, root, env: { ...base.env, ROSTER_ROLE: 'auditor' } };
   hello(auditor);
-  const se = { ...w.role('t-x7k2', 'file:9'), env: { ...w.role('t-x7k2', 'file:9').env, TPM_ROLE: 'software-engineer' } };
+  const se = { ...w.role('t-x7k2', 'file:9'), env: { ...w.role('t-x7k2', 'file:9').env, ROSTER_ROLE: 'software-engineer' } };
   return { ...w, root, pm, auditor, se };
 }
 

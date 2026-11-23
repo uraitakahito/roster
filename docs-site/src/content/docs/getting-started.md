@@ -43,25 +43,25 @@ cd <folder> && PATH=<repo>/cli/bin:"$PATH" claude --model claude-opus-5-5 --effo
 
 ### model と effort を替える
 
-上の 1 行の `--model claude-opus-5-5 --effort medium --permission-mode bypassPermissions` は既定。替えるときは 1 行を書き替えず、環境変数 `TPM_MODEL`・`TPM_EFFORT`・`TPM_PERMISSION_MODE` を書いてから `roster start` を打つ。
+上の 1 行の `--model claude-opus-5-5 --effort medium --permission-mode bypassPermissions` は既定。替えるときは 1 行を書き替えず、環境変数 `ROSTER_MODEL`・`ROSTER_EFFORT`・`ROSTER_PERMISSION_MODE` を書いてから `roster start` を打つ。
 
 ```sh
 # いつも替える: shell の profile（~/.zshrc など）で export する。TPM 担当にも、TPM 担当が起こす担当にも効く
-export TPM_MODEL=claude-fable-5-2
-export TPM_EFFORT=medium
+export ROSTER_MODEL=claude-fable-5-2
+export ROSTER_EFFORT=medium
 
 # 1 回だけ替える: roster start の前に付ける。出る 1 行を打った TPM 担当と、その TPM 担当が起こす担当に効く
-TPM_EFFORT=high /foo/bar/roster/cli/bin/roster start
+ROSTER_EFFORT=high /foo/bar/roster/cli/bin/roster start
 ```
 
-`roster start` は、書いてある `TPM_MODEL`・`TPM_EFFORT`・`TPM_PERMISSION_MODE` を 1 行の頭（`PATH=…` の隣）にも写す。1 回だけ付けた値も TPM 担当の Claude Code の環境に入るので、TPM 担当の状態の `model` と、`roster assign` で起こす担当に、profile に書いたときと同じに効く。
+`roster start` は、書いてある `ROSTER_MODEL`・`ROSTER_EFFORT`・`ROSTER_PERMISSION_MODE` を 1 行の頭（`PATH=…` の隣）にも写す。1 回だけ付けた値も TPM 担当の Claude Code の環境に入るので、TPM 担当の状態の `model` と、`roster assign` で起こす担当に、profile に書いたときと同じに効く。
 
 ```sh
-# TPM_EFFORT=high roster start が出す 1 行（skill-sets が無いとき）
-cd <folder> && PATH=<repo>/cli/bin:"$PATH" TPM_EFFORT=high claude --model claude-opus-5-5 --effort high --permission-mode bypassPermissions --settings '…' --add-dir <repo>/skill-sets/core -- /tpm
+# ROSTER_EFFORT=high roster start が出す 1 行（skill-sets が無いとき）
+cd <folder> && PATH=<repo>/cli/bin:"$PATH" ROSTER_EFFORT=high claude --model claude-opus-5-5 --effort high --permission-mode bypassPermissions --settings '…' --add-dir <repo>/skill-sets/core -- /tpm
 ```
 
-欄ごとに、命令の旗（`roster assign --model` など）> `.claude/roles/config.jsonc` の担当の欄 > 環境変数 > コードの既定 の順で、先に値がある物が使われる。project の config に `"devops-engineer": { "effort": "low" }` と書いてあれば、`TPM_EFFORT=high` でもその project の DevOps Engineer 担当は low のまま。表は[設定](/configuration/#model-などの既定の環境変数任意)。
+欄ごとに、命令の旗（`roster assign --model` など）> `.claude/roles/config.jsonc` の担当の欄 > 環境変数 > コードの既定 の順で、先に値がある物が使われる。project の config に `"devops-engineer": { "effort": "low" }` と書いてあれば、`ROSTER_EFFORT=high` でもその project の DevOps Engineer 担当は low のまま。表は[設定](/configuration/#model-などの既定の環境変数任意)。
 
 ## Auditor の席を起こす
 

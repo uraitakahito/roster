@@ -14,6 +14,7 @@ import { buildProgram, commandPaths } from '../src/program.ts';
 import { COMMANDS } from '../src/protocol.ts';
 import { deadUrl, startFakeCastlist, type CastlistRequest, type FakeCastlist } from './castlist-fake.ts';
 import { world, type World } from './helpers.ts';
+import { withoutRosterEnv } from '../src/env.ts';
 
 const READS = ['castlist find', 'castlist show', 'castlist lineage', 'castlist events', 'castlist settings'];
 const tpmBin = join(realpathSync(join(import.meta.dirname, '..')), 'bin', 'roster');
@@ -91,11 +92,11 @@ async function link(w: World, type: 'launched' | 'continued', from: Seeded, to: 
   await fake.send('PUT', `/v1/links/${from.sid}-${to.sid}`, { issuer: castlistIssuer(w.tpm.state.dir), type, from: `claude.session:${from.sid}`, to: `claude.session:${to.sid}`, sent_at: '2026-11-20T11:00:00.000Z' });
 }
 
-/** castlist を設定した世界と、Auditor の席の周り（$TPM_ROLE=auditor）。 */
+/** castlist を設定した世界と、Auditor の席の周り（$ROSTER_ROLE=auditor）。 */
 function auditorWorld(url = fake.url): { w: World, auditor: Context } {
   const w = world({ castlist: url });
   const base = w.role('audit', 'file:9');
-  return { w, auditor: { ...base, env: { ...base.env, TPM_KEY: 'audit', TPM_ROLE: 'auditor' } } };
+  return { w, auditor: { ...base, env: { ...base.env, ROSTER_KEY: 'audit', ROSTER_ROLE: 'auditor' } } };
 }
 
 const page = (url: string): string => `${fake.url}${url}`;
@@ -253,7 +254,7 @@ describe('roster castlist show', () => {
     const w = world({ castlist: fake.url });
     startTpm(w.tpm);
     const sid = 'cccccccc-0000-4000-8000-000000000001';
-    const tpm = { ...w.tpm, env: { ...w.tpm.env, TPM_LAUNCH: 'launch-show', TPM_LAUNCHED_BY: PM_REF, TPM_LAUNCH_MODEL: 'claude-opus-5-5', TPM_LAUNCH_EFFORT: 'medium', TPM_LAUNCH_FRESH: '1' } };
+    const tpm = { ...w.tpm, env: { ...w.tpm.env, ROSTER_LAUNCH: 'launch-show', ROSTER_LAUNCHED_BY: PM_REF, ROSTER_LAUNCH_MODEL: 'claude-opus-5-5', ROSTER_LAUNCH_EFFORT: 'medium', ROSTER_LAUNCH_FRESH: '1' } };
     sessionStart(tpm, JSON.stringify({ hook_event_name: 'SessionStart', session_id: sid, source: 'startup', transcript_path: '/nonexistent/t.jsonl' }));
     const record = w.tpm.state.read<{ id: string, name: string }>(`sessions/${sid}.jsonc`);
     expect(record?.name).toBe('project-tpm.1');
@@ -365,11 +366,11 @@ describe('読むだけ', () => {
     const w = world({ castlist: fake.url });
     await seed(w, 't-cl01-swe', { 'tpm.project': w.project, 'tpm.key': 't-cl01' }, '2026-11-20T11:00:00.000Z');
     const env = (url: string): NodeJS.ProcessEnv => ({
-      ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('TPM_') && !k.startsWith('CMUX_'))),
-      TPM_PROJECT: w.project,
-      TPM_ROLE: 'auditor',
-      TPM_KEY: 'audit',
-      TPM_CASTLIST_URL: url,
+      ...Object.fromEntries(Object.entries(withoutRosterEnv(process.env)).filter(([k]) => !k.startsWith('CMUX_'))),
+      ROSTER_PROJECT: w.project,
+      ROSTER_ROLE: 'auditor',
+      ROSTER_KEY: 'audit',
+      ROSTER_CASTLIST_URL: url,
       XDG_STATE_HOME: join(w.project, '..', 'state'),
     });
     const run = (args: string[], url = fake.url) => spawnSync(tpmBin, ['castlist', ...args], { cwd: w.project, encoding: 'utf8', env: env(url) });

@@ -20,8 +20,8 @@ function setup() {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'roster-files-')));
   const src = realpathSync(mkdtempSync(join(tmpdir(), 'roster-files-src-')));
   const w = world();
-  const wire = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({ ...ctx, env: { ...ctx.env, TPM_PAGES_DIR: dir, ...env } });
-  const role = wire(w.role('t-x7k2', 'file:1'), { TPM_ROLE: 'software-engineer' });
+  const wire = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({ ...ctx, env: { ...ctx.env, ROSTER_PAGES_DIR: dir, ...env } });
+  const role = wire(w.role('t-x7k2', 'file:1'), { ROSTER_ROLE: 'software-engineer' });
   const tpm = wire(w.tpm);
   writeRole(tpm, { key: 't-x7k2', role: 'software-engineer', title: 'SWE t-x7k2', cwd: w.project, addDirs: [], model: 'm', effort: 'e', permissionMode: 'p', address: 'file:1' });
   tpm.state.write('tpm.jsonc', { address: 'file:tpm' });
@@ -152,7 +152,7 @@ describe('roster file put', () => {
 
 describe('roster file put の送り手（pagetray 0.6.0 の actor_issuer・actor_ref）', () => {
   const SID = '5f0c2a8e-0000-4000-8000-000000000002';
-  const seated = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({ ...ctx, env: { ...ctx.env, TPM_CASTLIST_URL: 'http://127.0.0.1:8802', CLAUDE_CODE_SESSION_ID: SID, ...env } });
+  const seated = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({ ...ctx, env: { ...ctx.env, ROSTER_CASTLIST_URL: 'http://127.0.0.1:8802', CLAUDE_CODE_SESSION_ID: SID, ...env } });
 
   test('castlist の設定と session の id があれば、ページと同じ issuer と claude.session:<id> を付ける', () => {
     const s = setup();

@@ -9,6 +9,7 @@ import { commandOf, guardSettings, judge, judgeWrite, touched, writeOf, type App
 import type { RoleName } from '../src/protocol.ts';
 import { splitCommands } from '../src/shell.ts';
 import { world } from './helpers.ts';
+import { withoutRosterEnv } from '../src/env.ts';
 
 describe('splitCommands', () => {
   test('単純な命令に分け、引用を外し、頭の代入・前に付く語・path・redirect の先を外す', () => {
@@ -156,9 +157,9 @@ describe('道具の直打ち', () => {
     expect(ask('echo "$(wmill sync push)"', 'software-engineer').allow).toBe(false);
   });
 
-  test('TPM_RAW=1 を付けた直打ちは通すが、環境の手続きには効かない', () => {
-    expect(ask('TPM_RAW=1 cmux workspace close workspace:3 --force', 'software-engineer').allow).toBe(true);
-    expect(ask('TPM_RAW=1 aws s3 rm x', 'software-engineer').allow).toBe(false);
+  test('ROSTER_RAW=1 を付けた直打ちは通すが、環境の手続きには効かない', () => {
+    expect(ask('ROSTER_RAW=1 cmux workspace close workspace:3 --force', 'software-engineer').allow).toBe(true);
+    expect(ask('ROSTER_RAW=1 aws s3 rm x', 'software-engineer').allow).toBe(false);
   });
 });
 
@@ -176,12 +177,12 @@ describe('置き場のページを消す curl', () => {
     }
   });
 
-  test('TPM 担当・置き場の外への DELETE・ほかの要求・TPM_RAW=1 は通す', () => {
+  test('TPM 担当・置き場の外への DELETE・ほかの要求・ROSTER_RAW=1 は通す', () => {
     expect(ask(`curl -X DELETE ${url}`).allow).toBe(true);
     expect(ask('curl -X DELETE https://example.com/x', 'software-engineer').allow).toBe(true);
     expect(ask(`curl -sS ${url}`, 'devops-engineer').allow).toBe(true);
     expect(ask(`echo "curl -X DELETE ${url}"`, 'software-engineer').allow).toBe(true);
-    expect(ask(`TPM_RAW=1 curl -X DELETE ${url}`, 'software-engineer').allow).toBe(true);
+    expect(ask(`ROSTER_RAW=1 curl -X DELETE ${url}`, 'software-engineer').allow).toBe(true);
   });
 
   test('file を消す DELETE（/api/files）も止める', () => {
@@ -220,7 +221,7 @@ describe('置き場の CLI（pagetray）の消す命令', () => {
     }
   });
 
-  test('TPM 担当・読む命令と置く命令・命令でない字・TPM_RAW=1 は通す', () => {
+  test('TPM 担当・読む命令と置く命令・命令でない字・ROSTER_RAW=1 は通す', () => {
     expect(ask(`pagetray page delete ${url} --yes`).allow).toBe(true);
     for (const command of [
       'pagetray page list --key t-x',
@@ -233,7 +234,7 @@ describe('置き場の CLI（pagetray）の消す命令', () => {
       'pagetray file put screen.png --project p --key t-x --reviewed',
       `echo "pagetray page delete ${url} --yes"`,
       'git commit -m "docs: pagetray page delete の使い方"',
-      `TPM_RAW=1 pagetray page delete ${url} --yes`,
+      `ROSTER_RAW=1 pagetray page delete ${url} --yes`,
     ]) expect(ask(command, 'software-engineer').allow, command).toBe(true);
   });
 });
@@ -261,13 +262,13 @@ describe('hook の入力と settings', () => {
     const command = hookCommand(guardSettings(tpmBin));
     // 止めた記録（guard.jsonl）を、roster を動かす機械の本物の状態の folder でなく、一時の folder に書かせる。
     const state = mkdtempSync(join(tmpdir(), 'roster-guard-state-'));
-    const env = { ...process.env, TPM_PROJECT: undefined, TPM_STATE: undefined, TPM_KEY: undefined, TPM_ROLE: undefined, XDG_STATE_HOME: state };
+    const env = { ...withoutRosterEnv(process.env), XDG_STATE_HOME: state };
     const run = (cmd: string) => spawnSync('/bin/sh', ['-c', command], { cwd: dir, env, encoding: 'utf8', input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: cmd } }) });
     const denied = run(['cmux', 'set-status', 'x'].join(' '));
     expect(denied.stderr).toContain('roster wait');
     expect(denied.status).toBe(2);
     expect(run('ls').status).toBe(0);
-    expect(existsSync(join(state, 'tpm'))).toBe(true);
+    expect(existsSync(join(state, 'roster'))).toBe(true);
   });
 
   test('Auditor の席の settings は、file を書き替える道具の前にも roster guard を呼ぶ', () => {
@@ -287,11 +288,11 @@ describe('hook の入力と settings', () => {
 });
 
 describe('Audit の席を起こす命令', () => {
-  test('TPM 担当と担当が道具として打つ roster audit start は止める（TPM_RAW=1 も効かない）。ほかの roster audit は通す', () => {
+  test('TPM 担当と担当が道具として打つ roster audit start は止める（ROSTER_RAW=1 も効かない）。ほかの roster audit は通す', () => {
     for (const role of [undefined, 'software-engineer', 'devops-engineer', 'auditor'] as const) {
       expect(ask('roster audit start', role), String(role)).toEqual({ allow: false, reason: expect.stringContaining('Audit の席を起こすのは Product Manager です') as string });
     }
-    for (const command of ['cd /w && /r/cli/bin/roster audit start --model claude-opus-5-5', 'TPM_RAW=1 roster audit start', 'sh -c "roster audit start"']) expect(ask(command).allow, command).toBe(false);
+    for (const command of ['cd /w && /r/cli/bin/roster audit start --model claude-opus-5-5', 'ROSTER_RAW=1 roster audit start', 'sh -c "roster audit start"']) expect(ask(command).allow, command).toBe(false);
     for (const command of ['roster audit begin', 'roster audit begin 7 9', 'echo "roster audit start"', 'grep -rn "roster audit start" docs-site', 'roster roles']) expect(ask(command).allow, command).toBe(true);
   });
 });
@@ -329,7 +330,7 @@ describe('Auditor は repo を変えない', () => {
     ['gh api -X POST repos/o/r/rulesets', false],
     ['gh api --method=PUT repos/o/r/pages', false],
     ['gh api repos/o/r/labels -f name=x', false],
-    ['TPM_RAW=1 git push', false],
+    ['ROSTER_RAW=1 git push', false],
     // castlist を読むだけの命令（監査の検索）は通す
     ['roster castlist find --label tpm.key:t-23zs --active-from 2026-11-22T11:00:00+09:00', true],
     ['roster castlist show t-23zs-swe.1', true],
@@ -389,7 +390,7 @@ describe('Staff Engineer 担当は repo を変えない', () => {
     ['gh pr review 141 --approve', false],
     ['gh pr comment 141 --body x', false],
     ['gh pr merge 141 --squash', false],
-    ['TPM_RAW=1 git push', false],
+    ['ROSTER_RAW=1 git push', false],
   ])('%s', (command, allow) => {
     expect(ask(command, 'staff-engineer').allow).toBe(allow);
   });
@@ -418,7 +419,7 @@ describe('Staff Engineer 担当は repo を変えない', () => {
 
 describe('roster infra と roster guard', () => {
   const hook = (command: string): string => JSON.stringify({ tool_name: 'Bash', tool_input: { command } });
-  const devops = (w: ReturnType<typeof world>) => ({ ...w.role('devops', 'file:1'), env: { TPM_KEY: 'devops', TPM_ROLE: 'devops-engineer' } });
+  const devops = (w: ReturnType<typeof world>) => ({ ...w.role('devops', 'file:1'), env: { ROSTER_KEY: 'devops', ROSTER_ROLE: 'devops-engineer' } });
 
   test('承認を書くと通り、消すと止まる', () => {
     const w = world({ infra });
@@ -472,7 +473,9 @@ describe('roster infra と roster guard', () => {
 
   test('Auditor の書き込みと git の変える命令は hook で止まり、記録に残る', () => {
     const w = world();
-    const auditor = { ...w.role('audit', 'file:9'), env: { TPM_KEY: 'audit', TPM_ROLE: 'auditor' } };
+    // 控えの folder は一時の folder にする（試験を流す機械の本物の控えを見ない）。
+    const data = mkdtempSync(join(tmpdir(), 'roster-guard-data-'));
+    const auditor = { ...w.role('audit', 'file:9'), env: { ROSTER_KEY: 'audit', ROSTER_ROLE: 'auditor', XDG_DATA_HOME: data } };
     const write = (path: string): string => JSON.stringify({ tool_name: 'Write', tool_input: { file_path: path, content: 'x' } });
     expect(guard(auditor, write(join(w.tpm.project, 'README.md'))).allow).toBe(false);
     expect(guard(auditor, write(join(w.tpm.state.dir, 'log.jsonl'))).allow).toBe(false);
@@ -480,7 +483,7 @@ describe('roster infra と roster guard', () => {
     expect(guard(auditor, hook('git pull --ff-only')).allow).toBe(false);
     expect(guard(auditor, hook('git log -1')).allow).toBe(true);
     // Software Engineer 担当の書き込みは見ない。
-    expect(guard({ ...w.role('t-x7k2', 'file:1'), env: { TPM_KEY: 't-x7k2', TPM_ROLE: 'software-engineer' } }, write(join(w.tpm.project, 'README.md'))).allow).toBe(true);
+    expect(guard({ ...w.role('t-x7k2', 'file:1'), env: { ROSTER_KEY: 't-x7k2', ROSTER_ROLE: 'software-engineer', XDG_DATA_HOME: data } }, write(join(w.tpm.project, 'README.md'))).allow).toBe(true);
     expect(w.tpm.state.lines<{ by: string, role: string, command: string }>('guard.jsonl').map(l => [l.by, l.role, l.command.split(' ')[0]])).toEqual([
       ['audit', 'auditor', 'Write'],
       ['audit', 'auditor', 'Write'],
@@ -495,13 +498,13 @@ describe('直下の folder の設定の infra', () => {
 
   test('上の folder で起きた担当にも、直下の folder の宣言が効く。止めた文と roster infra list に、宣言した設定を出す', () => {
     const w = world({}, {}, { skills: { infra: store }, web: {} });
-    const verdict = guard({ ...w.role('t-x7k2', 'file:1'), env: { TPM_KEY: 't-x7k2', TPM_ROLE: 'software-engineer' } }, hook('cd web && container stop store'));
+    const verdict = guard({ ...w.role('t-x7k2', 'file:1'), env: { ROSTER_KEY: 't-x7k2', ROSTER_ROLE: 'software-engineer' } }, hook('cd web && container stop store'));
     expect(verdict).toEqual({ allow: false, reason: '環境 store（skills の設定） を変えてよいのは DevOps Engineer 担当だけです。roster ask devops --what … --why … で TPM 担当に頼んでください。' });
     expect(infraList(w.tpm)).toEqual(['- store  TPM に相談（DevOps Engineer 担当だけ）  match: "container stop store"  宣言: skills']);
   });
 
   test('gh issue の直打ちは、github を宣言した設定が直下に 1 つでもあれば止まる', () => {
-    const se = (w: ReturnType<typeof world>) => ({ ...w.role('t-x7k2', 'file:1'), env: { TPM_KEY: 't-x7k2', TPM_ROLE: 'software-engineer' } });
+    const se = (w: ReturnType<typeof world>) => ({ ...w.role('t-x7k2', 'file:1'), env: { ROSTER_KEY: 't-x7k2', ROSTER_ROLE: 'software-engineer' } });
     expect(guard(se(world({}, {}, { web: { tracker: 'github' } })), hook('gh issue close 12')).allow).toBe(false);
     expect(guard(se(world({}, {}, { skills: { tracker: 'jira' } })), hook('gh issue close 12')).allow).toBe(true);
   });

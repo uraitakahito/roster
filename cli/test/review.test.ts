@@ -31,14 +31,14 @@ function started(config: Record<string, unknown> = {}, issue?: string): Seats {
   const tpm = { ...w.tpm, root: staffRoot() };
   hello(tpm, TPM);
   assign(tpm, 'AI-8', { role: 'software-engineer', title: '計画と実装', brief: BRIEF, wait: 0, ...(issue === undefined ? {} : { issue }) });
-  const se = { ...w.role('AI-8', 'file:1'), root: staffRoot(), env: { ...w.role('AI-8', 'file:1').env, TPM_ROLE: 'software-engineer' } };
+  const se = { ...w.role('AI-8', 'file:1'), root: staffRoot(), env: { ...w.role('AI-8', 'file:1').env, ROSTER_ROLE: 'software-engineer' } };
   hello(se);
   const html = join(realpathSync(mkdtempSync(join(tmpdir(), 'roster-review-'))), 'p.html');
   writeFileSync(html, '<title>試し</title>');
   const put = (ctx: Context, kind: string): string => pagePut(ctx, html, { kind }).find(l => l.startsWith('URL: '))?.slice(5) ?? '';
   const staffAt = (address: string): Context => {
     const base = w.role('AI-8.staff', address);
-    return { ...base, env: { ...base.env, TPM_ROLE: 'staff-engineer' } };
+    return { ...base, env: { ...base.env, ROSTER_ROLE: 'staff-engineer' } };
   };
   return { ...w, tpm, se, plan: put(se, 'plan'), staffAt, put };
 }
@@ -124,7 +124,7 @@ describe('roster ask review（席が無い時: 命令が席を起こす）', () 
     expect(() => askReview(w.se, { url: 'cli/src/guard.ts' })).toThrow(/--url は、置き場のページか PR の URL にしてください/);
     expect(() => askReview(w.se, { url: w.plan })).toThrow(/同じ物のレビューを、もう頼んであります（#1。[\s\S]*判定は Staff Engineer 担当から【review】で届きます/);
     expect(() => askReview(w.staff, { url: w.plan })).toThrow(/Staff Engineer 担当は roster ask review を打ちません/);
-    const auditor = { ...w.se, env: { ...w.se.env, TPM_KEY: 'audit', TPM_ROLE: 'auditor' } };
+    const auditor = { ...w.se, env: { ...w.se.env, ROSTER_KEY: 'audit', ROSTER_ROLE: 'auditor' } };
     w.tpm.state.write('roles/audit.jsonc', { ...requireRole(w.tpm, 'AI-8'), key: 'audit', role: 'auditor', title: 'Audit' });
     expect(() => askReview(auditor, { url: w.plan })).toThrow(/Auditor は roster ask review を打ちません/);
   });
@@ -456,7 +456,7 @@ describe('roster review list', () => {
   test('レビューを頼まずに結果の【done】を出した課題を数える', () => {
     const w = asked();
     assign(w.tpm, 't-x7k2', { role: 'software-engineer', title: '小さい直し', brief: BRIEF, wait: 0 });
-    const other = { ...w.role('t-x7k2', 'file:3'), env: { ...w.role('t-x7k2', 'file:3').env, TPM_ROLE: 'software-engineer' } };
+    const other = { ...w.role('t-x7k2', 'file:3'), env: { ...w.role('t-x7k2', 'file:3').env, ROSTER_ROLE: 'software-engineer' } };
     hello(other);
     reportDone(other, { url: w.put(other, 'result'), kind: 'result', summary: '直した', remaining: 'なし', decisions: 'なし', points: [] });
     reportDone(w.se, { url: w.put(w.se, 'result'), kind: 'result', summary: '入れた', remaining: 'なし', decisions: 'なし', points: [] });

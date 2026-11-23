@@ -1,4 +1,4 @@
-// cli と本物の置き場（pagetray）のつなぎの試験。$TPM_E2E_PAGES_URL に動いている pagetray の URL がある時だけ流す
+// cli と本物の置き場（pagetray）のつなぎの試験。$ROSTER_E2E_PAGES_URL に動いている pagetray の URL がある時だけ流す
 // （CI の pagetray-e2e.yml。手元では docs-site の開発のページの「pagetray（ページの置き場のサーバー）とのつなぎ」）。
 // ほかの試験は偽の置き場（helpers.ts の FakeStore）で流すので、API の形（URL・引数の名・JSON の欄）のずれはここで見つける。
 import { execFileSync } from 'node:child_process';
@@ -18,7 +18,7 @@ import { markBrief, markEscalated, markVerdict } from '../src/commands/review-ma
 import { atLeast } from '../src/commands/store.ts';
 import type { Review } from '../src/reviews.ts';
 
-const URL = process.env.TPM_E2E_PAGES_URL ?? '';
+const URL = process.env.ROSTER_E2E_PAGES_URL ?? '';
 /**
  * 置き場に file のエンドポイントがあるか（pagetray 0.4.0 から）。.pagetray-version が 0.3 の間は、file の試験を飛ばして CI を緑に保つ。
  * 版の番号でなくエンドポイントで見るのは、0.4.0 の release の前の手元のサーバー（版は 0.3.x のまま）にも向けて流せるように。
@@ -44,7 +44,7 @@ const PNG = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('
 function setup() {
   const w = world();
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'roster-e2e-pages-')));
-  const real = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({ ...ctx, exec, env: { ...ctx.env, TPM_PAGES_URL: URL, TPM_PAGES_DIR: dir, ...env } });
+  const real = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({ ...ctx, exec, env: { ...ctx.env, ROSTER_PAGES_URL: URL, ROSTER_PAGES_DIR: dir, ...env } });
   const html = join(dir, 'src.html');
   const put = (ctx: Context, kind: string, text: string, key?: string): string => {
     writeFileSync(html, text);
@@ -59,7 +59,7 @@ describe.skipIf(URL === '')('cli と pagetray のつなぎ', () => {
   test('どの役割も、どの種類も置けて、役割と種類で探せて、置き場から読み戻せる', () => {
     const s = setup();
     for (const role of ROLE_NAMES) {
-      const ctx = s.real(s.w.role('K-1', 'file:1'), { TPM_ROLE: role });
+      const ctx = s.real(s.w.role('K-1', 'file:1'), { ROSTER_ROLE: role });
       for (const kind of PAGE_KINDS) {
         const text = `<!doctype html><title>${role} の ${kind}</title><p>つなぎの試験 ${role} ${kind}</p>`;
         const url = s.put(ctx, kind, text);
@@ -80,7 +80,7 @@ describe.skipIf(URL === '')('cli と pagetray のつなぎ', () => {
     const s = setup();
     s.tpm.state.write('tpm.jsonc', { address: 'workspace:7' });
     const brief = s.put(s.tpm, 'brief', '<title>依頼書</title><p>絞り込みを作る</p>', 'K-2');
-    const plan = s.put(s.real(s.w.role('K-2', 'file:9'), { TPM_ROLE: 'software-engineer' }), 'plan', '<title>計画</title><p>並べ替えを作る</p>');
+    const plan = s.put(s.real(s.w.role('K-2', 'file:9'), { ROSTER_ROLE: 'software-engineer' }), 'plan', '<title>計画</title><p>並べ替えを作る</p>');
     expect(s.list(s.tpm, {}).map(p => p.url)).toEqual([plan, brief]);
     expect(s.list(s.tpm, { oldest: true }).map(p => p.url)).toEqual([brief, plan]);
     expect(s.list(s.tpm, { workspace: 'workspace:7' })).toEqual([expect.objectContaining({ url: brief, role: 'tpm', key: 'K-2', kind: 'brief', n: 1, title: '依頼書' })]);
@@ -113,7 +113,7 @@ describe.skipIf(URL === '')('cli と pagetray のつなぎ', () => {
 
   test('TPM 担当が消すと、置き場と控えから消え、URL は 410。番号は使い回さず、import でも生き返らない', () => {
     const s = setup();
-    const ctx = s.real(s.w.role('K-5', 'file:1'), { TPM_ROLE: 'software-engineer' });
+    const ctx = s.real(s.w.role('K-5', 'file:1'), { ROSTER_ROLE: 'software-engineer' });
     const first = s.put(ctx, 'plan', '<title>一つ目</title><p>残る計画</p>');
     const second = s.put(ctx, 'plan', '<title>二つ目</title><p>消す計画</p>');
     const [cached = ''] = pagePath(ctx, second);
@@ -157,7 +157,7 @@ describe.skipIf(!FILES)('cli と pagetray のつなぎ（file。置き場が 0.4
 
   test('上げると番号が付き、控えを消しても読み戻せる。ページの <img> の参照も roster page path が控えに写す', () => {
     const s = setup();
-    const ctx = s.real(s.w.role('K-6', 'file:1'), { TPM_ROLE: 'software-engineer' });
+    const ctx = s.real(s.w.role('K-6', 'file:1'), { ROSTER_ROLE: 'software-engineer' });
     const url = upload(s, ctx, 'shot.png');
     expect(url).toBe(`${URL}/${s.project}/K-6/files/shot-1.png`);
     expect(upload(s, ctx, 'shot.png')).toBe(`${URL}/${s.project}/K-6/files/shot-2.png`);
@@ -185,7 +185,7 @@ describe.skipIf(!FILES)('cli と pagetray のつなぎ（file。置き場が 0.4
 
   test('TPM 担当が消す前に、参照しているページを出す。消すと 410 で、番号は使い回さない', () => {
     const s = setup();
-    const ctx = s.real(s.w.role('K-8', 'file:1'), { TPM_ROLE: 'software-engineer' });
+    const ctx = s.real(s.w.role('K-8', 'file:1'), { ROSTER_ROLE: 'software-engineer' });
     const url = upload(s, ctx, 'shot.png');
     const page = s.put(ctx, 'plan', '<title>図のある計画</title><img src="files/shot-1.png">');
     expect(() => fileDelete(ctx, [url], { yes: true })).toThrow('TPM 担当だけ');
@@ -213,7 +213,7 @@ describe.skipIf(!FILES)('cli と pagetray のつなぎ（file。置き場が 0.4
 
   test.skipIf(!REPLY)('返事の状態: 返事待ちにして、絞って探せて、答えたにできる。消したページ・無いページには書けない', () => {
     const s = setup();
-    const se = s.real(s.w.role('K-9', 'file:1'), { TPM_ROLE: 'software-engineer' });
+    const se = s.real(s.w.role('K-9', 'file:1'), { ROSTER_ROLE: 'software-engineer' });
     const first = s.put(se, 'confirm', '<title>案を選ぶ</title>');
     const second = s.put(se, 'confirm', '<title>計画の確認</title>');
     const result = s.put(se, 'result', '<title>結果</title>');
@@ -243,7 +243,7 @@ describe.skipIf(!FILES)('cli と pagetray のつなぎ（file。置き場が 0.4
 
   test.skipIf(REPLY)('返事の状態を持てない置き場（0.5.0 より前）: 書く道は old を返し、返事待ちは 1 枚も数えない', () => {
     const s = setup();
-    const se = s.real(s.w.role('K-9', 'file:1'), { TPM_ROLE: 'software-engineer' });
+    const se = s.real(s.w.role('K-9', 'file:1'), { ROSTER_ROLE: 'software-engineer' });
     const first = s.put(se, 'confirm', '<title>案を選ぶ</title>');
     s.put(se, 'confirm', '<title>計画の確認</title>');
     expect(setReply(se, first, 'waiting')).toBe('old');
@@ -258,7 +258,7 @@ describe.skipIf(!SENDER)('cli と pagetray のつなぎ（送り手。置き場�
   test('castlist の設定と session の id があると、ページと file の記録に、付けた issuer と ref が残る（置き場に castlist の URL が無いので未確認）', () => {
     const s = setup();
     const sid = '5f0c2a8e-0000-4000-8000-0000000000e2';
-    const ctx = s.real(s.w.role('K-20', 'file:1'), { TPM_ROLE: 'software-engineer', TPM_CASTLIST_URL: 'http://127.0.0.1:8802', CLAUDE_CODE_SESSION_ID: sid });
+    const ctx = s.real(s.w.role('K-20', 'file:1'), { ROSTER_ROLE: 'software-engineer', ROSTER_CASTLIST_URL: 'http://127.0.0.1:8802', CLAUDE_CODE_SESSION_ID: sid });
     const sender = { issuer: castlistIssuer(s.w.tpm.state.dir), ref: `claude.session:${sid}`, actor: null };
     const url = s.put(ctx, 'result', '<title>送り手のある結果</title><p>つなぎの試験</p>');
     expect(s.list(s.tpm, { key: 'K-20' })).toEqual([expect.objectContaining({ url, sender: expect.objectContaining(sender) as unknown })]);
@@ -268,7 +268,7 @@ describe.skipIf(!SENDER)('cli と pagetray のつなぎ（送り手。置き場�
     const listed = JSON.parse(fileList(s.tpm, { key: 'K-20', json: true }).join('\n')) as (FileRecord & { url: string })[];
     expect(listed).toEqual([expect.objectContaining({ url: file, sender: expect.objectContaining(sender) as unknown })]);
     // 付けない時は、前と同じに置き、sender は出ない。
-    const plain = s.put(s.real(s.w.role('K-21', 'file:1'), { TPM_ROLE: 'software-engineer' }), 'result', '<title>送り手の無い結果</title>');
+    const plain = s.put(s.real(s.w.role('K-21', 'file:1'), { ROSTER_ROLE: 'software-engineer' }), 'result', '<title>送り手の無い結果</title>');
     expect(s.list(s.tpm, { key: 'K-21' })).toEqual([expect.not.objectContaining({ sender: expect.anything() as unknown })]);
     expect(s.list(s.tpm, { key: 'K-21' })[0]?.url).toBe(plain);
   });
@@ -280,10 +280,10 @@ const MARKS = URL !== '' && atLeast((JSON.parse(execFileSync('curl', ['-fsS', `$
 describe.skipIf(!MARKS)('cli と pagetray のつなぎ（レビューの印。置き場が 0.8.0 から）', () => {
   test('依頼書にレビュー待ちと見る物、レビューのページに判定と見た物、上げた件の待ち。Product Manager の返事待ちには入らない', () => {
     const s = setup();
-    const se = s.real(s.w.role('K-30', 'file:1'), { TPM_ROLE: 'software-engineer' });
+    const se = s.real(s.w.role('K-30', 'file:1'), { ROSTER_ROLE: 'software-engineer' });
     const plan = s.put(se, 'plan', '<title>計画</title>');
     const brief = s.put(se, 'brief', '<title>レビューの依頼書</title>');
-    const review = s.put(s.real(s.w.role('K-30.staff', 'file:2'), { TPM_ROLE: 'staff-engineer' }), 'review', '<title>レビュー</title>', 'K-30');
+    const review = s.put(s.real(s.w.role('K-30.staff', 'file:2'), { ROSTER_ROLE: 'staff-engineer' }), 'review', '<title>レビュー</title>', 'K-30');
     const PR = 'https://github.com/o/r/pull/7';
     const asks: Review[] = [
       { n: 1, key: 'K-30', url: plan, by: 'SWE K-30', askedAt: '2026-11-23T00:00:00.000Z', brief },

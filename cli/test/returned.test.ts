@@ -17,8 +17,8 @@ const NOW = '2026-11-20T12:00:00.000Z';
 const as = (ctx: Context, env: NodeJS.ProcessEnv): Context => ({ ...ctx, env: { ...ctx.env, ...env } });
 /** TPM 担当の周りで、担当の Key を持たない session（起こし直した TPM 担当）。 */
 const asTpm = (ctx: Context, launch: string): Context => {
-  const env: NodeJS.ProcessEnv = { ...ctx.env, TPM_LAUNCH: launch };
-  delete env.TPM_KEY;
+  const env: NodeJS.ProcessEnv = { ...ctx.env, ROSTER_LAUNCH: launch };
+  delete env.ROSTER_KEY;
   return { ...ctx, env };
 };
 
@@ -33,7 +33,7 @@ function morning(): World & { texts: string[] } {
   hello(w.role('t-8b6j', 'file:1'));
   w.wire.hold('file:1');
   const texts = ['db.md に型', 'confirm-1 (1) 済み', 'お勧めで', '受け取った（#83）', 'A: ?at= のまま', 'ER 図の案を 3 つ'];
-  for (const text of texts) notify(as(w.tpm, { TPM_LAUNCH: 'L0' }), 't-8b6j', { text });
+  for (const text of texts) notify(as(w.tpm, { ROSTER_LAUNCH: 'L0' }), 't-8b6j', { text });
   return { ...w, texts };
 }
 
@@ -44,7 +44,7 @@ describe('送りの記録に、送り手と届く担当を書く', () => {
     const w = morning();
     expect(log(w)[0]).toMatchObject({ sender: { key: 'tpm', launch: 'L0' }, recipient: { key: 't-8b6j', launch: 'L1' } });
     w.wire.release('file:1');
-    askTpm(as(w.role('t-8b6j', 'file:1'), { TPM_LAUNCH: 'L1' }), { text: '聞きたい', waitingFor: '答え' });
+    askTpm(as(w.role('t-8b6j', 'file:1'), { ROSTER_LAUNCH: 'L1' }), { text: '聞きたい', waitingFor: '答え' });
     expect(log(w).at(-1)).toMatchObject({ sender: { key: 't-8b6j', launch: 'L1' }, recipient: { key: 'tpm' } });
   });
 
@@ -56,7 +56,7 @@ describe('送りの記録に、送り手と届く担当を書く', () => {
     // Staff の席（別の Key・別の居場所）が TPM 担当に聞き、TPM 担当が t-4q2b の答えとして --reply-to で返す
     writeRole(w.tpm, { ...requireRole(w.tpm, 't-4q2b'), key: 't-4q2b.staff', subject: 't-4q2b', role: 'staff-engineer', title: 'レビュー t-4q2b: 計画', address: 'file:2', launch: 'S1' });
     w.tpm.transport.spawn({ title: 'レビュー t-4q2b: 計画', cwd: w.project, command: 'claude' });
-    const staff = as(w.role('t-4q2b.staff', 'file:2'), { TPM_LAUNCH: 'S1' });
+    const staff = as(w.role('t-4q2b.staff', 'file:2'), { ROSTER_LAUNCH: 'S1' });
     hello(staff);
     askTpm(staff, { text: '読めない', waitingFor: '答え' });
     const asked = log(w).at(-1);
@@ -88,7 +88,7 @@ describe('新しい session の始まりに、届け違いを見つけて返す�
   test('同じ形で受けたのが別の担当 → TPM 担当へ【returned】を 1 通（6 通の id と先頭の字）', () => {
     const w = morning();
     assign(w.tpm, 't-4q2b', { role: 'software-engineer', title: '直す', brief: BRIEF, wait: 0 });
-    const se = as(w.role('t-4q2b', 'file:1'), { TPM_LAUNCH: 'L9' });
+    const se = as(w.role('t-4q2b', 'file:1'), { ROSTER_LAUNCH: 'L9' });
     expect(checkStart(se)?.systemMessage).toMatch(/TPM 担当に【returned】で返しました。/);
     const back = w.wire.inbox('file:tpm').filter(m => m.text.startsWith('【returned】'));
     expect(back).toHaveLength(1);
@@ -116,13 +116,13 @@ describe('新しい session の始まりに、届け違いを見つけて返す�
 
   test('同じ Key・同じ起こし（/clear の後）→ 何もしない', () => {
     const w = morning();
-    expect(checkStart(as(w.role('t-8b6j', 'file:1'), { TPM_LAUNCH: 'L1' }))).toBeUndefined();
+    expect(checkStart(as(w.role('t-8b6j', 'file:1'), { ROSTER_LAUNCH: 'L1' }))).toBeUndefined();
     expect(w.wire.mailbox('file:1').every(m => m.state === 'queued')).toBe(true);
   });
 
   test('同じ Key・違う起こし（起こし直した担当）→ 届け違い', () => {
     const w = morning();
-    expect(checkStart(as(w.role('t-8b6j', 'file:1'), { TPM_LAUNCH: 'L5' }))?.systemMessage).toMatch(/6 通ありました/);
+    expect(checkStart(as(w.role('t-8b6j', 'file:1'), { ROSTER_LAUNCH: 'L5' }))?.systemMessage).toMatch(/6 通ありました/);
   });
 
   test('宛先が TPM 担当で、受けたのが起こし直した TPM 担当 → 何もしない（TPM 担当は役割で比べる）', () => {
@@ -131,8 +131,8 @@ describe('新しい session の始まりに、届け違いを見つけて返す�
     assign(w.tpm, 't-x7k2', { role: 'software-engineer', title: '直す', brief: BRIEF, wait: 0 });
     hello(w.role('t-x7k2', 'file:1'));
     w.wire.hold('file:tpm');
-    askTpm(as(w.role('t-x7k2', 'file:1'), { TPM_LAUNCH: 'L1' }), { text: '聞きたい', waitingFor: '答え' });
-    expect(checkStart(as(w.tpm, { TPM_LAUNCH: 'T2' }))).toBeUndefined();
+    askTpm(as(w.role('t-x7k2', 'file:1'), { ROSTER_LAUNCH: 'L1' }), { text: '聞きたい', waitingFor: '答え' });
+    expect(checkStart(as(w.tpm, { ROSTER_LAUNCH: 'T2' }))).toBeUndefined();
   });
 
   test('送りの記録の無い id・届く担当の無い前の版の行 → 何もしない', () => {
@@ -153,7 +153,7 @@ describe('新しい session の始まりに、届け違いを見つけて返す�
     assign(w.tpm, 't-4q2b', { role: 'software-engineer', title: '直す', brief: BRIEF, wait: 0 });
     writeRole(w.tpm, { ...requireRole(w.tpm, 't-4q2b'), address: 'file:1', launch: 'L9' });
     notify(w.tpm, 't-4q2b', { text: 'あなた宛て' });
-    const out = checkStart(as(w.role('t-4q2b', 'file:1'), { TPM_LAUNCH: 'L9' }));
+    const out = checkStart(as(w.role('t-4q2b', 'file:1'), { ROSTER_LAUNCH: 'L9' }));
     expect(out?.systemMessage).toMatch(/6 通ありました/);
     expect(w.wire.mailbox('file:1').every(m => m.state === 'queued')).toBe(true);
   });
@@ -161,7 +161,7 @@ describe('新しい session の始まりに、届け違いを見つけて返す�
   test('前の session が送って、まだ待ちの物がこの居場所にある（今朝の形で、落ちた担当が TPM 担当へ送っていた物）→ 既読にしない', () => {
     const w = morning();
     w.wire.hold('file:tpm');
-    const old = as(w.role('t-8b6j', 'file:1'), { TPM_LAUNCH: 'L1' });
+    const old = as(w.role('t-8b6j', 'file:1'), { ROSTER_LAUNCH: 'L1' });
     inbox(old);
     askTpm(old, { text: '前の担当の問い', waitingFor: '答え' });
     const out = checkStart(asTpm(w.role('t-8b6j', 'file:1'), 'L2'));
@@ -172,7 +172,7 @@ describe('新しい session の始まりに、届け違いを見つけて返す�
 
   test('自分が送って、まだ相手に届いていない物（TPM 担当の【notify】）がある時に compact → 何もしない・相手の待ちは既読にしない', () => {
     const w = morning();
-    expect(checkStart(as(w.tpm, { TPM_LAUNCH: 'L0' }))).toBeUndefined();
+    expect(checkStart(as(w.tpm, { ROSTER_LAUNCH: 'L0' }))).toBeUndefined();
     expect(w.wire.mailbox('file:1').every(m => m.state === 'queued')).toBe(true);
   });
 
@@ -210,7 +210,7 @@ describe('新しい session の始まりに、届け違いを見つけて返す�
     const w = morning();
     assign(w.tpm, 't-4q2b', { role: 'software-engineer', title: '直す', brief: BRIEF, wait: 0 });
     w.tpm.state.write('tpm.jsonc', { address: 'file:gone' });
-    const se = as(w.role('t-4q2b', 'file:1'), { TPM_LAUNCH: 'L9' });
+    const se = as(w.role('t-4q2b', 'file:1'), { ROSTER_LAUNCH: 'L9' });
     for (const s of log(w)) w.wire.mark(s.id, { state: 'delivered', deliveredVia: 'claude.wake', deliveredAt: NOW });
     expect(checkStart(se)?.systemMessage).toMatch(/TPM 担当に返せませんでした（TPM 担当の居場所がありません）。roster ask tpm で、台帳 #1 の届け違いを知らせてください。/);
     expect(w.tpm.state.lines('returned.jsonl')).toEqual([]);

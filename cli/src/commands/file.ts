@@ -133,7 +133,7 @@ export interface FilePutOptions {
 
 /**
  * file を置き場に上げる。置き場が番号を決めて DB に持ち、控えの `<project>/<Key>/files/<語>-<番号>.<拡張子>` に写して、URL とページからの参照の書き方を返す。
- * Key は --key、無ければ $TPM_KEY（担当）。画像と PDF は --reviewed が無ければ、字の file は秘密の形に当たれば（--allow-secret が無ければ）、置き場に頼む前に止まる。
+ * Key は --key、無ければ $ROSTER_KEY（担当）。画像と PDF は --reviewed が無ければ、字の file は秘密の形に当たれば（--allow-secret が無ければ）、置き場に頼む前に止まる。
  */
 export function filePut(ctx: Context, file: string, options: FilePutOptions): string[] {
   if (!existsSync(file) || !statSync(file).isFile()) throw new TpmError(`file がありません: ${file}`);

@@ -40,7 +40,7 @@ jobs:
         working-directory: cli
       - name: roster の命令を本物に向けて流す
         working-directory: cli
-        # $TPM_E2E_PAGES_URL が無いと、この試験は飛ばされる（ふだんの pnpm test）。ここでは必ず渡す。
-        run: TPM_E2E_PAGES_URL=http://127.0.0.1:8801 pnpm exec vitest run test/pagetray-e2e.test.ts
+        # $ROSTER_E2E_PAGES_URL が無いと、この試験は飛ばされる（ふだんの pnpm test）。ここでは必ず渡す。
+        run: ROSTER_E2E_PAGES_URL=http://127.0.0.1:8801 pnpm exec vitest run test/pagetray-e2e.test.ts
       - if: always()
         run: docker logs e2e-store

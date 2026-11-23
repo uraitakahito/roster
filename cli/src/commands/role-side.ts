@@ -9,14 +9,15 @@ import { issueTracker } from './issue.ts';
 import { paint } from './launch.ts';
 import { issueCopyLine, markShown } from './messages.ts';
 import { recordingTo, tpmHello } from './tpm-side.ts';
+import { envOf } from '../env.ts';
 
 /**
- * 名乗る。$TPM_KEY が無ければ TPM 担当の名乗り（tpmHello）。
+ * 名乗る。$ROSTER_KEY が無ければ TPM 担当の名乗り（tpmHello）。
  * 担当なら、状態を出し、名簿に自分の宛先と時刻を書き、受け持ちを返す。担当の model と effort は roster assign が決めたので、旗は受けない。
  * castlist を設定していれば、名乗りを castlist に送り、`アクター: <名>` の行を頭に出す（castlist が止まっていれば、名乗らずに止まる）。
  */
 export function hello(ctx: Context, options: { model?: string, effort?: string } = {}): string[] {
-  if (!ctx.env.TPM_KEY) return tpmHello(ctx, options);
+  if (!envOf(ctx.env, 'KEY')) return tpmHello(ctx, options);
   if (options.model !== undefined || options.effort !== undefined) {
     throw new TpmError('--model・--effort は TPM 担当が名乗るときだけ使う（担当の model と effort は roster assign が決める）');
   }

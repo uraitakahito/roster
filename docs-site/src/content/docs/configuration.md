@@ -138,9 +138,9 @@ shell の profile などで書くと、すべての project・すべての担当
 
 | 環境変数 | 決める物 | 例 |
 |---|---|---|
-| `TPM_MODEL` | `--model` | `claude-fable-5-2` |
-| `TPM_EFFORT` | `--effort` | `high` |
-| `TPM_PERMISSION_MODE` | `--permission-mode` | `bypassPermissions` |
+| `ROSTER_MODEL` | `--model` | `claude-fable-5-2` |
+| `ROSTER_EFFORT` | `--effort` | `high` |
+| `ROSTER_PERMISSION_MODE` | `--permission-mode` | `bypassPermissions` |
 
 欄ごとに、次の順で先に値がある物を使う（空の字は書かなかったものとみなす）。
 
@@ -148,18 +148,18 @@ shell の profile などで書くと、すべての project・すべての担当
 |---|---|---|
 | 1 | 命令の旗（`roster assign --model` など。Sustaining Engineer 担当は `.claude/dependabot/config.jsonc` に書いた欄を `/dependabot-triage` が旗にする） | その 1 回 |
 | 2 | `.claude/roles/config.jsonc` の担当の欄 | Software Engineer・DevOps Engineer・Staff Engineer・Auditor |
-| 3 | 環境変数 `TPM_MODEL`・`TPM_EFFORT`・`TPM_PERMISSION_MODE` | すべて（TPM 担当を含む） |
+| 3 | 環境変数 `ROSTER_MODEL`・`ROSTER_EFFORT`・`ROSTER_PERMISSION_MODE` | すべて（TPM 担当を含む） |
 | 4 | コードの既定（TPM 担当・Software Engineer 担当・Sustaining Engineer 担当は Opus 5.5・medium、DevOps Engineer 担当は Opus 5.5・low、Staff Engineer 担当は Opus 5.5・high、Auditor は Fable 5.2・high、どれも `bypassPermissions`） | すべて |
 
 ```sh
 # ~/.zshrc など
-export TPM_MODEL=claude-fable-5-2
-export TPM_EFFORT=medium
+export ROSTER_MODEL=claude-fable-5-2
+export ROSTER_EFFORT=medium
 ```
 
-- model は、どこに書いても `claude-` で始まる id（`claude-opus-5-5` など）にする。`opus`・`sonnet`・`haiku`・`opus[1m]` などの別名は、`roster start`・`roster assign`・`roster audit start`・`roster hello` が、どこから来た値か（`--model`・`config.jsonc の <役割>.model`・`$TPM_MODEL`）を添えて断る（起こした model を castlist に残す時、別名では何の model か決まらないため）。
+- model は、どこに書いても `claude-` で始まる id（`claude-opus-5-5` など）にする。`opus`・`sonnet`・`haiku`・`opus[1m]` などの別名は、`roster start`・`roster assign`・`roster audit start`・`roster hello` が、どこから来た値か（`--model`・`config.jsonc の <役割>.model`・`$ROSTER_MODEL`）を添えて断る（起こした model を castlist に残す時、別名では何の model か決まらないため）。
 - `roster start` は環境変数を読んで 1 行の `--model`・`--effort`・`--permission-mode` に入れる。TPM 担当が名乗る `roster hello` も同じ値を状態の `model` に出す（effort は、Claude Code が入れる `$CLAUDE_EFFORT` があればそれ）。
-- `roster start` は、書いてある環境変数を 1 行の頭（`PATH=…` の隣）にも写す。`roster assign` は TPM 担当の居場所で動き、TPM 担当の Claude Code の環境変数を読むので、profile で export した値も、`TPM_MODEL=… roster start` のように 1 行を出すときだけ付けた値も、TPM 担当と担当の両方に効く。
+- `roster start` は、書いてある環境変数を 1 行の頭（`PATH=…` の隣）にも写す。`roster assign` は TPM 担当の居場所で動き、TPM 担当の Claude Code の環境変数を読むので、profile で export した値も、`ROSTER_MODEL=… roster start` のように 1 行を出すときだけ付けた値も、TPM 担当と担当の両方に効く。
 
 ## ページの置き場の環境変数（任意）
 
@@ -167,8 +167,8 @@ export TPM_EFFORT=medium
 
 | 環境変数 | 決める物 | 無いとき |
 |---|---|---|
-| `TPM_PAGES_DIR` | 控えの folder（置いた・読んだページと file を roster を動かす機械に写す所。前の置き場の folder と同じ） | `$XDG_DATA_HOME/tpm/pages`（`$XDG_DATA_HOME` も無ければ `~/.local/share/tpm/pages`） |
-| `TPM_PAGES_URL` | 置き場の URL（container の port の publish と同じにする） | `http://127.0.0.1:8801` |
+| `ROSTER_PAGES_DIR` | 控えの folder（置いた・読んだページと file を roster を動かす機械に写す所。前の置き場の folder と同じ） | `$XDG_DATA_HOME/roster/pages`（`$XDG_DATA_HOME` も無ければ `~/.local/share/roster/pages`） |
+| `ROSTER_PAGES_URL` | 置き場の URL（container の port の publish と同じにする） | `http://127.0.0.1:8801` |
 
 ## アクターの台帳（castlist）（任意）
 
@@ -176,11 +176,11 @@ export TPM_EFFORT=medium
 
 - project の folder の `.claude/roles/config.jsonc` に `"castlist": "http://127.0.0.1:8802"` を書くと、`roster` が castlist に送る。直下の folder の設定に書いた値は読まない（連携と同じ）。
 - 書かなければ、`roster` は castlist に何も送らない。hook の命令（`roster castlist session-start`・`roster castlist session-end`）はどの席にも付くが、何もしない。届け違いの hook（`roster returned check`）は castlist に依らずに動くが、担当の起こしの id は castlist を設定した時だけ名簿に書かれるので、同じ Key で起こし直した担当への届け違いは見分けない（Key が違う物は見分ける。[担当のあいだの決まり](/protocol/#届け違い)）。castlist を読む命令（`roster castlist find` など。[担当のあいだの決まり](/protocol/#監査の検索を読む)）は、設定していないと言う 1 行で止まり、`roster incident timeline` はアクターの欄を出さない。
-- 環境変数 `TPM_CASTLIST_URL` があれば、設定の値より先に使う（試験と、port を替えた時のため）。
+- 環境変数 `ROSTER_CASTLIST_URL` があれば、設定の値より先に使う（試験と、port を替えた時のため）。
 
 | 環境変数 | 決める物 | 無いとき |
 |---|---|---|
-| `TPM_CASTLIST_URL` | castlist の URL（`http://127.0.0.1:<port>` か `http://localhost:<port>`） | 設定の `castlist`。それも無ければ、castlist に何も送らない |
+| `ROSTER_CASTLIST_URL` | castlist の URL（`http://127.0.0.1:<port>` か `http://localhost:<port>`） | 設定の `castlist`。それも無ければ、castlist に何も送らない |
 
 ## 通知のバナー（任意）
 
@@ -244,9 +244,9 @@ Dependabot の skill を使う project では、`.claude/roles/config.jsonc` の
 | `cwd` | Sustaining Engineer 担当を起こす folder（無ければ使う側の project の folder） | `"/path/to/workspace"` |
 | `maxConcurrent` | 同時に動かす Sustaining Engineer 担当の数 | `3` |
 | `hours` | 依存の version の公開から何時間たったら merge を検討するか | `72` |
-| `model` | Sustaining Engineer 担当の model（無ければ `TPM_MODEL`、それも無ければ既定） | `"claude-opus-5-5"` |
-| `effort` | Sustaining Engineer 担当の effort（無ければ `TPM_EFFORT`、それも無ければ既定） | `"medium"` |
-| `permissionMode` | Sustaining Engineer 担当の `--permission-mode`（無ければ `TPM_PERMISSION_MODE`、それも無ければ既定） | `"bypassPermissions"` |
+| `model` | Sustaining Engineer 担当の model（無ければ `ROSTER_MODEL`、それも無ければ既定） | `"claude-opus-5-5"` |
+| `effort` | Sustaining Engineer 担当の effort（無ければ `ROSTER_EFFORT`、それも無ければ既定） | `"medium"` |
+| `permissionMode` | Sustaining Engineer 担当の `--permission-mode`（無ければ `ROSTER_PERMISSION_MODE`、それも無ければ既定） | `"bypassPermissions"` |
 | `mergeMethod` | `gh pr merge` の方法 | `"squash"` |
 | `rebaseWaitMinutes` | `@dependabot rebase` の応じた印 👍 を待つ分 | `20` |
 

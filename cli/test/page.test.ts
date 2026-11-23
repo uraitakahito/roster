@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
@@ -21,8 +21,8 @@ const PNG = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('
 function setup() {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'roster-pages-')));
   const w = world();
-  const wire = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({ ...ctx, env: { ...ctx.env, TPM_PAGES_DIR: dir, ...env } });
-  const role = wire(w.role('t-x7k2', 'file:1'), { TPM_ROLE: 'software-engineer' });
+  const wire = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({ ...ctx, env: { ...ctx.env, ROSTER_PAGES_DIR: dir, ...env } });
+  const role = wire(w.role('t-x7k2', 'file:1'), { ROSTER_ROLE: 'software-engineer' });
   const tpm = wire(w.tpm);
   writeRole(tpm, { key: 't-x7k2', role: 'software-engineer', title: 'SWE t-x7k2', cwd: w.project, addDirs: [], model: 'm', effort: 'e', permissionMode: 'p', address: 'file:1' });
   tpm.state.write('tpm.jsonc', { address: 'file:tpm' });
@@ -82,7 +82,7 @@ describe('roster page put', () => {
 
   test('名簿に宛先が無くても置ける（居場所は空）', () => {
     const s = setup();
-    const other = { ...s.role, env: { ...s.role.env, TPM_KEY: 't-none' } };
+    const other = { ...s.role, env: { ...s.role.env, ROSTER_KEY: 't-none' } };
     pagePut(other, s.html, { kind: 'plan' });
     expect(s.stored(`/${s.project}/t-none/plan-1.html`)).toMatchObject({ workspace: '' });
   });
@@ -182,16 +182,16 @@ describe('roster page put', () => {
     const s = setup();
     const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'roster-scratch-')));
     const stray = { ...s.tpm, project: scratch, state: new State(join(s.tpm.state.dir, '..', basename(scratch))) };
-    expect(() => pagePut(stray, s.html, { kind: 'brief', key: 't-x7k2' })).toThrow('$TPM_PROJECT');
+    expect(() => pagePut(stray, s.html, { kind: 'brief', key: 't-x7k2' })).toThrow('$ROSTER_PROJECT');
     expect(s.curls()).toEqual([]);
     // TPM 担当が起きた印があれば、設定の file が無くても置ける（設定を書く前の project）。
     stray.state.write('tpm.jsonc', { address: 'file:tpm' });
     expect(pagePut(stray, s.html, { kind: 'brief', key: 't-x7k2' })[1]).toContain('/brief-1.html');
   });
 
-  test('$TPM_PAGES_URL で置き場の URL を替えられる（末尾の / は落とす）', () => {
+  test('$ROSTER_PAGES_URL で置き場の URL を替えられる（末尾の / は落とす）', () => {
     const s = setup();
-    const ctx = { ...s.role, env: { ...s.role.env, TPM_PAGES_URL: 'http://127.0.0.1:9900/' } };
+    const ctx = { ...s.role, env: { ...s.role.env, ROSTER_PAGES_URL: 'http://127.0.0.1:9900/' } };
     expect(pagePut(ctx, s.html, { kind: 'plan' })[1]).toBe(`URL: http://127.0.0.1:9900/${s.project}/t-x7k2/plan-1.html`);
     expect(s.curls()[0]?.at(-1)).toMatch(/^http:\/\/127\.0\.0\.1:9900\/api\/pages\?/);
   });
@@ -200,8 +200,8 @@ describe('roster page put', () => {
 /** 送り手の試験の castlist の URL（置き場に聞かせるだけで、roster からは送らない）と、Claude Code の session の id。 */
 const CASTLIST = 'http://127.0.0.1:8802';
 const SID = '5f0c2a8e-0000-4000-8000-000000000001';
-/** castlist の設定（$TPM_CASTLIST_URL）と session の id を足した周り。 */
-const seated = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({ ...ctx, env: { ...ctx.env, TPM_CASTLIST_URL: CASTLIST, CLAUDE_CODE_SESSION_ID: SID, ...env } });
+/** castlist の設定（$ROSTER_CASTLIST_URL）と session の id を足した周り。 */
+const seated = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({ ...ctx, env: { ...ctx.env, ROSTER_CASTLIST_URL: CASTLIST, CLAUDE_CODE_SESSION_ID: SID, ...env } });
 
 describe('roster page put の送り手（pagetray 0.6.0 の actor_issuer・actor_ref）', () => {
   test('castlist の設定と session の id があれば、issuer と claude.session:<id> を、URL の引数に符号にして付ける', () => {
@@ -295,7 +295,7 @@ describe('roster page path', () => {
     const s = setup();
     const url = pagePut(s.role, s.html, { kind: 'plan' })[1]?.replace('URL: ', '') ?? '';
     // ほかの機械の控えは無い、という形にする。
-    const other = { ...s.role, env: { ...s.role.env, TPM_PAGES_DIR: join(s.dir, 'other') } };
+    const other = { ...s.role, env: { ...s.role.env, ROSTER_PAGES_DIR: join(s.dir, 'other') } };
     const path = join(s.dir, 'other', s.project, 't-x7k2', 'plan-1.html');
     expect(pagePath(other, url)).toEqual([path]);
     expect(readFileSync(path, 'utf8')).toBe(HTML);
@@ -351,7 +351,7 @@ describe('roster page path と、ページが参照する file', () => {
     filePut(s.tpm, png, { reviewed: true, name: 'shot.png', key: 't-y' });
     writeFileSync(s.html, body('t-y'));
     const url = pagePut(s.role, s.html, { kind: 'result' })[1]?.replace('URL: ', '') ?? '';
-    const other = { ...s.role, env: { ...s.role.env, TPM_PAGES_DIR: join(s.dir, 'other') } };
+    const other = { ...s.role, env: { ...s.role.env, ROSTER_PAGES_DIR: join(s.dir, 'other') } };
     const at = (...parts: string[]) => join(s.dir, 'other', s.project, ...parts);
     return { ...s, url, other, at };
   }
@@ -569,7 +569,7 @@ describe('roster page delete', () => {
 
   test('Auditor が置いたページは、Product Manager の言葉（--pm）が無ければ消せない。消した事は記録に残る', () => {
     const s = placed();
-    const auditor = { ...s.role, env: { ...s.role.env, TPM_KEY: 'audit', TPM_ROLE: 'auditor' } };
+    const auditor = { ...s.role, env: { ...s.role.env, ROSTER_KEY: 'audit', ROSTER_ROLE: 'auditor' } };
     pagePut(auditor, s.html, { kind: 'audit' });
     pagePut(auditor, s.html, { kind: 'audit' });
     const audit = (n: number): string => s.url('audit', `audit-${n}.html`);
@@ -691,9 +691,21 @@ describe('roster page delete', () => {
 });
 
 describe('置き場の既定', () => {
-  test('控えの folder は $TPM_PAGES_DIR、無ければ $XDG_DATA_HOME/tpm/pages。URL は既定 127.0.0.1:8801', () => {
-    expect(pagesDir({ TPM_PAGES_DIR: '/p' })).toBe('/p');
-    expect(pagesDir({ XDG_DATA_HOME: '/d' })).toBe('/d/tpm/pages');
+  test('控えの folder は $ROSTER_PAGES_DIR、無ければ $XDG_DATA_HOME/roster/pages。URL は既定 127.0.0.1:8801', () => {
+    expect(pagesDir({ ROSTER_PAGES_DIR: '/p' })).toBe('/p');
+    expect(pagesDir({ XDG_DATA_HOME: '/d' })).toBe('/d/roster/pages');
     expect(pagesUrl({})).toBe(BASE);
+  });
+
+  test('古い在り処（.local/share/tpm）が本物の folder なら止め、symlink なら新しい在り処を使う', () => {
+    const data = realpathSync(mkdtempSync(join(tmpdir(), 'roster-data-')));
+    mkdirSync(join(data, 'tpm'));
+    // 印（pages/）の無い share/tpm は roster の物でないので、触らない。
+    expect(pagesDir({ XDG_DATA_HOME: data })).toBe(join(data, 'roster', 'pages'));
+    mkdirSync(join(data, 'tpm', 'pages'));
+    expect(() => pagesDir({ XDG_DATA_HOME: data })).toThrow(/古い在り処です.*mv /);
+    renameSync(join(data, 'tpm'), join(data, 'roster'));
+    symlinkSync('roster', join(data, 'tpm'));
+    expect(pagesDir({ XDG_DATA_HOME: data })).toBe(join(data, 'roster', 'pages'));
   });
 });

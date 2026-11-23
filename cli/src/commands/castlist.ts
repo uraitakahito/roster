@@ -1,6 +1,6 @@
 // roster castlist …（hook が呼ぶ）と、ほかの命令（guard・hello・close）が castlist に送る物。送る物の形は castlist の docs/src/api.md。
 // session 1 つが castlist のアクター 1 つ。登録の答え（id と名）は状態の folder の sessions/<session の id>.jsonc に控え、
-// 起こし 1 回（$TPM_LAUNCH）ごとの session の並びを launches/<起こしの id>.jsonc に控える（/clear と fork の継ぐ線を、前の session から引くため）。
+// 起こし 1 回（$ROSTER_LAUNCH）ごとの session の並びを launches/<起こしの id>.jsonc に控える（/clear と fork の継ぐ線を、前の session から引くため）。
 // 出来事・線・model と effort の id は、issuer・session・種類（と、何度も起きる物は番号）で決める。送り直しても同じ id なので、castlist は 2 度足さない
 // （castlist の id は issuer をまたいで 1 つなので、issuer の hash を頭に付ける）。
 // 番号は、送れた時だけ進める（届かなかった物は、次に同じ id で送り直す）。
@@ -11,6 +11,7 @@ import { busyMessage, castlistUrl, downMessage, issuerOf, modelOf, request, requ
 import type { Verdict } from '../guard.ts';
 import type { RoleRecord } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
+import { envOf } from '../env.ts';
 
 /** 控えた session 1 つ（`sessions/<session の id>.jsonc`）。 */
 export interface SessionRecord {
@@ -120,15 +121,15 @@ function workspaceRef(ctx: Context): string | undefined {
 /**
  * session を登録し（鍵は session。何度登録しても同じアクター）、きっかけの出来事と線を送る。控えには、その時の居場所（cmux の ref と uuid）も書く。
  * revive なら、推しの幕引きで居ないにした session を、今の居場所で登録し直して、番号つきの再登場（source は guard）だけを送る（線は送らない）。
- * 頼んだ model と effort（$TPM_LAUNCH_MODEL・$TPM_LAUNCH_EFFORT）は、roster が起こしたばかりの process（$TPM_LAUNCH_FRESH）の初めの登録でだけ送る
+ * 頼んだ model と effort（$ROSTER_LAUNCH_MODEL・$ROSTER_LAUNCH_EFFORT）は、roster が起こしたばかりの process（$ROSTER_LAUNCH_FRESH）の初めの登録でだけ送る
  * （/clear の後の session は同じ環境変数を持つが、その後に /model で替えたかもしれないので送らない）。
  */
 function enter(ctx: Context, url: string, sid: string, source: Source, revive = false): Sent {
-  const launch = text(ctx.env.TPM_LAUNCH);
+  const launch = text(envOf(ctx.env, 'LAUNCH'));
   const launched = launch === undefined ? { sessions: [] } : ctx.state.read<LaunchRecord>(launchFile(launch)) ?? { sessions: [] };
-  const model = text(ctx.env.TPM_LAUNCH_MODEL);
-  const effort = text(ctx.env.TPM_LAUNCH_EFFORT);
-  const fresh = ['startup', 'resume', 'guard', 'hello'].includes(source) && ctx.env.TPM_LAUNCH_FRESH === '1' && launched.requested !== true && model !== undefined && effort !== undefined;
+  const model = text(envOf(ctx.env, 'LAUNCH_MODEL'));
+  const effort = text(envOf(ctx.env, 'LAUNCH_EFFORT'));
+  const fresh = ['startup', 'resume', 'guard', 'hello'].includes(source) && envOf(ctx.env, 'LAUNCH_FRESH') === '1' && launched.requested !== true && model !== undefined && effort !== undefined;
   const seat = seatOf(ctx);
   const ref = workspaceRef(ctx);
   const uuid = text(ctx.env.CMUX_WORKSPACE_ID);
@@ -172,7 +173,7 @@ function enter(ctx: Context, url: string, sid: string, source: Source, revive = 
   }
   const sent = sourceEvent(ctx, url, record, source);
   if (sent !== 'ok') return sent;
-  const by = text(ctx.env.TPM_LAUNCHED_BY);
+  const by = text(envOf(ctx.env, 'LAUNCHED_BY'));
   if (['startup', 'resume', 'guard', 'hello'].includes(source) && previous === undefined && by !== undefined) {
     return put(ctx, url, 'links', idOf(ctx, 'l', sid, 'launched'), { type: 'launched', from: by, to: sessionRef(sid) });
   }

@@ -13,6 +13,7 @@ import { roleOf } from './infra.ts';
 import { assertRead } from './messages.ts';
 import { inState, isStorePage, PARTY_SINCE, party, REPLY_LABELS, setReply, type Party, type ReplyState } from './reply.ts';
 import { call, compareStored, down, fetchTo, inStore, KEY, localPath, pagesDir, pagesUrl, PROJECT, reason, removeLocal, requireKey, selfAddress, sender, senderRefused, writeCopy } from './store.ts';
+import { envOf } from '../env.ts';
 
 /** ページの種類。file の名の頭になる（`<種類>-<番号>.html`）。置き場は名の一覧を持たないので、種類を足すのはここだけ。 */
 export const PAGE_KINDS = ['brief', 'confirm', 'proposal', 'plan', 'result', 'review', 'issue', 'timeline', 'audit'] as const;
@@ -59,8 +60,8 @@ export const pageFolder = (ctx: Context, key: string): string => join(pagesDir(c
 
 /**
  * ページを置く。置き場が番号を決めて DB に持ち、`<控えの folder>/<状態の folder の名>/<Key>/<種類>-<番号>.html` に控えを写して URL を返す。
- * project の名を状態の folder の名にするのは、起こされた担当も $TPM_STATE で同じ folder を受け取り、TPM 担当と名がずれないため。
- * Key は --key、無ければ $TPM_KEY（担当）。置き直すと次の番号になり、前の版は残る。置き場が応えなければ置けない。
+ * project の名を状態の folder の名にするのは、起こされた担当も $ROSTER_STATE で同じ folder を受け取り、TPM 担当と名がずれないため。
+ * Key は --key、無ければ $ROSTER_KEY（担当）。置き直すと次の番号になり、前の版は残る。置き場が応えなければ置けない。
  */
 export function pagePut(ctx: Context, file: string, options: { kind: string, key?: string }): string[] {
   if (!(PAGE_KINDS as readonly string[]).includes(options.kind)) throw new TpmError(`--kind は ${PAGE_KINDS.join('・')} のどれかにしてください`);
@@ -75,7 +76,7 @@ export function pagePut(ctx: Context, file: string, options: { kind: string, key
  * 担当は、自分宛ての物（TPM 担当と、レビューの相手から）を見る。TPM 担当は、--key の担当から来た物だけを見る（名簿に無い Key なら見ない）。
  */
 function assertReadBeforePut(ctx: Context, keyOption?: string): void {
-  if (ctx.env.TPM_KEY) {
+  if (envOf(ctx.env, 'KEY')) {
     assertRead(ctx, '相手', undefined, 'put');
     return;
   }
