@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { guardSettings } from './guard.ts';
 import { ROLES } from './protocol.ts';
 import type { RoleRecord } from './roster.ts';
-import { type EnvName, withEnv } from './env.ts';
+import { type EnvName, LAUNCH_ENV, withEnv } from './env.ts';
 
 /**
  * claude の引数。--add-dir は後ろの語もまとめて folder として読むので、最初の入力の前に -- を置く。
@@ -29,15 +29,11 @@ export function claudeArgs(record: RoleRecord, root: string): string[] {
   ];
 }
 
-/** 起こしの印の環境変数（castlist の hook が読む）。 */
-export const LAUNCH_ENV = ['LAUNCH', 'LAUNCHED_BY', 'LAUNCH_MODEL', 'LAUNCH_EFFORT', 'LAUNCH_FRESH'] as const satisfies readonly EnvName[];
-
 /**
  * 担当に渡す環境変数。担当の roster は、これで project（設定）・状態の folder・自分の Key を知る。PATH の頭に roster の folder を足す。
  * PAGETRAY_NO_DELETE は、置き場の CLI（pagetray）に「消す命令は何もせずに止まれ」と伝える（消してよいのは TPM 担当だけ。guard と二重に守る）。
  * 名簿に起こしの id（castlist を設定した時に roster assign・roster audit start が書く）があれば、起こしの印（LAUNCH_ENV）を渡す:
- * 起こしの id・起こした者・頼んだ model と effort（claude の --model・--effort と同じ値）・起こしたばかりの印。受け継いだ印（TPM 担当の物）は、新旧どちらの名も渡さない。
- * 書くのは新しい名（ROSTER_*）だけで、受け継いだ古い名（TPM_*）の同じ物は消す（withEnv）。
+ * 起こしの id・起こした者・頼んだ model と effort（claude の --model・--effort と同じ値）・起こしたばかりの印。受け継いだ印（TPM 担当の ROSTER_*）は渡さない。
  */
 export function roleEnv(record: RoleRecord, project: string, state: string, root: string, env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const launch: Partial<Record<EnvName, string | undefined>> = record.launch === undefined

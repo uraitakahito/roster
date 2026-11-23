@@ -158,9 +158,9 @@ describe('--verbose', () => {
     expect(r.stderr).toMatch(/^roster: dependabot +\S+\/skill-sets\/dependabot → .*\/dependabot-triage/m);
   });
 
-  test('担当の居場所で打っても、受け継いだ状態の folder（古い名 TPM_STATE も）を使わない', () => {
+  test('担当の居場所で打っても、受け継いだ状態の folder を使わない', () => {
     // 受け継いだ path が無い folder を指していると、使えば止まる（stateDir の守り）。
-    const r = spawnSync(entry, ['start', folder(null)], { cwd: scratch, encoding: 'utf8', env: env({ TPM_STATE: join(scratch, 'gone'), ROSTER_STATE: join(scratch, 'gone') }) });
+    const r = spawnSync(entry, ['start', folder(null)], { cwd: scratch, encoding: 'utf8', env: env({ ROSTER_STATE: join(scratch, 'gone') }) });
     expect(r.stderr).toBe('');
     expect(r.status).toBe(0);
   });

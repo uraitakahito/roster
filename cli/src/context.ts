@@ -11,7 +11,7 @@ import type { Tracker } from './tracker/types.ts';
 import { CmuxTransport } from './transport/cmux.ts';
 import { FileTransport } from './transport/file.ts';
 import type { Transport } from './transport/types.ts';
-import { envOf } from './env.ts';
+import { assertNoLegacySeat, envOf } from './env.ts';
 
 /** 命令が動くときの周り。命令はみなこれを受け取り、試験では偽物の道具を入れて組む。 */
 export interface Context {
@@ -43,6 +43,7 @@ const sleepSync = (ms: number): void => {
  * file の連携での自分の宛先は $ROSTER_ADDRESS（無ければ file:tpm）。
  */
 export function createContext(env: NodeJS.ProcessEnv = process.env, cwd: string = process.cwd(), exec: Exec = realExec): Context {
+  assertNoLegacySeat(env);
   const project = realpathSync(envOf(env, 'PROJECT') || cwd);
   const root = join(import.meta.dirname, '..', '..');
   const config = composeRolesConfig(project);

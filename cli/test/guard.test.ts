@@ -160,6 +160,8 @@ describe('道具の直打ち', () => {
   test('ROSTER_RAW=1 を付けた直打ちは通すが、環境の手続きには効かない', () => {
     expect(ask('ROSTER_RAW=1 cmux workspace close workspace:3 --force', 'software-engineer').allow).toBe(true);
     expect(ask('ROSTER_RAW=1 aws s3 rm x', 'software-engineer').allow).toBe(false);
+    // 前の名の印（TPM_RAW=1）は効かない（t-cmf2 で外した）。
+    expect(ask('TPM_RAW=1 cmux workspace close workspace:3 --force', 'software-engineer').allow).toBe(false);
   });
 });
 

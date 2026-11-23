@@ -10,7 +10,7 @@ import { skillSetDir, TpmError } from './skill-sets.ts';
 
 /**
  * dir に移って TPM 担当の claude を起こす 1 行を返す。model などは env から resolveSettings('tpm', …) で決める。
- * env に書いてある ROSTER_MODEL など（古い名で書いてあっても）は、新しい名で 1 行の頭（PATH の隣）に写す。`ROSTER_MODEL=… roster start` と 1 回だけ付けた値も、
+ * env に書いてある ROSTER_MODEL などは、1 行の頭（PATH の隣）に写す。`ROSTER_MODEL=… roster start` と 1 回だけ付けた値も、
  * TPM 担当の環境に入り、roster hello の状態と roster assign で起こす担当に効く（profile で export したときと揃う）。
  * core と追加の skill セットを --add-dir で足し、最初の入力は /tpm。--settings で guard（roster guard）の hook を付ける。
  * TPM 担当が roster を名前だけで打てるように、PATH の頭に roster の folder を足す（担当には roster run-role が同じことをする）。

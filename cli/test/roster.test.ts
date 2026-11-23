@@ -7,7 +7,7 @@ import { assign, close, configLines, newKey, recordingTo, roles } from '../src/c
 import { createContext, type Context } from '../src/context.ts';
 import { buildCommand } from '../src/command.ts';
 import { modelLabel, modelStatus, ROLES, TPM_COLOR } from '../src/protocol.ts';
-import { readRole, requireRole, requireSelf, writeRole } from '../src/roster.ts';
+import { readRole, requireRole, writeRole } from '../src/roster.ts';
 import { claudeArgs, roleEnv } from '../src/run-role.ts';
 import { TpmError } from '../src/skill-sets.ts';
 import { BRIEF, world } from './helpers.ts';
@@ -37,6 +37,14 @@ describe('hello（TPM 担当）', () => {
     expect(w.wire.status('file:tpm')?.model).toBe('Fable 5.2 · low');
     hello(w.tpm, { model: 'claude-opus-5-5', effort: 'max' });
     expect(w.wire.status('file:tpm')?.model).toBe('Opus 5.5 · max');
+  });
+
+  test('古い名（TPM_MODEL など）は読まず、残っていれば知らせる。起こしの印の古い名は、起こし直すよう知らせる', () => {
+    const w = world({}, { TPM_MODEL: 'claude-fable-5-2', TPM_PAGES_URL: 'http://old', TPM_LAUNCH: 'x' });
+    const lines = hello(w.tpm);
+    expect(lines).toContain('環境変数の古い名は読みません。新しい名に替えてください: TPM_MODEL → ROSTER_MODEL・TPM_PAGES_URL → ROSTER_PAGES_URL（Product Manager に伝える）');
+    expect(lines).toContain('この TPM 担当は、道具の名を替える前の roster start の 1 行で起きています（TPM_LAUNCH）。roster start の 1 行で起こし直してください（Product Manager に伝える）');
+    expect(w.wire.status('file:tpm')?.model).toBe('Opus 5.5 · medium');
   });
 });
 
@@ -399,19 +407,11 @@ describe('道具の名を替えた後（t-6ydg）', () => {
     expect(w.wire.command('file:1')).toBe(`${w.tpm.root}/cli/bin/roster run-role t-x7k2 --project ${w.project} --state ${real}`);
   });
 
-  test('担当に渡すのは新しい名だけで、受け継いだ古い名（TPM_*）の同じ物は消す', () => {
+  test('担当に渡す project・状態の folder・Key・役割は、受け継いだ物を書き替える', () => {
     const w = world();
     assign(w.tpm, 't-x7k2', SE);
-    const env = roleEnv(requireRole(w.tpm, 't-x7k2'), '/p', '/s', '/r', { PATH: '/usr/bin', TPM_PROJECT: '/old', TPM_STATE: '/old-state', TPM_KEY: 't-old', TPM_ROLE: 'devops-engineer', TPM_MODEL: 'claude-x' });
-    expect(env).toMatchObject({ ROSTER_PROJECT: '/p', ROSTER_STATE: '/s', ROSTER_KEY: 't-x7k2', ROSTER_ROLE: 'software-engineer', TPM_MODEL: 'claude-x' });
-    for (const name of ['TPM_PROJECT', 'TPM_STATE', 'TPM_KEY', 'TPM_ROLE']) expect(env).not.toHaveProperty(name);
-  });
-
-  test('古い名（TPM_KEY など）だけを持つ担当も、今までどおり自分の名簿の行を読める', () => {
-    const w = world();
-    assign(w.tpm, 't-x7k2', SE);
-    const old = { ...w.tpm, env: { TPM_KEY: 't-x7k2', TPM_ROLE: 'software-engineer' } };
-    expect(requireSelf(old).key).toBe('t-x7k2');
+    const env = roleEnv(requireRole(w.tpm, 't-x7k2'), '/p', '/s', '/r', { PATH: '/usr/bin', ROSTER_PROJECT: '/old', ROSTER_STATE: '/old-state', ROSTER_KEY: 't-old', ROSTER_ROLE: 'devops-engineer', ROSTER_MODEL: 'claude-x' });
+    expect(env).toMatchObject({ ROSTER_PROJECT: '/p', ROSTER_STATE: '/s', ROSTER_KEY: 't-x7k2', ROSTER_ROLE: 'software-engineer', ROSTER_MODEL: 'claude-x' });
   });
 });
 
