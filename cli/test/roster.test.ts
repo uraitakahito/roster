@@ -1,8 +1,8 @@
 import { mkdirSync, mkdtempSync, realpathSync, symlinkSync } from 'node:fs';
-import { missingCastlistWarning } from '../src/castlist.ts';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
+import { missingCastlistWarning } from '../src/castlist.ts';
 import { hello, inbox } from '../src/commands/role-side.ts';
 import { assign, close, configLines, newKey, recordingTo, roles } from '../src/commands/tpm-side.ts';
 import { createContext, type Context } from '../src/context.ts';

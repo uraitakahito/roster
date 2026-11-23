@@ -1,9 +1,9 @@
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
-import { missingCastlistWarning } from '../src/castlist.ts';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { readAudits } from '../src/audits.ts';
+import { missingCastlistWarning } from '../src/castlist.ts';
 import { auditBegin, auditFresh, auditStart } from '../src/commands/audit.ts';
 import { incidentAdd } from '../src/commands/incident.ts';
 import { askPm, askTpm, dismiss, notify, reportAudit, reportDecided, reportDocFix, reportDone, reportEnd, reportIncident, reportMerged } from '../src/commands/messages.ts';

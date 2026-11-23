@@ -68,7 +68,8 @@ export function buildProgram(): Command {
       const ctx = createContext(withEnv(process.env, { PROJECT: dir, STATE: undefined }), dir);
       const { warnings, alert, line } = startTpm(ctx);
       // castlist を設定していない警告は、Product Manager の terminal で目立つよう強める（起こす 1 行は止めない）。
-      for (const warning of [...emphasize(alert, { isTTY: process.stderr.isTTY, env: process.env }), ...warnings]) process.stderr.write(`roster: ${warning}\n`);
+      const prefixed = (lines: string[]): string[] => lines.map(l => `roster: ${l}`);
+      for (const warning of [...emphasize(prefixed(alert), { isTTY: process.stderr.isTTY, env: process.env }), ...prefixed(warnings)]) process.stderr.write(`${warning}\n`);
       console.log(line);
     });
 

@@ -60,7 +60,8 @@ const RULE = '━'.repeat(40);
 
 /**
  * castlist を設定していない時に、roster start と roster hello が出す警告の枠（設定していれば空）。
- * 決め方は castlistUrl と同じ（送らない時にだけ出す）。直下の folder の設定にだけ castlist があれば、読まないことを名指す（project の folder の設定だけが効くため）。
+ * 決め方は castlistUrl と同じ（送らない時にだけ出す）。設定の file が無ければ、作って書くよう言い分ける。
+ * 足すのは Product Manager が決めることなので、どの席の名乗りにも、誰が足すかを添える。直下の folder の設定にだけ castlist があれば、読まないことを名指す（project の folder の設定だけが効くため）。
  */
 export function missingCastlistWarning(ctx: Pick<Context, 'env' | 'config'>): string[] {
   if (castlistUrl(ctx) !== undefined) return [];
@@ -69,9 +70,12 @@ export function missingCastlistWarning(ctx: Pick<Context, 'env' | 'config'>): st
   return [
     RULE,
     '⚠ 警告: castlist（アクターの台帳）を設定していません',
-    `  ${own?.file ?? '.claude/roles/config.jsonc'} に castlist の行が無いので、この project の席は castlist に何も送りません（タイムラインに出ません）。`,
-    `  足す 1 行: "castlist": "${SUGGESTED_URL}"`,
+    own?.exists === true
+      ? `  ${own.file} に castlist の行が無いので、この project の席は castlist に何も送りません（タイムラインに出ません）。`
+      : `  ${own?.file ?? '.claude/roles/config.jsonc'} が無いので、この project の席は castlist に何も送りません（タイムラインに出ません）。`,
+    own?.exists === true ? `  足す 1 行: "castlist": "${SUGGESTED_URL}"` : `  作って書く 1 行: { "castlist": "${SUGGESTED_URL}" }`,
     ...(unread.length === 0 ? [] : [`  （直下の folder の設定に castlist がありますが、読みません: ${unread.join('・')}）`]),
+    '  （足すかは Product Manager が決める。担当は何もしなくてよい。TPM 担当が伝える）',
     RULE,
   ];
 }
