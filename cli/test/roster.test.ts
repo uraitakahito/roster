@@ -39,9 +39,11 @@ describe('hello（TPM 担当）', () => {
     expect(w.wire.status('file:tpm')?.model).toBe('Opus 5.5 · max');
   });
 
-  test('古い名（TPM_MODEL など）は読まず、残っていれば 1 行で知らせる', () => {
-    const w = world({}, { TPM_MODEL: 'claude-fable-5-2', TPM_PAGES_URL: 'http://old' });
-    expect(hello(w.tpm)).toContain('環境変数の古い名は読みません。新しい名に替えてください: TPM_MODEL → ROSTER_MODEL・TPM_PAGES_URL → ROSTER_PAGES_URL（Product Manager に伝える）');
+  test('古い名（TPM_MODEL など）は読まず、残っていれば知らせる。起こしの印の古い名は、起こし直すよう知らせる', () => {
+    const w = world({}, { TPM_MODEL: 'claude-fable-5-2', TPM_PAGES_URL: 'http://old', TPM_LAUNCH: 'x' });
+    const lines = hello(w.tpm);
+    expect(lines).toContain('環境変数の古い名は読みません。新しい名に替えてください: TPM_MODEL → ROSTER_MODEL・TPM_PAGES_URL → ROSTER_PAGES_URL（Product Manager に伝える）');
+    expect(lines).toContain('この TPM 担当は、道具の名を替える前の roster start の 1 行で起きています（TPM_LAUNCH）。roster start の 1 行で起こし直してください（Product Manager に伝える）');
     expect(w.wire.status('file:tpm')?.model).toBe('Opus 5.5 · medium');
   });
 });

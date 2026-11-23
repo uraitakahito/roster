@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { guardSettings } from './guard.ts';
 import { ROLES } from './protocol.ts';
 import type { RoleRecord } from './roster.ts';
-import { type EnvName, withEnv } from './env.ts';
+import { type EnvName, LAUNCH_ENV, withEnv } from './env.ts';
 
 /**
  * claude の引数。--add-dir は後ろの語もまとめて folder として読むので、最初の入力の前に -- を置く。
@@ -28,9 +28,6 @@ export function claudeArgs(record: RoleRecord, root: string): string[] {
     ROLES[record.role].prompt,
   ];
 }
-
-/** 起こしの印の環境変数（castlist の hook が読む）。 */
-export const LAUNCH_ENV = ['LAUNCH', 'LAUNCHED_BY', 'LAUNCH_MODEL', 'LAUNCH_EFFORT', 'LAUNCH_FRESH'] as const satisfies readonly EnvName[];
 
 /**
  * 担当に渡す環境変数。担当の roster は、これで project（設定）・状態の folder・自分の Key を知る。PATH の頭に roster の folder を足す。

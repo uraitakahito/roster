@@ -23,7 +23,7 @@ import { deadUrl, startFakeCastlist, type CastlistRequest, type FakeCastlist } f
 import { BRIEF, staffRoot, world, type World } from './helpers.ts';
 
 const SE = { role: 'software-engineer', title: '計画と実装', brief: BRIEF, wait: 0 } as const;
-const TPM_SID = 'aaaaaaaa-0000-4000-8000-000000000000';
+const tpmSid = 'aaaaaaaa-0000-4000-8000-000000000000';
 const SID = 'bbbbbbbb-0000-4000-8000-000000000001';
 const SID2 = 'bbbbbbbb-0000-4000-8000-000000000002';
 const SID3 = 'bbbbbbbb-0000-4000-8000-000000000003';
@@ -66,7 +66,7 @@ const castlistCalls = (w: World) => w.calls.filter(c => c.cmd === 'container' ||
 
 /** TPM 担当の周り: roster start の 1 行が付ける環境変数を持つ。 */
 const tpmSeat = (w: World): Context => withEnv(w.tpm, {
-  CLAUDE_CODE_SESSION_ID: TPM_SID,
+  CLAUDE_CODE_SESSION_ID: tpmSid,
   ROSTER_LAUNCH: 'launch-tpm',
   ROSTER_LAUNCHED_BY: 'tpm.person:product-manager',
   ROSTER_LAUNCH_MODEL: 'claude-opus-5-5',
@@ -87,7 +87,7 @@ function launched(config: Record<string, unknown> = {}): { w: World, tpm: Contex
   const w = world({ castlist: fake.url, ...config });
   startTpm(w.tpm);
   const tpm = tpmSeat(w);
-  sessionStart(tpm, startInput('startup', TPM_SID));
+  sessionStart(tpm, startInput('startup', tpmSid));
   hello(tpm);
   assign(tpm, 't-x7k2', SE);
   return { w, tpm, record: requireRole(w.tpm, 't-x7k2') };
@@ -101,7 +101,7 @@ describe('castlist を設定していない時', () => {
     const { line } = startTpm(w.tpm);
     expect(line).not.toContain('ROSTER_LAUNCH');
     hello(tpm);
-    sessionStart(tpm, startInput('startup', TPM_SID));
+    sessionStart(tpm, startInput('startup', tpmSid));
     assign(tpm, 't-x7k2', SE);
     expect(readRole(w.tpm, 't-x7k2')).not.toHaveProperty('launch');
     expect(readRole(w.tpm, 't-x7k2')).not.toHaveProperty('launchedBy');
@@ -194,16 +194,16 @@ describe('castlist が止まっている時', () => {
 
   test('guard は、まだ登録していない session の Bash を、1 行を添えて止める（Bash でない道具は通す）', () => {
     const w = world({ castlist: dead });
-    const verdict = guard(tpmSeat(w), bashInput(TPM_SID));
+    const verdict = guard(tpmSeat(w), bashInput(tpmSid));
     expect(verdict.allow).toBe(false);
     expect(verdict.allow ? '' : verdict.reason).toContain('container start castlist');
-    expect(guard(tpmSeat(w), JSON.stringify({ tool_name: 'Read', tool_input: { file_path: '/x' }, session_id: TPM_SID }))).toEqual({ allow: true });
+    expect(guard(tpmSeat(w), JSON.stringify({ tool_name: 'Read', tool_input: { file_path: '/x' }, session_id: tpmSid }))).toEqual({ allow: true });
   });
 
   test('session-start は誤りにせず、何も書かずに終わる', () => {
     const w = world({ castlist: dead });
-    expect(() => sessionStart(tpmSeat(w), startInput('startup', TPM_SID))).not.toThrow();
-    expect(() => sessionEnd(tpmSeat(w), endInput('other', TPM_SID))).not.toThrow();
+    expect(() => sessionStart(tpmSeat(w), startInput('startup', tpmSid))).not.toThrow();
+    expect(() => sessionEnd(tpmSeat(w), endInput('other', tpmSid))).not.toThrow();
     expect(w.tpm.state.list('sessions')).toEqual([]);
   });
 });
@@ -299,10 +299,10 @@ describe('session-start', () => {
     const got = mark();
     const { w, record } = launched();
     expect(record.launch).toMatch(/^[0-9a-f-]{36}$/);
-    expect(record.launchedBy).toBe(`claude.session:${TPM_SID}`);
+    expect(record.launchedBy).toBe(`claude.session:${tpmSid}`);
     const tpmPost = got().find(r => r.path === '/v1/actors' && r.body?.kind === 'ai');
-    expect(tpmPost?.body).toMatchObject({ name_prefix: 'project-tpm', labels: { 'tpm.project': w.project, 'tpm.launch': 'launch-tpm', 'tpm.role': 'tpm' }, bindings: [{ type: 'claude.session', value: TPM_SID }], settings: { model: 'claude-opus-5-5', effort: 'medium' } });
-    expect(got().find(r => r.path.startsWith('/v1/links/'))?.body).toMatchObject({ type: 'launched', from: 'tpm.person:product-manager', to: `claude.session:${TPM_SID}` });
+    expect(tpmPost?.body).toMatchObject({ name_prefix: 'project-tpm', labels: { 'tpm.project': w.project, 'tpm.launch': 'launch-tpm', 'tpm.role': 'tpm' }, bindings: [{ type: 'claude.session', value: tpmSid }], settings: { model: 'claude-opus-5-5', effort: 'medium' } });
+    expect(got().find(r => r.path.startsWith('/v1/links/'))?.body).toMatchObject({ type: 'launched', from: 'tpm.person:product-manager', to: `claude.session:${tpmSid}` });
 
     const se = seat(w, 't-x7k2', SID, { CMUX_WORKSPACE_ID: 'FF00-UUID' });
     const cmux = { ...se, config: { ...se.config, transport: 'cmux' as const } };
@@ -325,7 +325,7 @@ describe('session-start', () => {
       settings: { model: record.model, effort: record.effort },
     });
     expect(requests[1]?.body).toMatchObject({ by: `claude.session:${SID}`, type: 'entered', detail: {} });
-    expect(requests[2]?.body).toMatchObject({ type: 'launched', from: `claude.session:${TPM_SID}`, to: `claude.session:${SID}` });
+    expect(requests[2]?.body).toMatchObject({ type: 'launched', from: `claude.session:${tpmSid}`, to: `claude.session:${SID}` });
     expect(w.tpm.state.read(`sessions/${SID}.jsonc`)).toMatchObject({ name: 't-x7k2-swe.1', launch: record.launch });
   });
 
@@ -582,7 +582,7 @@ describe('担当を起こす環境変数', () => {
     const env = roleEnv(record, '/p', '/s', '/r', { PATH: '/usr/bin' });
     expect(env).toMatchObject({
       ROSTER_LAUNCH: record.launch,
-      ROSTER_LAUNCHED_BY: `claude.session:${TPM_SID}`,
+      ROSTER_LAUNCHED_BY: `claude.session:${tpmSid}`,
       ROSTER_LAUNCH_MODEL: record.model,
       ROSTER_LAUNCH_EFFORT: record.effort,
       ROSTER_LAUNCH_FRESH: '1',
@@ -618,16 +618,16 @@ describe('落ちた session の突き合わせ（推しの幕引き）', () => {
     return { ...ctx, exec, transport, config: { ...ctx.config, transport: 'cmux' }, env: { ...ctx.env, CMUX_WORKSPACE_ID: me.uuid } };
   }
 
-  const TPM_AT = { ref: 'workspace:1', uuid: 'U-TPM' };
+  const tpmAt = { ref: 'workspace:1', uuid: 'U-TPM' };
   const SE_AT = { ref: 'workspace:2', uuid: 'U-SE' };
   const inferredCloses = (requests: CastlistRequest[]) => writes(requests).filter(r => r.body?.type === 'closed' && (r.body.detail as { inferred?: unknown } | undefined)?.inferred === true);
 
   /** 担当 1 人（SID）が SE_AT で登場した世界。seats は TPM 担当が見る cmux の一覧（試験の中で替える）。 */
   function world2(): { w: World, se: Context, tpmIn: (seats: Record<string, string>, me?: { ref: string, uuid: string }) => Context } {
     const { w, tpm } = launched();
-    const se = inCmux(seat(w, 't-x7k2', SID), SE_AT, () => ({ [TPM_AT.uuid]: TPM_AT.ref, [SE_AT.uuid]: SE_AT.ref }));
+    const se = inCmux(seat(w, 't-x7k2', SID), SE_AT, () => ({ [tpmAt.uuid]: tpmAt.ref, [SE_AT.uuid]: SE_AT.ref }));
     sessionStart(se, startInput('startup', SID));
-    const tpmIn = (seats: Record<string, string>, me = TPM_AT): Context => inCmux(tpm, me, () => seats);
+    const tpmIn = (seats: Record<string, string>, me = tpmAt): Context => inCmux(tpm, me, () => seats);
     return { w, se, tpmIn };
   }
 
@@ -639,7 +639,7 @@ describe('落ちた session の突き合わせ（推しの幕引き）', () => {
   test('居場所の uuid が一覧に無い「居る」session に、推しの幕引き（workspace_gone）を番号つきの id で送り、控えを居ないにする', () => {
     const { w, tpmIn } = world2();
     const got = mark();
-    const lines = roles(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref }));
+    const lines = roles(tpmIn({ [tpmAt.uuid]: tpmAt.ref }));
     const closes = inferredCloses(got());
     expect(closes.map(r => r.body)).toEqual([expect.objectContaining({ by: `claude.session:${SID}`, type: 'closed', detail: { inferred: true, reason: 'workspace_gone' } })]);
     expect(closes[0]?.path).toMatch(new RegExp(`-${SID}-closed-1$`));
@@ -647,7 +647,7 @@ describe('落ちた session の突き合わせ（推しの幕引き）', () => {
     expect(lines.join('\n')).toContain('t-x7k2-swe.1');
     // 2 度目は何も送らない。
     const again = mark();
-    roles(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref }));
+    roles(tpmIn({ [tpmAt.uuid]: tpmAt.ref }));
     expect(inferredCloses(again())).toEqual([]);
   });
 
@@ -680,25 +680,25 @@ describe('落ちた session の突き合わせ（推しの幕引き）', () => {
     const { w, tpmIn } = world2();
     sessionStart(inCmux(seat(w, 't-x7k2', SID2), SE_AT, () => ({})), startInput('startup', SID2));
     const got = mark();
-    roles(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref, [SE_AT.uuid]: SE_AT.ref }));
+    roles(tpmIn({ [tpmAt.uuid]: tpmAt.ref, [SE_AT.uuid]: SE_AT.ref }));
     expect(inferredCloses(got())).toEqual([]);
   });
 
   test('組がそのまま一覧にある session と、自分の session には送らない', () => {
     const { w, tpmIn } = world2();
     const got = mark();
-    roles(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref, [SE_AT.uuid]: SE_AT.ref }));
+    roles(tpmIn({ [tpmAt.uuid]: tpmAt.ref, [SE_AT.uuid]: SE_AT.ref }));
     expect(inferredCloses(got())).toEqual([]);
     // 自分の居場所が一覧に無くても、自分は閉じない（その時は突き合わせごと止める）。
-    expect(readSession(w.tpm, TPM_SID)?.present).toBe(true);
+    expect(readSession(w.tpm, tpmSid)?.present).toBe(true);
   });
 
   test('一覧に自分の組が無い・一覧が空・一覧が誤りなら、何も送らず、命令は続ける', () => {
     const { tpmIn } = world2();
     const got = mark();
     expect(roles(tpmIn({})).join('\n')).toContain('名簿');
-    roles(tpmIn({ [TPM_AT.uuid]: 'workspace:99' }));
-    const broken = inCmux(tpmIn({}), TPM_AT, () => {
+    roles(tpmIn({ [tpmAt.uuid]: 'workspace:99' }));
+    const broken = inCmux(tpmIn({}), tpmAt, () => {
       throw new Error('cmux が答えない');
     });
     expect(roles(broken).join('\n')).toContain('名簿');
@@ -712,7 +712,7 @@ describe('落ちた session の突き合わせ（推しの幕引き）', () => {
     delete record.workspace;
     w.tpm.state.write(`sessions/${SID}.jsonc`, record);
     const got = mark();
-    roles(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref }));
+    roles(tpmIn({ [tpmAt.uuid]: tpmAt.ref }));
     expect(inferredCloses(got()).map(r => r.body)).toEqual([expect.objectContaining({ by: `claude.session:${SID}`, detail: { inferred: true, reason: 'workspace_gone' } })]);
     expect(readSession(w.tpm, SID)?.workspace).toEqual(SE_AT);
   });
@@ -720,7 +720,7 @@ describe('落ちた session の突き合わせ（推しの幕引き）', () => {
   test('assign と担当の hello も突き合わせる', () => {
     const { tpmIn } = world2();
     const got = mark();
-    assign(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref }), 't-q9zz', SE);
+    assign(tpmIn({ [tpmAt.uuid]: tpmAt.ref }), 't-q9zz', SE);
     expect(inferredCloses(got())).toHaveLength(1);
     const { w } = world2();
     const other = inCmux(seat(w, 't-x7k2', SID3), { ref: 'workspace:3', uuid: 'U-3' }, () => ({ 'U-3': 'workspace:3' }));
@@ -731,7 +731,7 @@ describe('落ちた session の突き合わせ（推しの幕引き）', () => {
 
   test('推しで閉じた session が Bash を打てば、今の居場所で登録し直し、番号つきの再登場を送り、もう閉じない', () => {
     const { w, se, tpmIn } = world2();
-    roles(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref }));
+    roles(tpmIn({ [tpmAt.uuid]: tpmAt.ref }));
     const moved = { ref: 'workspace:12', uuid: SE_AT.uuid };
     const back = inCmux(se, moved, () => ({}));
     const got = mark();
@@ -744,7 +744,7 @@ describe('落ちた session の突き合わせ（推しの幕引き）', () => {
     expect(readSession(w.tpm, SID)).toMatchObject({ present: true, workspace: moved });
     expect(readSession(w.tpm, SID)?.endedBy).toBeUndefined();
     const after = mark();
-    roles(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref, [moved.uuid]: moved.ref }));
+    roles(tpmIn({ [tpmAt.uuid]: tpmAt.ref, [moved.uuid]: moved.ref }));
     expect(inferredCloses(after())).toEqual([]);
   });
 
@@ -764,7 +764,7 @@ describe('落ちた session の突き合わせ（推しの幕引き）', () => {
     delete record.workspace;
     w.tpm.state.write(`sessions/${SID}.jsonc`, record);
     // 引く間に、その session の SessionEnd が退場を送った（控えは居ないになり、番号が進む）。
-    const racing = hooked(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref, [SE_AT.uuid]: SE_AT.ref }), /-X GET [\s\S]*\/v1\/actors\//, (pass) => {
+    const racing = hooked(tpmIn({ [tpmAt.uuid]: tpmAt.ref, [SE_AT.uuid]: SE_AT.ref }), /-X GET [\s\S]*\/v1\/actors\//, (pass) => {
       const now = readSession(w.tpm, SID);
       if (now !== undefined) w.tpm.state.write(`sessions/${SID}.jsonc`, { ...now, present: false, seq: { ...now.seq, exited: 1 } });
       return pass();
@@ -777,7 +777,7 @@ describe('落ちた session の突き合わせ（推しの幕引き）', () => {
 
   test('自分の session の id が無い所（roster の起こした session の外）で打っても、突き合わせない', () => {
     const { tpmIn } = world2();
-    const outside = tpmIn({ [TPM_AT.uuid]: TPM_AT.ref });
+    const outside = tpmIn({ [tpmAt.uuid]: tpmAt.ref });
     const got = mark();
     roles({ ...outside, env: { ...outside.env, CLAUDE_CODE_SESSION_ID: undefined } });
     expect(inferredCloses(got())).toEqual([]);
@@ -789,7 +789,7 @@ describe('落ちた session の突き合わせ（推しの幕引き）', () => {
     if (record === undefined) throw new Error('控えが無い');
     delete record.workspace;
     w.tpm.state.write(`sessions/${SID}.jsonc`, record);
-    const down = hooked(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref }), /\/v1\/actors\//, () => ({ status: 7, stdout: '', stderr: 'refused' }));
+    const down = hooked(tpmIn({ [tpmAt.uuid]: tpmAt.ref }), /\/v1\/actors\//, () => ({ status: 7, stdout: '', stderr: 'refused' }));
     const lines = roles(down);
     expect(lines.join('\n')).toContain('落ちた session の突き合わせをやめました');
     expect(lines.join('\n')).toContain('名簿');
@@ -797,14 +797,14 @@ describe('落ちた session の突き合わせ（推しの幕引き）', () => {
 
   test('幕引きを送れなければ、送れなかった session を 1 行で出す', () => {
     const { tpmIn } = world2();
-    const down = hooked(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref }), /-X PUT [\s\S]*\/v1\/events\//, () => ({ status: 7, stdout: '', stderr: 'refused' }));
+    const down = hooked(tpmIn({ [tpmAt.uuid]: tpmAt.ref }), /-X PUT [\s\S]*\/v1\/events\//, () => ({ status: 7, stdout: '', stderr: 'refused' }));
     const lines = roles(down);
     expect(lines.join('\n')).toContain('落ちたと推した幕引きを送れませんでした（t-x7k2-swe.1）');
   });
 
   test('推しで閉じた session が roster hello を打てば、名乗りより前に再登場を送る', () => {
     const { se, tpmIn } = world2();
-    roles(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref }));
+    roles(tpmIn({ [tpmAt.uuid]: tpmAt.ref }));
     const got = mark();
     hello(inCmux(se, { ref: 'workspace:12', uuid: SE_AT.uuid }, () => ({ [SE_AT.uuid]: 'workspace:12' })));
     const types = writes(got()).map(r => r.body?.type).filter(t => t === 'reentered' || t === 'reported_in');
@@ -823,10 +823,10 @@ describe('落ちた session の突き合わせ（推しの幕引き）', () => {
 
   test('推しで閉じて戻った session も、roster close の幕引きは castlist に残る（推しの id と別）', () => {
     const { se, tpmIn } = world2();
-    roles(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref }));
+    roles(tpmIn({ [tpmAt.uuid]: tpmAt.ref }));
     guard(inCmux(se, { ref: 'workspace:12', uuid: SE_AT.uuid }, () => ({})), bashInput(SID));
     const got = mark();
-    close(tpmIn({ [TPM_AT.uuid]: TPM_AT.ref, [SE_AT.uuid]: 'workspace:12' }), 't-x7k2');
+    close(tpmIn({ [tpmAt.uuid]: tpmAt.ref, [SE_AT.uuid]: 'workspace:12' }), 't-x7k2');
     const closes = writes(got()).filter(r => r.body?.type === 'closed');
     expect(closes.map(r => r.body?.detail)).toEqual([{}]);
     expect(closes[0]?.path).toMatch(new RegExp(`-${SID}-closed$`));

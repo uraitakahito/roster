@@ -104,9 +104,9 @@ const CODE_INNER = [
   /(?<!(?:\bbin'?|exec\w*\(|spawn\w*\(|which\(|\.name\()\s*,?\s*)(['"])tpm\1(?!\s*,\s*\[)/g,
 ];
 const CODE = /\.(?:ts|mjs|js)$/;
-/** 環境変数の古い名（TPM_KEY など）。TPM 担当を指すコードの名（TPM_TITLE・TPM_COLOR・TPM_SETTINGS・TPM_PARTY・試験の TPM_SID・TPM_AT）は当てない。 */
+/** 環境変数の古い名（TPM_KEY など）。TPM 担当を指すコードの名（TPM_TITLE・TPM_COLOR・TPM_SETTINGS・TPM_PARTY）は当てない。 */
 const OLD_ENV =
-  /(?<![A-Za-z0-9_])TPM_(?!(?:TITLE|COLOR|SETTINGS|PARTY|SID|AT)(?![A-Z0-9_]))[A-Z][A-Z0-9_]*/;
+  /(?<![A-Za-z0-9_])TPM_(?!(?:TITLE|COLOR|SETTINGS|PARTY)(?![A-Z0-9_]))[A-Z][A-Z0-9_]*/;
 /** 環境変数の古い名を、わざと書く file（古い名が残っていると知らせる所・その試験・移り方の docs）。 */
 const OLD_ENV_FILES = new Set([
   "cli/src/env.ts",
@@ -185,7 +185,6 @@ const MUST_PASS = [
   ["a.jsonc", '"guard": "tpm"'],
   ["a.ts", "role === 'tpm'"],
   ["a.md", "TPM 担当・ROSTER_KEY・TPM_TITLE・TPM_SETTINGS"],
-  ["a.ts", "const TPM_SID = 'x'・TPM_AT.ref"],
   ["cli/src/env.ts", "env[`TPM_${name}`] と TPM_KEY"],
   ["a.ts", "hello(w.tpm, TPM)・file:tpm・const tpm = createContext()"],
   ["a.ts", "function painting(tpm: Context)・{ tpm: { turn: 'pm-wait' } }"],
