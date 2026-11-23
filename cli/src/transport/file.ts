@@ -53,7 +53,7 @@ export class FileTransport implements Transport {
     const id = `m${this.inbox(to).length + 1}-${fileName(to)}`;
     const message: FileMessage = { id, sender: this.self, from, text, ...(replyTo === undefined ? {} : { replyTo }) };
     this.state.append(`${DIR}/inbox/${fileName(to)}.jsonl`, message);
-    return { id, delivered: this.heldFrom(to) === undefined };
+    return { id };
   }
 
   /** 宛先を「手を動かしている」にする（試験用）。これより後に送った物は、release まで届かない（pending に出る）。 */

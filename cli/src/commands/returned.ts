@@ -4,6 +4,7 @@
 // 違う物は配らせず（まだ待ちなら既読にする）、扱わないよう示し、台帳に書き、TPM 担当へ【returned】で返す。
 import type { Context } from '../context.ts';
 import { addIncident } from '../incidents.ts';
+import { RETURNED_FILE } from '../seen.ts';
 import { readRole, requireTpmSide } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
 import type { MailboxEntry } from '../transport/types.ts';
@@ -20,8 +21,8 @@ const WAKE = 'claude.wake';
 const TAG = '届け違い';
 /** 【returned】に載せる本文の先頭の長さ。 */
 const HEAD = 80;
-/** 返した物の控え（resume・compact で hook がもう 1 度走っても、2 度返さない）。 */
-const RETURNED = 'returned.jsonl';
+/** 返した物の控え（resume・compact で hook がもう 1 度走っても、2 度返さない。見た時刻の口も読み、返した物を「まだ見ていない」とする）。 */
+const RETURNED = RETURNED_FILE;
 
 interface ReturnedLine {
   at: string

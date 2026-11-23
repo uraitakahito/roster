@@ -27,7 +27,7 @@ describe('1 つの課題の 1 周（課題管理なし）', () => {
     const w = started();
     const FROM = 'SWE t-x7k2: 計画と実装';
 
-    expect(askTpm(w.se, { text: '案 A と B で迷う。お勧めは A', waitingFor: '案の選択' })).toEqual(['送った: 【ask-tpm】→ file:tpm（届いた）', '状態: 回答待ち(TPM): 案の選択']);
+    expect(askTpm(w.se, { text: '案 A と B で迷う。お勧めは A', waitingFor: '案の選択' })).toEqual(['送った: 【ask-tpm】→ file:tpm（相手の手が空いた時に届く。送り直さない）', '状態: 回答待ち(TPM): 案の選択']);
     const asked = w.wire.inbox('file:tpm')[0];
     expect(asked).toMatchObject({ from: FROM, text: '【ask-tpm】案 A と B で迷う。お勧めは A' });
     notify(w.tpm, 't-x7k2', { text: 'A で進める', ...(asked ? { replyTo: asked.id } : {}) });
@@ -36,13 +36,13 @@ describe('1 つの課題の 1 周（課題管理なし）', () => {
     expect(wait(w.se, 'work', '実装')).toEqual(['状態: 作業中: 実装']);
     reportMerged(w.se, { pr: PR, note: '段 1 を入れた' });
     expect(reportDone(w.se, { url: OUT, kind: 'plan', summary: 'PR 2 本の計画', remaining: 'なし', decisions: 'なし', points: [] })).toEqual([
-      '送った: 【done】→ file:tpm（届いた）',
+      '送った: 【done】→ file:tpm（相手の手が空いた時に届く。送り直さない）',
       '状態: 回答待ち(TPM): 次の依頼（次の【brief】か【dismiss】を待つ。自分から【end】を送らない）',
     ]);
     expect(waitOf(w, 'file:1')).toBe('回答待ち(TPM): 次の依頼');
 
     // 同じ Key に振ると、起こさずに同じ担当へ【brief】が行く
-    expect(assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: 'https://claude.ai/artifact/b2', note: '計画の実装', wait: 0 })).toEqual(['送った: 【brief】→ file:1（届いた）']);
+    expect(assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: 'https://claude.ai/artifact/b2', note: '計画の実装', wait: 0 })).toEqual(['送った: 【brief】→ file:1（相手の手が空いた時に届く。送り直さない）']);
     expect(requireRole(w.tpm, 't-x7k2').brief).toBe('https://claude.ai/artifact/b2');
     expect(w.wire.seats()).toHaveLength(1);
     reportDone(w.se, { url: OUT, kind: 'result', summary: '実装した', remaining: 'なし', decisions: 'なし', points: [] });
@@ -51,7 +51,7 @@ describe('1 つの課題の 1 周（課題管理なし）', () => {
     dismiss(w.tpm, 't-x7k2', { handover: false });
     expect(roles(w.tpm)[1]).toMatch(/dismiss 済み（終わり）/);
     expect(reportEnd(w.se, { url: OUT, prs: [PR], removed: ['skills-worktrees/t-x-impl'], left: 'なし' })).toEqual([
-      '送った: 【end】→ file:tpm（届いた）',
+      '送った: 【end】→ file:tpm（相手の手が空いた時に届く。送り直さない）',
       '状態: 回答待ち(TPM): workspace を閉じる（居場所は自分で閉じない）',
     ]);
     close(w.tpm, 't-x7k2');
@@ -305,13 +305,13 @@ describe('入口の検査: 送る前に、読んでいないメッセージを�
   test('担当: TPM 担当からのメッセージが届いていなければ、出して 1 度止まり、打ち直すと送る', () => {
     const w = started({ tracker: 'github' }, 'gh-12');
     w.wire.hold('file:1');
-    expect(notify(w.tpm, 't-x7k2', { text: 'tag はまだ打たないで待つこと' })[0]).toMatch(/まだ届いていない/);
+    expect(notify(w.tpm, 't-x7k2', { text: 'tag はまだ打たないで待つこと' })[0]).toMatch(/相手の手が空いた時に届く/);
     const done = (): string[] => reportDone(w.se, { url: OUT, kind: 'result', summary: '実装した', remaining: 'なし', decisions: 'なし', points: [] });
     expect(done).toThrow('相手から、まだ読んでいないメッセージが 1 件あります。送っていません。\n--- Technical Program Manager（id m1-file-1）\n【notify】tag はまだ打たないで待つこと\n--- ここまで\n読んだうえで、同じ命令を打ち直せば送ります（事情が変わっていたら、中身を変えて打つ）。');
     // 止まった回は、メッセージも課題の記録も書かない
     expect(texts(w, 'file:tpm')).toEqual([]);
     expect(w.calls.filter(c => c.args[1] === 'comment')).toEqual([]);
-    expect(done()[1]).toBe('送った: 【done】→ file:tpm（届いた）');
+    expect(done()[1]).toBe('送った: 【done】→ file:tpm（相手の手が空いた時に届く。送り直さない）');
     // 新しいメッセージが来たら、また 1 度止まる（前に見せた物は出さない）
     notify(w.tpm, 't-x7k2', { text: '2 通目' });
     expect(() => askTpm(w.se, { text: 'q', waitingFor: 'a' })).toThrow(/1 件あります[\s\S]*【notify】2 通目/);
@@ -461,6 +461,16 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
     expect(gates(w)).toEqual([]);
   });
 
+  test('届け違いで返した【brief】（returned.jsonl）は、配られていても、まだ見ていない・済んでいない物として止まる（t-4q2b）', () => {
+    const w = started();
+    reportDone(w.se, { kind: 'result', summary: '1 つ目', remaining: 'なし', decisions: 'なし', points: [] });
+    assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B4, wait: 0 });
+    w.tpm.state.append('returned.jsonl', { at: '2026-11-20T12:00:01.000Z', id: 'm1-file-1', incident: 1 });
+    // 担当が【done】を送っても、返した依頼書の分には数えない
+    reportDone(w.se, { kind: 'result', summary: '別の物', remaining: 'なし', decisions: 'なし', points: [] });
+    expect(() => dismiss(w.tpm, 't-x7k2', { handover: false })).toThrow(`--- 【done】が返っていない依頼書: brief-4（${B4}）`);
+  });
+
   test('見せていない queued の物は「まだ見ていない」として出して止まり、--supersede の本文も同じ字にする', () => {
     const w = started();
     reportDone(w.se, { kind: 'result', summary: '1 つ目', remaining: 'なし', decisions: 'なし', points: [] });
@@ -479,7 +489,7 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
   test('ふつうの流れ（依頼書 → 【done】 → dismiss・続きの assign）では止まらない', () => {
     const w = sentBrief4(false);
     reportDone(w.se, { kind: 'result', summary: '2 つ目', remaining: 'なし', decisions: 'なし', points: [] });
-    expect(assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B5, wait: 0 })).toEqual(['送った: 【brief】→ file:1（届いた）']);
+    expect(assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B5, wait: 0 })).toEqual(['送った: 【brief】→ file:1（相手の手が空いた時に届く。送り直さない）']);
     reportDone(w.se, { kind: 'result', summary: '3 つ目', remaining: 'なし', decisions: 'なし', points: [] });
     dismiss(w.tpm, 't-x7k2', { handover: false });
     expect(gates(w)).toEqual([]);
@@ -529,7 +539,7 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
     const w = build();
     // 名でも URL でも名指せる
     const out = reportDone(w.se, { kind: 'result', summary: '1〜3 を済ませた', remaining: 'なし', decisions: 'なし', points: [], briefs: ['brief-1', B2, 'brief-3'] });
-    expect(out).toContain('送った: 【done】→ file:tpm（届いた）');
+    expect(out).toContain('送った: 【done】→ file:tpm（相手の手が空いた時に届く。送り直さない）');
     expect(texts(w, 'file:tpm').at(-1)).toBe('【done】要点: 1〜3 を済ませた／残り: なし／決めてほしいこと: なし／済ませた依頼書: brief-1・brief-2・brief-3');
     expect(w.tpm.state.lines<{ heading: string, briefs?: string[] }>('log.jsonl').findLast(l => l.heading === 'done')?.briefs).toEqual([BRIEF, B2, B3]);
     expect(dismiss(w.tpm, 't-x7k2', { handover: false })[0]).toMatch(/^送った: 【dismiss】/);
@@ -578,7 +588,7 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
     w.se.transport.queued = () => {
       throw new TpmError('cmux agent inbox が失敗しました');
     };
-    expect(reportDone(w.se, { kind: 'result', summary: 'x', remaining: 'なし', decisions: 'なし', points: [] })).toContain('送った: 【done】→ file:tpm（届いた）');
+    expect(reportDone(w.se, { kind: 'result', summary: 'x', remaining: 'なし', decisions: 'なし', points: [] })).toContain('送った: 【done】→ file:tpm（相手の手が空いた時に届く。送り直さない）');
     w.se.transport.queued = queued;
   });
 
@@ -600,7 +610,7 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
     const w = started();
     reportDone(w.se, { kind: 'result', summary: '済んだ', remaining: 'なし', decisions: 'なし', points: [] });
     w.wire.hold('file:1');
-    expect(notify(w.tpm, 't-x7k2', { text: 'tag はまだ打たないで待つこと' })[0]).toMatch(/まだ届いていない/);
+    expect(notify(w.tpm, 't-x7k2', { text: 'tag はまだ打たないで待つこと' })[0]).toMatch(/相手の手が空いた時に届く/);
     expect(gates(w)).toEqual([]);
   });
 
@@ -617,7 +627,7 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
     inbox(w.se);
     expect(w.tpm.state.read('shown/file-1.jsonc')).toEqual([{ id: 'm1-file-1', at: '2026-11-20T12:01:00.000Z' }]);
     w.tpm.now = at(300);
-    expect(assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B5, wait: 0 })).toEqual(['送った: 【brief】→ file:1（届いた）']);
+    expect(assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B5, wait: 0 })).toEqual(['送った: 【brief】→ file:1（相手の手が空いた時に届く。送り直さない）']);
     expect(gates(w)).toEqual([]);
   });
 

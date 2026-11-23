@@ -16,7 +16,7 @@ function fake(answers: [prefix: string, result: Partial<ExecResult> | (() => Par
     const result = typeof hit?.[1] === 'function' ? hit[1]() : hit?.[1];
     return { status: 0, stdout: '', stderr: '', ...result };
   };
-  return { exec, calls, transport: new CmuxTransport(exec, () => undefined) };
+  return { exec, calls, transport: new CmuxTransport(exec) };
 }
 const json = (value: unknown): Partial<ExecResult> => ({ stdout: JSON.stringify(value) });
 
@@ -31,32 +31,20 @@ describe('CmuxTransport', () => {
     expect(() => transport.whoami()).toThrow(TpmError);
   });
 
-  test('send は本文を標準入力で渡し、inbox で届いたかを見る', () => {
+  test('#129 の形: send は本文を標準入力で渡し、id だけを返す（届いたかは見張らない。見た時刻は後で口が引く）', () => {
     const { transport, calls } = fake([
       ['agent message', { stdout: `Queued message ${ID} for TPM (surface:1).\n` }],
-      ['--json agent inbox', json({ messages: [{ id: ID, state: 'delivered' }] })],
     ]);
-    expect(transport.send('workspace:1', 'SE t-x7k2: 題', '【done】- で始まらない本文')).toEqual({ id: ID, delivered: true });
-    expect(calls[0]).toEqual({ args: ['agent', 'message', 'workspace:1', '--from', 'SE t-x7k2: 題', '-'], input: '【done】- で始まらない本文' });
-    expect(calls[1]?.args).toEqual(['--json', 'agent', 'inbox', '--surface', 'workspace:1', '--limit', '20']);
+    expect(transport.send('workspace:1', 'SE t-x7k2: 題', '【done】- で始まらない本文')).toEqual({ id: ID });
+    expect(calls).toEqual([{ args: ['agent', 'message', 'workspace:1', '--from', 'SE t-x7k2: 題', '-'], input: '【done】- で始まらない本文' }]);
   });
 
   test('返事は --reply-to で送る', () => {
     const { transport, calls } = fake([
       ['agent message', { stdout: `Queued message ${ID} for TPM.\n` }],
-      ['--json agent inbox', json({ messages: [{ id: ID, state: 'read' }] })],
     ]);
-    expect(transport.send('workspace:1', 'TPM', '受け取った', 'abc').delivered).toBe(true);
+    expect(transport.send('workspace:1', 'TPM', '受け取った', 'abc')).toEqual({ id: ID });
     expect(calls[0]?.args).toEqual(['agent', 'message', '--reply-to', 'abc', '--from', 'TPM', '-']);
-  });
-
-  test('queued のままなら、何度か見てから delivered: false を返す', () => {
-    const { transport, calls } = fake([
-      ['agent message', { stdout: `Queued message ${ID} for TPM.\n` }],
-      ['--json agent inbox', json({ messages: [{ id: ID, state: 'queued' }] })],
-    ]);
-    expect(transport.send('workspace:1', 'SE', '本文')).toEqual({ id: ID, delivered: false });
-    expect(calls.filter(c => c.args.includes('inbox'))).toHaveLength(4);
   });
 
   test('pending は自分宛ての queued のメッセージを、既読にせずに読む', () => {

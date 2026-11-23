@@ -56,6 +56,15 @@ describe('見た時刻の口', () => {
     expect(seenTimes(w.tpm, { live: true })(sent(id, '12:00:00'))).toEqual({ at: T('12:00:30'), by: 'shown' });
   });
 
+  test('届け違いで返した物（returned.jsonl）は、配られていても・見せていても、まだ見ていない（宛先の担当は見ていない。t-4q2b）', () => {
+    const w = world();
+    w.tpm.state.append('deliveries.jsonl', { id: 'r', deliveredAt: T('12:00:05'), readAt: T('12:00:06') } satisfies MessageTrace);
+    w.tpm.state.write(shownFile('file:1'), [{ id: 'r', at: T('12:00:07') }]);
+    w.tpm.state.append('returned.jsonl', { at: T('12:00:06'), id: 'r', incident: 1 });
+    expect(seenTimes(w.tpm, { live: true })(sent('r', '12:00:00'))).toBeUndefined();
+    expect(seenTimes(w.tpm, { live: false })(sent('r', '12:00:00'))).toBeUndefined();
+  });
+
   test('見せた物は、受け手の宛先の shown/ だけで見る', () => {
     const w = world();
     w.wire.hold('file:2');

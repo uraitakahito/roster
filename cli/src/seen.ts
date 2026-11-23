@@ -29,6 +29,12 @@ export interface Seen {
   by: 'delivered' | 'shown' | 'legacy' | 'assumed'
 }
 
+/** 届け違いで返したメッセージの控え（tpm returned check が書く）。 */
+export const RETURNED_FILE = 'returned.jsonl';
+
+/** 届け違いで返したメッセージの id。cmux の上では配られて既読になっているが、宛先の担当は見ていない（t-4q2b）。 */
+export const returnedIds = (ctx: Context): Set<string> => new Set(ctx.state.lines<{ id: string }>(RETURNED_FILE).map(l => l.id));
+
 /** 口が読む、送った記録の行の欄。 */
 export interface SentRef {
   id: string
@@ -75,6 +81,7 @@ export function seenTimes(ctx: Context, options: { live: boolean }): SeenAt {
     }
     return m;
   };
+  const returned = returnedIds(ctx);
   const queued = new Map<string, Set<string>>();
   const queuedTo = (address: string): Set<string> => {
     let q = queued.get(address);
@@ -85,6 +92,8 @@ export function seenTimes(ctx: Context, options: { live: boolean }): SeenAt {
     return q;
   };
   return (sent) => {
+    // 届け違いで返した物は、配られていても・同じ居場所で見せていても、宛先の担当は見ていない。
+    if (returned.has(sent.id)) return undefined;
     const at = delivered.get(sent.id);
     const s = shownTo(sent.to);
     // 前の版の delivered:true は、道具の配った時刻が無い時だけ使う（同じ配りの写しで、道具の時刻の方が確か）。

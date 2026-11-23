@@ -42,7 +42,7 @@ flowchart TB
 | `roles/<Key>.jsonc` | 名簿。課題の Key → 役割・居場所の宛先・依頼書・課題管理の課題。Staff Engineer 担当の席は、課題の担当と並べるために名簿の Key を `<課題の Key>.staff` にし、見ている課題の Key を `subject` に持つ |
 | `reviews/<番号>.jsonc` | レビューの頼み 1 件（下の「Staff Engineer 担当の席」）。課題の Key・見る物・頼んだ担当と時刻・渡した依頼書・判定・レビューのページ・返った時刻・TPM 担当に上げた時刻。レビューを 1 度も頼んでいない project には無い |
 | `approvals/<環境>.jsonc` | Product Manager の承認と期限 |
-| `log.jsonl`・`infra.jsonl` | 送ったメッセージ（時刻・Key・見出し・本文・送った時に届いたか・返事の先）と、`tpm infra run` で打った命令の記録 |
+| `log.jsonl`・`infra.jsonl` | 送ったメッセージ（時刻・Key・見出し・本文・返事の先・送り手と届く担当。前の版の行には、送った後 2 秒の内に届いたかの `delivered` もある。今の版は書かず、見た時刻は `cli/src/seen.ts` の口が `deliveries.jsonl`・`shown/`・`returned.jsonl` から引く）と、`tpm infra run` で打った命令の記録 |
 | `deliveries.jsonl` | メッセージの送った・届いた・読んだ時刻（連携の道具が覚えている物の写し）。cmux は新しい 1,000 件より古い物を捨てるので、`tpm close` で居場所を閉じる前と、TPM 担当が `tpm hello` を打った時に写す。変わった時だけ 1 行足すので、同じ id の行は後ろが新しい |
 | `tracker.jsonl` | `tpm` が課題管理に書いた物（コメント・済み）。時刻・打った担当・課題・記録の種類・通ったか。課題管理の履歴は人も担当も同じ account なので、`tpm` の手かどうかはここで見分ける |
 | `guard.jsonl`・`gate.jsonl` | guard が止めた命令（頭の 300 字と訳）と、入口の検査が送る・置くのを止めた回（読んでいないメッセージ・merge していない PR・読めない PR・同じメッセージの 2 度送り・TPM 担当が送って済んでいない物・前の監査の文脈が残ったまま始めようとした監査） |
@@ -218,7 +218,7 @@ sequenceDiagram
   1. 待ちの物がみな違う宛てなら、`cmux agent inbox --mark-read` で既読にして配らせない。`--mark-read` は並べた物をみな既読にし、1 通ずつはできないので、正しい宛ての物が混じる時と、その居場所が送ってまだ相手に届いていない物（自分や前の session が送った【brief】【done】など）がある時は既読にしない（相手に届かなくなるため）。既読にした物に、確かめた組の外の物（間に届いた物）があれば、その中身を「あなた宛てかもしれない」として示す。
   2. 台帳に 1 件書く（reliability、tag「届け違い」）。【incident】は送らない。
   3. TPM 担当へ【returned】を送る（宛先の担当ごとの数と、1 通ずつの id・見出し・送った時刻・宛先・本文の先頭 80 字。全文は TPM 担当が `tpm returned show <id>` で読む）。自分が TPM 担当なら送らない。TPM 担当の居場所が無ければ送らず、そう示す。
-  4. 返した id を `returned.jsonl` に控える（resume・compact で hook がもう 1 度走っても 2 度返さない。返せなかった物は控えず、次の始まりでもう 1 度試す）。
+  4. 返した id を `returned.jsonl` に控える（resume・compact で hook がもう 1 度走っても 2 度返さない。返せなかった物は控えず、次の始まりでもう 1 度試す）。見た時刻の口（`cli/src/seen.ts`）も読み、返した物を、cmux の上で既読でも「宛先の担当はまだ見ていない」とする（`tpm dismiss`・続きの `tpm assign` の検査が止まり、時系列のページは「届け違いで返した」と出す）。
   5. 画面（`systemMessage`）と Claude の文脈（`additionalContext`）に「前の session 宛て。扱わない」と一覧を出す。
 - **見ない物**: session が起きた後に届く届け違い（次の始まりまで見ない）。tpm の hook を付けずに起きた Claude（比べる自分が分からない）。
 

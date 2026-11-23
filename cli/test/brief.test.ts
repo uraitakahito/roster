@@ -64,7 +64,7 @@ describe('tpm assign が依頼書の課題の概要の節を確かめる', () =>
     assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: BRIEF, wait: 0 });
     finish(w, 't-x7k2', 'file:1');
     const next = put(w, 'brief-2.html', '<h1>計画まで</h1>');
-    expect(assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: next, wait: 0 })).toEqual(['送った: 【brief】→ file:1（届いた）']);
+    expect(assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: next, wait: 0 })).toEqual(['送った: 【brief】→ file:1（相手の手が空いた時に届く。送り直さない）']);
   });
 
   test('担当が消えて起こし直すとき（交代を含む）は確かめる', () => {

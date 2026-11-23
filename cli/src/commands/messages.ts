@@ -1,4 +1,4 @@
-// 見出しの付いたメッセージを送る命令。送る・届いたかを見る・課題に記録を書く・状態を替える、を 1 度にする。
+// 見出しの付いたメッセージを送る命令。送る・課題に記録を書く・状態を替える、を 1 度にする（届いたか・見たかは、送る時には見ない。見た時刻は seen.ts の口が引く）。
 // 担当が打つ物（ask・report・wait）と、TPM 担当が打つ物（answer・notify・dismiss・show）。brief は命令でなく、assign の中で使う。
 // レビューの頼み（tpm ask review）と判定（tpm report review）は staff.ts にある（課題の担当と Staff Engineer 担当の席の間を、じかに届ける）。
 // Auditor は、成果を tpm report audit（Product Manager へじかに出した報告の写し）と tpm report decided（Product Manager の決定）で出す。
@@ -41,6 +41,9 @@ export function selfParty(env: NodeJS.ProcessEnv): Party {
 /** 名簿の行の担当。 */
 const partyOf = (role: RoleRecord): Party => ({ key: role.key, ...(role.launch === undefined ? {} : { launch: role.launch }) });
 
+/** 送った命令の出力に添える一言。届いたかは送る時には見ない（相手が手を動かしている間は届かず、空いたら届く）。 */
+export const SENT_NOTE = '相手の手が空いた時に届く。送り直さない';
+
 /** 送った記録の 1 行（log.jsonl）。 */
 export interface Sent {
   at: string
@@ -50,7 +53,8 @@ export interface Sent {
   to: string
   text: string
   id: string
-  delivered: boolean
+  /** 前の版の行だけ: 送った後 2 秒の内に届いたのを見たか。今の版は書かない（見た時刻は seen.ts の口が引き、前の行のこの欄も読む）。 */
+  delivered?: boolean
   /** 返事の先のメッセージの id（--reply-to）。 */
   replyTo?: string
   /**
@@ -105,13 +109,12 @@ function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: str
     to,
     text,
     id: d.id,
-    delivered: d.delivered,
     ...(replyTo === undefined ? {} : { replyTo }),
     ...extra,
     sender: selfParty(ctx.env),
     ...(receiving === undefined ? {} : { recipient: receiving }),
   } satisfies Sent);
-  return `送った: 【${id}】→ ${to}（${d.delivered ? '届いた' : '相手が手を動かしているので、まだ届いていない。空いたら届く'}）`;
+  return `送った: 【${id}】→ ${to}（${SENT_NOTE}）`;
 }
 
 /** 担当から TPM 担当へ。 */
