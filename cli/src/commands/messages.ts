@@ -15,7 +15,7 @@ import { MAX_POINTS, type Note, type NoteKind, type NoteLink } from '../tracker/
 import type { Incoming } from '../transport/types.ts';
 import { isStorePage, pageOwner, replyLine, samePage, waitingUrls } from './reply.ts';
 import { isPageUrl } from './store.ts';
-import { readShown, seenTimes, shownFile, type SeenAt } from '../seen.ts';
+import { readShown, returnedIds, seenTimes, shownFile, type SeenAt } from '../seen.ts';
 
 /** 記録の 1 行目の一言に使う長さの上限（メッセージの本文から作るとき）。 */
 const SUMMARY_LIMIT = 80;
@@ -347,9 +347,12 @@ function unsettled(ctx: Context, role: RoleRecord, address: string, headings?: H
  */
 export function assertSettled(ctx: Context, role: RoleRecord, command: 'dismiss' | 'assign', choice?: SettleChoice): string | undefined {
   const { unseen, briefs } = unsettled(ctx, role, seatOf(ctx, role), command === 'assign' ? ['brief'] : undefined);
+  // 届け違いで返した物は、配られて既読になっているので「まだ見ていない」と字を分ける（TPM 担当が【returned】で扱った後なら --supersede で外す）。
+  const returned = returnedIds(ctx);
+  const what = (l: Sent): string => returned.has(l.id) ? '届け違いで返した' : 'まだ見ていない';
   // 済んでいない依頼書として挙げる【brief】は、まだ見ていない物として 2 度挙げない。
   const late = unseen.filter(l => !briefs.some(b => b.id === l.id));
-  const names = [...briefs.map(b => `${briefName(b.url)}（${b.url}）`), ...late.map(l => `まだ見ていない【${l.heading}】（${l.at} に送った。id ${l.id}）`)];
+  const names = [...briefs.map(b => `${briefName(b.url)}（${b.url}）`), ...late.map(l => `${what(l)}【${l.heading}】（${l.at} に送った。id ${l.id}）`)];
   if (choice !== undefined) {
     if (names.length === 0) throw new TpmError(`${role.key} の担当に、済んでいない物はありません。--${choice} を付けずに打ってください`);
     return choice === 'supersede' ? `取り消す: ${names.join('・')}` : `${names.join('・')}を済ませてから、これをする`;
@@ -361,7 +364,9 @@ export function assertSettled(ctx: Context, role: RoleRecord, command: 'dismiss'
     : 'させてから進むなら --after、取り消すなら --supersede を付けて打ち直す（本文に一言が載る）。';
   throw new TpmError([
     `${role.key} の担当に、まだ済んでいない物があります。送っていません。`,
-    ...unseen.flatMap(l => [`--- まだ見ていない（届いておらず、tpm も見せていない。${l.at} に送った。id ${l.id}）`, l.text]),
+    ...unseen.flatMap(l => [returned.has(l.id)
+      ? `--- 届け違いで返した（${l.at} に送った。id ${l.id}。tpm returned show ${l.id}。送り直したか、要らないと決めたなら --supersede）`
+      : `--- まだ見ていない（届いておらず、tpm も見せていない。${l.at} に送った。id ${l.id}）`, l.text]),
     ...(briefs.length === 0 ? [] : [`--- 【done】が返っていない依頼書: ${briefs.map(b => `${briefName(b.url)}（${b.url}）`).join('・')}`]),
     '--- ここまで',
     how,

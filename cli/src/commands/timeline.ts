@@ -67,7 +67,7 @@ const cut = (text: string): string => text.length > TEXT_LIMIT ? `${text.slice(0
 function seenNote(m: Sent, seen: Seen | undefined, returned: Set<string>): string {
   if (returned.has(m.id)) return '届け違いで返した（宛先の担当は見ていない。tpm returned show）';
   // 後ろ半分は、前の版の行が送った時に「まだ届いていない」と書いた時だけ（今の版の行は、送る時に見ない）。
-  if (seen === undefined || seen.by === 'assumed') return `届いた時刻: 分からない${m.delivered === false ? '（送った時は、まだ届いていない）' : ''}`;
+  if (seen === undefined) return `届いた時刻: 分からない${m.delivered === false ? '（送った時は、まだ届いていない）' : ''}`;
   if (seen.by === 'legacy') return '送った時に届いた';
   if (seen.by === 'shown') return `見た: ${hms(seen.at)}（${seconds(m.at, seen.at)} 秒後。届く前に tpm が見せた）`;
   return `届いた: ${hms(seen.at)}（${seconds(m.at, seen.at)} 秒後）`;

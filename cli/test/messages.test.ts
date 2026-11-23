@@ -471,6 +471,23 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
     expect(() => dismiss(w.tpm, 't-x7k2', { handover: false })).toThrow(`--- 【done】が返っていない依頼書: brief-4（${B4}）`);
   });
 
+  test('返した【notify】を送り直した後の dismiss は、「届け違いで返した」と字を分けて止まり、--supersede の本文も同じ字にする', () => {
+    const w = started();
+    reportDone(w.se, { kind: 'result', summary: '1 つ目', remaining: 'なし', decisions: 'なし', points: [] });
+    notify(w.tpm, 't-x7k2', { text: '前の担当への知らせ' });
+    w.tpm.state.append('returned.jsonl', { at: '2026-11-20T12:00:01.000Z', id: 'm1-file-1', incident: 1 });
+    // TPM 担当が【returned】を扱い、今の担当に送り直した
+    notify(w.tpm, 't-x7k2', { text: '今の担当への知らせ' });
+    expect(() => dismiss(w.tpm, 't-x7k2', { handover: false })).toThrow([
+      't-x7k2 の担当に、まだ済んでいない物があります。送っていません。',
+      '--- 届け違いで返した（2026-11-20T12:00:00.000Z に送った。id m1-file-1。tpm returned show m1-file-1。送り直したか、要らないと決めたなら --supersede）',
+      '【notify】前の担当への知らせ',
+      '--- ここまで',
+    ].join('\n'));
+    dismiss(w.tpm, 't-x7k2', { handover: false, supersede: true });
+    expect(texts(w, 'file:1').at(-1)).toMatch(/取り消す: 届け違いで返した【notify】（2026-11-20T12:00:00\.000Z に送った。id m1-file-1）$/);
+  });
+
   test('見せていない queued の物は「まだ見ていない」として出して止まり、--supersede の本文も同じ字にする', () => {
     const w = started();
     reportDone(w.se, { kind: 'result', summary: '1 つ目', remaining: 'なし', decisions: 'なし', points: [] });
