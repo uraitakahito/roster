@@ -26,7 +26,7 @@ import { launchStaff, markBriefed, putStaffBrief, relabelStaff, STAFF, staffSubj
 /**
  * TPM 担当が名乗る（$ROSTER_KEY の無い roster hello）: 居場所の題と状態を出し、自分の宛先を状態に書く。続けて名簿を出す。
  * 状態の model は、旗が無ければ起こす 1 行と同じ決め方（resolveSettings）。effort は、旗が無ければ Claude Code が入れる $CLAUDE_EFFORT（実際の effort）を旗と同じに扱う。
- * castlist を設定していれば、名乗りを送り、`アクター: <名>` の行を頭に出す（castlist が止まっていれば、名乗らずに止まる）。
+ * castlist を設定していれば、名乗りを送り、`アクター: <名>` の行を頭に出す（castlist が止まっていれば、名乗らずに止まる）。設定していなければ、警告の枠を頭に出す。
  */
 export function tpmHello(ctx: Context, options: { model?: string, effort?: string } = {}): string[] {
   const settings = resolveSettings('tpm', { flags: { model: options.model, effort: options.effort ?? ctx.env.CLAUDE_EFFORT }, env: ctx.env });

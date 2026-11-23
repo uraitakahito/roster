@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, realpathSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
+import { missingCastlistWarning } from '../src/castlist.ts';
 import { hello, inbox } from '../src/commands/role-side.ts';
 import { assign, close, configLines, newKey, recordingTo, roles } from '../src/commands/tpm-side.ts';
 import { createContext, type Context } from '../src/context.ts';
@@ -17,7 +18,7 @@ const SE = { role: 'software-engineer', title: '計画と実装', brief: BRIEF, 
 describe('hello（TPM 担当）', () => {
   test('$ROSTER_KEY が無ければ TPM 担当として名乗る: 宛先を状態に書き、状態を出し、名簿を出す', () => {
     const w = world();
-    expect(hello(w.tpm)).toEqual(['TPM 担当の宛先: file:tpm', `設定: ${w.project}/.claude/roles/config.jsonc`, '課題管理: none（既定）・連携: file', '名簿: 担当はいない']);
+    expect(hello(w.tpm)).toEqual([...missingCastlistWarning(w.tpm), 'TPM 担当の宛先: file:tpm', `設定: ${w.project}/.claude/roles/config.jsonc`, '課題管理: none（既定）・連携: file', '名簿: 担当はいない']);
     expect(w.tpm.state.read('tpm.jsonc')).toEqual({ address: 'file:tpm' });
     expect(w.wire.status('file:tpm')).toEqual({ model: 'Opus 5.5 · medium', wait: '作業中: 起動' });
   });
@@ -326,6 +327,7 @@ describe('hello', () => {
     hello(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
     assign(w.tpm, 't-x7k2', { ...SE, model: 'claude-fable-5-2' });
     expect(hello(w.role('t-x7k2', 'file:1'))).toEqual([
+      ...missingCastlistWarning(w.tpm),
       '役割: Software Engineer',
       '課題の Key: t-x7k2',
       `依頼書: ${BRIEF}`,

@@ -1,18 +1,19 @@
 // castlist（アクターの台帳。127.0.0.1 の別のサーバー）への組み込み。試験は偽の castlist（castlist-fake.ts）と、何も待っていない port を使う。
 // 本物の castlist（8802）と container には触らない。担当は file の連携で、本当には起こさない。
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
-import { castlistIssuer, CASTLIST_VERSION, seatPrefix } from '../src/castlist.ts';
+import { castlistIssuer, CASTLIST_VERSION, emphasize, seatPrefix } from '../src/castlist.ts';
 import { auditStart } from '../src/commands/audit.ts';
 import { readSession, sessionEnd, sessionStart } from '../src/commands/castlist.ts';
 import { guard } from '../src/commands/infra.ts';
 import { hello } from '../src/commands/role-side.ts';
 import { askReview } from '../src/commands/staff.ts';
 import { assign, close, roles } from '../src/commands/tpm-side.ts';
-import { startTpm } from '../src/command.ts';
+import { buildCommand, startTpm } from '../src/command.ts';
+import { composeRolesConfig } from '../src/config.ts';
 import type { Context } from '../src/context.ts';
 import { guardSettings } from '../src/guard.ts';
 import type { RoleName } from '../src/protocol.ts';
@@ -51,6 +52,9 @@ function mark(): () => CastlistRequest[] {
 
 /** 書く要求だけ（/healthz を除く）。 */
 const writes = (requests: CastlistRequest[]): CastlistRequest[] => requests.filter(r => r.path !== '/healthz');
+
+/** 設定の file を読み直した周り（試験の中で file を消した後）。 */
+const withConfig = (ctx: Context): Context => ({ ...ctx, config: composeRolesConfig(ctx.project) });
 
 /** 周りの環境変数を足した周り。 */
 const withEnv = (ctx: Context, extra: NodeJS.ProcessEnv): Context => ({ ...ctx, env: { ...ctx.env, ...extra } });
@@ -115,6 +119,67 @@ describe('castlist を設定していない時', () => {
     expect(castlistCalls(w)).toEqual([]);
     expect(w.tpm.state.list('sessions')).toEqual([]);
     expect(fake.requests().length).toBe(before);
+  });
+});
+
+describe('castlist を設定していない時の警告', () => {
+  const RULE = /^━+$/;
+  const HEAD = '⚠ 警告: castlist（アクターの台帳）を設定していません';
+
+  test('roster start は、起こす 1 行を今までどおり出し、枠で囲んだ警告を alert に返す（warnings には入れない）', () => {
+    const w = world();
+    const { line, warnings, alert } = startTpm(w.tpm);
+    expect(line).toBe(buildCommand(w.tpm.project, w.tpm.root, w.tpm.skillSets, w.tpm.env));
+    expect(warnings).toEqual([]);
+    expect(alert[0]).toMatch(RULE);
+    expect(alert.at(-1)).toMatch(RULE);
+    expect(alert).toContain(HEAD);
+    expect(alert.join('\n')).toContain(join(w.project, '.claude', 'roles', 'config.jsonc'));
+    expect(alert).toContain('  足す 1 行: "castlist": "http://127.0.0.1:8802"');
+    expect(alert).toContain('  （足すかは Product Manager が決める。担当は何もしなくてよい。TPM 担当が伝える）');
+  });
+
+  test('設定の file が無い project では、作って書くよう言い分ける', () => {
+    const w = world();
+    const file = join(w.project, '.claude', 'roles', 'config.jsonc');
+    rmSync(file);
+    const { alert } = startTpm(withConfig(w.tpm));
+    expect(alert).toContain(`  ${file} が無いので、この project の席は castlist に何も送りません（タイムラインに出ません）。`);
+    expect(alert).toContain('  作って書く 1 行: { "castlist": "http://127.0.0.1:8802" }');
+  });
+
+  test('roster hello は、TPM 担当にも担当にも、出力の頭に同じ枠を出す', () => {
+    const w = world();
+    const tpm = tpmSeat(w);
+    const lines = hello(tpm);
+    expect(lines[0]).toMatch(RULE);
+    expect(lines[1]).toBe(HEAD);
+    assign(tpm, 't-x7k2', SE);
+    const se = hello(seat(w, 't-x7k2', SID));
+    expect(se[0]).toMatch(RULE);
+    expect(se[1]).toBe(HEAD);
+  });
+
+  test('設定か $ROSTER_CASTLIST_URL に castlist があれば、警告を出さない', () => {
+    const configured = launched();
+    expect(hello(configured.tpm).some(l => l === HEAD)).toBe(false);
+    expect(startTpm(configured.w.tpm).alert).toEqual([]);
+    const byEnv = world({}, { ROSTER_CASTLIST_URL: fake.url });
+    expect(startTpm(byEnv.tpm).alert).toEqual([]);
+  });
+
+  test('直下の folder の設定にだけ castlist があれば、読まないことを名指す（無ければその行は出ない）', () => {
+    const w = world({}, {}, { castlist: { castlist: fake.url }, other: { tracker: 'none' } });
+    const { alert } = startTpm(w.tpm);
+    expect(alert).toContain('  （直下の folder の設定に castlist がありますが、読みません: castlist）');
+    expect(startTpm(world().tpm).alert.some(l => l.includes('直下の folder'))).toBe(false);
+  });
+
+  test('強める（色を付ける）のは terminal で NO_COLOR が無い時だけ', () => {
+    const lines = ['━━', '⚠ 警告'];
+    expect(emphasize(lines, { isTTY: true, env: {} })).toEqual(['\u001b[1;31m━━\u001b[0m', '\u001b[1;31m⚠ 警告\u001b[0m']);
+    expect(emphasize(lines, { isTTY: false, env: {} })).toEqual(lines);
+    expect(emphasize(lines, { isTTY: true, env: { NO_COLOR: '1' } })).toEqual(lines);
   });
 });
 

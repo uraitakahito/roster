@@ -7,7 +7,7 @@
 // 落ちて終わりを送れなかった session は、hello・roles・assign が cmux の居場所の一覧と突き合わせ、推しの幕引き（detail.inferred）を送る（sweep）。
 import { createHash } from 'node:crypto';
 import type { Context } from '../context.ts';
-import { busyMessage, castlistUrl, downMessage, issuerOf, modelOf, request, requireUp, seatOf, sessionRef, type Reply } from '../castlist.ts';
+import { busyMessage, castlistUrl, downMessage, issuerOf, missingCastlistWarning, modelOf, request, requireUp, seatOf, sessionRef, type Reply } from '../castlist.ts';
 import type { Verdict } from '../guard.ts';
 import type { RoleRecord } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
@@ -299,12 +299,13 @@ function reportIn(ctx: Context, url: string, sid: string): string[] {
 }
 
 /**
- * roster hello（TPM 担当・担当・Auditor）の castlist の分: 起きているかを見て（時計がずれていれば 1 行足す）、名乗りを送る。設定が無ければ空。
+ * roster hello（TPM 担当・担当・Auditor）の castlist の分: 起きているかを見て（時計がずれていれば 1 行足す）、名乗りを送る。
+ * 設定が無ければ、castlist には送らず、警告の枠（missingCastlistWarning）を返す（名乗りの頭に出る）。
  * Claude Code の session の id（$CLAUDE_CODE_SESSION_ID）が無ければ、どのアクターかわからないので、castlist に聞かずに 1 行だけ返す。
  */
 export function castlistHello(ctx: Context): string[] {
   const url = castlistUrl(ctx);
-  if (url === undefined) return [];
+  if (url === undefined) return missingCastlistWarning(ctx);
   const sid = text(ctx.env.CLAUDE_CODE_SESSION_ID);
   if (sid === undefined) return ['アクター: わからない（$CLAUDE_CODE_SESSION_ID が無い。castlist には送っていない）'];
   const skew = requireUp(ctx, '名乗っていません。');

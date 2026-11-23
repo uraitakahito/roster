@@ -21,6 +21,7 @@ disable-model-invocation: true
    - **これが最初の手。** 居場所の題と状態（`model`・`wait`）を出し、自分の宛先を覚えさせ、設定（課題管理・連携・infra と、その出どころ）と名簿を返す。担当はメッセージを送るたびにこの宛先を読むので、起こし直しても担当に知らせ直さなくてよい。
    - 設定は、あなたを起こした folder と、その**直下の folder** の `.claude/roles/config.jsonc` を合わせた物（下の repo をいくつも触る課題のため）。`roster hello` は、どの設定に何が書いてあるかと、課題の Key の形ごとの記録の先を出す。**課題管理や連携を Product Manager に伝えるときは、値だけを言わず、どの folder の設定から来た値か（設定の file が無いための既定なら、そのこと）を添える。**「決まらない」「Product Manager に伝える」と出た行は、そのまま伝える。
    - `roster start` の 1 行と違う model で起こされていたら（Product Manager が 1 行の `--model` を書き替えた、など）、`roster hello --model <model の id>` で打ち直す。
+   - 頭に「⚠ 警告: castlist（アクターの台帳）を設定していません」の枠が出たら、Product Manager への返答の頭に、枠の中身（どの設定の file に、どの 1 行を足すか）をそのまま書く。
    - Auditor の席を 1 度でも起こした project では、`roster hello` と `roster roles` の終わりに「前の監査」の 1 行が出る。「目安を過ぎている」と出たら、Product Manager に一言伝える（監査を始めるのは Product Manager。あなたは起こさない。下の「6. 監査」）。
 2. 名簿を読む。動いている担当がいれば、課題の Key と担当の対応を覚える（Key は下の 2）。「消えた」と出た担当は、居場所がもう無い。Product Manager に伝え、続けるなら `roster assign` で起こし直し、終えるなら `roster close <Key>` で名簿から消す。
 3. `roster wait pm 指示` を打ち、Product Manager の指示を待つ。

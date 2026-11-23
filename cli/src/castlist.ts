@@ -53,6 +53,39 @@ export function castlistUrl(ctx: Pick<Context, 'env' | 'config'>): string | unde
   return url.replace(/\/+$/, '');
 }
 
+/** 警告に書く、足す 1 行の URL（castlist の docs の「動かす」の既定の port）。 */
+const SUGGESTED_URL = 'http://127.0.0.1:8802';
+/** 警告の枠の線。 */
+const RULE = '━'.repeat(40);
+
+/**
+ * castlist を設定していない時に、roster start と roster hello が出す警告の枠（設定していれば空）。
+ * 決め方は castlistUrl と同じ（送らない時にだけ出す）。設定の file が無ければ、作って書くよう言い分ける。
+ * 足すのは Product Manager が決めることなので、どの席の名乗りにも、誰が足すかを添える。直下の folder の設定にだけ castlist があれば、読まないことを名指す（project の folder の設定だけが効くため）。
+ */
+export function missingCastlistWarning(ctx: Pick<Context, 'env' | 'config'>): string[] {
+  if (castlistUrl(ctx) !== undefined) return [];
+  const [own, ...folders] = ctx.config.sources;
+  const unread = folders.filter(s => s.config.castlist !== undefined).map(s => s.name);
+  return [
+    RULE,
+    '⚠ 警告: castlist（アクターの台帳）を設定していません',
+    own?.exists === true
+      ? `  ${own.file} に castlist の行が無いので、この project の席は castlist に何も送りません（タイムラインに出ません）。`
+      : `  ${own?.file ?? '.claude/roles/config.jsonc'} が無いので、この project の席は castlist に何も送りません（タイムラインに出ません）。`,
+    own?.exists === true ? `  足す 1 行: "castlist": "${SUGGESTED_URL}"` : `  作って書く 1 行: { "castlist": "${SUGGESTED_URL}" }`,
+    ...(unread.length === 0 ? [] : [`  （直下の folder の設定に castlist がありますが、読みません: ${unread.join('・')}）`]),
+    '  （足すかは Product Manager が決める。担当は何もしなくてよい。TPM 担当が伝える）',
+    RULE,
+  ];
+}
+
+/** 行を強める（赤の太字）。出す先が terminal で、NO_COLOR が無い時だけ（file や pipe に色の符号を混ぜない）。 */
+export function emphasize(lines: string[], out: { isTTY: boolean, env: NodeJS.ProcessEnv }): string[] {
+  if (!out.isTTY || (out.env.NO_COLOR ?? '') !== '') return lines;
+  return lines.map(line => `\u001b[1;31m${line}\u001b[0m`);
+}
+
 /** 英小文字・数字・- だけにする（castlist の名の接頭辞の字）。 */
 const slug = (text: string): string => text.toLowerCase().replaceAll(/[^a-z0-9-]+/g, '-').replaceAll(/-+/g, '-').replace(/^-|-$/g, '');
 
