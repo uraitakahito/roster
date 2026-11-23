@@ -201,9 +201,11 @@ roster banner check   # 設定と hook を確かめる
 
 命令の頭の検査は、入口が無い機械（roster を入れていない機械）で、何も替えずに（`{}` を返して）0 で終わるための物。dotfiles などで同じ cmux.json をいくつもの機械に配っても、roster の無い機械で通知のたびに失敗しない（バナーは cmux のまま出る）。入口が有って動けない時（node が見つからない・roster が落ちる）は、cmux はいつものバナーに加えて「Notification Hook Failed」を出す（黙ってバナーが消えはしない）。古い形の命令（頭に `PATH=…` を書いた物・入口の検査が無い物）が残っていると、`roster banner check` と TPM 担当の `roster hello` が知らせる。
 
-### `~/.config/tpm/banner.jsonc`（任意）
+### `~/.config/roster/banner.jsonc`（任意）
 
-何を出すかの設定。`$XDG_CONFIG_HOME` があれば `$XDG_CONFIG_HOME/tpm/banner.jsonc`。バナーを見るのは project でなく人なので、`.claude/roles/config.jsonc` には書かない。無ければ次の既定と同じ。
+何を出すかの設定。`$XDG_CONFIG_HOME` があれば `$XDG_CONFIG_HOME/roster/banner.jsonc`。バナーを見るのは project でなく人なので、`.claude/roles/config.jsonc` には書かない。無ければ次の既定と同じ。
+
+古い名の頃の在り処 `~/.config/tpm/banner.jsonc` は読まない。そこに file が有れば、`roster banner check` と TPM 担当の `roster hello` が、移す命令を添えて知らせる（新しい在り処にも有れば、古い方は消してよいと知らせる）。
 
 ```jsonc
 {

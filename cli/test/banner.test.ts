@@ -155,18 +155,30 @@ describe('bannerHook', () => {
 
   test('設定を読めなければ消さず、記録に訳を書く', () => {
     const { w, hook, configHome } = hooked();
-    mkdirSync(join(configHome, 'tpm'));
-    writeFileSync(join(configHome, 'tpm', 'banner.jsonc'), '{ "banner": { "tpm": { "turn": "never" } } }');
+    mkdirSync(join(configHome, 'roster'));
+    writeFileSync(join(configHome, 'roster', 'banner.jsonc'), '{ "banner": { "tpm": { "turn": "never" } } }');
     expect(hook('U-SE', 'turn-complete')).toBe('{}');
     expect(bannerLog(w.tpm, 5)[0]).toMatch(/file:1 {2}software-engineer {2}turn-complete {2}出す {2}設定を読めないので出す/);
   });
 
   test('設定で替えた物に従う（withBanner も）', () => {
     const { hook, configHome } = hooked();
-    mkdirSync(join(configHome, 'tpm'));
-    writeFileSync(join(configHome, 'tpm', 'banner.jsonc'), '{\n  // 担当の答え終わったも見る\n  "banner": { "software-engineer": { "turn": "show" } },\n  "withBanner": ["sound", "paneFlash"],\n}');
+    mkdirSync(join(configHome, 'roster'));
+    writeFileSync(join(configHome, 'roster', 'banner.jsonc'), '{\n  // 担当の答え終わったも見る\n  "banner": { "software-engineer": { "turn": "show" } },\n  "withBanner": ["sound", "paneFlash"],\n}');
     expect(hook('U-SE', 'turn-complete')).toBe('{}');
     expect(hook('U-SE', 'idle-reminder')).toBe(JSON.stringify({ effects: { desktop: false, sound: false, paneFlash: false } }));
+  });
+
+  // 古い名の頃の在り処 ~/.config/tpm（t-4urw）は読まない。知らせるのは banner check と TPM 担当の roster hello。
+  test('古い在り処（~/.config/tpm）の設定は読まず、既定で決める', () => {
+    const { hook, configHome } = hooked();
+    mkdirSync(join(configHome, 'tpm'));
+    writeFileSync(join(configHome, 'tpm', 'banner.jsonc'), '{ "banner": { "software-engineer": { "turn": "show" } } }');
+    expect(hook('U-SE', 'turn-complete')).toBe(HIDE);
+    mkdirSync(join(configHome, 'roster'));
+    writeFileSync(join(configHome, 'roster', 'banner.jsonc'), '{ "banner": { "software-engineer": { "idle": "show" } } }');
+    expect(hook('U-SE', 'turn-complete')).toBe(HIDE);
+    expect(hook('U-SE', 'idle-reminder')).toBe('{}');
   });
 
   test('決めたことを project の banner.jsonl に書き、roster banner log が新しい順に出す', () => {
@@ -244,6 +256,27 @@ describe('setup と check', () => {
     expect(ok.lines).toContain('  tpm: turn=pm-wait idle=hide ask=show');
     expect(ok.lines).toContain('  *: turn=hide idle=hide ask=show');
     expect(ok.lines).toContain('  バナーを消す時に一緒に消す物: sound');
+    expect(ok.lines[0]).toBe(`設定: ${join(dir, 'roster', 'banner.jsonc')}（無いので既定）`);
+  });
+
+  test('check は古い在り処（~/.config/tpm）の設定を読まず、移す手を出して ok にしない', () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'roster-banner-old-')));
+    const env = { XDG_CONFIG_HOME: dir, HOME: home };
+    const file = join(dir, 'cmux.json');
+    writeFileSync(file, JSON.stringify({ notifications: { hooks: [hookEntry(root, env)] } }));
+    mkdirSync(join(dir, 'tpm'));
+    writeFileSync(join(dir, 'tpm', 'banner.jsonc'), '{ "banner": { "software-engineer": { "turn": "show" } } }');
+    const onlyOld = bannerCheck(root, env, file);
+    expect(onlyOld.ok).toBe(false);
+    expect(onlyOld.lines[0]).toMatch(/（無いので既定）$/);
+    expect(onlyOld.lines).not.toContain('  software-engineer: turn=show idle=hide ask=show');
+    expect(onlyOld.lines).toContain(`設定が古い在り処にあり、読みません（既定で動く）。移す: mkdir -p ${join(dir, 'roster')} && mv ${join(dir, 'tpm', 'banner.jsonc')} ${join(dir, 'roster', 'banner.jsonc')}`);
+    mkdirSync(join(dir, 'roster'));
+    writeFileSync(join(dir, 'roster', 'banner.jsonc'), '{ "banner": { "devops-engineer": { "turn": "show" } } }');
+    const both = bannerCheck(root, env, file);
+    expect(both.ok).toBe(false);
+    expect(both.lines).toContain('  devops-engineer: turn=show idle=hide ask=show');
+    expect(both.lines).toContain(`古い在り処の設定は読みません（${join(dir, 'roster', 'banner.jsonc')} を読む）。古い方は消してよい: rm ${join(dir, 'tpm', 'banner.jsonc')}`);
   });
 });
 
@@ -390,5 +423,18 @@ describe('TPM 担当の roster hello の一言', () => {
     expect(bannerHint(cmux, file)).toEqual([expect.stringMatching(/hook の命令が今の roster の在り処と違います.*roster banner setup/)]);
     writeFileSync(file, '{ broken');
     expect(bannerHint(cmux, file)).toEqual([expect.stringMatching(/cmux.json を読めません/)]);
+  });
+
+  test('cmux の連携で、設定が古い在り処（~/.config/tpm）にあれば 1 行足す', () => {
+    const configHome = realpathSync(mkdtempSync(join(tmpdir(), 'roster-banner-hint-old-')));
+    const w = world({}, { XDG_CONFIG_HOME: configHome });
+    const cmux = { ...w.tpm, config: { ...w.tpm.config, transport: 'cmux' as const } };
+    const file = join(configHome, 'cmux.json');
+    writeFileSync(file, `{ "notifications": { "hooks": [${JSON.stringify(hookEntry(cmux.root, cmux.env))}] } }`);
+    expect(bannerHint(cmux, file)).toEqual([]);
+    mkdirSync(join(configHome, 'tpm'));
+    writeFileSync(join(configHome, 'tpm', 'banner.jsonc'), '{}');
+    expect(bannerHint(cmux, file)).toEqual([expect.stringMatching(/^通知のバナー: 設定が古い在り処にあり、読みません.*mv .*（Product Manager に伝える）$/)]);
+    expect(bannerHint(w.tpm, file)).toEqual([]);
   });
 });
