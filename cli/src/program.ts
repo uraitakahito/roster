@@ -45,8 +45,8 @@ function resolveFolder(folder: string): string {
   throw new TpmError(`folder がありません: ${folder}`);
 }
 
-/** `roster` の命令の木を組む。 */
-export function buildProgram(): Command {
+/** `roster` の命令の木を組む。readStdin は hook の標準入力を読む（試験で替える）。 */
+export function buildProgram(readStdin: () => string = () => readFileSync(0, 'utf8')): Command {
   const print = (lines: string[]): void => console.log(lines.join('\n'));
   const program = new Command()
     .name('roster')
@@ -57,7 +57,7 @@ export function buildProgram(): Command {
 
   program.command('start [folder]').description('TPM 担当の Claude Code を起こす 1 行を出す（起こすのは、それを写して打つ利用者。castlist を設定していれば、起きているかを先に見る）')
     .option('-v, --verbose', '読んだ config・追加の skill セット・skill セットごとの skill を stderr に出す')
-    .action((folder: string | undefined, options: { verbose?: boolean }) => {
+    .action(async (folder: string | undefined, options: { verbose?: boolean }) => {
       const dir = resolveFolder(folder ?? process.cwd());
       const sources = readConfigSources(dir);
       const skillSets = composeSkillSets(sources, root);
@@ -66,14 +66,14 @@ export function buildProgram(): Command {
       }
       // 担当の居場所の中で打っても、その担当の project と状態の folder を受け継がない（設定と状態は、渡した folder の物）。
       const ctx = createContext(withEnv(process.env, { PROJECT: dir, STATE: undefined }), dir);
-      const { warnings, alert, line } = startTpm(ctx);
+      const { warnings, alert, line } = await startTpm(ctx);
       // castlist を設定していない警告は、Product Manager の terminal で目立つよう強める（起こす 1 行は止めない）。
       const prefixed = (lines: string[]): string[] => lines.map(l => `roster: ${l}`);
       for (const warning of [...emphasize(prefixed(alert), { isTTY: process.stderr.isTTY, env: process.env }), ...prefixed(warnings)]) process.stderr.write(`${warning}\n`);
       console.log(line);
     });
 
-  program.command('roles').description('名簿を、動いている居場所と突き合わせて出す').action(() => print(roles(createContext())));
+  program.command('roles').description('名簿を、動いている居場所と突き合わせて出す').action(async () => print(await roles(createContext())));
   program.command('key').description('課題管理の課題が無い課題の Key（t- と 4 文字）を、使われていない物から作って出す')
     .action(() => console.log(newKey(createContext())));
   program.command('assign <key>').description('課題を担当に振る（動いていれば【brief】を送る。いなければ起こし、名乗るまで待つ）')
@@ -90,22 +90,22 @@ export function buildProgram(): Command {
     .option('--after', '続きの【brief】で、済んでいない前の依頼書を済ませてから、これをさせる（本文に載る）')
     .option('--no-issue-copy <訳>', '課題（Jira・GitHub の Issue の Key）の写しのページを作らずに振る。訳は担当に届く')
     .option('--wait <秒>', '起こした担当の roster hello を待つ秒（0 なら待たない）', '90')
-    .action((key: string, { issueCopy, ...options }: Omit<AssignOptions, 'wait' | 'role' | 'noIssueCopy'> & { wait: string, role: string, issueCopy: true | string }) => {
+    .action(async (key: string, { issueCopy, ...options }: Omit<AssignOptions, 'wait' | 'role' | 'noIssueCopy'> & { wait: string, role: string, issueCopy: true | string }) => {
       if (!(ROLE_NAMES as string[]).includes(options.role)) throw new TpmError(`--role は ${ROLE_NAMES.join('・')} のどれかにしてください`);
       // commander は --no-issue-copy <訳> を issueCopy（既定 true・付けたら訳の字）にする。
       const skip = issueCopy === true ? {} : { noIssueCopy: issueCopy };
-      print(assign(createContext(), key, { ...options, ...skip, role: options.role as RoleName, wait: Number(options.wait) }));
+      print(await assign(createContext(), key, { ...options, ...skip, role: options.role as RoleName, wait: Number(options.wait) }));
     });
-  program.command('close <key>').description('担当の居場所を閉じ、名簿から消す').action((key: string) => print(close(createContext(), key)));
+  program.command('close <key>').description('担当の居場所を閉じ、名簿から消す').action(async (key: string) => print(await close(createContext(), key)));
   program.command('hello').description('名乗る（TPM 担当は宛先を状態に書いて名簿を出す。担当は受け持ちを返す）')
     .option('--model <model>', 'TPM 担当の model（既定は roster start が起こす model。$ROSTER_MODEL があればそれ）')
     .option('--effort <effort>', 'TPM 担当の effort（既定は $CLAUDE_EFFORT、無ければ roster start が起こす effort）')
-    .action((options: { model?: string, effort?: string }) => print(hello(createContext(), options)));
+    .action(async (options: { model?: string, effort?: string }) => print(await hello(createContext(), options)));
   program.command('inbox').description('自分宛てで、まだ届いていないメッセージを出す（段の区切りに見る）').action(() => print(inbox(createContext())));
   registerMessages(program, print);
   registerReview(program, print);
   registerIncident(program, print);
-  registerAudit(program, print, () => readFileSync(0, 'utf8'));
+  registerAudit(program, print, readStdin);
 
   const infra = program.command('infra').description('インフラの環境の宣言と承認');
   infra.command('list').description('環境・手続き・承認を出す').action(() => print(infraList(createContext())));
@@ -129,9 +129,9 @@ export function buildProgram(): Command {
   page.command('put <file>').description('ページを置き場に置き、控えを写して URL を出す（置き場が応えなければ置けない）')
     .requiredOption('--kind <種類>', PAGE_KINDS.join('・'))
     .option('--key <Key>', '課題の Key（担当は $ROSTER_KEY。TPM 担当は要る）')
-    .action((file: string, options: { kind: string, key?: string }) => print(pagePut(createContext(), file, options)));
+    .action(async (file: string, options: { kind: string, key?: string }) => print(await pagePut(createContext(), file, options)));
   page.command('path <url>').description('置き場の URL を控えの file の path にする（Read tool で読むため。控えに無ければ置き場から取る）')
-    .action((url: string) => print(pagePath(createContext(), url)));
+    .action(async (url: string) => print(await pagePath(createContext(), url)));
   page.command('list').description('置き場のページを絞って探す（今の project の新しい順）')
     .option('--key <Key>', '課題の Key')
     .option('--role <役割>', '置いた担当の役割（tpm・software-engineer など。前の置き場から入れた物は unknown）')
@@ -144,20 +144,20 @@ export function buildProgram(): Command {
     .option('--reply <状態>', '返事の状態で絞る（waiting は返事待ち、answered は答えた物）')
     .option('--on <相手>', '--reply で絞る時の待ちの相手（pm＝既定・review はレビューの席・tpm は TPM 担当。置き場 0.8.0 から）')
     .option('--json', '記録を JSON で出す')
-    .action((options: PageListOptions) => print(pageList(createContext(), options)));
+    .action(async (options: PageListOptions) => print(await pageList(createContext(), options)));
   page.command('reply <urls...>').description('ページの返事の状態を手で直す（TPM 担当だけ。いつもは roster ask pm と roster answer が書く）')
     .option('--waiting', '返事待ちにする（既定は Product Manager の返事待ち）')
     .option('--answered', '答えたにする')
     .option('--on <相手>', '待ちの相手（pm＝既定・review はレビューの席・tpm は TPM 担当。上げた件が決まったら --answered --on tpm。置き場 0.8.0 から）')
-    .action((urls: string[], options: { waiting?: boolean, answered?: boolean, on?: string }) => print(pageReply(createContext(), urls, options)));
+    .action(async (urls: string[], options: { waiting?: boolean, answered?: boolean, on?: string }) => print(await pageReply(createContext(), urls, options)));
   page.command('delete [urls...]').description('ページを置き場と控えから消す（TPM 担当だけ。戻せない。一覧を見せ、--yes で消す）')
     .option('--key <key>', 'この Key のページをみな消す')
     .option('--project <name>', 'この project（状態の folder の名）のページを消す。--key が無ければ project のページをみな消す（既定は今の project）')
     .option('--yes', '一覧を見せるだけでなく、本当に消す')
     .option('--pm <言葉>', 'Auditor が置いたページを消す訳（Product Manager の言葉。記録に残る）')
-    .action((urls: string[], options: PageDeleteOptions) => print(pageDelete(createContext(), urls, options)));
+    .action(async (urls: string[], options: PageDeleteOptions) => print(await pageDelete(createContext(), urls, options)));
   page.command('import').description('控えの folder にあって置き場に無いページと file を、同じ番号で置き場に入れる（切り替えと、DB を失った後）')
-    .action(() => print(pageImport(createContext())));
+    .action(async () => print(await pageImport(createContext())));
 
   const file = program.command('file').description('ページから参照する画像・PDF・字の file を、置き場（127.0.0.1 の pagetray）に上げる・読む・探す・消す');
   file.command('put <file>').description('file を置き場に上げ、控えを写して URL とページからの参照を出す（画像・PDF は --reviewed が要る）')
@@ -165,9 +165,9 @@ export function buildProgram(): Command {
     .option('--reviewed', '画像・PDF の中身を Read tool で見て、秘密が写っていないと確かめた')
     .option('--allow-secret', '秘密の形に当たる字の file を、わかった上で上げる（記録に残る）')
     .option('--key <Key>', '課題の Key（担当は $ROSTER_KEY。TPM 担当は要る）')
-    .action((path: string, options: FilePutOptions) => print(filePut(createContext(), path, options)));
+    .action(async (path: string, options: FilePutOptions) => print(await filePut(createContext(), path, options)));
   file.command('path <url>').description('置き場の file の URL を控えの file の path にする（Read tool で読むため。控えに無ければ置き場から取る）')
-    .action((url: string) => print(filePath(createContext(), url)));
+    .action(async (url: string) => print(await filePath(createContext(), url)));
   file.command('list').description('置き場の file を絞って探す（今の project の新しい順）')
     .option('--key <Key>', '課題の Key')
     .option('--role <役割>', '上げた担当の役割')
@@ -175,17 +175,17 @@ export function buildProgram(): Command {
     .option('--limit <件数>', '出す件数（1000 まで）', '50')
     .option('--all-projects', 'ほかの project の file も出す')
     .option('--json', '記録を JSON で出す')
-    .action((options: FileListOptions) => print(fileList(createContext(), options)));
+    .action(async (options: FileListOptions) => print(await fileList(createContext(), options)));
   file.command('delete <urls...>').description('file を置き場と控えから消す（TPM 担当だけ。戻せない。消す物と参照しているページを見せ、--yes で消す）')
     .option('--yes', '一覧を見せるだけでなく、本当に消す')
-    .action((urls: string[], options: { yes?: boolean }) => print(fileDelete(createContext(), urls, options)));
+    .action(async (urls: string[], options: { yes?: boolean }) => print(await fileDelete(createContext(), urls, options)));
 
   program.command('guard').description('（hook が呼ぶ）標準入力の命令を通すか止めるかを決める')
-    .action(() => {
+    .action(async () => {
       // 設定を読めないときも止める（guard を素通りさせない）。
       let verdict: Verdict;
       try {
-        verdict = guard(createContext(), readFileSync(0, 'utf8'));
+        verdict = await guard(createContext(), readStdin());
       }
       catch (e) {
         verdict = { allow: false, reason: `guard が命令を見られません: ${(e as Error).message}` };
@@ -210,19 +210,19 @@ export function buildProgram(): Command {
     .action((id: string) => print(showReturned(createContext(), id)));
   const castlist = program.command('castlist').description('アクターの台帳（castlist）: session の始まりと終わりを送る（hook が呼ぶ。castlist を設定していなければ何もしない）・監査の検索を読む（find・show・lineage・events・settings。読むだけ）');
   castlist.command('session-start').description('（SessionStart の hook が呼ぶ）session を登録し、登場・再登場・要約・分身と、起こした・継いだ線を送る')
-    .action(() => {
+    .action(async () => {
       // hook なので、どんな誤りでも何も出さずに 0 で終わる（標準出力は、Claude Code が文脈に足してしまう）。
       try {
-        sessionStart(createContext(), readFileSync(0, 'utf8'));
+        await sessionStart(createContext(), readStdin());
       }
       catch (e) {
         process.stderr.write(`roster castlist session-start: ${(e as Error).message}\n`);
       }
     });
   castlist.command('session-end').description('（SessionEnd の hook が呼ぶ）/clear なら交代、ほかは退場を送る')
-    .action(() => {
+    .action(async () => {
       try {
-        sessionEnd(createContext(), readFileSync(0, 'utf8'));
+        await sessionEnd(createContext(), readStdin());
       }
       catch (e) {
         process.stderr.write(`roster castlist session-end: ${(e as Error).message}\n`);
@@ -247,16 +247,16 @@ export function buildProgram(): Command {
     .option('--limit <件数>', '1 頁の数（castlist の既定は 100・1000 まで）')
     .option('--after <next>', '前の答えの next（続きの頁）')
     .option('--json', 'castlist の答えをそのまま出す')
-    .action((options: FindOptions) => print(castlistFind(createContext(), options)));
+    .action(async (options: FindOptions) => print(await castlistFind(createContext(), options)));
   castlist.command('show <名か-id>').description('1 つのアクター: ラベル・付随する id・今の状態・最新の model と effort・線の要約（名は、この project の roster が登録して控えた物だけ引ける）')
     .option('--json', 'castlist の答え（GET /v1/actors/{id}）をそのまま出す')
-    .action((target: string, options: JsonOption) => print(castlistShow(createContext(), target, options)));
+    .action(async (target: string, options: JsonOption) => print(await castlistShow(createContext(), target, options)));
   castlist.command('lineage <名か-id>').description('誰が起こしたか・誰を起こしたか（GET /v1/actors/{id}/lineage。上は人まで、下は既定で 1 段）')
     .option('--direction <up|down|both>', '辿る向き（既定は both）')
     .option('--depth <段>', '辿る段（1〜20）')
     .option('--type <launched|continued>', 'その線だけを辿る')
     .option('--json', 'castlist の答えをそのまま出す')
-    .action((target: string, options: LineageOptions) => print(castlistLineage(createContext(), target, options)));
+    .action(async (target: string, options: LineageOptions) => print(await castlistLineage(createContext(), target, options)));
   castlist.command('events').description('出来事を、アクターをまたいで探す（GET /v1/events。受けた順）')
     .option('--type <種類>', '出来事の種類（何度でも。どれか）', repeat)
     .option('--actor <名か id>', 'そのアクターの物')
@@ -268,7 +268,7 @@ export function buildProgram(): Command {
     .option('--limit <件数>', '1 頁の数（1000 まで）')
     .option('--after <next>', '前の答えの next（続きの頁）')
     .option('--json', 'castlist の答えをそのまま出す')
-    .action((options: EventsOptions) => print(castlistEvents(createContext(), options)));
+    .action(async (options: EventsOptions) => print(await castlistEvents(createContext(), options)));
   castlist.command('settings').description('model と effort の行（--actor が無ければ GET /v1/settings、あれば GET /v1/actors/{id}/settings）')
     .option('--actor <名か id>', 'そのアクターの行（--at でその時に効いていた 1 行）')
     .option('--at <時刻>', '--actor の時刻')
@@ -282,7 +282,7 @@ export function buildProgram(): Command {
     .option('--limit <件数>', '1 頁の数（1000 まで）')
     .option('--after <next>', '前の答えの next（続きの頁）')
     .option('--json', 'castlist の答えをそのまま出す')
-    .action((options: SettingsOptions) => print(castlistSettings(createContext(), options)));
+    .action(async (options: SettingsOptions) => print(await castlistSettings(createContext(), options)));
   program.command('run-role <key>').description('（連携の道具が動かす）名簿を読んで担当の claude を起こす')
     .requiredOption('--project <folder>', 'TPM 担当を起こした folder')
     .requiredOption('--state <folder>', '状態の folder')
@@ -297,7 +297,7 @@ export function buildProgram(): Command {
       // どんな誤りでも {} を返して 0 で終わる（失敗すると cmux が「Notification Hook Failed」を出すため）。
       let out = '{}';
       try {
-        out = bannerHook(readFileSync(0, 'utf8'), { env: process.env, exec, now: new Date() });
+        out = bannerHook(readStdin(), { env: process.env, exec, now: new Date() });
       }
       catch (e) {
         process.stderr.write(`roster banner hook: ${(e as Error).message}\n`);
@@ -316,6 +316,21 @@ export function buildProgram(): Command {
     .option('--limit <件数>', '出す件数', '30')
     .action((options: { limit: string }) => print(bannerLog(createContext(), Number(options.limit))));
   return program;
+}
+
+/**
+ * 命令の木を動かす（cli.ts の入口）。命令は非同期に動くので、parseAsync で終わりまで待つ。
+ * 決まりの誤り（TpmError）は、命令が同期に投げても非同期に投げても、`roster: <文>` の 1 行を stderr に出して exit 1。ほかの誤りはそのまま投げる。
+ */
+export async function runProgram(argv: string[], program: Command = buildProgram()): Promise<void> {
+  try {
+    await program.parseAsync(argv);
+  }
+  catch (e) {
+    if (!(e instanceof TpmError)) throw e;
+    process.stderr.write(`roster: ${e.message}\n`);
+    process.exit(1);
+  }
 }
 
 /** 命令の木を「ask pm」のような名前の並びにする（下に命令を持つ物は、下の命令だけを数える）。 */

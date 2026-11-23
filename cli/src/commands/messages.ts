@@ -504,7 +504,7 @@ export function showWait(ctx: Context, text: string): string {
 }
 
 /** TPM 担当に決めてほしいことを送り（【ask-tpm】）、状態を回答待ちにする。 */
-export function askTpm(ctx: Context, options: { text: string, waitingFor: string, replyTo?: string, review?: number }): string[] {
+export async function askTpm(ctx: Context, options: { text: string, waitingFor: string, replyTo?: string, review?: number }): Promise<string[]> {
   const self = sender(ctx);
   if (options.review === undefined) return [toTpm(ctx, self, 'ask-tpm', options.text, options.replyTo), ...wait(ctx, 'tpm', options.waitingFor)];
   // レビューの判定を受けずに上げる: TPM 担当は判定を受け取っていないので、レビューのページの URL を本文に足し、上げたことを頼みの記録に残す。
@@ -517,14 +517,14 @@ export function askTpm(ctx: Context, options: { text: string, waitingFor: string
   // 2 度目に上げても、最初に上げた時刻を残す。
   if (review.escalatedAt === undefined) patchReview(ctx, review.n, { escalatedAt: ctx.now().toISOString() });
   // 置き場のレビューのページを「上げた」にする（TPM 担当が決めたら roster page reply --answered --on tpm で外す）。
-  return [sent, ...markEscalated(ctx, review.page), ...wait(ctx, 'tpm', options.waitingFor)];
+  return [sent, ...await markEscalated(ctx, review.page), ...wait(ctx, 'tpm', options.waitingFor)];
 }
 
 /**
  * --supersede で名指した古い確認を、送る前に確かめる。受けるのは、自分の Key の、今返事待ちの確認だけ。
  * 置き場に聞けない時（止まっている）は、返事待ちかを確かめずに通す（送った後に印を外せず、直し方の行が出る）。
  */
-function assertSupersede(ctx: Context, self: RoleRecord, url: string, supersede: string[]): void {
+async function assertSupersede(ctx: Context, self: RoleRecord, url: string, supersede: string[]): Promise<void> {
   for (const old of supersede) {
     const owner = pageOwner(ctx, old);
     if (owner === undefined) throw new TpmError(`--supersede は、置き場の確認のページの URL にしてください: ${old}`);
@@ -534,7 +534,7 @@ function assertSupersede(ctx: Context, self: RoleRecord, url: string, supersede:
     if (samePage(ctx, old, url)) throw new TpmError(`--supersede に、送る確認そのものは書けません: ${old}`);
   }
   if (supersede.length === 0) return;
-  const waiting = waitingUrls(ctx, self.key);
+  const waiting = await waitingUrls(ctx, self.key);
   if (waiting === undefined) return;
   const notWaiting = supersede.filter(old => !waiting.some(w => samePage(ctx, w, old)));
   if (notWaiting.length > 0) {
@@ -550,7 +550,7 @@ function assertSupersede(ctx: Context, self: RoleRecord, url: string, supersede:
  * Product Manager に決めてほしいことを書いた確認のページを、TPM 担当に送る。ページは開かない（Product Manager は置き場の一覧の UI で見る）。
  * supersede は、この確認で置き換える古い確認。送った後、その返事待ちの印を外す（答える要が無くなったため）。
  */
-export function askPm(ctx: Context, options: { url: string, items: string[], waitingFor: string, supersede?: string[] }): string[] {
+export async function askPm(ctx: Context, options: { url: string, items: string[], waitingFor: string, supersede?: string[] }): Promise<string[]> {
   const self = sender(ctx);
   notAuditor(self, 'roster ask pm');
   if (options.items.length === 0) throw new TpmError('--item で、決めてほしい項目の題を 1 つ以上書いてください');
@@ -560,7 +560,7 @@ export function askPm(ctx: Context, options: { url: string, items: string[], wai
     ...(supersede.length === 0 ? [] : [`置き換える確認: ${supersede.join(' ')}`]),
   ].join(' ');
   notRepeatToTpm(ctx, self, 'ask-pm', body);
-  assertSupersede(ctx, self, options.url, supersede);
+  await assertSupersede(ctx, self, options.url, supersede);
   const recorded = record(ctx, self, {
     kind: '確認',
     role: ROLES[self.role].label,
@@ -571,13 +571,9 @@ export function askPm(ctx: Context, options: { url: string, items: string[], wai
   const sent = toTpm(ctx, self, 'ask-pm', body);
   // 置き場の確認のページを返事待ちにする（Product Manager が、一覧の UI の印と件数で気づく）。書けなくても、送った事は変わらない。
   // 置き換えた古い確認は、返事待ちから外す（残すと、答える要の無いページが「返事待ち」に出続ける）。
-  return [
-    ...recorded,
-    sent,
-    ...replyLine(ctx, options.url, 'waiting'),
-    ...supersede.flatMap(old => replyLine(ctx, old, 'answered', '置き換えたので返事待ちを外した')),
-    ...wait(ctx, 'pm', options.waitingFor),
-  ];
+  const marks = await replyLine(ctx, options.url, 'waiting');
+  for (const old of supersede) marks.push(...await replyLine(ctx, old, 'answered', '置き換えたので返事待ちを外した'));
+  return [...recorded, sent, ...marks, ...wait(ctx, 'pm', options.waitingFor)];
 }
 
 /** 共有の環境で DevOps Engineer 担当の手が要ることを、TPM 担当に送る（【ask-devops】）。 */
@@ -850,12 +846,12 @@ export interface AnswerOptions {
  * 返事待ちが 2 枚以上あって、どれへの答えかが書かれていなければ、送る前に止まる（別の確認まで「答えた」にしないため）。
  * 置き場に聞けない時（止まっている）と、返事の状態を持てない前の置き場では空（印は付けないが、答えは返す）。
  */
-function answeredPages(ctx: Context, key: string, options: AnswerOptions): string[] {
+async function answeredPages(ctx: Context, key: string, options: AnswerOptions): Promise<string[]> {
   const urls = options.urls ?? [];
   const foreign = urls.find(url => !isStorePage(ctx, url));
   if (foreign !== undefined) throw new TpmError(`--url は、置き場の確認のページの URL にしてください: ${foreign}`);
   if (urls.length > 0) return urls;
-  const waiting = waitingUrls(ctx, key) ?? [];
+  const waiting = await waitingUrls(ctx, key) ?? [];
   if (waiting.length > 1 && options.all !== true) {
     throw new TpmError([
       `${key} に、返事待ちのページが ${waiting.length} 枚あります。答えは送っていません・記録も書いていません。`,
@@ -867,14 +863,16 @@ function answeredPages(ctx: Context, key: string, options: AnswerOptions): strin
 }
 
 /** Product Manager の答えを返す。課題があれば、返す前に「決定」の記録を書く。返した後、置き場の返事待ちのページを答えたにする。 */
-export function answer(ctx: Context, key: string, options: AnswerOptions): string[] {
+export async function answer(ctx: Context, key: string, options: AnswerOptions): Promise<string[]> {
   requireTpmSide(ctx, 'roster answer');
   const role = receiver(ctx, key);
   if (role.address !== undefined) assertNotRepeat(ctx, 'answer', TPM_TITLE, role.address, options.text, options.replyTo);
-  const pages = answeredPages(ctx, key, options);
+  const pages = await answeredPages(ctx, key, options);
   const recorded = record(ctx, role, { kind: '決定', role: 'TPM', summary: oneLine(options.text), links: [], points: [] });
   const sent = toRole(ctx, role, 'answer', options.text, options.replyTo);
-  return [...recorded, sent, ...pages.flatMap(url => replyLine(ctx, url, 'answered'))];
+  const marks: string[] = [];
+  for (const url of pages) marks.push(...await replyLine(ctx, url, 'answered'));
+  return [...recorded, sent, ...marks];
 }
 
 /** 担当に、返事の要らないメッセージを送る（【notify】）。 */
@@ -884,7 +882,7 @@ export function notify(ctx: Context, key: string, options: { text: string, reply
 }
 
 /** この課題に続きは無い、と知らせる。handover は担当の交代（課題は続くので、担当は課題を閉じない）。 */
-export function dismiss(ctx: Context, key: string, options: { handover: boolean, supersede?: boolean }): string[] {
+export async function dismiss(ctx: Context, key: string, options: { handover: boolean, supersede?: boolean }): Promise<string[]> {
   requireTpmSide(ctx, 'roster dismiss');
   if (readRole(ctx, key)?.role === 'auditor') throw new TpmError('Auditor の席に【dismiss】は送れません（Auditor の席は、Product Manager が起こし、閉じる）');
   // Staff Engineer 担当は worktree も PR も持たないので、片付けのやりとり（【dismiss】と【end】）は要らない。
@@ -898,7 +896,7 @@ export function dismiss(ctx: Context, key: string, options: { handover: boolean,
   role.dismissed = options.handover ? 'handover' : 'done';
   writeRole(ctx, role);
   // 答えが要らなくなった確認が、置き場で返事待ちのまま残らないように知らせる（止めない）。
-  const all = waitingByParty(ctx, key);
+  const all = await waitingByParty(ctx, key);
   const left = (['pm', 'review', 'tpm'] as const).flatMap((on) => {
     const waiting = all?.[on] ?? [];
     return waiting.length === 0

@@ -29,14 +29,14 @@ export interface Context {
   /** core のほかに足す skill セット（合わせた設定の skill-sets）。 */
   skillSets: string[]
   /** 待つ（試験で替える）。 */
-  sleep: (ms: number) => void
+  sleep: (ms: number) => Promise<void>
   /** 今の時刻（試験で替える）。 */
   now: () => Date
 }
 
-const sleepSync = (ms: number): void => {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-};
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => {
+  setTimeout(resolve, ms);
+});
 
 /**
  * 周りを組む。project は $ROSTER_PROJECT（担当は起こされるときに渡される）、無ければ今いる folder。
@@ -52,5 +52,5 @@ export function createContext(env: NodeJS.ProcessEnv = process.env, cwd: string 
   const transport = config.transport === 'file' ? new FileTransport(state, envOf(env, 'ADDRESS') || 'file:tpm') : new CmuxTransport(exec);
   // 課題管理への書き込みは tracker.jsonl に残す。
   const tracker = new RecordedTracker(new RoutedTracker(config.trackers, exec), state, actor(env));
-  return { project, config, state, transport, tracker, env, exec, root, skillSets: composeSkillSets(config.sources, root), sleep: sleepSync, now: () => new Date() };
+  return { project, config, state, transport, tracker, env, exec, root, skillSets: composeSkillSets(config.sources, root), sleep, now: () => new Date() };
 }

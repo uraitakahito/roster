@@ -25,24 +25,24 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
     .requiredOption('--waiting-for <何を>', '状態に出す、待っている物')
     .option('--reply-to <id>', '返事の先のメッセージの id')
     .option('--review <番号>', 'レビューの判定（直すべき など）を受けずに上げる時の、頼みの番号（roster review list で見る）。レビューのページの URL が本文に付く')
-    .action((text: string, options: { waitingFor: string, replyTo?: string, review?: string }) => {
+    .action(async (text: string, options: { waitingFor: string, replyTo?: string, review?: string }) => {
       const { review, ...rest } = options;
       if (review !== undefined && !/^[1-9]\d*$/.test(review)) throw new TpmError('--review は、レビューの頼みの番号（1 以上の数）にしてください');
-      print(askTpm(createContext(), { text, ...rest, ...(review === undefined ? {} : { review: Number(review) }) }));
+      print(await askTpm(createContext(), { text, ...rest, ...(review === undefined ? {} : { review: Number(review) }) }));
     });
   ask.command('pm').description('【ask-pm】確認のページを送る（課題に「確認」の記録も書く）')
     .requiredOption('--url <URL>', '確認のページ（roster page put で置いた URL）')
     .requiredOption('--item <題>', '決めてほしい項目の題（繰り返せる）', collect, [] as string[])
     .requiredOption('--waiting-for <何を>', '状態に出す、待っている物')
     .option('--supersede <URL>', 'この確認で置き換える古い確認（同じ Key の返事待ち。繰り返せる）。送った後、その返事待ちの印を外す', collect, [] as string[])
-    .action((options: { url: string, item: string[], waitingFor: string, supersede: string[] }) => print(askPm(createContext(), { url: options.url, items: options.item, waitingFor: options.waitingFor, supersede: options.supersede })));
+    .action(async (options: { url: string, item: string[], waitingFor: string, supersede: string[] }) => print(await askPm(createContext(), { url: options.url, items: options.item, waitingFor: options.waitingFor, supersede: options.supersede })));
   ask.command('devops').description('【ask-devops】共有の環境で DevOps Engineer 担当の手が要る')
     .requiredOption('--what <何を>').requiredOption('--why <なぜ>').option('--urgent', '急ぎ', false)
     .action((options: { what: string, why: string, urgent: boolean }) => print(askDevops(createContext(), options)));
   ask.command('review').description('【ask-review】計画・提案のページか PR のレビューを頼む（Staff Engineer 担当の席へじかに届く。席が無ければ起こす。レビューは助言）')
     .requiredOption('--url <URL>', '見る物（置き場のページか PR の URL）')
     .option('--focus <見てほしい所>', '特に見てほしい所')
-    .action((options: { url: string, focus?: string }) => print(askReview(createContext(), options)));
+    .action(async (options: { url: string, focus?: string }) => print(await askReview(createContext(), options)));
 
   const report = program.command('report').description('担当が TPM 担当に知らせる');
   report.command('merged').description('【merged】自分の PR を 1 本 merge した（PR が merge 済みでなければ送らない）')
@@ -93,7 +93,7 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
     .requiredOption('--url <URL>', 'レビューのページ（roster page put --kind review で置いた URL）')
     .requiredOption('--verdict <判定>', Object.entries(VERDICTS).map(([id, label]) => `${id}（${label}）`).join('・'))
     .requiredOption('--summary <一言>')
-    .action((options: { url: string, verdict: string, summary: string }) => print(reportReview(createContext(), options)));
+    .action(async (options: { url: string, verdict: string, summary: string }) => print(await reportReview(createContext(), options)));
   for (const [id, description] of [
     ['merge-request', '【merge-request】（Dependabot）PR の merge を頼む'],
     ['not-yet', '【not-yet】（Dependabot）まだ対象でない・rebase に応じない'],
@@ -108,12 +108,12 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
     .option('--reply-to <id>', '返事の先のメッセージの id')
     .option('--url <URL>', '答えた確認のページ（何度でも。その Key の返事待ちが 2 枚以上ある時に、どれへの答えかを書く）', collect, [] as string[])
     .option('--all', 'その Key の返事待ちのページの、みなへの答え')
-    .action((key: string, text: string, options: { replyTo?: string, url: string[], all?: boolean }) => print(answer(createContext(), key, { text, urls: options.url, ...(options.replyTo === undefined ? {} : { replyTo: options.replyTo }), ...(options.all ? { all: true } : {}) })));
+    .action(async (key: string, text: string, options: { replyTo?: string, url: string[], all?: boolean }) => print(await answer(createContext(), key, { text, urls: options.url, ...(options.replyTo === undefined ? {} : { replyTo: options.replyTo }), ...(options.all ? { all: true } : {}) })));
   program.command('notify <key> <text>').description('TPM 担当が【notify】を送る（返事は要らない）')
     .option('--reply-to <id>', '返事の先のメッセージの id')
     .action((key: string, text: string, options: { replyTo?: string }) => print(notify(createContext(), key, { text, ...options })));
   program.command('dismiss <key>').description('TPM 担当が【dismiss】を送る')
     .option('--handover', '担当の交代のため（担当は課題を閉じない）', false)
     .option('--supersede', '済んでいない依頼書・まだ見ていないメッセージを取り消して送る（本文に「取り消す: …」と載る）', false)
-    .action((key: string, options: { handover: boolean, supersede: boolean }) => print(dismiss(createContext(), key, options)));
+    .action(async (key: string, options: { handover: boolean, supersede: boolean }) => print(await dismiss(createContext(), key, options)));
 }

@@ -23,11 +23,11 @@ export function summaryText(html: string): string | undefined {
 }
 
 /** 依頼書（置き場のページ）に概要の節があり、SUMMARY_MIN 字以上あるかを確かめる。無ければ、直し方を添えて止まる。 */
-export function assertSummary(ctx: Context, key: string, url: string): void {
+export async function assertSummary(ctx: Context, key: string, url: string): Promise<void> {
   if (!isPageUrl(ctx.env, url)) {
     throw new TpmError(`依頼書は置き場のページにしてください（roster page put <file> --kind brief --key ${key} で置き、出た URL を --brief に書く）: ${url}`);
   }
-  const [path = ''] = pagePath(ctx, url);
+  const [path = ''] = await pagePath(ctx, url);
   const text = summaryText(readFileSync(path, 'utf8'));
   if (text === undefined) {
     throw new TpmError([

@@ -38,7 +38,7 @@ export interface StartOptions {
  * 席は project に 1 つ。もうあれば断る（その席で /clear → /audit を呼ぶ）。居場所が消えていれば起こし直す。
  * 担当の居場所からは打てない。TPM 担当と担当が道具として打つのは、guard が止める。
  */
-export function auditStart(ctx: Context, options: StartOptions): string[] {
+export async function auditStart(ctx: Context, options: StartOptions): Promise<string[]> {
   if (envOf(ctx.env, 'KEY')) throw new TpmError('Audit の席を起こすのは Product Manager です。担当の居場所からは起こせません');
   if (!Number.isFinite(options.wait) || options.wait < 0) throw new TpmError('--wait は 0 以上の数にしてください（0 なら待たない）');
   // skill が無いまま起こすと、最初の入力が Unknown command になる。
@@ -57,8 +57,8 @@ export function auditStart(ctx: Context, options: StartOptions): string[] {
     ...resolveSettings('auditor', { flags: options, config: ctx.config.roles.auditor, env: ctx.env }),
   };
   // castlist を設定していれば、起きているかを見る（止まっていれば、席を起こさずに止まる）。
-  const skew = requireUp(ctx, 'Audit の席は起こしていません。', ['打ってから、もう 1 度 roster audit start を打ってください。']);
-  const lines = launch(ctx, record, existing !== undefined, options.wait, ['この席で /audit（定期の監査）か /audit <件の番号…>（臨時の監査）を呼ぶ。2 度目からは、先に /clear を打つ', ...skew], PM_REF);
+  const skew = await requireUp(ctx, 'Audit の席は起こしていません。', ['打ってから、もう 1 度 roster audit start を打ってください。']);
+  const lines = await launch(ctx, record, existing !== undefined, options.wait, ['この席で /audit（定期の監査）か /audit <件の番号…>（臨時の監査）を呼ぶ。2 度目からは、先に /clear を打つ', ...skew], PM_REF);
   appendAudit(ctx, { kind: 'start', address: record.address ?? '' });
   return lines;
 }
@@ -150,7 +150,7 @@ export function registerAudit(program: Command, print: (lines: string[]) => void
     .option('--effort <effort>', 'Auditor の effort（同じ順）')
     .option('--permission-mode <mode>', 'Auditor の permission mode（同じ順）')
     .option('--wait <秒>', '起こした Auditor の roster hello を待つ秒（0 なら待たない）', '90')
-    .action((options: Omit<StartOptions, 'wait'> & { wait: string }) => print(auditStart(createContext(), { ...options, wait: Number(options.wait) })));
+    .action(async (options: Omit<StartOptions, 'wait'> & { wait: string }) => print(await auditStart(createContext(), { ...options, wait: Number(options.wait) })));
   audit.command('begin [numbers...]').description('Auditor が監査を始める（番号があれば、その件の臨時の監査）。前の報告の後に /clear していなければ止まる')
     .action((numbers: string[]) => print(auditBegin(createContext(), numbers)));
   audit.command('fresh').description('（Auditor の席の hook が呼ぶ）席を起こした・/clear した印を記録する')

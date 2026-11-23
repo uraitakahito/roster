@@ -33,14 +33,14 @@ export function buildCommand(dir: string, root: string, skillSets: string[], env
  * warnings は、castlist の時計がずれている時の 1 行（標準出力の 1 行と分けて出す）。
  * alert は、castlist を設定していない時の警告の枠（強めて出す。missingCastlistWarning）。
  */
-export function startTpm(ctx: Context): { warnings: string[], alert: string[], line: string } {
+export async function startTpm(ctx: Context): Promise<{ warnings: string[], alert: string[], line: string }> {
   const settings = resolveSettings('tpm', { env: ctx.env });
   const url = castlistUrl(ctx);
   if (url === undefined) return { warnings: [], alert: missingCastlistWarning(ctx), line: buildCommand(ctx.project, ctx.root, ctx.skillSets, ctx.env) };
   const done = 'TPM 担当を起こす 1 行は出していません。';
   const after = ['打ってから、もう 1 度 roster start を打ってください。'];
-  const warnings = requireUp(ctx, done, after);
-  const registered = registerPm(ctx, url);
+  const warnings = await requireUp(ctx, done, after);
+  const registered = await registerPm(ctx, url);
   if (registered.kind === 'busy') throw new TpmError(busyMessage(url, done));
   if (registered.kind === 'down') throw new TpmError(downMessage(ctx, url, done, after));
   if (registered.kind === 'refused') throw new TpmError(`castlist（${url}）が Product Manager の登録を断りました（${registered.code}: ${registered.error}）`);

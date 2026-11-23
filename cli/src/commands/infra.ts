@@ -79,7 +79,7 @@ export function infraRun(ctx: Context, name: string, command: string[]): { lines
  * hook の標準入力を読んで決める。Bash と、file を書き替える道具のほかは通す。止めた命令は guard.jsonl に残す。
  * Bash は、手続きと道具の直打ちを見て通す物を、続けて castlist の分（castlistGuard。設定が無ければ何もしない）で見る。
  */
-export function guard(ctx: Context, stdin: string): Verdict {
+export async function guard(ctx: Context, stdin: string): Promise<Verdict> {
   const write = writeOf(stdin);
   if (write !== undefined) {
     const verdict = judgeWrite(write, roleOf(ctx.env), [
@@ -93,7 +93,7 @@ export function guard(ctx: Context, stdin: string): Verdict {
   const command = commandOf(stdin);
   if (command === undefined) return { allow: true };
   const verdict = judge({ command, role: roleOf(ctx.env), config: ctx.config, approvals: readApprovals(ctx.state, ctx.config.infra), now: ctx.now() });
-  const castlist = verdict.allow ? castlistGuard(ctx, stdin) : verdict;
+  const castlist = verdict.allow ? await castlistGuard(ctx, stdin) : verdict;
   if (!castlist.allow) recordGuardStop(ctx, command, castlist.reason);
   return castlist;
 }

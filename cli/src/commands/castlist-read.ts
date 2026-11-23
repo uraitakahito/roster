@@ -134,9 +134,9 @@ function requireUrl(ctx: Context): string {
 }
 
 /** castlist に GET で聞く。 */
-function ask<T>(ctx: Pick<Context, 'exec'>, url: string, path: string, params: Params = []): Answer<T> {
+async function ask<T>(ctx: Pick<Context, 'exec'>, url: string, path: string, params: Params = []): Promise<Answer<T>> {
   const query = new URLSearchParams(params.filter((p): p is [string, string] => p[1] !== undefined)).toString();
-  const r = request(ctx, url, 'GET', query === '' ? path : `${path}?${query}`);
+  const r = await request(ctx, url, 'GET', query === '' ? path : `${path}?${query}`);
   if (r.kind === 'ok') return { kind: 'ok', body: r.body as T, text: r.text };
   if (r.kind === 'down') return { kind: 'failed', reason: `castlist に聞けない（${url} が応えない）`, down: true };
   if (r.kind === 'busy') return { kind: 'failed', reason: `castlist に聞けない（${url} が混んでいる。503）。少し待ってから打ち直す`, down: true };
@@ -186,9 +186,9 @@ function edgeLine(names: Map<string, string>, e: Edge): string {
 const settingLine = (url: string, s: SettingRow): string => [s.received_at, s.actor_name, `${s.model}・${s.effort}（${s.source}）`, profileUrl(url, s.actor_id)].join('  ');
 
 /** `roster castlist find`: アクターを探す（GET /v1/actors）。 */
-export function castlistFind(ctx: Context, options: FindOptions): string[] {
+export async function castlistFind(ctx: Context, options: FindOptions): Promise<string[]> {
   const url = requireUrl(ctx);
-  const { body, text } = must(ask<{ as_of: string, actors: ActorItem[], next: unknown }>(ctx, url, '/v1/actors', [
+  const { body, text } = must(await ask<{ as_of: string, actors: ActorItem[], next: unknown }>(ctx, url, '/v1/actors', [
     ...many('label', options.label),
     ['binding', options.binding],
     ['at', options.at],
@@ -210,17 +210,17 @@ export function castlistFind(ctx: Context, options: FindOptions): string[] {
 }
 
 /** `roster castlist show`: 1 つのアクター（GET /v1/actors/<id>）と、線の要約（GET /v1/actors/<id>/lineage。上は人まで・下は 1 段）。 */
-export function castlistShow(ctx: Context, target: string, options: JsonOption): string[] {
+export async function castlistShow(ctx: Context, target: string, options: JsonOption): Promise<string[]> {
   const url = requireUrl(ctx);
   const id = actorId(ctx, target);
   const path = `/v1/actors/${encodeURIComponent(id)}`;
-  const answer = ask<ActorDetail>(ctx, url, path);
+  const answer = await ask<ActorDetail>(ctx, url, path);
   if (answer.kind === 'failed' && !answer.down) {
     throw new TpmError(`${answer.reason}（${target}）。名で引けるのは、この project の roster が登録して控えたアクター（状態の folder の sessions/）だけ（castlist には名で引く道が無い）。id は roster castlist find で探す`);
   }
   const { body: a, text } = must(answer);
   if (options.json === true) return [text];
-  const { body: lineage } = must(ask<{ nodes: ActorItem[], edges: Edge[] }>(ctx, url, `${path}/lineage`));
+  const { body: lineage } = must(await ask<{ nodes: ActorItem[], edges: Edge[] }>(ctx, url, `${path}/lineage`));
   const names = new Map(lineage.nodes.map(n => [n.id, n.name]));
   const s = a.state;
   const now = s.present
@@ -240,10 +240,10 @@ export function castlistShow(ctx: Context, target: string, options: JsonOption):
 }
 
 /** `roster castlist lineage`: 誰が起こしたか・誰を起こしたか（GET /v1/actors/<id>/lineage）。 */
-export function castlistLineage(ctx: Context, target: string, options: LineageOptions): string[] {
+export async function castlistLineage(ctx: Context, target: string, options: LineageOptions): Promise<string[]> {
   const url = requireUrl(ctx);
   const id = actorId(ctx, target);
-  const { body, text } = must(ask<{ as_of: string, nodes: ActorItem[], edges: Edge[] }>(ctx, url, `/v1/actors/${encodeURIComponent(id)}/lineage`, [
+  const { body, text } = must(await ask<{ as_of: string, nodes: ActorItem[], edges: Edge[] }>(ctx, url, `/v1/actors/${encodeURIComponent(id)}/lineage`, [
     ['direction', options.direction],
     ['depth', options.depth],
     ['type', options.type],
@@ -260,9 +260,9 @@ export function castlistLineage(ctx: Context, target: string, options: LineageOp
 }
 
 /** `roster castlist events`: 出来事を、アクターをまたいで（GET /v1/events）。 */
-export function castlistEvents(ctx: Context, options: EventsOptions): string[] {
+export async function castlistEvents(ctx: Context, options: EventsOptions): Promise<string[]> {
   const url = requireUrl(ctx);
-  const { body, text } = must(ask<{ as_of: string, events: EventRow[], next: unknown }>(ctx, url, '/v1/events', [
+  const { body, text } = must(await ask<{ as_of: string, events: EventRow[], next: unknown }>(ctx, url, '/v1/events', [
     ...many('type', options.type),
     ['actor', options.actor === undefined ? undefined : actorId(ctx, options.actor)],
     ['from', options.from],
@@ -285,7 +285,7 @@ export function castlistEvents(ctx: Context, options: EventsOptions): string[] {
  * `roster castlist settings`: model と effort の行。--actor があれば、そのアクターの行（GET /v1/actors/<id>/settings。--at でその時に効いていた 1 行）、
  * 無ければアクターをまたいで（GET /v1/settings）。どちらにも、ほかの旗をそのまま送る（受けない引数は castlist が断る）。
  */
-export function castlistSettings(ctx: Context, options: SettingsOptions): string[] {
+export async function castlistSettings(ctx: Context, options: SettingsOptions): Promise<string[]> {
   const url = requireUrl(ctx);
   const params: Params = [
     ['at', options.at],
@@ -301,12 +301,12 @@ export function castlistSettings(ctx: Context, options: SettingsOptions): string
   ];
   if (options.actor !== undefined) {
     const id = actorId(ctx, options.actor);
-    const { body, text } = must(ask<{ as_of: string, setting?: SettingRow | null, settings?: SettingRow[] }>(ctx, url, `/v1/actors/${encodeURIComponent(id)}/settings`, params));
+    const { body, text } = must(await ask<{ as_of: string, setting?: SettingRow | null, settings?: SettingRow[] }>(ctx, url, `/v1/actors/${encodeURIComponent(id)}/settings`, params));
     if (options.json === true) return [text];
     if (body.settings !== undefined) return [head('model と effort の行', body.settings.length, body.as_of), ...body.settings.map(s => settingLine(url, s))];
     return body.setting === null || body.setting === undefined ? [`その時（${options.at ?? ''}）の model と effort は、まだ無い（castlist の時刻 ${body.as_of}）`] : [settingLine(url, body.setting)];
   }
-  const { body, text } = must(ask<{ as_of: string, settings: SettingRow[], next: unknown }>(ctx, url, '/v1/settings', params));
+  const { body, text } = must(await ask<{ as_of: string, settings: SettingRow[], next: unknown }>(ctx, url, '/v1/settings', params));
   if (options.json === true) return [text];
   return [head('model と effort の行', body.settings.length, body.as_of), ...body.settings.map(s => settingLine(url, s)), ...more(body.next)];
 }
@@ -315,8 +315,8 @@ export function castlistSettings(ctx: Context, options: SettingsOptions): string
  * 時刻 at に、席 seat（担当は課題の Key、TPM 担当は tpm）に居たアクター（roster incident timeline のアクターの欄）。
  * この project のラベル（tpm.project と、tpm.key か tpm.role=tpm）で、居た間がその時刻に掛かる者を聞く。
  */
-export function seatActorsAt(ctx: Context, url: string, seat: string, at: string): Answer<{ actors: ActorItem[] }> {
-  return ask(ctx, url, '/v1/actors', [
+export async function seatActorsAt(ctx: Context, url: string, seat: string, at: string): Promise<Answer<{ actors: ActorItem[] }>> {
+  return await ask(ctx, url, '/v1/actors', [
     ['label', `tpm.project:${ctx.project}`],
     ['label', seat === 'tpm' ? 'tpm.role:tpm' : `tpm.key:${seat}`],
     ['active_from', at],

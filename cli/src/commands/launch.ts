@@ -39,7 +39,7 @@ export class NotStartedError extends TpmError {}
  * 状態の folder は symlink を解いて渡す（古い在り処の symlink を通って起きた担当が起こす席にも、新しい path を渡す。t-6ydg）。
  * description は題の下に出す説明。色は役割の表（ROLES の color）から、宛先を名簿に書いた後に付ける（paint）。
  */
-export function launch(ctx: Context, record: RoleRecord, again: boolean, wait: number, more: string[] = [], launchedBy?: string, description?: string): string[] {
+export async function launch(ctx: Context, record: RoleRecord, again: boolean, wait: number, more: string[] = [], launchedBy?: string, description?: string): Promise<string[]> {
   if (castlistUrl(ctx) !== undefined) {
     record.launch = randomUUID();
     if (launchedBy !== undefined) record.launchedBy = launchedBy;
@@ -52,7 +52,7 @@ export function launch(ctx: Context, record: RoleRecord, again: boolean, wait: n
   if (wait === 0) return [...head, '名乗り（roster hello）は待っていない'];
   for (let waited = 0; waited < wait * 1000; waited += HELLO_INTERVAL_MS) {
     if (readRole(ctx, record.key)?.helloAt !== undefined) return [...head, '名乗った（roster hello が来た）'];
-    ctx.sleep(HELLO_INTERVAL_MS);
+    await ctx.sleep(HELLO_INTERVAL_MS);
   }
   if (readRole(ctx, record.key)?.helloAt !== undefined) return [...head, '名乗った（roster hello が来た）'];
   throw new NotStartedError(notStarted(ctx, record, wait));
@@ -72,13 +72,13 @@ export function roleDefaults(ctx: Context, role: RoleName, cwd: string): Partial
  * 課題の写し（名簿に書く欄）。読める形の Key なら写しを置いて URL を、--no-issue-copy ならその訳を返す。読める形でなければ空。
  * 前の写しの欄は、どちらかに上書きするため両方を返す（undefined は消す）。
  */
-export function issueCopy(ctx: Context, issueKey: string, roleKey: string, skip: string | undefined): Pick<RoleRecord, 'issuePage' | 'issueCopySkipped'> {
+export async function issueCopy(ctx: Context, issueKey: string, roleKey: string, skip: string | undefined): Promise<Pick<RoleRecord, 'issuePage' | 'issueCopySkipped'>> {
   if (issueTracker(ctx, issueKey) === undefined) return {};
   if (skip !== undefined) {
     if (skip.trim() === '') throw new TpmError('--no-issue-copy には、写しを作らずに振る訳を書いてください');
     return { issuePage: undefined, issueCopySkipped: skip };
   }
-  return { issuePage: copyIssue(ctx, issueKey, roleKey), issueCopySkipped: undefined };
+  return { issuePage: await copyIssue(ctx, issueKey, roleKey), issueCopySkipped: undefined };
 }
 
 /** 名乗らなかった訳を画面から読む。信頼のダイアログと命令の誤りは、居場所を閉じてから知らせる。 */

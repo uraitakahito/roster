@@ -8,7 +8,7 @@ import type { Context } from '../context.ts';
 import { actor } from '../evidence.ts';
 import { TpmError } from '../skill-sets.ts';
 import { readRole } from '../roster.ts';
-import { copyRefs, fileImport, findFiles, removeFiles } from './file.ts';
+import { copyRefs, fileImport, findFiles, removeFiles, type FileRecord } from './file.ts';
 import { roleOf } from './infra.ts';
 import { assertRead } from './messages.ts';
 import { inState, isStorePage, PARTY_SINCE, party, REPLY_LABELS, setReply, type Party, type ReplyState } from './reply.ts';
@@ -63,11 +63,11 @@ export const pageFolder = (ctx: Context, key: string): string => join(pagesDir(c
  * project の名を状態の folder の名にするのは、起こされた担当も $ROSTER_STATE で同じ folder を受け取り、TPM 担当と名がずれないため。
  * Key は --key、無ければ $ROSTER_KEY（担当）。置き直すと次の番号になり、前の版は残る。置き場が応えなければ置けない。
  */
-export function pagePut(ctx: Context, file: string, options: { kind: string, key?: string }): string[] {
+export async function pagePut(ctx: Context, file: string, options: { kind: string, key?: string }): Promise<string[]> {
   if (!(PAGE_KINDS as readonly string[]).includes(options.kind)) throw new TpmError(`--kind は ${PAGE_KINDS.join('・')} のどれかにしてください`);
   if (!existsSync(file) || !statSync(file).isFile()) throw new TpmError(`file がありません: ${file}`);
   if (READ_FIRST.includes(options.kind as PageKind)) assertReadBeforePut(ctx, options.key);
-  const { path, url } = putPage(ctx, { file }, options.kind as PageKind, options.key);
+  const { path, url } = await putPage(ctx, { file }, options.kind as PageKind, options.key);
   return [`置いた: ${path}`, `URL: ${url}`];
 }
 
@@ -85,7 +85,7 @@ function assertReadBeforePut(ctx: Context, keyOption?: string): void {
 }
 
 /** file の中身か字をページとして置き、控えの path と URL を返す（pagePut と、roster assign の課題の写し）。 */
-export function putPage(ctx: Context, source: { file: string } | { text: string }, kind: PageKind, keyOption?: string): { path: string, url: string } {
+export async function putPage(ctx: Context, source: { file: string } | { text: string }, kind: PageKind, keyOption?: string): Promise<{ path: string, url: string }> {
   const key = requireKey(ctx, keyOption);
   const query = new URLSearchParams({
     project: basename(ctx.state.dir),
@@ -95,7 +95,7 @@ export function putPage(ctx: Context, source: { file: string } | { text: string 
     workspace: selfAddress(ctx),
     ...sender(ctx),
   });
-  const record = post(ctx, source, query);
+  const record = await post(ctx, source, query);
   if (record === 'taken') throw new TpmError('置き場が番号を決められませんでした（409）。もう 1 度打ってください');
   const path = localPath(ctx, record.path);
   writeCopy(ctx, path, 'file' in source ? readFileSync(source.file) : Buffer.from(source.text));
@@ -103,9 +103,9 @@ export function putPage(ctx: Context, source: { file: string } | { text: string 
 }
 
 /** 置き場に 1 枚送る。置けたら記録を、番号を名指して使われていたら 'taken' を返す。ほかは止まる（送り手を付けた要求の 503・422 は senderRefused の文）。 */
-function post(ctx: Context, source: { file: string } | { text: string }, query: URLSearchParams): PageRecord | 'taken' {
+async function post(ctx: Context, source: { file: string } | { text: string }, query: URLSearchParams): Promise<PageRecord | 'taken'> {
   const data = 'file' in source ? `@${source.file}` : '@-';
-  const r = call(
+  const r = await call(
     ctx,
     ['-X', 'POST', '-H', 'Content-Type: text/html; charset=utf-8', '--data-binary', data, `${pagesUrl(ctx.env)}/api/pages?${query.toString()}`],
     'file' in source ? undefined : source.text,
@@ -123,7 +123,7 @@ function post(ctx: Context, source: { file: string } | { text: string }, query: 
  * ページが相対で参照する file（`files/…`・`../<Key>/files/…`）も、控えに無ければ取って、ページから同じ相対の所に写す（取れなければ注意の行を足す）。
  * 前の置き場の URL（8800）も受ける。置き場の外の URL・無いページは誤り。file の URL は roster file path に回す。
  */
-export function pagePath(ctx: Context, url: string): string[] {
+export async function pagePath(ctx: Context, url: string): Promise<string[]> {
   const rest = inStore(ctx.env, url);
   if (rest === undefined) throw new TpmError(`置き場（${pagesUrl(ctx.env)}）の URL ではありません: ${url}`);
   const parts = rest.split('/').map((p) => {
@@ -141,14 +141,14 @@ export function pagePath(ctx: Context, url: string): string[] {
   const page = parts.length === 3 && PAGE_FILE.test(file);
   if (!existsSync(path) || !statSync(path).isFile()) {
     if (!page) throw new TpmError(`置き場に file がありません: ${path}`);
-    fetchPage(ctx, `/${parts.map(encodeURIComponent).join('/')}`, path);
+    await fetchPage(ctx, `/${parts.map(encodeURIComponent).join('/')}`, path);
   }
-  return page ? [path, ...copyRefs(ctx, project, key, path)] : [path];
+  return page ? [path, ...await copyRefs(ctx, project, key, path)] : [path];
 }
 
 /** 置き場からページを取り、控えの path に書く。途中の file は残さない。 */
-function fetchPage(ctx: Context, storePath: string, path: string): void {
-  const code = fetchTo(ctx, storePath, path);
+async function fetchPage(ctx: Context, storePath: string, path: string): Promise<void> {
+  const code = await fetchTo(ctx, storePath, path);
   if (code === '200') return;
   if (code === '000') throw down(ctx, `控え（${path}）もありません。`);
   if (code === '410') throw new TpmError(`置き場のページは消してあります（410）: ${pagesUrl(ctx.env)}${storePath}`);
@@ -190,7 +190,7 @@ function replyState(value: string): ReplyState {
 }
 
 /** 置き場のページを絞って探す。既定は、今の project の新しい順。--json は記録の配列（url を足した物）を出す。 */
-export function pageList(ctx: Context, options: PageListOptions): string[] {
+export async function pageList(ctx: Context, options: PageListOptions): Promise<string[]> {
   const query = new URLSearchParams({ limit: options.limit ?? '50' });
   if (!options.allProjects) query.set('project', basename(ctx.state.dir));
   for (const name of ['key', 'role', 'workspace', 'kind', 'q'] as const) {
@@ -203,7 +203,7 @@ export function pageList(ctx: Context, options: PageListOptions): string[] {
   const on = partyOption(options.on);
   if (reply !== undefined) query.set('reply', reply);
   if (on !== 'pm') query.set('on', on);
-  const r = call(ctx, [`${pagesUrl(ctx.env)}/api/pages?${query.toString()}`]);
+  const r = await call(ctx, [`${pagesUrl(ctx.env)}/api/pages?${query.toString()}`]);
   if (r.code === '000') throw down(ctx, '');
   if (r.code !== '200') throw new TpmError(`置き場が一覧を返しませんでした（${r.code}）: ${reason(r.body)}`);
   const pages = (JSON.parse(r.body) as { pages: PageRecord[] }).pages
@@ -219,7 +219,7 @@ export function pageList(ctx: Context, options: PageListOptions): string[] {
  * ページの返事の状態を、手で直す（TPM 担当だけ）。いつもは roster ask pm が返事待ちに、roster answer が答えたにする。
  * 使うのは、roster answer を通らずに済んだ確認（取り下げた・次の依頼書で答えた）と、置き場が応えない間に送った確認。
  */
-export function pageReply(ctx: Context, urls: string[], options: { waiting?: boolean, answered?: boolean, on?: string }): string[] {
+export async function pageReply(ctx: Context, urls: string[], options: { waiting?: boolean, answered?: boolean, on?: string }): Promise<string[]> {
   if (roleOf(ctx.env) !== undefined) throw new TpmError('ページの返事の状態を手で直せるのは TPM 担当だけです。直すページの URL と訳を、roster ask tpm で TPM 担当に送って頼んでください');
   if (options.waiting === options.answered) throw new TpmError('--waiting（返事待ちにする）か --answered（答えたにする）の、どちらか 1 つを付けてください');
   if (urls.length === 0) throw new TpmError('ページの URL を 1 つ以上書いてください');
@@ -228,9 +228,13 @@ export function pageReply(ctx: Context, urls: string[], options: { waiting?: boo
   // 書く前に、みな置き場のページの URL かを見る（途中まで書いて止まらないように）。
   const foreign = urls.find(url => !isStorePage(ctx, url));
   if (foreign !== undefined) throw new TpmError(`置き場（${pagesUrl(ctx.env)}）のページの URL ではありません: ${foreign}`);
-  return urls.map((url) => {
-    const result = setReply(ctx, url, state, on);
-    if (result === 'done') return `${REPLY_LABELS[on][state]}にした: ${url}`;
+  const lines: string[] = [];
+  for (const url of urls) {
+    const result = await setReply(ctx, url, state, on);
+    if (result === 'done') {
+      lines.push(`${REPLY_LABELS[on][state]}にした: ${url}`);
+      continue;
+    }
     if (result === 'down') throw down(ctx, '返事の状態は書いていません。');
     if (result === 'old') {
       throw new TpmError(on === 'pm'
@@ -243,7 +247,8 @@ export function pageReply(ctx: Context, urls: string[], options: { waiting?: boo
         : `そのページは、今ほかの相手の返事を待っています（置き場は待ちを移さない。何も替えていない）: ${url}。今の待ちは roster page list --reply waiting --on <相手> で見る。先にその待ちを --answered --on <相手> で外す`);
     }
     throw new TpmError(`そのページは置き場にありません: ${url}`);
-  });
+  }
+  return lines;
 }
 
 /** 控えの folder にあるページ（`<project>/<Key>/<種類>-<番号>.html`）を並べる。 */
@@ -262,7 +267,7 @@ function cached(dir: string): { project: string, key: string, kind: string, n: s
  * 何度打っても同じ結果になる。消したページ（置き場が 410 を返す番号）は入れない。置いた担当はわからないので、役割は依頼書と課題の写しだけ tpm、ほかは unknown、居場所は空で入る。
  * 同じ番号に別の中身があるページは入れず、並べて知らせる。控えの `<Key>/files/` にある file も、同じ決まりで入れる（file.ts の fileImport）。
  */
-export function pageImport(ctx: Context): string[] {
+export async function pageImport(ctx: Context): Promise<string[]> {
   const dir = pagesDir(ctx.env);
   const added: string[] = [];
   const conflicts: string[] = [];
@@ -279,13 +284,13 @@ export function pageImport(ctx: Context): string[] {
       n: page.n,
       created_at: statSync(page.file).mtime.toISOString(),
     });
-    if (post(ctx, { file: page.file }, query) !== 'taken') {
+    if (await post(ctx, { file: page.file }, query) !== 'taken') {
       added.push(storePath);
       continue;
     }
     // もうある番号。中身が同じなら入っている。違えば、置き場を通さずに置かれた物とぶつかっている。
     // 消したページ（410）は、番号が残っているので入らない。控えだけが残っていた物。
-    const seen = compareStored(ctx, storePath, page.file);
+    const seen = await compareStored(ctx, storePath, page.file);
     if (seen === 'same') same += 1;
     else if (seen === 'removed') removed += 1;
     else conflicts.push(page.file);
@@ -294,7 +299,7 @@ export function pageImport(ctx: Context): string[] {
     `入れた: ${added.length} 枚・もう入っていた: ${same} 枚・消したページ: ${removed} 枚・ぶつかった: ${conflicts.length} 枚（控えの folder: ${dir}）`,
     ...added.map(path => `+ ${pagesUrl(ctx.env)}${path}`),
     ...conflicts.map(file => `! 同じ番号に別の中身がある（入れていない。要るなら roster page put で置き直す）: ${file}`),
-    ...fileImport(ctx),
+    ...await fileImport(ctx),
   ];
 }
 
@@ -329,20 +334,21 @@ interface DeleteTarget {
  * まず消す物を一覧で出し、--yes を付けたときだけ置き場に頼む。置き場は番号を残すので、消した URL は 410 になり、同じ番号は 2 度使われない。
  * 消した後に、控えの file（Key・project ごとなら folder）も消す。
  */
-export function pageDelete(ctx: Context, urls: string[], options: PageDeleteOptions): string[] {
+export async function pageDelete(ctx: Context, urls: string[], options: PageDeleteOptions): Promise<string[]> {
   if (roleOf(ctx.env) !== undefined) throw new TpmError('ページを消せるのは TPM 担当だけです。消すページの URL と訳を、roster ask tpm で TPM 担当に送って頼んでください');
   const targets = deleteTargets(ctx, urls, options);
   const dir = pagesDir(ctx.env);
-  const found = targets.map((target) => {
+  const found: { target: DeleteTarget, pages: PageRecord[], files: FileRecord[] }[] = [];
+  for (const target of targets) {
     const query = new URLSearchParams({ project: target.query.get('project') ?? '', limit: '1000' });
     const key = target.query.get('key');
     if (key !== null) query.set('key', key);
-    const r = call(ctx, [`${pagesUrl(ctx.env)}/api/pages?${query.toString()}`]);
+    const r = await call(ctx, [`${pagesUrl(ctx.env)}/api/pages?${query.toString()}`]);
     if (r.code === '000') throw down(ctx, 'ページは消していません。');
     if (r.code !== '200') throw new TpmError(`置き場が一覧を返しませんでした（${r.code}）: ${reason(r.body)}`);
     const pages = (JSON.parse(r.body) as { pages: PageRecord[] }).pages.filter(p => target.covers(p.path));
-    return { target, pages, files: target.files ? findFiles(ctx, query) ?? [] : [] };
-  });
+    found.push({ target, pages, files: target.files ? await findFiles(ctx, query) ?? [] : [] });
+  }
   const pages = found.flatMap(f => f.pages);
   const files = found.flatMap(f => f.files);
   if (pages.length === 0 && files.length === 0) return ['置き場に、消すページは無い'];
@@ -362,14 +368,15 @@ export function pageDelete(ctx: Context, urls: string[], options: PageDeleteOpti
       '消すには、同じ命令に --yes を付けて打ってください',
     ];
   }
-  const removed = found.map(({ target, files }) => {
-    const r = call(ctx, ['-X', 'DELETE', `${pagesUrl(ctx.env)}/api/pages?${target.query.toString()}`]);
+  const removed: { pages: string[], files: string[] }[] = [];
+  for (const { target, files } of found) {
+    const r = await call(ctx, ['-X', 'DELETE', `${pagesUrl(ctx.env)}/api/pages?${target.query.toString()}`]);
     if (r.code === '000') throw down(ctx, 'ページは消していません。');
     if (r.code !== '200') throw new TpmError(`置き場がページを消しませんでした（${r.code}）: ${reason(r.body)}`);
-    const gone = { pages: (JSON.parse(r.body) as { removed: string[] }).removed, files: files.length > 0 ? removeFiles(ctx, target.query) : [] };
+    const gone = { pages: (JSON.parse(r.body) as { removed: string[] }).removed, files: files.length > 0 ? await removeFiles(ctx, target.query) : [] };
     for (const local of target.local) removeLocal(dir, local);
-    return gone;
-  });
+    removed.push(gone);
+  }
   for (const p of audits) appendAudit(ctx, { kind: 'page-deleted', url: `${pagesUrl(ctx.env)}${p.path}`, by: actor(ctx.env).by, pm: options.pm ?? '' });
   const [gonePages, goneFiles] = [removed.flatMap(g => g.pages), removed.flatMap(g => g.files)];
   return [

@@ -87,7 +87,7 @@ export function issuePage(issue: TrackerIssue, at: Date): string {
  * 課題の写しのページを置き、URL を返す（roster assign）。issueKey が読める形でなければ（t- の Key・Dependabot の PR）何もせず undefined。
  * 読めなければ、--no-issue-copy で抜けられることを添えて止まる。ページは担当の Key（roleKey）の folder に置く。
  */
-export function copyIssue(ctx: Context, issueKey: string, roleKey: string): string | undefined {
+export async function copyIssue(ctx: Context, issueKey: string, roleKey: string): Promise<string | undefined> {
   if (issueTracker(ctx, issueKey) === undefined) return undefined;
   let issue;
   try {
@@ -97,5 +97,5 @@ export function copyIssue(ctx: Context, issueKey: string, roleKey: string): stri
     if (!(e instanceof TpmError)) throw e;
     throw new TpmError(`${issueKey} の課題の写しを作れませんでした: ${e.message}\n読めないまま振るなら、訳を添えて --no-issue-copy "<訳>" を付けてください（訳は担当に届きます）`);
   }
-  return putPage(ctx, { text: issuePage(issue, ctx.now()) }, 'issue', roleKey).url;
+  return (await putPage(ctx, { text: issuePage(issue, ctx.now()) }, 'issue', roleKey)).url;
 }

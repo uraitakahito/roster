@@ -57,7 +57,7 @@ function staffBriefPage(subject: RoleRecord, asks: Review[]): string {
 }
 
 /** レビューの頼みから依頼書のページを作って置き、URL を返す。 */
-export const putStaffBrief = (ctx: Context, subject: RoleRecord, asks: Review[]): string => putPage(ctx, { text: staffBriefPage(subject, asks) }, 'brief', subject.key).url;
+export const putStaffBrief = async (ctx: Context, subject: RoleRecord, asks: Review[]): Promise<string> => (await putPage(ctx, { text: staffBriefPage(subject, asks) }, 'brief', subject.key)).url;
 
 /**
  * 頼みに、渡した依頼書の URL を書く（渡した後に呼ぶ。渡せなかった回に、依頼書にした事にしない）。
@@ -111,18 +111,18 @@ export interface LaunchStaffOptions {
  * 課題の担当の roster ask review（席が無い時）と、TPM 担当の roster assign --role staff-engineer（起こし直し）が使う。
  * 起こした者（castlist の launchedBy）は、命令を打った session（roster ask review なら課題の担当）。
  */
-export function launchStaff(ctx: Context, subject: RoleRecord, asks: Review[], options: LaunchStaffOptions): string[] {
+export async function launchStaff(ctx: Context, subject: RoleRecord, asks: Review[], options: LaunchStaffOptions): Promise<string[]> {
   // Staff Engineer 担当の記録は、見ている課題の課題管理の課題に書く。
   const issue = options.issue ?? subject.issue;
   const cwd = options.cwd ?? ctx.project;
   const settings = resolveSettings(STAFF, { flags: options.flags ?? {}, config: roleDefaults(ctx, STAFF, cwd), env: ctx.env });
   // castlist を設定していれば、起きているかを、写しを置く前に見る（止まっていれば、席を起こさずに止まる）。
-  const skew = requireUp(ctx, '担当は起こしていません。', options.castlistHint);
+  const skew = await requireUp(ctx, '担当は起こしていません。', options.castlistHint);
   // 居場所を作る前に読む（読めなければ、席を起こさずに止まる）。
-  const copy = issueCopy(ctx, issue ?? subject.key, subject.key, options.noIssueCopy);
+  const copy = await issueCopy(ctx, issue ?? subject.key, subject.key, options.noIssueCopy);
   const label = reviewLabel(asks);
   // 起こす席には、依頼書を名簿の行で渡す（起こせなかった回は席が無いので、次の回に渡し直す）。
-  const briefUrl = putStaffBrief(ctx, subject, asks);
+  const briefUrl = await putStaffBrief(ctx, subject, asks);
   const previous = markBriefed(ctx, asks, briefUrl);
   const seat: RoleRecord = {
     key: staffKey(subject.key),
@@ -141,16 +141,16 @@ export function launchStaff(ctx: Context, subject: RoleRecord, asks: Review[], o
   const before = readRole(ctx, seat.key)?.address;
   let out: string[];
   try {
-    out = launch(ctx, seat, options.again, options.wait, [...(options.more?.(issue) ?? []), ...skew], sid ? sessionRef(sid) : undefined, label.description);
+    out = await launch(ctx, seat, options.again, options.wait, [...(options.more?.(issue) ?? []), ...skew], sid ? sessionRef(sid) : undefined, label.description);
   }
   catch (e) {
     // 居場所ができた後の失敗（名乗らない など）は、頼みが残るので印も付ける。居場所を作る前に止まった回は付けない（依頼書の待ちを残さない）。
     const after = readRole(ctx, seat.key)?.address;
-    if (e instanceof NotStartedError || (after !== undefined && after !== before)) markBrief(ctx, briefUrl, asks, previous);
+    if (e instanceof NotStartedError || (after !== undefined && after !== before)) await markBrief(ctx, briefUrl, asks, previous);
     throw e;
   }
   // 置き場の印は、居場所ができた後に付ける。
-  return [...out, ...markBrief(ctx, briefUrl, asks, previous)];
+  return [...out, ...await markBrief(ctx, briefUrl, asks, previous)];
 }
 
 // ---- レビュー（課題の担当が頼み、Staff Engineer 担当が返す。どちらも相手へじかに届く） ----
@@ -170,7 +170,7 @@ export const ASK_REVIEW_WAIT = 90;
  * 状態を `回答待ち(レビュー)` にする。判定は、席から【review】でじかに届く。レビューは助言で、頼んだ担当を縛らない。
  * wait は、起こした席の名乗りを待つ秒（0 なら待たない）。
  */
-export function askReview(ctx: Context, options: { url: string, focus?: string, wait?: number }): string[] {
+export async function askReview(ctx: Context, options: { url: string, focus?: string, wait?: number }): Promise<string[]> {
   const self = sender(ctx);
   notAuditor(self, 'roster ask review');
   if (!isPageUrl(ctx.env, options.url) && !PR_URL.test(options.url)) throw new TpmError(`--url は、置き場のページか PR の URL にしてください（見る物）: ${options.url}`);
@@ -191,7 +191,7 @@ export function askReview(ctx: Context, options: { url: string, focus?: string, 
     let url: string;
     let sent: string;
     try {
-      url = putStaffBrief(ctx, subject, asks);
+      url = await putStaffBrief(ctx, subject, asks);
       const body = [
         url,
         `頼み: ${asks.map(r => `#${r.n}`).join(' ')} ${options.url}`,
@@ -209,12 +209,12 @@ export function askReview(ctx: Context, options: { url: string, focus?: string, 
     seat.brief = url;
     writeRole(ctx, seat);
     // 席の題は、返っていない頼みをみな数える（新しい頼みと +<残りの数>）。
-    out = [sent, ...relabelStaff(ctx, seat, self.key, [...before, ...asks]), ...markBrief(ctx, url, asks, previous)];
+    out = [sent, ...relabelStaff(ctx, seat, self.key, [...before, ...asks]), ...await markBrief(ctx, url, asks, previous)];
   }
   else {
     try {
       // 席が無い・落ちた: 返っていない前の頼み（渡したが返っていない物も、渡せていなかった物も）を、新しい依頼書で渡し直す。
-      out = launchStaff(ctx, subject, [...open, review], {
+      out = await launchStaff(ctx, subject, [...open, review], {
         wait: options.wait ?? ASK_REVIEW_WAIT,
         again: seat !== undefined,
         castlistHint: ['この 1 行は自分で打たない。roster ask tpm で、castlist が止まっていることを TPM 担当に知らせ、起きた後にもう 1 度 roster ask review を打ってください。'],
@@ -254,7 +254,7 @@ const WAIT_NEXT_REVIEW = WAIT.review('次の頼み');
  * いちばん古い依頼書の頼み（まだ返していない物）に判定を書き、課題があれば記録「レビュー」を書く。
  * 課題の担当の居場所が無ければ、送らず・記録も書かずに止まる（TPM 担当に知らせる）。
  */
-export function reportReview(ctx: Context, options: ReviewOptions): string[] {
+export async function reportReview(ctx: Context, options: ReviewOptions): Promise<string[]> {
   const self = sender(ctx);
   if (self.role !== 'staff-engineer') throw new TpmError('roster report review は Staff Engineer 担当（Staff の席）が打ちます。レビューを頼むのは roster ask review');
   if (!Object.hasOwn(VERDICTS, options.verdict)) throw new TpmError(`--verdict は ${Object.keys(VERDICTS).join('・')} のどれかにしてください（${Object.entries(VERDICTS).map(([id, label]) => `${id}＝${label}`).join('・')}）`);
@@ -276,7 +276,7 @@ export function reportReview(ctx: Context, options: ReviewOptions): string[] {
   const sent = toPeer(ctx, self, owner, 'review', body);
   const reviewedAt = ctx.now().toISOString();
   for (const r of asks) patchReview(ctx, r.n, { verdict, page: options.url, summary: options.summary, reviewedAt });
-  const marks = markVerdict(ctx, options.url, verdict, asks);
+  const marks = await markVerdict(ctx, options.url, verdict, asks);
   syncDeliveries(ctx);
   showWait(ctx, WAIT_NEXT_REVIEW);
   return [...recorded, sent, ...marks, `状態: ${WAIT_NEXT_REVIEW}`];

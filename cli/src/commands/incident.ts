@@ -252,5 +252,5 @@ export function registerIncident(program: Command, print: (lines: string[]) => v
     .action((options: FollowOptions) => print(incidentFollow(createContext(), options)));
   incident.command('timeline <target>').description('件の番号か課題の Key の前後の記録を、時刻の順に 1 枚のページにして置く（依頼書に URL を貼る）')
     .option('--minutes <分>', '件の前後に拾う分（番号を名指した時）', String(DEFAULT_MINUTES))
-    .action((target: string, options: { minutes: string }) => print(incidentTimeline(createContext(), target, { minutes: Number(options.minutes) })));
+    .action(async (target: string, options: { minutes: string }) => print(await incidentTimeline(createContext(), target, { minutes: Number(options.minutes) })));
 }

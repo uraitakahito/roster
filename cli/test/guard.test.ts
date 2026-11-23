@@ -423,12 +423,12 @@ describe('roster infra と roster guard', () => {
   const hook = (command: string): string => JSON.stringify({ tool_name: 'Bash', tool_input: { command } });
   const devops = (w: ReturnType<typeof world>) => ({ ...w.role('devops', 'file:1'), env: { ROSTER_KEY: 'devops', ROSTER_ROLE: 'devops-engineer' } });
 
-  test('承認を書くと通り、消すと止まる', () => {
+  test('承認を書くと通り、消すと止まる', async () => {
     const w = world({ infra });
-    expect(guard(devops(w), hook('aws s3 ls')).allow).toBe(false);
+    expect((await guard(devops(w), hook('aws s3 ls'))).allow).toBe(false);
     expect(infraApprove(w.tpm, 'aws-staging', { minutes: 30, note: 'deploy' })).toEqual(['承認を書いた: aws-staging（2026-11-20T12:30:00.000Z まで）']);
-    expect(guard(devops(w), hook('aws s3 ls')).allow).toBe(true);
-    expect(guard(w.role('t-x7k2', 'file:2'), hook('aws s3 ls')).allow).toBe(false);
+    expect((await guard(devops(w), hook('aws s3 ls'))).allow).toBe(true);
+    expect((await guard(w.role('t-x7k2', 'file:2'), hook('aws s3 ls'))).allow).toBe(false);
     expect(infraList(w.tpm)).toEqual([
       '- apple-container  自由  match: "container "',
       '- windmill  TPM に相談（DevOps Engineer 担当だけ）  match: "wmill "',
@@ -436,7 +436,7 @@ describe('roster infra と roster guard', () => {
       '- castlist  PM だけ（どの担当も打てない）  match: "container stop castlist"',
     ]);
     infraRevoke(w.tpm, 'aws-staging');
-    expect(guard(devops(w), hook('aws s3 ls')).allow).toBe(false);
+    expect((await guard(devops(w), hook('aws s3 ls'))).allow).toBe(false);
     expect(infraList(w.tpm)[2]).toContain('承認なし');
   });
 
@@ -467,25 +467,25 @@ describe('roster infra と roster guard', () => {
     expect(w.tpm.state.lines('infra.jsonl')).toEqual([{ at: '2026-11-20T12:00:00.000Z', env: 'aws-staging', role: 'devops-engineer', key: 'devops', command: ['deploy.sh', '--env', 'staging'], status: 0 }]);
   });
 
-  test('宣言が無ければ、そう出す。Bash でない道具は通す', () => {
+  test('宣言が無ければ、そう出す。Bash でない道具は通す', async () => {
     const w = world();
     expect(infraList(w.tpm)).toEqual(['環境の宣言は無い（設定の infra に書く）']);
-    expect(guard(w.tpm, JSON.stringify({ tool_name: 'Edit', tool_input: {} })).allow).toBe(true);
+    expect((await guard(w.tpm, JSON.stringify({ tool_name: 'Edit', tool_input: {} }))).allow).toBe(true);
   });
 
-  test('Auditor の書き込みと git の変える命令は hook で止まり、記録に残る', () => {
+  test('Auditor の書き込みと git の変える命令は hook で止まり、記録に残る', async () => {
     const w = world();
     // 控えの folder は一時の folder にする（試験を流す機械の本物の控えを見ない）。
     const data = mkdtempSync(join(tmpdir(), 'roster-guard-data-'));
     const auditor = { ...w.role('audit', 'file:9'), env: { ROSTER_KEY: 'audit', ROSTER_ROLE: 'auditor', XDG_DATA_HOME: data } };
     const write = (path: string): string => JSON.stringify({ tool_name: 'Write', tool_input: { file_path: path, content: 'x' } });
-    expect(guard(auditor, write(join(w.tpm.project, 'README.md'))).allow).toBe(false);
-    expect(guard(auditor, write(join(w.tpm.state.dir, 'log.jsonl'))).allow).toBe(false);
-    expect(guard(auditor, write(join(tmpdir(), 'audit-page.html'))).allow).toBe(true);
-    expect(guard(auditor, hook('git pull --ff-only')).allow).toBe(false);
-    expect(guard(auditor, hook('git log -1')).allow).toBe(true);
+    expect((await guard(auditor, write(join(w.tpm.project, 'README.md')))).allow).toBe(false);
+    expect((await guard(auditor, write(join(w.tpm.state.dir, 'log.jsonl')))).allow).toBe(false);
+    expect((await guard(auditor, write(join(tmpdir(), 'audit-page.html')))).allow).toBe(true);
+    expect((await guard(auditor, hook('git pull --ff-only'))).allow).toBe(false);
+    expect((await guard(auditor, hook('git log -1'))).allow).toBe(true);
     // Software Engineer 担当の書き込みは見ない。
-    expect(guard({ ...w.role('t-x7k2', 'file:1'), env: { ROSTER_KEY: 't-x7k2', ROSTER_ROLE: 'software-engineer', XDG_DATA_HOME: data } }, write(join(w.tpm.project, 'README.md'))).allow).toBe(true);
+    expect((await guard({ ...w.role('t-x7k2', 'file:1'), env: { ROSTER_KEY: 't-x7k2', ROSTER_ROLE: 'software-engineer', XDG_DATA_HOME: data } }, write(join(w.tpm.project, 'README.md')))).allow).toBe(true);
     expect(w.tpm.state.lines<{ by: string, role: string, command: string }>('guard.jsonl').map(l => [l.by, l.role, l.command.split(' ')[0]])).toEqual([
       ['audit', 'auditor', 'Write'],
       ['audit', 'auditor', 'Write'],
@@ -498,17 +498,17 @@ describe('直下の folder の設定の infra', () => {
   const hook = (command: string): string => JSON.stringify({ tool_name: 'Bash', tool_input: { command } });
   const store = { store: { guard: 'tpm', match: ['container stop store'] } };
 
-  test('上の folder で起きた担当にも、直下の folder の宣言が効く。止めた文と roster infra list に、宣言した設定を出す', () => {
+  test('上の folder で起きた担当にも、直下の folder の宣言が効く。止めた文と roster infra list に、宣言した設定を出す', async () => {
     const w = world({}, {}, { skills: { infra: store }, web: {} });
-    const verdict = guard({ ...w.role('t-x7k2', 'file:1'), env: { ROSTER_KEY: 't-x7k2', ROSTER_ROLE: 'software-engineer' } }, hook('cd web && container stop store'));
+    const verdict = await guard({ ...w.role('t-x7k2', 'file:1'), env: { ROSTER_KEY: 't-x7k2', ROSTER_ROLE: 'software-engineer' } }, hook('cd web && container stop store'));
     expect(verdict).toEqual({ allow: false, reason: '環境 store（skills の設定） を変えてよいのは DevOps Engineer 担当だけです。roster ask devops --what … --why … で TPM 担当に頼んでください。' });
     expect(infraList(w.tpm)).toEqual(['- store  TPM に相談（DevOps Engineer 担当だけ）  match: "container stop store"  宣言: skills']);
   });
 
-  test('gh issue の直打ちは、github を宣言した設定が直下に 1 つでもあれば止まる', () => {
+  test('gh issue の直打ちは、github を宣言した設定が直下に 1 つでもあれば止まる', async () => {
     const se = (w: ReturnType<typeof world>) => ({ ...w.role('t-x7k2', 'file:1'), env: { ROSTER_KEY: 't-x7k2', ROSTER_ROLE: 'software-engineer' } });
-    expect(guard(se(world({}, {}, { web: { tracker: 'github' } })), hook('gh issue close 12')).allow).toBe(false);
-    expect(guard(se(world({}, {}, { skills: { tracker: 'jira' } })), hook('gh issue close 12')).allow).toBe(true);
+    expect((await guard(se(world({}, {}, { web: { tracker: 'github' } })), hook('gh issue close 12'))).allow).toBe(false);
+    expect((await guard(se(world({}, {}, { skills: { tracker: 'jira' } })), hook('gh issue close 12'))).allow).toBe(true);
   });
 });
 
