@@ -9,10 +9,6 @@ const STATUS_STYLE: Record<StatusKey, string[]> = {
   wait: ['--icon', 'hourglass', '--priority', '80'],
 };
 
-/** 届いたかを見る回数と間（ミリ秒）。相手が手を動かしている間は queued のままなので、長くは待たない。 */
-const DELIVERY_TRIES = 4;
-const DELIVERY_INTERVAL_MS = 500;
-
 /** 起動の命令の上限（バイト）。超えると cmux は黙って実行しない。 */
 const COMMAND_LIMIT = 1024;
 
@@ -47,21 +43,12 @@ const entry = (m: CmuxMessage): MailboxEntry => ({
   ...iso('deliveredAt', m.delivered_at),
 });
 
-/** ms ミリ秒だけ止まる。試験では待たない物に替える。 */
-export type Sleep = (ms: number) => void;
-
-const sleepSync: Sleep = (ms) => {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-};
-
 /** cmux でメッセージを送り、居場所（workspace）を作り、状態をサイドバーに出す adapter。 */
 export class CmuxTransport implements Transport {
   private readonly exec: Exec;
-  private readonly sleep: Sleep;
 
-  constructor(exec: Exec, sleep: Sleep = sleepSync) {
+  constructor(exec: Exec) {
     this.exec = exec;
-    this.sleep = sleep;
   }
 
   whoami(): string {
@@ -76,17 +63,9 @@ export class CmuxTransport implements Transport {
     const out = this.run(['agent', 'message', ...target, '--from', from, '-'], text).stdout;
     const id = /message ([0-9a-f-]{36})/i.exec(out)?.[1];
     if (id === undefined) throw new TpmError(`cmux agent message の出力からメッセージの id を読めません: ${out.trim()}`);
-    for (let i = 0; i < DELIVERY_TRIES; i++) {
-      if (this.delivered(to, id)) return { id, delivered: true };
-      this.sleep(DELIVERY_INTERVAL_MS);
-    }
-    return { id, delivered: false };
-  }
-
-  private delivered(to: string, id: string): boolean {
-    const inbox = this.json(['agent', 'inbox', '--surface', to, '--limit', '20']) as { messages?: { id: string, state: string }[] };
-    const state = inbox.messages?.find(m => m.id === id)?.state;
-    return state === 'delivered' || state === 'read';
+    // 届いたかは見張らない。cmux は相手の手が空くまで配らないので、送った後の短い見張りは「まだ届いていない」と出しやすく、
+    // その字が記録に固まって実際とずれた（台帳 #129）。見た時刻は、後で見た時刻の口（seen.ts）が history() と shown/ から引く。
+    return { id };
   }
 
   pending(): Incoming[] {

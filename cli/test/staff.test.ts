@@ -164,10 +164,10 @@ describe('Staff が打たない命令', () => {
 
   test('【ask-tpm】と【incident】は送れる。TPM 担当は名簿の Key で答える', () => {
     const w = reviewed();
-    expect(askTpm(w.staff, { text: '見る物が読めない', waitingFor: '見る物' })[0]).toBe('送った: 【ask-tpm】→ file:tpm（届いた）');
-    expect(reportIncident(w.staff, { text: '依頼書の URL が 404', type: 'reliability', tags: [], severe: false }).at(-1)).toBe('送った: 【incident】→ file:tpm（届いた）');
+    expect(askTpm(w.staff, { text: '見る物が読めない', waitingFor: '見る物' })[0]).toBe('送った: 【ask-tpm】→ file:tpm（相手の手が空いた時に届く。送り直さない）');
+    expect(reportIncident(w.staff, { text: '依頼書の URL が 404', type: 'reliability', tags: [], severe: false }).at(-1)).toBe('送った: 【incident】→ file:tpm（相手の手が空いた時に届く。送り直さない）');
     w.wire.inbox('file:tpm');
-    expect(notify(w.tpm, 'AI-8.staff', { text: 'URL を直した' })).toEqual(['送った: 【notify】→ file:2（届いた）']);
+    expect(notify(w.tpm, 'AI-8.staff', { text: 'URL を直した' })).toEqual(['送った: 【notify】→ file:2（相手の手が空いた時に届く。送り直さない）']);
   });
 
   test('Staff の席に【dismiss】は送れない（tpm close で閉じる）', () => {

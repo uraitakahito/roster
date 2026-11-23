@@ -9,7 +9,7 @@ import { HEADINGS, type HeadingId } from '../protocol.ts';
 import { isStaffKey, staffKey, subjectOfStaffKey } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
 import type { TrackerWrite } from '../tracker/recorded.ts';
-import { seenTimes, type Seen } from '../seen.ts';
+import { returnedIds, seenTimes, type Seen } from '../seen.ts';
 import { profileUrl, seatActorsAt } from './castlist-read.ts';
 import { putPage } from './page.ts';
 
@@ -27,7 +27,8 @@ interface Sent {
   to: string
   text: string
   id: string
-  delivered: boolean
+  /** 前の版の行だけ（送った後 2 秒の内に届いたのを見たか）。 */
+  delivered?: boolean
   replyTo?: string
   /** 担当から担当へじかに送った行（レビューの頼みと判定）。 */
   peer?: true
@@ -63,8 +64,10 @@ const hms = (iso: string): string => iso.slice(11, 19);
 const seconds = (from: string, to: string): number => Math.round((Date.parse(to) - Date.parse(from)) / 1000);
 const cut = (text: string): string => text.length > TEXT_LIMIT ? `${text.slice(0, TEXT_LIMIT)}…（続きは log.jsonl）` : text;
 /** 見た時刻の欄。配った時刻は「届いた」、見せた時刻は「見た」と書き分ける。 */
-function seenNote(m: Sent, seen: Seen | undefined): string {
-  if (seen === undefined || seen.by === 'assumed') return '届いた時刻: 分からない（送った時は、まだ届いていない）';
+function seenNote(m: Sent, seen: Seen | undefined, returned: Set<string>): string {
+  if (returned.has(m.id)) return '届け違いで返した（宛先の担当は見ていない。tpm returned show）';
+  // 後ろ半分は、前の版の行が送った時に「まだ届いていない」と書いた時だけ（今の版の行は、送る時に見ない）。
+  if (seen === undefined) return `届いた時刻: 分からない${m.delivered === false ? '（送った時は、まだ届いていない）' : ''}`;
   if (seen.by === 'legacy') return '送った時に届いた';
   if (seen.by === 'shown') return `見た: ${hms(seen.at)}（${seconds(m.at, seen.at)} 秒後。届く前に tpm が見せた）`;
   return `届いた: ${hms(seen.at)}（${seconds(m.at, seen.at)} 秒後）`;
@@ -83,6 +86,7 @@ const counterpart = (key: string): string => isStaffKey(key) ? subjectOfStaffKey
 export function collect(ctx: Context, key: string, window?: { from: string, to: string }, triggerId?: string): TimelineEvent[] {
   // 見た時刻は口から引く（送る前の検査と同じ決め方。queued は見ず、時刻が無ければ「分からない」にする）。
   const seenAt = seenTimes(ctx, { live: false });
+  const returned = returnedIds(ctx);
   // 課題の Key で集めると、その課題の Staff Engineer 担当の席（名簿の Key は <課題の Key>.staff）の行も入る。
   const mine = (k: string | undefined): boolean => k === key || k === staffKey(key);
   const messages = ctx.state.lines<Sent>('log.jsonl').filter(l => mine(l.key));
@@ -90,7 +94,7 @@ export function collect(ctx: Context, key: string, window?: { from: string, to: 
     const seen = seenAt(m);
     const arrived = seen?.at;
     const notes = [
-      seenNote(m, seen),
+      seenNote(m, seen, returned),
       ...(m.replyTo === undefined ? [] : [`返事の先: ${m.replyTo}`]),
     ];
     // 行き違い: これが届く（見せた時刻の方が早ければ、見る）前に、相手が送ったメッセージ。相手は、送り手と受け手の組で見る。じかの物は、記録の行の印（peer）で見分ける

@@ -142,7 +142,7 @@ describe('tpm ask review（席が居る時: じかに届ける）', () => {
     w.staff.now = () => new Date('2026-11-20T12:05:00.000Z');
     reportReview(w.staff, { url: w.put(w.staff, 'review'), verdict: 'approve', summary: 'このままでよい' });
     w.se.now = () => new Date('2026-11-20T12:10:00.000Z');
-    expect(askReview(w.se, { url: PR })).toEqual(['送った: 【ask-review】→ file:2（届いた）', '状態: 回答待ち(レビュー): PR #7']);
+    expect(askReview(w.se, { url: PR })).toEqual(['送った: 【ask-review】→ file:2（相手の手が空いた時に届く。送り直さない）', '状態: 回答待ち(レビュー): PR #7']);
     const got = w.wire.inbox('file:2').at(-1);
     expect(got?.from).toBe(SE_TITLE);
     expect(got?.text).toMatch(new RegExp(`^【ask-review】http://127\\.0\\.0\\.1:8801/.+/AI-8/brief-2\\.html 頼み: #2 ${PR}$`));
@@ -186,7 +186,7 @@ describe('tpm ask review（席が居る時: じかに届ける）', () => {
     expect(() => askReview(w.se, { url: PR })).toThrow('送れない');
     expect(readReviews(w.tpm).map(r => r.n)).toEqual([1]);
     w.se.transport.send = send;
-    expect(askReview(w.se, { url: PR })[0]).toBe('送った: 【ask-review】→ file:2（届いた）');
+    expect(askReview(w.se, { url: PR })[0]).toBe('送った: 【ask-review】→ file:2（相手の手が空いた時に届く。送り直さない）');
   });
 
   test('送った後の失敗では、頼みを消さない（席にはもう届いている）', () => {
@@ -225,7 +225,7 @@ describe('tpm ask review（席が居る時: じかに届ける）', () => {
       throw new Error('Workspace ref not found');
     };
     const se = { ...w.se, transport: Object.assign(Object.create(w.se.transport) as Context['transport'], { relabel }) };
-    expect(askReview(se, { url: PR })).toEqual(['送った: 【ask-review】→ file:2（届いた）', '居場所の題を替えられなかった（名簿の題は レビュー AI-8: 計画 plan-1 のまま）: Workspace ref not found', '状態: 回答待ち(レビュー): PR #7']);
+    expect(askReview(se, { url: PR })).toEqual(['送った: 【ask-review】→ file:2（相手の手が空いた時に届く。送り直さない）', '居場所の題を替えられなかった（名簿の題は レビュー AI-8: 計画 plan-1 のまま）: Workspace ref not found', '状態: 回答待ち(レビュー): PR #7']);
     expect(requireRole(w.tpm, 'AI-8.staff').title).toBe('レビュー AI-8: 計画 plan-1');
     expect(readReviews(w.tpm)[1]?.brief).toMatch(/brief-2\.html$/);
   });
@@ -291,7 +291,7 @@ describe('tpm report review', () => {
     const page = w.put(w.staff, 'review');
     expect(page).toMatch(/\/AI-8\/review-1\.html$/);
     w.staff.now = () => new Date('2026-11-20T12:07:00.000Z');
-    expect(reportReview(w.staff, { url: page, verdict: 'concerns', summary: 'Key の形に抜けが 1 つ' })).toEqual(['送った: 【review】→ file:1（届いた）', '状態: 回答待ち(レビュー): 次の頼み']);
+    expect(reportReview(w.staff, { url: page, verdict: 'concerns', summary: 'Key の形に抜けが 1 つ' })).toEqual(['送った: 【review】→ file:1（相手の手が空いた時に届く。送り直さない）', '状態: 回答待ち(レビュー): 次の頼み']);
     expect(w.wire.inbox('file:1').at(-1)).toMatchObject({ from: 'レビュー AI-8: 計画 plan-1', text: `【review】${page} 判定: 気になる所あり（concerns）／一言: Key の形に抜けが 1 つ／頼み: #1` });
     expect(texts(w, 'file:tpm')).toEqual([]);
     expect(readReviews(w.tpm)[0]).toMatchObject({ n: 1, verdict: 'concerns', page, summary: 'Key の形に抜けが 1 つ', reviewedAt: '2026-11-20T12:07:00.000Z' });
@@ -334,7 +334,7 @@ describe('じかの 2 通の、届いた時刻の写し', () => {
     reportReview(w.staff, { url: w.put(w.staff, 'review'), verdict: 'approve', summary: 'よい' });
     w.wire.hold('file:2');
     w.se.now = () => new Date('2026-11-20T12:10:00.000Z');
-    expect(askReview(w.se, { url: PR })[0]).toMatch(/まだ届いていない/);
+    expect(askReview(w.se, { url: PR })[0]).toMatch(/相手の手が空いた時に届く/);
     const asking = w.wire.inbox('file:2').at(-1)?.id ?? '';
     w.wire.release('file:2', '2026-11-20T12:12:00.000Z');
     w.wire.hold('file:1');
@@ -400,7 +400,7 @@ describe('tpm ask tpm --review（判定を受けずに上げる）', () => {
     w.staff.now = () => new Date('2026-11-20T12:07:00.000Z');
     reportReview(w.staff, { url: page, verdict: 'reject', summary: '依頼と違う' });
     w.se.now = () => new Date('2026-11-20T12:15:00.000Z');
-    expect(askTpm(w.se, { text: '指摘 1 は依頼書の範囲の外。お勧め: 直さない', waitingFor: 'レビューの食い違い', review: 1 })).toEqual(['送った: 【ask-tpm】→ file:tpm（届いた）', '状態: 回答待ち(TPM): レビューの食い違い']);
+    expect(askTpm(w.se, { text: '指摘 1 は依頼書の範囲の外。お勧め: 直さない', waitingFor: 'レビューの食い違い', review: 1 })).toEqual(['送った: 【ask-tpm】→ file:tpm（相手の手が空いた時に届く。送り直さない）', '状態: 回答待ち(TPM): レビューの食い違い']);
     expect(texts(w, 'file:tpm')).toEqual([`【ask-tpm】レビュー #1（判定: 直すべき。${page}）を受けない: 指摘 1 は依頼書の範囲の外。お勧め: 直さない`]);
     expect(readReviews(w.tpm)[0]).toMatchObject({ n: 1, verdict: 'reject', escalatedAt: '2026-11-20T12:15:00.000Z' });
     // 2 度目に上げても、最初に上げた時刻を残す

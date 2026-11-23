@@ -16,7 +16,7 @@ describe('FileTransport', () => {
   test('送ったメッセージは、相手の inbox に届いた順に並ぶ', () => {
     const first = at('file:1').send('file:tpm', 'SE t-x7k2', '【done】a');
     at('file:1').send('file:tpm', 'SE t-x7k2', '【end】b', first.id);
-    expect(first.delivered).toBe(true);
+    expect(first).toEqual({ id: expect.any(String) as string });
     expect(at('file:tpm').inbox('file:tpm')).toEqual([
       { id: first.id, sender: 'file:1', from: 'SE t-x7k2', text: '【done】a' },
       { id: expect.any(String) as string, sender: 'file:1', from: 'SE t-x7k2', text: '【end】b', replyTo: first.id },

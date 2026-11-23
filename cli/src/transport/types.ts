@@ -7,10 +7,9 @@ export interface Seat {
   title: string
 }
 
-/** 送ったメッセージ。delivered は、相手に届いたところまで見られたか。 */
+/** 送ったメッセージ。届いたか・見たかは送る時には見ない（見た時刻は seen.ts の口が後で引く）。 */
 export interface Delivery {
   id: string
-  delivered: boolean
 }
 
 /** 自分宛てのメッセージ。 */
@@ -64,7 +63,7 @@ export type StatusKey = 'model' | 'wait';
 export interface Transport {
   /** 自分の宛先。 */
   whoami(): string
-  /** メッセージを送り、届いたかまで見る。replyTo は、返事の先のメッセージの id。 */
+  /** メッセージを送り、id を返す（届いたかは見ない）。replyTo は、返事の先のメッセージの id。 */
   send(to: string, from: string, text: string, replyTo?: string): Delivery
   /** 自分宛てで、まだ届いていないメッセージ（手を動かしている間は届かない道具がある）。 */
   pending(): Incoming[]

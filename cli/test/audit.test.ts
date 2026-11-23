@@ -97,7 +97,7 @@ describe('tpm audit start', () => {
     expect(() => dismiss(w.tpm, 'audit', { handover: true })).toThrow(/Auditor の席に【dismiss】は送れません/);
     expect(() => close(w.tpm, 'audit')).toThrow(/tpm close では閉じられません/);
     expect(w.wire.seats()).toEqual([{ address: 'file:1', title: 'Audit' }]);
-    expect(notify(w.tpm, 'audit', { text: '受け取った' })).toEqual(['送った: 【notify】→ file:1（届いた）']);
+    expect(notify(w.tpm, 'audit', { text: '受け取った' })).toEqual(['送った: 【notify】→ file:1（相手の手が空いた時に届く。送り直さない）']);
   });
 });
 
@@ -143,12 +143,12 @@ describe('監査の 1 周（始める → 報告 → 決定）', () => {
       '見直す: tpm incident review／追いかける: tpm incident follow',
     ]);
     expect(reportAudit(w.auditor, { url: PAGE, summary: '権限の件は仕組みが止めていない', items: ['R1 をするか', 'R2 を受け入れるか'] })).toEqual([
-      '送った: 【audit】→ file:tpm（届いた）',
+      '送った: 【audit】→ file:tpm（相手の手が空いた時に届く。送り直さない）',
       '状態: 回答待ち(PM): 監査の報告',
       'この席に、要点と決めてほしいことを書いて、Product Manager の答えを待つ',
     ]);
     expect(w.wire.inbox('file:tpm').at(-1)).toMatchObject({ from: 'Audit', text: `【audit】${PAGE} 要点: 権限の件は仕組みが止めていない／決めてほしいこと: (1) R1 をするか (2) R2 を受け入れるか（写し。Product Manager には Audit の席でじかに報告した。伝え直さなくてよい）` });
-    expect(reportDecided(w.auditor, { url: PAGE, adopted: ['R1'], accepted: ['R2'], later: [] })).toEqual(['送った: 【decided】→ file:tpm（届いた）', '状態: 回答待ち(PM): 次の /audit']);
+    expect(reportDecided(w.auditor, { url: PAGE, adopted: ['R1'], accepted: ['R2'], later: [] })).toEqual(['送った: 【decided】→ file:tpm（相手の手が空いた時に届く。送り直さない）', '状態: 回答待ち(PM): 次の /audit']);
     expect(w.wire.inbox('file:tpm').at(-1)?.text).toBe(`【decided】${PAGE} する: R1／受け入れる: R2`);
     expect(readAudits(w.tpm).map(e => e.kind)).toEqual(['start', 'fresh', 'begin', 'report', 'decided']);
     expect(readAudits(w.tpm).at(-2)).toMatchObject({ kind: 'report', url: PAGE, items: ['R1 をするか', 'R2 を受け入れるか'], copied: true });
@@ -225,7 +225,7 @@ describe('誰が打てるか', () => {
       ['tpm ask pm', () => askPm(w.auditor, { url: PAGE, items: ['x'], waitingFor: 'x' })],
     ] as const) expect(run, command).toThrow(`Auditor は ${command} を打ちません`);
     expect(w.wire.inbox('file:tpm')).toEqual([]);
-    expect(askTpm(w.auditor, { text: 'この件の依頼書の URL を教えてほしい', waitingFor: '依頼書の URL' })[0]).toBe('送った: 【ask-tpm】→ file:tpm（届いた）');
+    expect(askTpm(w.auditor, { text: 'この件の依頼書の URL を教えてほしい', waitingFor: '依頼書の URL' })[0]).toBe('送った: 【ask-tpm】→ file:tpm（相手の手が空いた時に届く。送り直さない）');
     expect(reportIncident(w.auditor, { text: '監査のページに誤りを書いた', type: 'reliability', tags: ['監査の誤り'], severe: false })[0]).toMatch(/^台帳に書いた: #1 信頼性 audit /);
   });
 });

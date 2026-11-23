@@ -40,7 +40,7 @@ describe('時系列を集める', () => {
       ['12:00:10', 'メッセージ', '【ask-tpm】tag を打ってよいか（id m1-file-tpm）', ['届いた: 12:00:11（1 秒後）'], false],
       ['12:00:10', 'wait', '回答待ち(TPM): 答え', [], false],
       ['12:01:00', 'メッセージ', '【notify】まだ打たないで待つこと（id m1-file-1）', ['届いた: 12:05:00（240 秒後）', '返事の先: m1-file-tpm', '行き違い: これが届く前に、相手が 1 件送った（【merged】12:02:00）'], true],
-      ['12:02:00', 'メッセージ', `【merged】${PR} 入れた（id m2-file-tpm）`, ['送った時に届いた'], false],
+      ['12:02:00', 'メッセージ', `【merged】${PR} 入れた（id m2-file-tpm）`, ['届いた時刻: 分からない'], false],
       ['12:02:30', 'wait', '作業中: tag を打つ', [], false],
     ]);
     // ほかの Key の記録は入らない
@@ -55,6 +55,18 @@ describe('時系列を集める', () => {
     // 見る前に相手が送っていれば、「見る前に」の行き違い
     w.tpm.state.write('shown/file-1.jsonc', [{ id: 'm1-file-1', at: '2026-11-20T12:03:00.000Z' }]);
     expect(collect(w.tpm, 't-x7k2').find(e => e.what.includes('（id m1-file-1）'))?.notes.at(-1)).toBe('行き違い: これを見る前に、相手が 1 件送った（【merged】12:02:00）');
+  });
+
+  test('前の版の行（送った時に delivered を書いた）は、今までの字で出す。届け違いで返した物は「返した」と出す', () => {
+    const w = crossed();
+    const old = { at: '2026-11-20T12:03:00.000Z', key: 't-x7k2', heading: 'notify', from: 'Technical Program Manager', to: 'file:1' };
+    w.tpm.state.append('log.jsonl', { ...old, text: '【notify】a', id: 'old-yes', delivered: true });
+    w.tpm.state.append('log.jsonl', { ...old, text: '【notify】b', id: 'old-no', delivered: false });
+    w.tpm.state.append('returned.jsonl', { at: '2026-11-20T12:06:00.000Z', id: 'm1-file-1', incident: 1 });
+    const notes = (id: string): string[] | undefined => collect(w.tpm, 't-x7k2').find(e => e.what.includes(`（id ${id}）`))?.notes;
+    expect(notes('old-yes')).toEqual(['送った時に届いた']);
+    expect(notes('old-no')).toEqual(['届いた時刻: 分からない（送った時は、まだ届いていない）']);
+    expect(notes('m1-file-1')?.[0]).toBe('届け違いで返した（宛先の担当は見ていない。tpm returned show）');
   });
 
   test('guard・入口の検査・課題管理・台帳の行も入る', () => {

@@ -49,7 +49,7 @@ describe('台帳に書く', () => {
     const comments = w.calls.filter(c => c.args[1] === 'comment').length;
     expect(reportIncident(w.se, { text: 'merge が断られたのに【merged】を送った', type: 'reliability', tags: [], severe: false })).toEqual([
       '台帳に書いた: #1 信頼性 t-x7k2 11-20 12:00「merge が断られたのに【merged】を送った」',
-      '送った: 【incident】→ file:tpm（届いた）',
+      '送った: 【incident】→ file:tpm（相手の手が空いた時に届く。送り直さない）',
     ]);
     expect(w.wire.inbox('file:tpm').at(-1)?.text).toBe('【incident】#1 信頼性: merge が断られたのに【merged】を送った');
     reportIncident(w.se, { text: 'image が public だった', type: 'safety', tags: ['公開'], severe: true });
