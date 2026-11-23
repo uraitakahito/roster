@@ -351,6 +351,8 @@ describe('TPM 担当の roster hello の一言', () => {
     expect(bannerHint(cmux, file)).toEqual([]);
     writeFileSync(file, '{ "notifications": { "hooks": [{ "id": "tpm-banner", "command": "PATH=/n/bin:/usr/bin:/bin /r/cli/bin/roster banner hook" }] } }');
     expect(bannerHint(cmux, file)).toEqual([expect.stringMatching(/hook の命令が古い形です.*roster banner setup/)]);
+    writeFileSync(file, '{ "notifications": { "hooks": [{ "id": "tpm-banner", "command": "/elsewhere/cli/bin/roster banner hook" }] } }');
+    expect(bannerHint(cmux, file)).toEqual([expect.stringMatching(/hook の命令が今の roster の在り処と違います.*roster banner setup/)]);
     writeFileSync(file, '{ broken');
     expect(bannerHint(cmux, file)).toEqual([expect.stringMatching(/cmux.json を読めません/)]);
   });

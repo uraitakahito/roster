@@ -3,7 +3,7 @@
 // cmux は hook が失敗・時間切れ・JSON の誤りになると、いつものバナーに加えて「Notification Hook Failed」を出すので、hook はどんな時も正しい JSON を返して 0 で終わる。
 import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, isAbsolute, join, relative } from 'node:path';
+import { isAbsolute, join, relative } from 'node:path';
 import { BANNER_ROLES, bannerConfigFile, CATEGORY_TRIGGER, choiceOf, decide, toBannerConfig, TRIGGERS, type BannerConfig } from '../banner.ts';
 import type { Context } from '../context.ts';
 import type { Exec } from '../exec.ts';
@@ -147,12 +147,7 @@ export function hookEntry(root: string, env: NodeJS.ProcessEnv): { id: string, c
 /** cmux.json の hook の命令が、今 roster banner setup が出す字と違う訳。同じなら undefined。 */
 export function staleHook(command: string, root: string, env: NodeJS.ProcessEnv): string | undefined {
   if (command === hookCommand(root, env)) return undefined;
-  if (command.startsWith('PATH=')) return '古い形です（Node と cmux の path を書いた形）';
-  // 道具の名を roster に替える前の入口（cli/bin の古い名）。切り替えの間は古い入口が hook を渡すので動くが、張り直すまで知らせる。
-  // 入口は命令の 1 語目（引用を外した物）。後ろに何か書き足してあっても（… banner hook 2>/dev/null など）見分ける。
-  const first = /^\s*(?:"([^"]*)"|'([^']*)'|(\S+))/.exec(command);
-  const entry = first?.[1] ?? first?.[2] ?? first?.[3] ?? '';
-  return basename(entry) === 'roster' ? '今の roster の在り処と違います（repo を移した）' : '古い入口です（道具の名を roster に替えた。cli/bin/roster を呼ぶ字に張り直す）';
+  return command.startsWith('PATH=') ? '古い形です（Node と cmux の path を書いた形）' : '今の roster の在り処と違います（repo を移した）';
 }
 
 /** cmux の設定の file。 */

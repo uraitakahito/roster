@@ -8,8 +8,7 @@
 // - TPM 担当を指す値: roster ask tpm・roster wait tpm・--on tpm の 2 語目、引用符で囲んだ 'tpm'（役割の鍵・設定の "guard": "tpm"）
 // 環境変数（TPM_KEY など）と TPM 担当は大文字なので、もとから当たらない。
 //
-// 見るのは git が追跡する物と add 前の新しい物（check-wording.mjs と同じ数え方）。lockfile と、この file と、
-// 下の KEEP（切り替えの間だけ残す古い入口と、その試験）は見ない。
+// 見るのは git が追跡する物と add 前の新しい物（check-wording.mjs と同じ数え方）。lockfile と、この file は見ない。
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
@@ -17,9 +16,6 @@ import { fileURLToPath } from "node:url";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SELF = relative(REPO, fileURLToPath(import.meta.url));
-
-/** 切り替えの間だけ残す古い入口と、その試験。全部の席を起こし直した後の PR で、file と一緒にここから消す。 */
-const KEEP = ["cli/bin/tpm", "cli/test/old-entry.test.ts"];
 
 /** 命令の 1 語目（cli/src/protocol.ts の COMMANDS）。skill の名 /tpm の後に命令が続く形（試験の /tpm close … / など）は内の名とみなさない。 */
 const COMMAND_WORDS = [
@@ -195,7 +191,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       (f) =>
         f !== "" &&
         f !== SELF &&
-        !KEEP.includes(f) &&
         !f.endsWith("pnpm-lock.yaml"),
     )
     .filter((f) => !/\.(png|jpe?g|gif|ico|webp|pdf|woff2?)$/i.test(f));
