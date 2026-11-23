@@ -67,11 +67,11 @@ const castlistCalls = (w: World) => w.calls.filter(c => c.cmd === 'container' ||
 /** TPM 担当の周り: roster start の 1 行が付ける環境変数を持つ。 */
 const tpmSeat = (w: World): Context => withEnv(w.tpm, {
   CLAUDE_CODE_SESSION_ID: TPM_SID,
-  TPM_LAUNCH: 'launch-tpm',
-  TPM_LAUNCHED_BY: 'tpm.person:product-manager',
-  TPM_LAUNCH_MODEL: 'claude-opus-5-5',
-  TPM_LAUNCH_EFFORT: 'medium',
-  TPM_LAUNCH_FRESH: '1',
+  ROSTER_LAUNCH: 'launch-tpm',
+  ROSTER_LAUNCHED_BY: 'tpm.person:product-manager',
+  ROSTER_LAUNCH_MODEL: 'claude-opus-5-5',
+  ROSTER_LAUNCH_EFFORT: 'medium',
+  ROSTER_LAUNCH_FRESH: '1',
 });
 
 /** 担当の周り: roster run-role が付ける環境変数（roleEnv）と、Claude Code の session。 */
@@ -99,14 +99,14 @@ describe('castlist を設定していない時', () => {
     const w = world();
     const tpm = tpmSeat(w);
     const { line } = startTpm(w.tpm);
-    expect(line).not.toContain('TPM_LAUNCH');
+    expect(line).not.toContain('ROSTER_LAUNCH');
     hello(tpm);
     sessionStart(tpm, startInput('startup', TPM_SID));
     assign(tpm, 't-x7k2', SE);
     expect(readRole(w.tpm, 't-x7k2')).not.toHaveProperty('launch');
     expect(readRole(w.tpm, 't-x7k2')).not.toHaveProperty('launchedBy');
     const se = seat(w, 't-x7k2', SID);
-    expect(se.env.TPM_LAUNCH).toBeUndefined();
+    expect(se.env.ROSTER_LAUNCH).toBeUndefined();
     sessionStart(se, startInput('startup', SID));
     expect(guard(se, bashInput(SID, { effort: { level: 'high' } }))).toEqual({ allow: true });
     expect(hello(se).some(l => l.startsWith('アクター'))).toBe(false);
@@ -239,12 +239,12 @@ describe('roster start', () => {
     expect(posts[0]?.body).toMatchObject({ kind: 'human', name_prefix: 'product-manager', bindings: [{ type: 'tpm.person', value: 'product-manager' }], sent_at: NOW });
     expect(posts[0]?.body?.issuer).toBe(castlistIssuer(w.tpm.state.dir));
     expect(posts.map(p => p.status)).toEqual([201, 200]);
-    for (const part of ['TPM_LAUNCH="$(uuidgen)"', 'TPM_LAUNCHED_BY=tpm.person:product-manager', 'TPM_LAUNCH_MODEL=claude-opus-5-5', 'TPM_LAUNCH_EFFORT=medium', 'TPM_LAUNCH_FRESH=1']) expect(line).toContain(` ${part} `);
+    for (const part of ['ROSTER_LAUNCH="$(uuidgen)"', 'ROSTER_LAUNCHED_BY=tpm.person:product-manager', 'ROSTER_LAUNCH_MODEL=claude-opus-5-5', 'ROSTER_LAUNCH_EFFORT=medium', 'ROSTER_LAUNCH_FRESH=1']) expect(line).toContain(` ${part} `);
     expect(line).toMatch(/ claude --model claude-opus-5-5 --effort medium /);
   });
 
-  test('$TPM_CASTLIST_URL は設定の castlist に勝つ', () => {
-    const w = world({ castlist: dead }, { TPM_CASTLIST_URL: fake.url });
+  test('$ROSTER_CASTLIST_URL は設定の castlist に勝つ', () => {
+    const w = world({ castlist: dead }, { ROSTER_CASTLIST_URL: fake.url });
     const got = mark();
     expect(() => startTpm(w.tpm)).not.toThrow();
     expect(got().some(r => r.path === '/v1/actors')).toBe(true);
@@ -471,7 +471,7 @@ describe('guard と castlist', () => {
     const path = transcript([user, assistant('claude-opus-5-5')]);
     expect(guard(se, bashInput(SID, { transcript_path: path, effort: { level: 'high' } }))).toEqual({ allow: true });
     w.castlist.push(dead);
-    const down = withEnv(se, { TPM_CASTLIST_URL: dead });
+    const down = withEnv(se, { ROSTER_CASTLIST_URL: dead });
     // 送る物が無ければ、castlist に聞かずに通す
     expect(guard(down, bashInput(SID, { transcript_path: path, effort: { level: 'high' } }))).toEqual({ allow: true });
     const verdict = guard(down, bashInput(SID, { transcript_path: path, effort: { level: 'max' } }));
@@ -523,10 +523,10 @@ describe('model の別名を断る', () => {
     expect(() => hello(w.tpm, { model: 'haiku' })).toThrow(/--model.*haiku/);
   });
 
-  test('$TPM_MODEL', () => {
-    expect(() => resolveSettings('software-engineer', { env: { TPM_MODEL: 'opus[1m]' } })).toThrow(/\$TPM_MODEL.*opus\[1m\]/);
-    const w = world({}, { TPM_MODEL: 'opus' });
-    expect(() => startTpm(w.tpm)).toThrow(/\$TPM_MODEL/);
+  test('$ROSTER_MODEL', () => {
+    expect(() => resolveSettings('software-engineer', { env: { ROSTER_MODEL: 'opus[1m]' } })).toThrow(/\$ROSTER_MODEL.*opus\[1m\]/);
+    const w = world({}, { ROSTER_MODEL: 'opus' });
+    expect(() => startTpm(w.tpm)).toThrow(/\$ROSTER_MODEL/);
   });
 
   test('claude- で始まる id は通す', () => {
@@ -581,20 +581,25 @@ describe('担当を起こす環境変数', () => {
     const { record } = launched();
     const env = roleEnv(record, '/p', '/s', '/r', { PATH: '/usr/bin' });
     expect(env).toMatchObject({
-      TPM_LAUNCH: record.launch,
-      TPM_LAUNCHED_BY: `claude.session:${TPM_SID}`,
-      TPM_LAUNCH_MODEL: record.model,
-      TPM_LAUNCH_EFFORT: record.effort,
-      TPM_LAUNCH_FRESH: '1',
+      ROSTER_LAUNCH: record.launch,
+      ROSTER_LAUNCHED_BY: `claude.session:${TPM_SID}`,
+      ROSTER_LAUNCH_MODEL: record.model,
+      ROSTER_LAUNCH_EFFORT: record.effort,
+      ROSTER_LAUNCH_FRESH: '1',
     });
   });
 
   test('印が無ければ、受け継いだ起こしの環境変数（TPM 担当の物）を渡さない', () => {
     const w = world();
     assign(w.tpm, 't-x7k2', SE);
-    const inherited = { PATH: '/usr/bin', TPM_LAUNCH: 'x', TPM_LAUNCHED_BY: 'tpm.person:product-manager', TPM_LAUNCH_MODEL: 'm', TPM_LAUNCH_EFFORT: 'e', TPM_LAUNCH_FRESH: '1' };
+    const names = ['LAUNCH', 'LAUNCHED_BY', 'LAUNCH_MODEL', 'LAUNCH_EFFORT', 'LAUNCH_FRESH'];
+    // 道具の名を替える前に起きた TPM 担当は、古い名（TPM_*）で持っている。どちらも渡さない。
+    const inherited = { PATH: '/usr/bin', ...Object.fromEntries(names.flatMap(n => [[`ROSTER_${n}`, 'x'], [`TPM_${n}`, 'x']])) };
     const env = roleEnv(requireRole(w.tpm, 't-x7k2'), '/p', '/s', '/r', inherited);
-    for (const name of ['TPM_LAUNCH', 'TPM_LAUNCHED_BY', 'TPM_LAUNCH_MODEL', 'TPM_LAUNCH_EFFORT', 'TPM_LAUNCH_FRESH']) expect(env).not.toHaveProperty(name);
+    for (const name of names) {
+      expect(env).not.toHaveProperty(`ROSTER_${name}`);
+      expect(env).not.toHaveProperty(`TPM_${name}`);
+    }
   });
 
   test('roster audit start の起こした者は Product Manager', () => {

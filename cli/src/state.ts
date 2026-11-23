@@ -1,24 +1,57 @@
 // roster が持つ状態（TPM 担当の宛先・担当の名簿・承認・送ったメッセージ）の置き場。
 // project（TPM 担当を起こした folder）ごとに folder を分け、1 件 1 ファイルで書く（担当が同時に書いてもぶつからない）。
 // 1 件 1 ファイルは .jsonc（config.jsonc と同じ parseJsonc で読む）、足していく記録は 1 行 1 件の .jsonl。
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { parseJsonc } from './jsonc.ts';
 import { TpmError } from './skill-sets.ts';
+import { envName, envOf } from './env.ts';
+import { shellQuote } from './shell.ts';
 
 /**
- * project の状態の folder。$XDG_STATE_HOME（無ければ ~/.local/state）の `tpm/<project の path の / を - に替えた名>`。
- * $TPM_STATE があればそれ（起こされた担当は、起こした側と同じ folder をこれで受け取る。shell の環境変数が違っても取り違えない）。
+ * project の状態の folder。$XDG_STATE_HOME（無ければ ~/.local/state）の `roster/<project の path の / を - に替えた名>`。
+ * $ROSTER_STATE があればそれ（起こされた担当は、起こした側と同じ folder をこれで受け取る。shell の環境変数が違っても取り違えない）。
+ * 渡された folder が無ければ、作らずに止める（古い居場所が、消えた在り処の path のまま復元された時。空の状態を作らない）。
  */
 export function stateDir(project: string, env: NodeJS.ProcessEnv = process.env): string {
-  if (env.TPM_STATE) return env.TPM_STATE;
+  const given = envOf(env, 'STATE');
+  if (given) {
+    if (!existsSync(given)) throw new TpmError(`状態の folder ${given}（$${envName('STATE')} で渡された物）がありません。居場所が古い在り処の path のまま復元された時に起きます。空の状態は作りません。この居場所を閉じ、TPM 担当が起こし直してください`);
+    return given;
+  }
   return join(stateBase(env), project.replaceAll(/[^A-Za-z0-9._-]/g, '-'));
 }
 
-/** project ごとの状態の folder を並べる folder。$XDG_STATE_HOME（無ければ ~/.local/state）の `tpm`（道具の名を roster に替えた後も、folder の名は替えていない）。 */
+/** project ごとの状態の folder を並べる folder。$XDG_STATE_HOME（無ければ ~/.local/state）の `roster`（{@link rosterHome}）。 */
 export function stateBase(env: NodeJS.ProcessEnv = process.env): string {
-  return join(env.XDG_STATE_HOME || join(homedir(), '.local', 'state'), 'tpm');
+  return rosterHome(env.XDG_STATE_HOME || join(homedir(), '.local', 'state'));
+}
+
+/** 道具の名を roster に替える前の folder の名（t-6ydg）。 */
+const LEGACY_HOME = 'tpm';
+
+/**
+ * parent の下の roster の folder（状態は ~/.local/state/roster、控えは ~/.local/share/roster）。
+ * 古い在り処（.local/state/tpm・.local/share/tpm）が本物の folder（symlink でない）で在れば、使わずに止める: 新しい folder が無ければ移す 1 行を出し（空の状態を作らない）、
+ * 在れば割れていると出す（移す間に古い在り処へ書かれた）。古い名が symlink（移した後の形）か、無ければそのまま。
+ */
+export function rosterHome(parent: string): string {
+  const home = join(parent, 'roster');
+  const legacy = join(parent, LEGACY_HOME);
+  if (!isRealDir(legacy)) return home;
+  if (!existsSync(home)) throw new TpmError(`${legacy} は古い在り処です（道具の名を roster に替えた）。roster は読まないので、移してください: mv ${shellQuote(legacy)} ${shellQuote(home)} && ln -s roster ${shellQuote(legacy)}`);
+  throw new TpmError(`${legacy} と ${home} の両方が本物の folder です（割れている）。${legacy} の中の file を ${home} へ写し（名が同じ物は新しい方を残す）、${legacy} を消して ln -s roster ${shellQuote(legacy)} を打ってください`);
+}
+
+/** path が本物の folder か（symlink は辿らない）。 */
+function isRealDir(path: string): boolean {
+  try {
+    return lstatSync(path).isDirectory();
+  }
+  catch {
+    return false;
+  }
 }
 
 /** 状態の base の下にある project の状態の folder（tpm.jsonc か roles/ がある物）。無ければ空。 */

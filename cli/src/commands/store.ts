@@ -11,6 +11,8 @@ import { castlistUrl, issuerOf, sessionRef } from '../castlist.ts';
 import { rolesConfigFile } from '../config.ts';
 import { readRole, subjectOf } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
+import { envOf } from '../env.ts';
+import { rosterHome } from '../state.ts';
 
 /** 置き場の URL の既定（container の port の publish の 127.0.0.1:8801）。 */
 export const DEFAULT_PAGES_URL = 'http://127.0.0.1:8801';
@@ -29,15 +31,16 @@ const WORKSPACE = /^[A-Za-z0-9:._-]{0,64}$/;
 /** 置き場の答えを待つ秒数。 */
 const TIMEOUT = '10';
 
-/** 控えの folder。$TPM_PAGES_DIR、無ければ $XDG_DATA_HOME（それも無ければ ~/.local/share）の `tpm/pages`。 */
+/** 控えの folder。$ROSTER_PAGES_DIR、無ければ $XDG_DATA_HOME（それも無ければ ~/.local/share）の `roster/pages`（古い在り処の扱いは rosterHome）。 */
 export function pagesDir(env: NodeJS.ProcessEnv): string {
-  if (env.TPM_PAGES_DIR) return env.TPM_PAGES_DIR;
-  return join(env.XDG_DATA_HOME || join(homedir(), '.local', 'share'), 'tpm', 'pages');
+  const given = envOf(env, 'PAGES_DIR');
+  if (given) return given;
+  return join(rosterHome(env.XDG_DATA_HOME || join(homedir(), '.local', 'share')), 'pages');
 }
 
-/** 置き場の URL（末尾の / は落とす）。$TPM_PAGES_URL、無ければ既定。 */
+/** 置き場の URL（末尾の / は落とす）。$ROSTER_PAGES_URL、無ければ既定。 */
 export function pagesUrl(env: NodeJS.ProcessEnv): string {
-  return (env.TPM_PAGES_URL || DEFAULT_PAGES_URL).replace(/\/+$/, '');
+  return (envOf(env, 'PAGES_URL') || DEFAULT_PAGES_URL).replace(/\/+$/, '');
 }
 
 /** URL が置き場（今の URL か、前の置き場の URL）を指していれば、置き場の中の path（頭の / は無し。`?` と `#` から後は落とす）。違えば undefined。 */
@@ -144,21 +147,22 @@ export function senderRefused(ctx: Context, query: URLSearchParams, code: string
 
 /** 自分の居場所の宛先（担当は名簿、TPM 担当は tpm.jsonc）。わからなければ空。 */
 export function selfAddress(ctx: Context): string {
-  const record: RoleRecord | TpmRecord | undefined = ctx.env.TPM_KEY ? readRole(ctx, ctx.env.TPM_KEY) : ctx.state.read<TpmRecord>('tpm.jsonc');
+  const own = envOf(ctx.env, 'KEY');
+  const record: RoleRecord | TpmRecord | undefined = own ? readRole(ctx, own) : ctx.state.read<TpmRecord>('tpm.jsonc');
   const address = record?.address ?? '';
   return WORKSPACE.test(address) ? address : '';
 }
 
 /**
- * 置く物の project と Key を確かめる。project は $TPM_PROJECT、無ければ今いる folder。roster を使う project の印（設定の file・TPM 担当が起きた印）が無い folder なら、
- * scratchpad などから打った置き間違い（その folder の名が別の project になる）なので止める。Key は keyOption、無ければ $TPM_KEY（担当）。
+ * 置く物の project と Key を確かめる。project は $ROSTER_PROJECT、無ければ今いる folder。roster を使う project の印（設定の file・TPM 担当が起きた印）が無い folder なら、
+ * scratchpad などから打った置き間違い（その folder の名が別の project になる）なので止める。Key は keyOption、無ければ $ROSTER_KEY（担当）。
  */
 export function requireKey(ctx: Context, keyOption?: string): string {
   if (!existsSync(rolesConfigFile(ctx.project)) && ctx.state.read('tpm.jsonc') === undefined) {
-    throw new TpmError(`roster を使う project の folder ではありません: ${ctx.project}（.claude/roles/config.jsonc も、TPM 担当が起きた印も無い）。project の folder で打つか、$TPM_PROJECT に project の path を付けてください`);
+    throw new TpmError(`roster を使う project の folder ではありません: ${ctx.project}（.claude/roles/config.jsonc も、TPM 担当が起きた印も無い）。project の folder で打つか、$ROSTER_PROJECT に project の path を付けてください`);
   }
   // Staff Engineer 担当の席（名簿の Key は <課題の Key>.staff）は、見ている課題の Key の folder に置く。
-  const own = ctx.env.TPM_KEY || undefined;
+  const own = envOf(ctx.env, 'KEY');
   const key = keyOption ?? (own === undefined ? undefined : subjectOf(readRole(ctx, own) ?? { key: own }));
   if (!key) throw new TpmError('課題の Key がわかりません。TPM 担当は --key <Key> を付けてください');
   if (!KEY.test(key)) throw new TpmError(`課題の Key に使えない字があります: ${key}`);

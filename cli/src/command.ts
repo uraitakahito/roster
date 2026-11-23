@@ -5,11 +5,12 @@ import type { Context } from './context.ts';
 import { guardSettings } from './guard.ts';
 import { presentSettingsEnv, resolveSettings } from './settings.ts';
 import { shellQuote } from './shell.ts';
+import { envName } from './env.ts';
 import { skillSetDir, TpmError } from './skill-sets.ts';
 
 /**
  * dir に移って TPM 担当の claude を起こす 1 行を返す。model などは env から resolveSettings('tpm', …) で決める。
- * env に書いてある TPM_MODEL などは 1 行の頭（PATH の隣）に写す。`TPM_MODEL=… roster start` と 1 回だけ付けた値も、
+ * env に書いてある ROSTER_MODEL など（古い名で書いてあっても）は、新しい名で 1 行の頭（PATH の隣）に写す。`ROSTER_MODEL=… roster start` と 1 回だけ付けた値も、
  * TPM 担当の環境に入り、roster hello の状態と roster assign で起こす担当に効く（profile で export したときと揃う）。
  * core と追加の skill セットを --add-dir で足し、最初の入力は /tpm。--settings で guard（roster guard）の hook を付ける。
  * TPM 担当が roster を名前だけで打てるように、PATH の頭に roster の folder を足す（担当には roster run-role が同じことをする）。
@@ -43,11 +44,11 @@ export function startTpm(ctx: Context): { warnings: string[], line: string } {
   if (registered.kind === 'down') throw new TpmError(downMessage(ctx, url, done, after));
   if (registered.kind === 'refused') throw new TpmError(`castlist（${url}）が Product Manager の登録を断りました（${registered.code}: ${registered.error}）`);
   const launch = [
-    'TPM_LAUNCH="$(uuidgen)"',
-    `TPM_LAUNCHED_BY=${shellQuote(PM_REF)}`,
-    `TPM_LAUNCH_MODEL=${shellQuote(settings.model)}`,
-    `TPM_LAUNCH_EFFORT=${shellQuote(settings.effort)}`,
-    'TPM_LAUNCH_FRESH=1',
+    `${envName('LAUNCH')}="$(uuidgen)"`,
+    `${envName('LAUNCHED_BY')}=${shellQuote(PM_REF)}`,
+    `${envName('LAUNCH_MODEL')}=${shellQuote(settings.model)}`,
+    `${envName('LAUNCH_EFFORT')}=${shellQuote(settings.effort)}`,
+    `${envName('LAUNCH_FRESH')}=1`,
   ];
   return { warnings, line: buildCommand(ctx.project, ctx.root, ctx.skillSets, ctx.env, launch) };
 }

@@ -18,15 +18,15 @@ describe('buildCommand', () => {
     );
   });
 
-  test('TPM_MODEL などがあれば、旗にし、1 行の頭（PATH の隣）にも引用して写す', () => {
-    const env = { TPM_MODEL: 'claude-fable-5-2', TPM_EFFORT: 'high', TPM_PERMISSION_MODE: 'accept edits' };
+  test('ROSTER_MODEL などがあれば、旗にし、1 行の頭（PATH の隣）にも引用して写す', () => {
+    const env = { ROSTER_MODEL: 'claude-fable-5-2', ROSTER_EFFORT: 'high', ROSTER_PERMISSION_MODE: 'accept edits' };
     expect(buildCommand('/w', '/r', [], env)).toMatch(
-      /^cd \/w && PATH=\/r\/cli\/bin:"\$PATH" TPM_MODEL=claude-fable-5-2 TPM_EFFORT=high TPM_PERMISSION_MODE='accept edits' claude --model claude-fable-5-2 --effort high --permission-mode 'accept edits' --settings /,
+      /^cd \/w && PATH=\/r\/cli\/bin:"\$PATH" ROSTER_MODEL=claude-fable-5-2 ROSTER_EFFORT=high ROSTER_PERMISSION_MODE='accept edits' claude --model claude-fable-5-2 --effort high --permission-mode 'accept edits' --settings /,
     );
   });
 
   test('無い物・空の物は写さない', () => {
-    expect(buildCommand('/w', '/r', [], { TPM_MODEL: '', TPM_EFFORT: 'high' })).toMatch(/^cd \/w && PATH=\/r\/cli\/bin:"\$PATH" TPM_EFFORT=high claude --model claude-opus-5-5 --effort high /);
+    expect(buildCommand('/w', '/r', [], { ROSTER_MODEL: '', ROSTER_EFFORT: 'high' })).toMatch(/^cd \/w && PATH=\/r\/cli\/bin:"\$PATH" ROSTER_EFFORT=high claude --model claude-opus-5-5 --effort high /);
   });
 
   test('空白を含む道も引用する', () => {

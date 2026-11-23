@@ -1,6 +1,6 @@
 // castlist（別の repo。127.0.0.1 で待つ、アクターの台帳のサーバー）への組み込み。API は castlist の docs/src/api.md。
 // アクターは Claude Code の session 1 つ（担当・TPM 担当・Auditor）と、人の Product Manager。roster は、登録・出来事・線・model と effort を送る。
-// 設定（config.jsonc の castlist か $TPM_CASTLIST_URL）が無ければ、どれも何もしない。
+// 設定（config.jsonc の castlist か $ROSTER_CASTLIST_URL）が無ければ、どれも何もしない。
 // 送るのは curl（置き場の pagetray と同じ。命令が同期なので）。castlist を起こすのは Product Manager だけで、止まっていれば打つ 1 行を出す。
 import { createHash } from 'node:crypto';
 import { closeSync, existsSync, fstatSync, openSync, readSync } from 'node:fs';
@@ -9,6 +9,7 @@ import type { Context } from './context.ts';
 import { ROLE_NAMES, type RoleName } from './protocol.ts';
 import { readRole } from './roster.ts';
 import { TpmError } from './skill-sets.ts';
+import { envOf } from './env.ts';
 
 /**
  * castlist が止まっている時に Product Manager へ出す `container run` の image の版。
@@ -44,11 +45,11 @@ const ROLE_ABBREV = {
 /** castlist の URL が受ける形（roster を動かす機械の中だけ）。 */
 const URL_FORM = /^http:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\/?$/;
 
-/** castlist の URL（末尾の / は落とす）。$TPM_CASTLIST_URL、無ければ project の folder の設定の castlist。どちらも無ければ undefined（castlist に何も送らない）。 */
+/** castlist の URL（末尾の / は落とす）。$ROSTER_CASTLIST_URL、無ければ project の folder の設定の castlist。どちらも無ければ undefined（castlist に何も送らない）。 */
 export function castlistUrl(ctx: Pick<Context, 'env' | 'config'>): string | undefined {
-  const url = ctx.env.TPM_CASTLIST_URL || ctx.config.castlist;
+  const url = envOf(ctx.env, 'CASTLIST_URL') || ctx.config.castlist;
   if (url === undefined) return undefined;
-  if (!URL_FORM.test(url)) throw new TpmError(`$TPM_CASTLIST_URL は http://127.0.0.1:<port> か http://localhost:<port> の形にしてください: ${url}`);
+  if (!URL_FORM.test(url)) throw new TpmError(`$ROSTER_CASTLIST_URL は http://127.0.0.1:<port> か http://localhost:<port> の形にしてください: ${url}`);
   return url.replace(/\/+$/, '');
 }
 
@@ -190,13 +191,14 @@ export interface Seat {
 }
 
 /**
- * 今の周りの席。$TPM_KEY があれば名簿の行（無ければ $TPM_ROLE）の役割の担当、Auditor は project に 1 つの席。
+ * 今の周りの席。$ROSTER_KEY があれば名簿の行（無ければ $ROSTER_ROLE）の役割の担当、Auditor は project に 1 つの席。
  * Staff Engineer 担当の席は、名の接頭辞を課題の Key から作り（`ai-33-staff`）、見ている課題の Key を subject に持つ。
- * $TPM_KEY が無ければ TPM 担当（castlist の hook と guard は、roster が起こした session にしか付かない）。
+ * $ROSTER_KEY が無ければ TPM 担当（castlist の hook と guard は、roster が起こした session にしか付かない）。
  */
 export function seatOf(ctx: Context): Seat {
-  const key = ctx.env.TPM_KEY || undefined;
-  const fromEnv = (ROLE_NAMES as string[]).includes(ctx.env.TPM_ROLE ?? '') ? ctx.env.TPM_ROLE as RoleName : undefined;
+  const key = envOf(ctx.env, 'KEY');
+  const envRole = envOf(ctx.env, 'ROLE');
+  const fromEnv = (ROLE_NAMES as string[]).includes(envRole ?? '') ? envRole as RoleName : undefined;
   const record = key === undefined ? undefined : readRole(ctx, key);
   const role = key === undefined ? undefined : record?.role ?? fromEnv;
   if (role === 'auditor') return { prefix: projectPrefix(ctx.project, 'audit'), role, ...(key === undefined ? {} : { key }) };

@@ -11,6 +11,7 @@ import type { Tracker } from './tracker/types.ts';
 import { CmuxTransport } from './transport/cmux.ts';
 import { FileTransport } from './transport/file.ts';
 import type { Transport } from './transport/types.ts';
+import { envOf } from './env.ts';
 
 /** 命令が動くときの周り。命令はみなこれを受け取り、試験では偽物の道具を入れて組む。 */
 export interface Context {
@@ -38,16 +39,16 @@ const sleepSync = (ms: number): void => {
 };
 
 /**
- * 周りを組む。project は $TPM_PROJECT（担当は起こされるときに渡される）、無ければ今いる folder。
- * file の連携での自分の宛先は $TPM_ADDRESS（無ければ file:tpm）。
+ * 周りを組む。project は $ROSTER_PROJECT（担当は起こされるときに渡される）、無ければ今いる folder。
+ * file の連携での自分の宛先は $ROSTER_ADDRESS（無ければ file:tpm）。
  */
 export function createContext(env: NodeJS.ProcessEnv = process.env, cwd: string = process.cwd(), exec: Exec = realExec): Context {
-  const project = realpathSync(env.TPM_PROJECT || cwd);
+  const project = realpathSync(envOf(env, 'PROJECT') || cwd);
   const root = join(import.meta.dirname, '..', '..');
   const config = composeRolesConfig(project);
   const state = new State(stateDir(project, env));
   migrateLegacyJson(state.dir);
-  const transport = config.transport === 'file' ? new FileTransport(state, env.TPM_ADDRESS || 'file:tpm') : new CmuxTransport(exec);
+  const transport = config.transport === 'file' ? new FileTransport(state, envOf(env, 'ADDRESS') || 'file:tpm') : new CmuxTransport(exec);
   // 課題管理への書き込みは tracker.jsonl に残す。
   const tracker = new RecordedTracker(new RoutedTracker(config.trackers, exec), state, actor(env));
   return { project, config, state, transport, tracker, env, exec, root, skillSets: composeSkillSets(config.sources, root), sleep: sleepSync, now: () => new Date() };

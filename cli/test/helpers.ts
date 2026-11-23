@@ -270,7 +270,7 @@ export interface World {
   slept: () => number
   /** PR の URL → `gh pr view` が返す state（無い URL は MERGED）。値が undefined の URL は、gh が読めない（exit 1）。 */
   prs: Map<string, string | undefined>
-  /** castlist の URL（設定の castlist と $TPM_CASTLIST_URL）。この URL への curl は、偽の置き場でなく本当の curl で送る（試験の偽の castlist が受ける）。 */
+  /** castlist の URL（設定の castlist と $ROSTER_CASTLIST_URL）。この URL への curl は、偽の置き場でなく本当の curl で送る（試験の偽の castlist が受ける）。 */
   castlist: string[]
   /** 外の命令の答えを替える（`<命令> <引数…>` の字 → 答え）。無い命令は今までどおり exit 0・`{}`。 */
   answers: Map<string, ExecResult>
@@ -294,7 +294,7 @@ export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessE
   const calls: Call[] = [];
   const store = new FakeStore();
   const prs = new Map<string, string | undefined>();
-  const castlist = [config.castlist, env.TPM_CASTLIST_URL].filter((u): u is string => typeof u === 'string' && u !== '');
+  const castlist = [config.castlist, env.ROSTER_CASTLIST_URL].filter((u): u is string => typeof u === 'string' && u !== '');
   const answers = new Map<string, ExecResult>();
   const exec: Exec = (cmd, args, options) => {
     // castlist への curl は、試験が起こした偽の castlist（か、何も待っていない port）へ本当に送る。calls には数えない。
@@ -314,7 +314,7 @@ export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessE
   let slept = 0;
   const at = (env: NodeJS.ProcessEnv): Context => ({
     // 控えの folder も一時の folder にする（本物の控えに試験のページを置かない）。
-    ...createContext({ XDG_STATE_HOME: join(base, 'state'), TPM_PAGES_DIR: join(base, 'pages'), ...env }, project, exec),
+    ...createContext({ XDG_STATE_HOME: join(base, 'state'), ROSTER_PAGES_DIR: join(base, 'pages'), ...env }, project, exec),
     now: () => new Date('2026-11-20T12:00:00.000Z'),
     sleep: () => {
       slept += 1;
@@ -326,7 +326,7 @@ export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessE
     calls,
     store,
     tpm,
-    role: (key, address) => at({ TPM_PROJECT: project, TPM_KEY: key, TPM_ADDRESS: address }),
+    role: (key, address) => at({ ROSTER_PROJECT: project, ROSTER_KEY: key, ROSTER_ADDRESS: address }),
     wire: new FileTransport(tpm.state, 'file:tpm'),
     slept: () => slept,
     prs,

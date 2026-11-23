@@ -13,7 +13,7 @@ const LONG = 'あ'.repeat(SUMMARY_MIN);
 
 /** 置き場に依頼書 name を置き、URL を返す。 */
 function put(w: ReturnType<typeof world>, name: string, html: string): string {
-  const dir = w.tpm.env.TPM_PAGES_DIR ?? '';
+  const dir = w.tpm.env.ROSTER_PAGES_DIR ?? '';
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, name), html);
   return `${DEFAULT_PAGES_URL}/${name}`;

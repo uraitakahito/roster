@@ -160,7 +160,7 @@ describe('roster page reply と roster dismiss', () => {
     expect(pageReply(s.tpm, [url], { answered: true })).toEqual([`答えたにした: ${url}`]);
     expect(s.state(1)).toBe('answered');
 
-    expect(() => pageReply({ ...s.se, env: { ...s.se.env, TPM_ROLE: 'software-engineer' } }, [url], { waiting: true })).toThrow(/TPM 担当だけ/);
+    expect(() => pageReply({ ...s.se, env: { ...s.se.env, ROSTER_ROLE: 'software-engineer' } }, [url], { waiting: true })).toThrow(/TPM 担当だけ/);
     expect(() => pageReply(s.tpm, [url], {})).toThrow(/どちらか 1 つ/);
     expect(() => pageReply(s.tpm, [url], { waiting: true, answered: true })).toThrow(/どちらか 1 つ/);
     expect(() => pageReply(s.tpm, [], { waiting: true })).toThrow(/URL を 1 つ以上/);

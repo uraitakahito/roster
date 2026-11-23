@@ -11,7 +11,24 @@ description: この repo を別の folder へ移す手順、Node の version の
 4. 新しい folder の `cli/` で `pnpm install --frozen-lockfile` を打つ（`cd <新しい folder>/cli && pnpm install --frozen-lockfile`）。`~/.local/bin/roster` の symlink を張っていれば張り直す（`ln -sf <新しい folder>/cli/bin/roster ~/.local/bin/roster`）。通知のバナーの hook（[設定](/configuration/#cmuxjson-に-hook-を足す)）を使っていれば、`roster banner setup` を打ち直して `~/.config/cmux/cmux.json` の命令を替え、`roster banner check` で確かめる（命令は repo の在り処を書いている。替えないと、古い在り処に入口が無いので hook は何もせず、バナーを選ばなくなる。`roster banner check` と TPM 担当の `roster hello` が在り処の違いを知らせる）。
 5. 動いている TPM 担当は、`roster start` の 1 行で起こし直す（guard の hook と `roster` の在り処が古い folder を指しているため）。担当を起こす旗は `roster assign` が自分の場所から求めるので直さない。
 
-使う側の project（TPM 担当を起こす folder）を移したときは、状態の folder（`~/.local/state/tpm/<project の path から作った名>/`）も変わる。担当が 0 のときに移せば、古い folder は消してよい。
+使う側の project（TPM 担当を起こす folder）を移したときは、状態の folder（`~/.local/state/roster/<project の path から作った名>/`）も変わる。担当が 0 のときに移せば、古い folder は消してよい。
+
+## 古い在り処と古い名から移る
+
+道具の名を roster に替えたので（t-v28j）、在り処と環境変数も roster の名にした（t-6ydg）。
+
+| 物 | 今の名 | 古い名 |
+|---|---|---|
+| 状態の folder | `~/.local/state/roster/` | `~/.local/state/tpm/` |
+| 控えの folder | `~/.local/share/roster/pages/` | `~/.local/share/tpm/pages/` |
+| cmux.json の hook の id | `roster-banner` | `tpm-banner` |
+| 環境変数 | `ROSTER_KEY`・`ROSTER_STATE`・`ROSTER_MODEL` など | `TPM_KEY`・`TPM_STATE`・`TPM_MODEL` など |
+
+- **folder**: 古い名の folder が本物の folder（symlink でない）で在れば、`roster` は空の状態を作らずに止まり、移す 1 行（`mv ~/.local/state/tpm ~/.local/state/roster && ln -s roster ~/.local/state/tpm`。控えも同じ形）を出す。古い名の symlink を残すのは、移す前に起きた担当と、cmux が復元する居場所の命令が、古い path を持つため。両方が本物の folder なら（移す間に古い在り処へ書かれた）、割れていると言って止まる。
+- **渡された状態の folder が無い時**: `$ROSTER_STATE`（か `--state`）の folder が無ければ、作らずに止まる（古い在り処の path のまま復元された居場所）。その居場所を閉じ、TPM 担当が起こし直す。
+- **環境変数**: `roster` は新しい名を読み、無ければ古い名を読む（移す前に起きた担当のため）。書くのは新しい名だけで、担当を起こす時は受け継いだ古い名を消す。
+- **hook の id**: 古い id でも、`roster` は命令で hook を見つけるので動く。`roster banner check` が替える 1 行を出す。
+- **後始末**: 移す前に起きた居場所がみな無くなり、どの project の TPM 担当も新しい `roster start` で起き直した後に、古い名の symlink を消し、古い名を読む所を外す（`cli/src/env.ts`・`guard.ts` の `TPM_RAW=1`）。
 
 ## Node の version を上げる
 
@@ -100,7 +117,7 @@ cd <TPM 担当を起こした folder>
 | container | `pagetray`（`127.0.0.1:8801` と `127.0.0.1:8800` → 中の 8080。メモリは Apple Container の下限の 200 MiB、CPU は 1） |
 | URL | `http://127.0.0.1:8801/`（一覧の UI。ページは `/<状態の folder の名>/<Key>/<種類>-<番号>.html`、ページが参照する file は `/<状態の folder の名>/<Key>/files/<語>-<番号>.<拡張子>`）。`http://127.0.0.1:8800/` は、前の置き場（Nginx。今は無い）の port。前に置いたページの URL と、ページの中の link を同じ path で開けるように、同じ container が待ち受ける |
 | CLI | `pagetray`（置き場を端末から操作する命令。release に macOS arm64 用の binary が付く。入れ方と命令は pagetray の docs の「[CLI](https://uraitakahito.github.io/pagetray/cli.html)」）。担当は `roster page` を使い、`pagetray` は人の手元と、`roster` を通さない場面で使う。担当の `pagetray page delete` は guard が止める |
-| 控えの folder | `~/.local/share/tpm/pages/`（`roster` が、置いた・読んだページと file を roster を動かす機械に写す所。container には mount しない） |
+| 控えの folder | `~/.local/share/roster/pages/`（`roster` が、置いた・読んだページと file を roster を動かす機械に写す所。container には mount しない） |
 | DB | 名前つきの volume `pagetray-data`（中の `/data/pages.db`）。roster を動かす機械の folder は mount しない |
 
 **手順は、pagetray の docs の「[動かす](https://uraitakahito.github.io/pagetray/run.html)」にある**（起こす・確かめる・DB の写しを取る・写しから戻す・止める・版を上げる）。そこの命令のうち、container と volume に触る物は、頭に `roster infra run pagetray --` を付けて打つ。下は、この repo の側の決まりだけを書く。
@@ -123,7 +140,7 @@ roster infra run pagetray -- container run -d --name pagetray \
 - `-p` には必ず `127.0.0.1:` を書く。`-p 8801:8080` と書くと LAN に開く。
 - `PAGETRAY_CASTLIST_URL`（pagetray 0.6.0 から）は、置き場が送り手を castlist（[アクターの台帳](#アクターの台帳castlist)）に聞く先。`roster page put`・`roster file put` は、castlist の設定がある project では送り手（session の付随する id）を付けて置き、置き場が受けたその時に castlist に聞いて記録に残す（[担当のあいだの決まり](/protocol/#ページの置き場)）。container の中の `127.0.0.1` は container 自身なので、castlist の container `castlist.box` に名でつなぐ（Apple Container の DNS が domain `box` の名を答える）。一覧の UI の送り手の link の頭 `PAGETRAY_CASTLIST_LINK_URL` は、既定の `http://127.0.0.1:8802`（host の browser で開く castlist）のままにする。
 - `PAGETRAY_CASTLIST_URL` を書いた置き場は、castlist が止まっている・名で届かない間、送り手を付けた置く要求を `503` で断る（何も置かない。`roster page put` は「castlist に送り手を聞けませんでした」と出す）。castlist を起こすのは Product Manager（[アクターの台帳](#アクターの台帳castlist)）。castlist が起きているのに続く時は、置き場から `castlist.box` に届いていない（同じ network に居ない・名が違う）。
-- 8801 が使われていたら別の port にし、担当が使う URL を環境変数 `TPM_PAGES_URL`（[設定](/configuration/)）で合わせる。
+- 8801 が使われていたら別の port にし、担当が使う URL を環境変数 `ROSTER_PAGES_URL`（[設定](/configuration/)）で合わせる。
 - 起こしたら、pagetray の docs の「[確かめる](https://uraitakahito.github.io/pagetray/run.html#確かめる)」をする。試しのページを置いたら、TPM 担当が `roster page delete <URL> --yes` で消す（[担当のあいだの決まり](/protocol/#ページの置き場)）。
 - 「確かめる」の 6（一覧の UI を、読むだけの試験で見る。pagetray 0.3.2 から）は、DevOps Engineer 担当が自分で流す。pagetray の checkout のある folder で打ち、Node と pnpm が要る。試験は本物の browser（roster を動かす機械の Chrome）で一覧の UI を開くが、置き場には何も書かない。出力を結果のページに載せる。browser で一覧を見ることを、Product Manager に頼まない。試験が落ちたら、落ちた所を【ask-tpm】で知らせる。
 

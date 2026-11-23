@@ -129,7 +129,7 @@ export type Answer<T> = { kind: 'ok', body: T, text: string } | { kind: 'failed'
 /** castlist の URL。設定が無ければ止める。 */
 function requireUrl(ctx: Context): string {
   const url = castlistUrl(ctx);
-  if (url === undefined) throw new TpmError('castlist を設定していない（project の folder の .claude/roles/config.jsonc の castlist か $TPM_CASTLIST_URL に URL を書く）');
+  if (url === undefined) throw new TpmError('castlist を設定していない（project の folder の .claude/roles/config.jsonc の castlist か $ROSTER_CASTLIST_URL に URL を書く）');
   return url;
 }
 

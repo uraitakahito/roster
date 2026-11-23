@@ -4,6 +4,7 @@ import type { Context } from './context.ts';
 import { recordGateStop } from './evidence.ts';
 import type { RoleName, RoleSettings } from './protocol.ts';
 import { TpmError } from './skill-sets.ts';
+import { envOf } from './env.ts';
 
 /** 名簿の 1 行（`roles/` の 1 ファイル）。担当 1 人の役割・居場所・受けている依頼書。 */
 export interface RoleRecord extends RoleSettings {
@@ -29,7 +30,7 @@ export interface RoleRecord extends RoleSettings {
   address?: string
   /** 担当が名乗った時刻。 */
   helloAt?: string
-  /** 起こしの id（castlist を設定した時に、roster assign・roster audit start が起こすたびに作る UUID。roster run-role が $TPM_LAUNCH にする）。 */
+  /** 起こしの id（castlist を設定した時に、roster assign・roster audit start が起こすたびに作る UUID。roster run-role が $ROSTER_LAUNCH にする）。 */
   launch?: string
   /** 起こした者の、castlist の鍵の付随する id（roster assign は打った TPM 担当の `claude.session:…`、roster audit start は Product Manager）。 */
   launchedBy?: string
@@ -98,20 +99,20 @@ export function requireTpm(ctx: Context): TpmRecord {
 }
 
 /**
- * TPM 担当だけが打つ命令（担当に送る・担当を起こす・閉じる）を、担当の session（$TPM_KEY がある）から打ったら止める。
+ * TPM 担当だけが打つ命令（担当に送る・担当を起こす・閉じる）を、担当の session（$ROSTER_KEY がある）から打ったら止める。
  * 送り手の名は命令が付けるので、担当が打つと TPM 担当の名で相手に届いてしまう（台帳 #117）。止めた回は入口の検査の記録に残す。
  * message は、命令ごとの断りの字（無ければ、roster ask tpm で頼むよう言う字）。
  */
 export function requireTpmSide(ctx: Context, command: string, message?: string): void {
-  const key = ctx.env.TPM_KEY;
+  const key = envOf(ctx.env, 'KEY');
   if (!key) return;
   recordGateStop(ctx, 'tpm-only', command);
   throw new TpmError(message ?? `${command} は TPM 担当の命令です。担当の session（${key}）からは打てません。TPM 担当に頼むことは、roster ask tpm で送ってください`);
 }
 
-/** 自分の名簿の行。担当は起こされるときに $TPM_KEY を渡される。 */
+/** 自分の名簿の行。担当は起こされるときに $ROSTER_KEY を渡される。 */
 export function requireSelf(ctx: Context): RoleRecord {
-  const key = ctx.env.TPM_KEY;
-  if (!key) throw new TpmError('$TPM_KEY がありません（この命令は、roster assign で起こされた担当が打つ）');
+  const key = envOf(ctx.env, 'KEY');
+  if (!key) throw new TpmError('$ROSTER_KEY がありません（この命令は、roster assign で起こされた担当が打つ）');
   return requireRole(ctx, key);
 }

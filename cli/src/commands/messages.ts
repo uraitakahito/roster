@@ -17,12 +17,13 @@ import { isStorePage, pageOwner, replyLine, samePage, waitingByParty, waitingUrl
 import { markEscalated } from './review-marks.ts';
 import { isPageUrl } from './store.ts';
 import { readShown, returnedIds, seenTimes, shownFile, type SeenAt } from '../seen.ts';
+import { envOf } from '../env.ts';
 
 /** 記録の 1 行目の一言に使う長さの上限（メッセージの本文から作るとき）。 */
 const SUMMARY_LIMIT = 80;
 
 /**
- * 送り手・受け手の担当: 名簿の Key（TPM 担当は tpm）と、起こしの id（$TPM_LAUNCH・名簿の launch。castlist を設定した時だけある）。
+ * 送り手・受け手の担当: 名簿の Key（TPM 担当は tpm）と、起こしの id（$ROSTER_LAUNCH・名簿の launch。castlist を設定した時だけある）。
  * 届いた所で、宛先の担当と受けた session を比べるのに使う（roster returned check）。
  */
 export interface Party {
@@ -33,10 +34,10 @@ export interface Party {
 /** TPM 担当の担当の名（Party の key）。 */
 export const TPM_PARTY = 'tpm';
 
-/** 自分の担当（$TPM_KEY が無ければ TPM 担当）。 */
+/** 自分の担当（$ROSTER_KEY が無ければ TPM 担当）。 */
 export function selfParty(env: NodeJS.ProcessEnv): Party {
-  const launch = env.TPM_LAUNCH;
-  return { key: env.TPM_KEY || TPM_PARTY, ...(launch ? { launch } : {}) };
+  const launch = envOf(env, 'LAUNCH');
+  return { key: envOf(env, 'KEY') || TPM_PARTY, ...(launch ? { launch } : {}) };
 }
 
 /** 名簿の行の担当。 */
@@ -206,7 +207,7 @@ export function assertRead(ctx: Context, who: string, from?: string, action: key
   const incoming = ctx.transport.pending().filter(m => from === undefined || m.from === from);
   if (incoming.length === 0) return;
   const self = ctx.transport.whoami();
-  const key = ctx.env.TPM_KEY;
+  const key = envOf(ctx.env, 'KEY');
   const mine = (l: Sent): boolean => key ? l.key === key && l.from !== TPM_TITLE : l.from === TPM_TITLE;
   const sent = new Set(ctx.state.lines<Sent>('log.jsonl').filter(mine).map(l => l.id));
   const pending = incoming.filter(m => !sent.has(m.id));
@@ -454,7 +455,7 @@ export function wait(ctx: Context, kind: WaitKind, what: string, options: { hand
     ctx.state.write(waitFile(address), { ...record, hand: folded.n });
     return [`状態: ${text}`, `台帳の件に寄せた（打ち直し。新しい件にしない）: ${incidentLine(folded)}`];
   }
-  const incident = addIncident(ctx, { key: ctx.env.TPM_KEY || 'tpm', source: 'pm-hand', text: what, tags: [PM_HAND] });
+  const incident = addIncident(ctx, { key: envOf(ctx.env, 'KEY') || 'tpm', source: 'pm-hand', text: what, tags: [PM_HAND] });
   ctx.state.write(waitFile(address), { ...record, hand: incident.n });
   return [`状態: ${text}`, `台帳に入れた: ${incidentLine(incident)}`, ...tagLines(ctx, incident)];
 }

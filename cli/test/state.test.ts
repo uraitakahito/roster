@@ -1,9 +1,9 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { beforeEach, describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { TpmError } from '../src/skill-sets.ts';
-import { migrateLegacyJson, State, stateDir } from '../src/state.ts';
+import { migrateLegacyJson, rosterHome, State, stateDir } from '../src/state.ts';
 
 let state: State;
 
@@ -13,15 +13,57 @@ beforeEach(() => {
 
 describe('stateDir', () => {
   test('XDG_STATE_HOME の下に、project の path から作った名の folder', () => {
-    expect(stateDir('/Users/me/my work/app', { XDG_STATE_HOME: '/s' })).toBe('/s/tpm/-Users-me-my-work-app');
+    expect(stateDir('/Users/me/my work/app', { XDG_STATE_HOME: '/s' })).toBe('/s/roster/-Users-me-my-work-app');
   });
 
-  test('TPM_STATE があればそれを使う', () => {
-    expect(stateDir('/w', { TPM_STATE: '/given', XDG_STATE_HOME: '/s' })).toBe('/given');
+  test('ROSTER_STATE（無ければ古い名 TPM_STATE）があればそれを使う', () => {
+    expect(stateDir('/w', { ROSTER_STATE: state.dir, XDG_STATE_HOME: '/s' })).toBe(state.dir);
+    expect(stateDir('/w', { TPM_STATE: state.dir, XDG_STATE_HOME: '/s' })).toBe(state.dir);
+  });
+
+  test('渡された folder が無ければ、作らずに止める（古い在り処の path のまま復元された居場所）', () => {
+    const gone = join(state.dir, 'gone');
+    expect(() => stateDir('/w', { ROSTER_STATE: gone })).toThrow(/状態の folder .*gone.*がありません.*居場所を閉じ/);
+    expect(existsSync(gone)).toBe(false);
   });
 
   test('XDG_STATE_HOME が無ければ ~/.local/state', () => {
-    expect(stateDir('/w', {})).toMatch(/\/\.local\/state\/tpm\/-w$/);
+    vi.stubEnv('HOME', state.dir);
+    try {
+      expect(stateDir('/w', {})).toBe(join(state.dir, '.local', 'state', 'roster', '-w'));
+    }
+    finally {
+      vi.unstubAllEnvs();
+    }
+  });
+});
+
+describe('rosterHome（古い在り処 state/tpm）', () => {
+  test('古い名が無ければ、新しい名の folder', () => {
+    expect(rosterHome(state.dir)).toBe(join(state.dir, 'roster'));
+  });
+
+  test('古い名が symlink（移した後の形）なら、新しい名の folder', () => {
+    mkdirSync(join(state.dir, 'roster'));
+    symlinkSync('roster', join(state.dir, 'tpm'));
+    expect(rosterHome(state.dir)).toBe(join(state.dir, 'roster'));
+  });
+
+  test('古い名が本物の folder で新しい名が無ければ、空の状態を作らずに止め、移す 1 行を出す', () => {
+    mkdirSync(join(state.dir, 'tpm'));
+    expect(() => rosterHome(state.dir)).toThrow(`移してください: mv ${join(state.dir, 'tpm')} ${join(state.dir, 'roster')} && ln -s roster ${join(state.dir, 'tpm')}`);
+    expect(existsSync(join(state.dir, 'roster'))).toBe(false);
+  });
+
+  test('古い名も新しい名も本物の folder なら、割れていると止める', () => {
+    mkdirSync(join(state.dir, 'tpm'));
+    mkdirSync(join(state.dir, 'roster'));
+    expect(() => rosterHome(state.dir)).toThrow(/両方が本物の folder です（割れている）/);
+  });
+
+  test('stateBase も同じ守りを通る', () => {
+    mkdirSync(join(state.dir, 'tpm'));
+    expect(() => stateDir('/w', { XDG_STATE_HOME: state.dir })).toThrow(/古い在り処です/);
   });
 });
 

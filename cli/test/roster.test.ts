@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, realpathSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
@@ -7,7 +7,7 @@ import { assign, close, configLines, newKey, recordingTo, roles } from '../src/c
 import { createContext, type Context } from '../src/context.ts';
 import { buildCommand } from '../src/command.ts';
 import { modelLabel, modelStatus, ROLES, TPM_COLOR } from '../src/protocol.ts';
-import { readRole, requireRole, writeRole } from '../src/roster.ts';
+import { readRole, requireRole, requireSelf, writeRole } from '../src/roster.ts';
 import { claudeArgs, roleEnv } from '../src/run-role.ts';
 import { TpmError } from '../src/skill-sets.ts';
 import { BRIEF, world } from './helpers.ts';
@@ -15,7 +15,7 @@ import { BRIEF, world } from './helpers.ts';
 const SE = { role: 'software-engineer', title: '計画と実装', brief: BRIEF, wait: 0 } as const;
 
 describe('hello（TPM 担当）', () => {
-  test('$TPM_KEY が無ければ TPM 担当として名乗る: 宛先を状態に書き、状態を出し、名簿を出す', () => {
+  test('$ROSTER_KEY が無ければ TPM 担当として名乗る: 宛先を状態に書き、状態を出し、名簿を出す', () => {
     const w = world();
     expect(hello(w.tpm)).toEqual(['TPM 担当の宛先: file:tpm', `設定: ${w.project}/.claude/roles/config.jsonc`, '課題管理: none（既定）・連携: file', '名簿: 担当はいない']);
     expect(w.tpm.state.read('tpm.jsonc')).toEqual({ address: 'file:tpm' });
@@ -23,7 +23,7 @@ describe('hello（TPM 担当）', () => {
   });
 
   test('状態の model・effort は、同じ環境変数で roster start が出す 1 行と揃う', () => {
-    const env = { TPM_MODEL: 'claude-fable-5-2', TPM_EFFORT: 'high' };
+    const env = { ROSTER_MODEL: 'claude-fable-5-2', ROSTER_EFFORT: 'high' };
     const w = world({}, env);
     hello(w.tpm);
     const line = buildCommand('/w', w.tpm.root, [], env);
@@ -31,8 +31,8 @@ describe('hello（TPM 担当）', () => {
     expect(w.wire.status('file:tpm')?.model).toBe(modelStatus('claude-fable-5-2', 'high'));
   });
 
-  test('effort は 旗 > $CLAUDE_EFFORT（実際の effort）> $TPM_EFFORT、model は 旗 > $TPM_MODEL', () => {
-    const w = world({}, { TPM_MODEL: 'claude-fable-5-2', TPM_EFFORT: 'high', CLAUDE_EFFORT: 'low' });
+  test('effort は 旗 > $CLAUDE_EFFORT（実際の effort）> $ROSTER_EFFORT、model は 旗 > $ROSTER_MODEL', () => {
+    const w = world({}, { ROSTER_MODEL: 'claude-fable-5-2', ROSTER_EFFORT: 'high', CLAUDE_EFFORT: 'low' });
     hello(w.tpm);
     expect(w.wire.status('file:tpm')?.model).toBe('Fable 5.2 · low');
     hello(w.tpm, { model: 'claude-opus-5-5', effort: 'max' });
@@ -139,7 +139,7 @@ describe('assign', () => {
   });
 
   test('環境変数は config.jsonc の担当の欄に負け、役割の既定に勝つ', () => {
-    const env = { TPM_MODEL: 'claude-sonnet-5-5', TPM_EFFORT: 'high', TPM_PERMISSION_MODE: 'acceptEdits' };
+    const env = { ROSTER_MODEL: 'claude-sonnet-5-5', ROSTER_EFFORT: 'high', ROSTER_PERMISSION_MODE: 'acceptEdits' };
     const w = world({ 'devops-engineer': { model: 'claude-fable-5-2' } }, env);
     assign(w.tpm, 'devops', { role: 'devops-engineer', wait: 0 });
     expect(requireRole(w.tpm, 'devops')).toMatchObject({ model: 'claude-fable-5-2', effort: 'high', permissionMode: 'acceptEdits' });
@@ -232,7 +232,7 @@ describe('newKey', () => {
   /** TPM 担当の周りと、置き場の folder（world が一時の folder にしている）。 */
   function setup() {
     const w = world();
-    return { w, tpm: w.tpm, pages: w.tpm.env.TPM_PAGES_DIR ?? '' };
+    return { w, tpm: w.tpm, pages: w.tpm.env.ROSTER_PAGES_DIR ?? '' };
   }
   /** 決めた並びの数を順に返す pick。 */
   const sequence = (...ns: number[]) => {
@@ -389,6 +389,32 @@ describe('roles と close', () => {
   });
 });
 
+describe('道具の名を替えた後（t-6ydg）', () => {
+  test('起こす命令の --state は symlink を解いた path（古い在り処を通って起きた担当が起こす席も、新しい path を持つ）', () => {
+    const real = realpathSync(mkdtempSync(join(tmpdir(), 'roster-real-state-')));
+    const link = join(realpathSync(mkdtempSync(join(tmpdir(), 'roster-link-'))), 'old-state');
+    symlinkSync(real, link);
+    const w = world({}, { ROSTER_STATE: link });
+    assign(w.tpm, 't-x7k2', SE);
+    expect(w.wire.command('file:1')).toBe(`${w.tpm.root}/cli/bin/roster run-role t-x7k2 --project ${w.project} --state ${real}`);
+  });
+
+  test('担当に渡すのは新しい名だけで、受け継いだ古い名（TPM_*）の同じ物は消す', () => {
+    const w = world();
+    assign(w.tpm, 't-x7k2', SE);
+    const env = roleEnv(requireRole(w.tpm, 't-x7k2'), '/p', '/s', '/r', { PATH: '/usr/bin', TPM_PROJECT: '/old', TPM_STATE: '/old-state', TPM_KEY: 't-old', TPM_ROLE: 'devops-engineer', TPM_MODEL: 'claude-x' });
+    expect(env).toMatchObject({ ROSTER_PROJECT: '/p', ROSTER_STATE: '/s', ROSTER_KEY: 't-x7k2', ROSTER_ROLE: 'software-engineer', TPM_MODEL: 'claude-x' });
+    for (const name of ['TPM_PROJECT', 'TPM_STATE', 'TPM_KEY', 'TPM_ROLE']) expect(env).not.toHaveProperty(name);
+  });
+
+  test('古い名（TPM_KEY など）だけを持つ担当も、今までどおり自分の名簿の行を読める', () => {
+    const w = world();
+    assign(w.tpm, 't-x7k2', SE);
+    const old = { ...w.tpm, env: { TPM_KEY: 't-x7k2', TPM_ROLE: 'software-engineer' } };
+    expect(requireSelf(old).key).toBe('t-x7k2');
+  });
+});
+
 describe('run-role', () => {
   test('claude の引数は、guard の hook を付け、最初の入力の前に -- を置く', () => {
     const w = world({ 'skill-sets': ['dependabot'] });
@@ -428,10 +454,10 @@ describe('run-role', () => {
     assign(w.tpm, 't-x7k2', SE);
     expect(roleEnv(requireRole(w.tpm, 't-x7k2'), '/p', '/s', '/r', { PATH: '/usr/bin', HOME: '/h' })).toEqual({
       HOME: '/h',
-      TPM_PROJECT: '/p',
-      TPM_STATE: '/s',
-      TPM_KEY: 't-x7k2',
-      TPM_ROLE: 'software-engineer',
+      ROSTER_PROJECT: '/p',
+      ROSTER_STATE: '/s',
+      ROSTER_KEY: 't-x7k2',
+      ROSTER_ROLE: 'software-engineer',
       PAGETRAY_NO_DELETE: '1',
       PATH: '/r/cli/bin:/usr/bin',
     });

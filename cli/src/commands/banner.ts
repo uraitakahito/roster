@@ -19,7 +19,9 @@ import { waitFile, type WaitRecord } from './messages.ts';
 /** hook の記録を残す日数。 */
 const LOG_DAYS = 7;
 /** cmux.json の hook の id。 */
-export const HOOK_ID = 'tpm-banner';
+export const HOOK_ID = 'roster-banner';
+/** 前の hook の id（t-6ydg で替えた）。cmux.json に残っていれば roster banner check が知らせる。 */
+export const LEGACY_HOOK_ID = 'tpm-banner';
 /** cmux が hook を待つ秒（既定の 20 は長い。roster が決めるのは 0.3 秒ほど）。 */
 const HOOK_TIMEOUT_SECONDS = 5;
 
@@ -175,11 +177,11 @@ export function staleHook(command: string, root: string, env: NodeJS.ProcessEnv)
 export const cmuxConfigFile = (): string => join(homedir(), '.config', 'cmux', 'cmux.json');
 
 /** cmux.json に roster の hook があるか。読めなければ undefined。 */
-export function findHook(file: string = cmuxConfigFile()): { command: string, enabled: boolean } | undefined {
+export function findHook(file: string = cmuxConfigFile()): { id: string | undefined, command: string, enabled: boolean } | undefined {
   if (!existsSync(file)) return undefined;
   const config = parseJsonc(readFileSync(file, 'utf8')) as { notifications?: { hooks?: { id?: string, command?: string, enabled?: boolean }[] } };
   const hook = config.notifications?.hooks?.find(h => h.id === HOOK_ID || h.command?.includes('banner hook'));
-  return hook?.command === undefined ? undefined : { command: hook.command, enabled: hook.enabled !== false };
+  return hook?.command === undefined ? undefined : { id: hook.id, command: hook.command, enabled: hook.enabled !== false };
 }
 
 /** `roster banner setup`: cmux.json に足す字と手順を出す（cmux.json は利用者の設定なので、roster は書き替えない）。 */
@@ -245,6 +247,8 @@ export function bannerCheck(root: string, env: NodeJS.ProcessEnv, cmuxFile: stri
   }
   else {
     lines.push(`cmux.json の hook: あり（${cmuxFile}）`);
+    // id は cmux が見分けに使うだけで、roster は命令でも hook を見つけるので、ok は落とさない。
+    if (hook.id === LEGACY_HOOK_ID) lines.push(`cmux.json の hook の id が前の名（${LEGACY_HOOK_ID}）です。${HOOK_ID} に替えてください（動きは変わらない）`);
   }
   return { ok, lines };
 }

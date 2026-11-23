@@ -69,7 +69,7 @@ disable-model-invocation: true
 | DevOps Engineer | `devops-engineer` | `claude-opus-5-5` | `low` | `bypassPermissions` |
 | Staff Engineer | `staff-engineer` | `claude-opus-5-5` | `high` | `bypassPermissions` |
 
-- 欄ごとに、旗 > 担当を起こす folder（`--cwd`）の `.claude/roles/config.jsonc` の `software-engineer`・`devops-engineer`・`staff-engineer`（欄は `model`・`effort`・`permissionMode`）> 起こした folder の同じ欄 > 環境変数 `TPM_MODEL`・`TPM_EFFORT`・`TPM_PERMISSION_MODE` > コードの既定 の順に、`roster assign` が決める。環境変数は `roster start` の 1 行（あなた）にも効く。
+- 欄ごとに、旗 > 担当を起こす folder（`--cwd`）の `.claude/roles/config.jsonc` の `software-engineer`・`devops-engineer`・`staff-engineer`（欄は `model`・`effort`・`permissionMode`）> 起こした folder の同じ欄 > 環境変数 `ROSTER_MODEL`・`ROSTER_EFFORT`・`ROSTER_PERMISSION_MODE` > コードの既定 の順に、`roster assign` が決める。環境変数は `roster start` の 1 行（あなた）にも効く。
 - **Product Manager が課題ごとに別の model や effort を指示したら、それに従う**（`roster assign` に `--model`・`--effort` を付ける）。その課題の担当が既にいれば、替えると背景を知らない新しい担当になることと、その担当が今受けている依頼書（`roster roles` の依頼書。【done】が返っていなければ、その作業も止まる）を Product Manager に伝え、それでも替えるかを確かめる。替えるなら、前の担当に `roster dismiss <Key> --handover`（担当の交代の【dismiss】。担当は課題を閉じない）を送り、【end】（成果の URL が載る）を受けて `roster close <Key>` で閉じてから、その URL を頭書きに書いた依頼書で新しい担当を起こす。
 
 ## 3. 起こす

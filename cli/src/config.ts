@@ -76,7 +76,7 @@ export interface RolesConfig {
   infra: Record<string, InfraEnv>
   /** 起こす担当ごとの model・effort・permissionMode（project の folder の設定に書いた欄だけ）。 */
   roles: Partial<Record<RoleName, Partial<RoleSettings>>>
-  /** アクターの台帳（castlist）の URL（project の folder の設定だけ。$TPM_CASTLIST_URL が勝つ。castlist.ts の castlistUrl）。 */
+  /** アクターの台帳（castlist）の URL（project の folder の設定だけ。$ROSTER_CASTLIST_URL が勝つ。castlist.ts の castlistUrl）。 */
   castlist?: string
   /** 集めた設定（project の folder 自身が先頭、次に直下の folder を名前の順）。 */
   sources: ConfigSource[]

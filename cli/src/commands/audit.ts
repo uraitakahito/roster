@@ -16,6 +16,7 @@ import { numberOf } from './incident.ts';
 import { roleOf } from './infra.ts';
 import { launch, paint } from './launch.ts';
 import { PM_REF, requireUp } from '../castlist.ts';
+import { envOf } from '../env.ts';
 
 /** core の skill セットの中の file（skill と、監査の手順・規程）。 */
 const coreSkill = (ctx: Context, ...path: string[]): string => join(skillSetDir(ctx.root, 'core'), '.claude', 'skills', ...path);
@@ -38,7 +39,7 @@ export interface StartOptions {
  * 担当の居場所からは打てない。TPM 担当と担当が道具として打つのは、guard が止める。
  */
 export function auditStart(ctx: Context, options: StartOptions): string[] {
-  if (ctx.env.TPM_KEY) throw new TpmError('Audit の席を起こすのは Product Manager です。担当の居場所からは起こせません');
+  if (envOf(ctx.env, 'KEY')) throw new TpmError('Audit の席を起こすのは Product Manager です。担当の居場所からは起こせません');
   if (!Number.isFinite(options.wait) || options.wait < 0) throw new TpmError('--wait は 0 以上の数にしてください（0 なら待たない）');
   // skill が無いまま起こすと、最初の入力が Unknown command になる。
   const skill = coreSkill(ctx, 'audit', 'SKILL.md');
@@ -145,7 +146,7 @@ export function auditFresh(ctx: Context, stdin: string): void {
 export function registerAudit(program: Command, print: (lines: string[]) => void, readStdin: () => string): void {
   const audit = program.command('audit').description('Auditor の席（Product Manager が起こす）と、監査の始まり');
   audit.command('start').description('Product Manager が Auditor の席を起こす（居場所を作り、名乗るまで待つ。席は project に 1 つ）')
-    .option('--model <model>', 'Auditor の model（既定は config.jsonc の auditor の欄・$TPM_MODEL・役割の既定の順）')
+    .option('--model <model>', 'Auditor の model（既定は config.jsonc の auditor の欄・$ROSTER_MODEL・役割の既定の順）')
     .option('--effort <effort>', 'Auditor の effort（同じ順）')
     .option('--permission-mode <mode>', 'Auditor の permission mode（同じ順）')
     .option('--wait <秒>', '起こした Auditor の roster hello を待つ秒（0 なら待たない）', '90')
