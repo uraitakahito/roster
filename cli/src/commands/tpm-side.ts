@@ -14,7 +14,7 @@ import { resolveSettings } from '../settings.ts';
 import { allRoles, assertKey, isStaffKey, LOCAL_KEY, readRole, removeRole, requireTpmSide, staffKey, type RoleRecord, type TpmRecord } from '../roster.ts';
 import { readSkillSets, skillSetDir, TpmError } from '../skill-sets.ts';
 import { route } from '../tracker/routed.ts';
-import { findHook, staleHook } from './banner.ts';
+import { findHook, oldBannerConfigNotice, staleHook } from './banner.ts';
 import { castlistHello, closeLaunch, sweep } from './castlist.ts';
 import { issueCopy, launch, paint, roleDefaults } from './launch.ts';
 import { assertRead, assertSettled, brief } from './messages.ts';
@@ -94,9 +94,14 @@ export function recordingTo(ctx: Context, issue: string): string {
   return sourceLabel(to.source) === OWN_LABEL ? to.tool : `${to.tool}（${sourceLabel(to.source)} の設定）`;
 }
 
-/** cmux の連携で、cmux.json に通知のバナーの hook が無い・命令が古ければ 1 行出す（TPM 担当が Product Manager に伝える）。 */
+/** cmux の連携で、cmux.json に通知のバナーの hook が無い・命令が古い・設定の file が古い在り処にあれば、1 行ずつ出す（TPM 担当が Product Manager に伝える）。 */
 export function bannerHint(ctx: Context, cmuxFile?: string): string[] {
   if (ctx.config.transport !== 'cmux') return [];
+  const old = oldBannerConfigNotice(ctx.env);
+  return [...hookHint(ctx, cmuxFile), ...(old === undefined ? [] : [`通知のバナー: ${old}（Product Manager に伝える）`])];
+}
+
+function hookHint(ctx: Context, cmuxFile?: string): string[] {
   try {
     const hook = findHook(cmuxFile);
     if (hook === undefined) return ['通知のバナー: cmux.json に roster の hook がありません。roster banner setup の字を足すと、Product Manager に要るバナーだけになる（Product Manager に伝える）'];

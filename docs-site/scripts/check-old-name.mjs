@@ -2,7 +2,7 @@
 // 替えた（t-v28j）。命令の形（tpm <命令>）・入口の path（cli/bin/tpm）・道具を指す字（「tpm の命令」など）の残りを落とす。
 //
 // 替えなかった内の名は当てない（当てる前に字から外す）:
-// - 状態と控えと設定の folder の名（~/.local/state/tpm・~/.local/share/tpm・~/.config/tpm）
+// - 状態と控えの folder の名（~/.local/state/tpm・~/.local/share/tpm）と、設定の古い在り処 ~/.config/tpm（読まずに知らせる。t-4urw）
 // - 名の頭の tpm.（tpm.jsonc・castlist の鍵 tpm.person・ラベル tpm.key と tpm.role・issuer の tpm.<project>）
 // - TPM 担当の skill /tpm（skills/tpm も）・cmux.json の hook の id tpm-banner・file の名 tpm-side
 // - TPM 担当を指す値: roster ask tpm・roster wait tpm・--on tpm の 2 語目、引用符で囲んだ 'tpm'（役割の鍵・設定の "guard": "tpm"）

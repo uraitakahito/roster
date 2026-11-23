@@ -1,5 +1,5 @@
 // 通知のバナー（cmux の通知の desktop）を、居場所の役割 × きっかけで出すか消すかを決める。I/O を持たない。
-// 設定は利用者の $XDG_CONFIG_HOME/tpm/banner.jsonc（無ければ ~/.config/tpm/banner.jsonc）。バナーを見るのは project でなく人なので、project の config.jsonc には置かない。
+// 設定は利用者の $XDG_CONFIG_HOME/roster/banner.jsonc（無ければ ~/.config/roster/banner.jsonc）。バナーを見るのは project でなく人なので、project の config.jsonc には置かない。
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { ROLE_NAMES } from './protocol.ts';
@@ -47,9 +47,16 @@ export const DEFAULT_BANNER: BannerConfig = {
   withBanner: ['sound'],
 };
 
+const configHome = (env: NodeJS.ProcessEnv): string => env.XDG_CONFIG_HOME || join(homedir(), '.config');
+
 /** 設定の file。 */
 export function bannerConfigFile(env: NodeJS.ProcessEnv = process.env): string {
-  return join(env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'tpm', 'banner.jsonc');
+  return join(configHome(env), 'roster', 'banner.jsonc');
+}
+
+/** 古い名の頃の設定の file（~/.config/tpm。t-4urw）。読まず、有れば banner check と TPM 担当の roster hello が知らせる。 */
+export function oldBannerConfigFile(env: NodeJS.ProcessEnv = process.env): string {
+  return join(configHome(env), 'tpm', 'banner.jsonc');
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);

@@ -4,8 +4,8 @@
 // cmux.json の命令は、roster の入口が無い機械（dotfiles で同じ cmux.json を配った機械）では、入口を呼ばずに `{}` を返して 0 で終わる。
 import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { isAbsolute, join, relative } from 'node:path';
-import { BANNER_ROLES, bannerConfigFile, CATEGORY_TRIGGER, choiceOf, decide, toBannerConfig, TRIGGERS, type BannerConfig } from '../banner.ts';
+import { dirname, isAbsolute, join, relative } from 'node:path';
+import { BANNER_ROLES, bannerConfigFile, CATEGORY_TRIGGER, choiceOf, decide, oldBannerConfigFile, toBannerConfig, TRIGGERS, type BannerConfig } from '../banner.ts';
 import type { Context } from '../context.ts';
 import type { Exec } from '../exec.ts';
 import { parseJsonc } from '../jsonc.ts';
@@ -68,6 +68,16 @@ function appendLog(state: State, entry: BannerLog, now: Date): void {
   const first = lines[0] === undefined ? undefined : (JSON.parse(lines[0]) as BannerLog).at;
   if (first === undefined || Date.parse(first) >= since) return;
   writeFileSync(file, lines.filter(l => Date.parse((JSON.parse(l) as BannerLog).at) >= since).map(l => `${l}\n`).join(''));
+}
+
+/** 古い在り処に設定の file があれば、移す手を書いた 1 行。無ければ undefined。古い在り処は読まない。 */
+export function oldBannerConfigNotice(env: NodeJS.ProcessEnv): string | undefined {
+  const old = oldBannerConfigFile(env);
+  if (!existsSync(old)) return undefined;
+  const file = bannerConfigFile(env);
+  return existsSync(file)
+    ? `古い在り処の設定は読みません（${file} を読む）。古い方は消してよい: rm ${shellQuote(old)}`
+    : `設定が古い在り処にあり、読みません（既定で動く）。移す: mkdir -p ${shellQuote(dirname(file))} && mv ${shellQuote(old)} ${shellQuote(file)}`;
 }
 
 /** 設定を読む。無ければ既定。 */
@@ -205,6 +215,11 @@ export function bannerCheck(root: string, env: NodeJS.ProcessEnv, cmuxFile: stri
   catch (e) {
     ok = false;
     lines.push(`設定を読めません（hook は読めない間、バナーを消さない）: ${file}: ${(e as Error).message}`);
+  }
+  const old = oldBannerConfigNotice(env);
+  if (old !== undefined) {
+    ok = false;
+    lines.push(old);
   }
   let hook: ReturnType<typeof findHook>;
   try {
