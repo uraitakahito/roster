@@ -71,6 +71,40 @@ export function call(ctx: Context, args: string[], input?: string): Reply {
   return { body: result.stdout.slice(0, Math.max(cut, 0)), code: result.status !== 0 || code === '' ? '000' : code, result };
 }
 
+/** 1 つの命令の中で、置き場の版を引いた答え（引くのは 1 度だけ）。 */
+const storeVersions = new WeakMap<Context, string>();
+
+/**
+ * 置き場の版が since（`<major>.<minor>.<patch>`）以上か。yes・old（古い。版を答えない置き場も）・down（応えない）。
+ * 版は数にして比べる（字で比べると 0.10.0 を 0.8.0 より前とみなす）。1 つの命令（Context）の中では、置き場に 1 度だけ聞く。
+ */
+export function storeAtLeast(ctx: Context, since: string): 'yes' | 'old' | 'down' {
+  let version = storeVersions.get(ctx);
+  if (version === undefined) {
+    const r = call(ctx, [`${pagesUrl(ctx.env)}/api/version`]);
+    if (r.code === '000') return 'down';
+    let answered: unknown;
+    try {
+      answered = r.code === '200' ? (JSON.parse(r.body) as { version?: unknown }).version : undefined;
+    }
+    catch { /* JSON でない答えは、版を答えない置き場 */ }
+    version = typeof answered === 'string' ? answered : '';
+    storeVersions.set(ctx, version);
+  }
+  return atLeast(version, since) ? 'yes' : 'old';
+}
+
+/** 版の字（`0.10.1`）が since 以上か。数の形でなければ false。 */
+export function atLeast(version: string, since: string): boolean {
+  const parse = (v: string): number[] | undefined => /^\d+\.\d+\.\d+$/.test(v) ? v.split('.').map(Number) : undefined;
+  const [a, b] = [parse(version), parse(since)];
+  if (a === undefined || b === undefined) return false;
+  for (let i = 0; i < 3; i++) {
+    if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) > (b[i] ?? 0);
+  }
+  return true;
+}
+
 /** 置き場の誤りの答え（`{"error": "…"}`）から文を取り出す。JSON でなければ本文のまま。 */
 export function reason(body: string): string {
   try {

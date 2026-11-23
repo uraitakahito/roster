@@ -8,12 +8,15 @@ import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { fileDelete, fileList, filePath, filePut, type FileRecord } from '../src/commands/file.ts';
 import { PAGE_KINDS, pageDelete, pageImport, pageList, pagePath, pagePut, pageReply, type PageRecord } from '../src/commands/page.ts';
-import { setReply, waitingUrls } from '../src/commands/reply.ts';
+import { PARTY_SINCE, setReply, waitingUrls } from '../src/commands/reply.ts';
 import { castlistIssuer } from '../src/castlist.ts';
 import type { Context } from '../src/context.ts';
 import { exec } from '../src/exec.ts';
 import { ROLE_NAMES } from '../src/protocol.ts';
 import { world } from './helpers.ts';
+import { markBrief, markEscalated, markVerdict } from '../src/commands/review-marks.ts';
+import { atLeast } from '../src/commands/store.ts';
+import type { Review } from '../src/reviews.ts';
 
 const URL = process.env.TPM_E2E_PAGES_URL ?? '';
 /**
@@ -268,5 +271,39 @@ describe.skipIf(!SENDER)('cli と pagetray のつなぎ（送り手。置き場�
     const plain = s.put(s.real(s.w.role('K-21', 'file:1'), { TPM_ROLE: 'software-engineer' }), 'result', '<title>送り手の無い結果</title>');
     expect(s.list(s.tpm, { key: 'K-21' })).toEqual([expect.not.objectContaining({ sender: expect.anything() as unknown })]);
     expect(s.list(s.tpm, { key: 'K-21' })[0]?.url).toBe(plain);
+  });
+});
+
+/** 置き場がレビューの印（待ちの相手・判定・見た物）を持てるか（pagetray 0.8.0 から）。/api/version の版で見る（前の版は知らない on を読まずに捨てる）。 */
+const MARKS = URL !== '' && atLeast((JSON.parse(execFileSync('curl', ['-fsS', `${URL}/api/version`], { encoding: 'utf8' })) as { version: string }).version, PARTY_SINCE);
+
+describe.skipIf(!MARKS)('cli と pagetray のつなぎ（レビューの印。置き場が 0.8.0 から）', () => {
+  test('依頼書にレビュー待ちと見る物、レビューのページに判定と見た物、上げた件の待ち。Product Manager の返事待ちには入らない', () => {
+    const s = setup();
+    const se = s.real(s.w.role('K-30', 'file:1'), { TPM_ROLE: 'software-engineer' });
+    const plan = s.put(se, 'plan', '<title>計画</title>');
+    const brief = s.put(se, 'brief', '<title>レビューの依頼書</title>');
+    const review = s.put(s.real(s.w.role('K-30.staff', 'file:2'), { TPM_ROLE: 'staff-engineer' }), 'review', '<title>レビュー</title>', 'K-30');
+    const PR = 'https://github.com/o/r/pull/7';
+    const asks: Review[] = [
+      { n: 1, key: 'K-30', url: plan, by: 'SWE K-30', askedAt: '2026-11-23T00:00:00.000Z', brief },
+      { n: 2, key: 'K-30', url: PR, by: 'SWE K-30', askedAt: '2026-11-23T00:00:01.000Z', brief },
+    ];
+    expect(markBrief(se, brief, asks, [])).toEqual([`置き場の印: レビュー待ちにした ${brief}`]);
+    const target = `/${s.project}/K-30/plan-1.html`;
+    expect(s.list(s.tpm, { key: 'K-30', kind: 'brief' })[0]).toMatchObject({ waits_on: 'review', targets: [target, PR] });
+    expect(waitingUrls(s.tpm, 'K-30')).toEqual([]);
+    expect(s.list(s.tpm, { key: 'K-30', reply: 'waiting', on: 'review' }).map(p => p.url)).toEqual([brief]);
+
+    expect(markVerdict(se, review, 'reject', asks)).toEqual([`置き場の印: 判定と見た物を書いた ${review}`, `置き場の印: レビュー済みにした ${brief}`]);
+    expect(s.list(s.tpm, { key: 'K-30', kind: 'review' })[0]).toMatchObject({ verdict: 'reject', targets: [target, PR] });
+    expect(s.list(s.tpm, { key: 'K-30', reply: 'answered' })).toEqual([]);
+
+    expect(markEscalated(se, review)).toEqual([`置き場の印: 上げた（TPM 担当の返事待ち）にした ${review}`]);
+    expect(s.list(s.tpm, { key: 'K-30', reply: 'waiting', on: 'tpm' }).map(p => p.url)).toEqual([review]);
+    // 相手を違えると、置き場は何も替えない
+    expect(setReply(s.tpm, review, 'answered')).toBe('conflict');
+    expect(pageReply(s.tpm, [review], { answered: true, on: 'tpm' })).toEqual([`決まったにした: ${review}`]);
+    expect(s.list(s.tpm, { key: 'K-30', reply: 'waiting', on: 'tpm' })).toEqual([]);
   });
 });

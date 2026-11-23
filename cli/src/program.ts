@@ -137,13 +137,15 @@ export function buildProgram(): Command {
     .option('--limit <件数>', '出す件数（1000 まで）', '50')
     .option('--oldest', '古い順に出す')
     .option('--all-projects', 'ほかの project のページも出す')
-    .option('--reply <状態>', '返事の状態で絞る（waiting は Product Manager の返事待ち、answered は答えた物）')
+    .option('--reply <状態>', '返事の状態で絞る（waiting は返事待ち、answered は答えた物）')
+    .option('--on <相手>', '--reply で絞る時の待ちの相手（pm＝既定・review はレビューの席・tpm は TPM 担当。置き場 0.8.0 から）')
     .option('--json', '記録を JSON で出す')
     .action((options: PageListOptions) => print(pageList(createContext(), options)));
   page.command('reply <urls...>').description('ページの返事の状態を手で直す（TPM 担当だけ。いつもは tpm ask pm と tpm answer が書く）')
-    .option('--waiting', 'Product Manager の返事待ちにする')
+    .option('--waiting', '返事待ちにする（既定は Product Manager の返事待ち）')
     .option('--answered', '答えたにする')
-    .action((urls: string[], options: { waiting?: boolean, answered?: boolean }) => print(pageReply(createContext(), urls, options)));
+    .option('--on <相手>', '待ちの相手（pm＝既定・review はレビューの席・tpm は TPM 担当。上げた件が決まったら --answered --on tpm。置き場 0.8.0 から）')
+    .action((urls: string[], options: { waiting?: boolean, answered?: boolean, on?: string }) => print(pageReply(createContext(), urls, options)));
   page.command('delete [urls...]').description('ページを置き場と控えから消す（TPM 担当だけ。戻せない。一覧を見せ、--yes で消す）')
     .option('--key <key>', 'この Key のページをみな消す')
     .option('--project <name>', 'この project（状態の folder の名）のページを消す。--key が無ければ project のページをみな消す（既定は今の project）')

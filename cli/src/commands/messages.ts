@@ -13,7 +13,8 @@ import { patchReview, readReviews, VERDICTS } from '../reviews.ts';
 import { TpmError } from '../skill-sets.ts';
 import { MAX_POINTS, type Note, type NoteKind, type NoteLink } from '../tracker/types.ts';
 import type { Incoming } from '../transport/types.ts';
-import { isStorePage, pageOwner, replyLine, samePage, waitingUrls } from './reply.ts';
+import { isStorePage, pageOwner, REPLY_LABELS, replyLine, samePage, waitingByParty, waitingUrls } from './reply.ts';
+import { markEscalated } from './review-marks.ts';
 import { isPageUrl } from './store.ts';
 import { readShown, returnedIds, seenTimes, shownFile, type SeenAt } from '../seen.ts';
 
@@ -514,7 +515,8 @@ export function askTpm(ctx: Context, options: { text: string, waitingFor: string
   const sent = toTpm(ctx, self, 'ask-tpm', `レビュー #${review.n}（判定: ${VERDICTS[review.verdict]}。${review.page}）を受けない: ${options.text}`, options.replyTo);
   // 2 度目に上げても、最初に上げた時刻を残す。
   if (review.escalatedAt === undefined) patchReview(ctx, review.n, { escalatedAt: ctx.now().toISOString() });
-  return [sent, ...wait(ctx, 'tpm', options.waitingFor)];
+  // 置き場のレビューのページを「上げた」にする（TPM 担当が決めたら tpm page reply --answered --on tpm で外す）。
+  return [sent, ...markEscalated(ctx, review.page), ...wait(ctx, 'tpm', options.waitingFor)];
 }
 
 /**
@@ -895,10 +897,13 @@ export function dismiss(ctx: Context, key: string, options: { handover: boolean,
   role.dismissed = options.handover ? 'handover' : 'done';
   writeRole(ctx, role);
   // 答えが要らなくなった確認が、置き場で返事待ちのまま残らないように知らせる（止めない）。
-  const waiting = waitingUrls(ctx, key) ?? [];
-  const left = waiting.length === 0
-    ? []
-    : [`置き場に、${key} の返事待ちのページが ${waiting.length} 枚残っています:`, ...waiting, 'もう答えが要らなければ、tpm page reply <URL>… --answered で印を外す'];
+  const all = waitingByParty(ctx, key);
+  const left = (['pm', 'review', 'tpm'] as const).flatMap((on) => {
+    const waiting = all?.[on] ?? [];
+    return waiting.length === 0
+      ? []
+      : [`置き場に、${key} の${REPLY_LABELS[on].waiting}のページが ${waiting.length} 枚残っています:`, ...waiting, `もう答えが要らなければ、tpm page reply <URL>… --answered${on === 'pm' ? '' : ` --on ${on}`} で印を外す`];
+  });
   return [sent, ...left];
 }
 

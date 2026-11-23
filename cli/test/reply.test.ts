@@ -36,6 +36,20 @@ function started() {
 }
 
 describe('tpm ask pm と tpm answer が、置き場のページの返事の状態を書く', () => {
+  test('レビュー待ち・上げた件（待ちの相手が Product Manager でない物）は、answer と --supersede の数に入らない', () => {
+    const s = started();
+    const url = s.confirm('案を選ぶ');
+    const other = s.confirm('レビューの依頼書のつもり');
+    expect(pageReply(s.tpm, [other], { waiting: true, on: 'review' })).toEqual([`レビュー待ちにした: ${other}`]);
+    askPm(s.se, { url, items: ['案の選択'], waitingFor: '案の選択' });
+    // Product Manager の返事待ちは 1 枚なので、--url が無くても答えられる
+    expect(answer(s.tpm, 't-x7k2', { text: '案 A' })).toEqual(['送った: 【answer】→ file:1（相手の手が空いた時に届く。送り直さない）', `置き場の印: 答えたにした ${url}`]);
+    expect(s.state(2)).toBe('waiting');
+    expect(pageList(s.tpm, { reply: 'waiting', on: 'review' })).toHaveLength(1);
+    expect(() => pageList(s.tpm, { on: 'review' })).toThrow(/--on は --reply と一緒に/);
+    expect(() => pageList(s.tpm, { reply: 'waiting', on: 'staff' })).toThrow(/--on は pm/);
+  });
+
   test('ask pm が確認のページを返事待ちにし、answer が答えたにする（--url は要らない）', () => {
     const s = started();
     const url = s.confirm('案を選ぶ');
