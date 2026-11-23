@@ -105,7 +105,8 @@ const CODE_INNER = [
 ];
 const CODE = /\.(?:ts|mjs|js)$/;
 /** 環境変数の古い名（TPM_KEY など）。TPM 担当を指すコードの名（TPM_TITLE・TPM_COLOR・TPM_SETTINGS・TPM_PARTY）は当てない。 */
-const OLD_ENV = /(?<![A-Za-z0-9_])TPM_(?!(?:TITLE|COLOR|SETTINGS|PARTY)(?![A-Z0-9_]))[A-Z][A-Z0-9_]*/;
+const OLD_ENV =
+  /(?<![A-Za-z0-9_])TPM_(?!(?:TITLE|COLOR|SETTINGS|PARTY)(?![A-Z0-9_]))[A-Z][A-Z0-9_]*/;
 /** 環境変数の古い名を、わざと書く file（古い名を読む所・その試験・移り方の docs）。後始末（t-6ydg の段 5）で減らす。 */
 const OLD_ENV_FILES = new Set([
   "cli/src/env.ts",
