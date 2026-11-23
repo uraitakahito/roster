@@ -20,7 +20,7 @@ export function readShown(ctx: Context, address: string): Shown[] {
 /**
  * 見た時刻と、その出どころ。
  * - delivered: 連携の道具（cmux）が画面に配った時刻
- * - shown: tpm が受け手に本文を見せた時刻（送る前の検査・tpm inbox・tpm hello。時刻の無い前の版の項目は、検査用では送った時刻、記録用では使わない）
+ * - shown: roster が受け手に本文を見せた時刻（送る前の検査・roster inbox・roster hello。時刻の無い前の版の項目は、検査用では送った時刻、記録用では使わない）
  * - legacy: 前の版が送った時に「届いた」と書いた行（送った時刻）
  * - assumed: 時刻がどこにも無く、受け手の「まだ配っていない」にも無いので、送った時刻に倒した物（道具が時刻を返さない時。止めすぎない側）
  */
@@ -29,7 +29,7 @@ export interface Seen {
   by: 'delivered' | 'shown' | 'legacy' | 'assumed'
 }
 
-/** 届け違いで返したメッセージの控え（tpm returned check が書く）。 */
+/** 届け違いで返したメッセージの控え（roster returned check が書く）。 */
 export const RETURNED_FILE = 'returned.jsonl';
 
 /** 届け違いで返したメッセージの id。cmux の上では配られて既読になっているが、宛先の担当は見ていない（t-4q2b）。 */

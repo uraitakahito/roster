@@ -17,21 +17,21 @@ export interface RoleRecord extends RoleSettings {
   addDirs: string[]
   /** いちばん新しい依頼書の URL。 */
   brief?: string
-  /** 起こしたときに渡した依頼書の URL（担当は tpm hello で受ける）。前の版で起こした担当には、この欄が無い（その担当の最初の依頼書は、済んでいない物に数えない）。 */
+  /** 起こしたときに渡した依頼書の URL（担当は roster hello で受ける）。前の版で起こした担当には、この欄が無い（その担当の最初の依頼書は、済んでいない物に数えない）。 */
   firstBrief?: string
   /** 課題管理の課題の Key（あれば）。 */
   issue?: string
-  /** いちばん新しい課題の写しのページの URL（tpm assign が置く）。 */
+  /** いちばん新しい課題の写しのページの URL（roster assign が置く）。 */
   issuePage?: string
-  /** 写しを作らずに振った訳（tpm assign --no-issue-copy）。 */
+  /** 写しを作らずに振った訳（roster assign --no-issue-copy）。 */
   issueCopySkipped?: string
   /** 居場所の宛先。起こしたときに書く。 */
   address?: string
   /** 担当が名乗った時刻。 */
   helloAt?: string
-  /** 起こしの id（castlist を設定した時に、tpm assign・tpm audit start が起こすたびに作る UUID。tpm run-role が $TPM_LAUNCH にする）。 */
+  /** 起こしの id（castlist を設定した時に、roster assign・roster audit start が起こすたびに作る UUID。roster run-role が $TPM_LAUNCH にする）。 */
   launch?: string
-  /** 起こした者の、castlist の鍵の付随する id（tpm assign は打った TPM 担当の `claude.session:…`、tpm audit start は Product Manager）。 */
+  /** 起こした者の、castlist の鍵の付随する id（roster assign は打った TPM 担当の `claude.session:…`、roster audit start は Product Manager）。 */
   launchedBy?: string
   /** 【dismiss】を送ったか。handover は担当の交代（課題は閉じない）。 */
   dismissed?: 'done' | 'handover'
@@ -47,7 +47,7 @@ const KEY = /^[A-Za-z0-9][A-Za-z0-9#._/-]*$/;
 /** Key をファイルの名にする（<repo>#<PR> の # と / を替える）。 */
 const fileOf = (key: string): string => `roles/${key.replaceAll(/[^A-Za-z0-9._-]/g, '_')}.jsonc`;
 
-/** 課題管理の課題が無いときの Key の形（`t-` と英小文字・数字 4 文字。tpm key が作る）。 */
+/** 課題管理の課題が無いときの Key の形（`t-` と英小文字・数字 4 文字。roster key が作る）。 */
 export const LOCAL_KEY = /^t-[a-z0-9]{4}$/;
 
 /** Staff Engineer 担当の席の、名簿の Key の終わり。 */
@@ -76,7 +76,7 @@ export const readRole = (ctx: Context, key: string): RoleRecord | undefined => c
 /** Key の担当を名簿から読む。いなければ止める。 */
 export function requireRole(ctx: Context, key: string): RoleRecord {
   const record = readRole(ctx, key);
-  if (record === undefined) throw new TpmError(`名簿に担当がいません: ${key}（tpm roles で名簿を見る）`);
+  if (record === undefined) throw new TpmError(`名簿に担当がいません: ${key}（roster roles で名簿を見る）`);
   return record;
 }
 
@@ -90,28 +90,28 @@ export function allRoles(ctx: Context): RoleRecord[] {
   return ctx.state.list('roles').map(name => ctx.state.read<RoleRecord>(`roles/${name}.jsonc`)).filter(r => r !== undefined);
 }
 
-/** TPM 担当の宛先を読む。`tpm hello` の前なら止める。 */
+/** TPM 担当の宛先を読む。`roster hello` の前なら止める。 */
 export function requireTpm(ctx: Context): TpmRecord {
   const tpm = ctx.state.read<TpmRecord>('tpm.jsonc');
-  if (tpm === undefined) throw new TpmError('TPM 担当の宛先がありません（TPM 担当が tpm hello を打つ）');
+  if (tpm === undefined) throw new TpmError('TPM 担当の宛先がありません（TPM 担当が roster hello を打つ）');
   return tpm;
 }
 
 /**
  * TPM 担当だけが打つ命令（担当に送る・担当を起こす・閉じる）を、担当の session（$TPM_KEY がある）から打ったら止める。
  * 送り手の名は命令が付けるので、担当が打つと TPM 担当の名で相手に届いてしまう（台帳 #117）。止めた回は入口の検査の記録に残す。
- * message は、命令ごとの断りの字（無ければ、tpm ask tpm で頼むよう言う字）。
+ * message は、命令ごとの断りの字（無ければ、roster ask tpm で頼むよう言う字）。
  */
 export function requireTpmSide(ctx: Context, command: string, message?: string): void {
   const key = ctx.env.TPM_KEY;
   if (!key) return;
   recordGateStop(ctx, 'tpm-only', command);
-  throw new TpmError(message ?? `${command} は TPM 担当の命令です。担当の session（${key}）からは打てません。TPM 担当に頼むことは、tpm ask tpm で送ってください`);
+  throw new TpmError(message ?? `${command} は TPM 担当の命令です。担当の session（${key}）からは打てません。TPM 担当に頼むことは、roster ask tpm で送ってください`);
 }
 
 /** 自分の名簿の行。担当は起こされるときに $TPM_KEY を渡される。 */
 export function requireSelf(ctx: Context): RoleRecord {
   const key = ctx.env.TPM_KEY;
-  if (!key) throw new TpmError('$TPM_KEY がありません（この命令は、tpm assign で起こされた担当が打つ）');
+  if (!key) throw new TpmError('$TPM_KEY がありません（この命令は、roster assign で起こされた担当が打つ）');
   return requireRole(ctx, key);
 }

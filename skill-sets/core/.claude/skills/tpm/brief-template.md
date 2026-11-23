@@ -1,21 +1,21 @@
 # 依頼書のひな形
 
-TPM 担当が Software Engineer 担当・DevOps Engineer 担当に渡す依頼書（Staff Engineer 担当への依頼書は、`tpm assign --role staff-engineer` がレビューの頼みから作るので、書かない）。HTML の file に書いて `tpm page put <file> --kind brief --key <Key>` で置き（protocol.md の「ページ」）、出た URL を `tpm assign <Key> … --brief <URL>` で渡す（担当が動いていれば【brief】で届き、いなければ起こされた担当が `tpm hello` で受け取る）。
+TPM 担当が Software Engineer 担当・DevOps Engineer 担当に渡す依頼書（Staff Engineer 担当への依頼書は、`roster assign --role staff-engineer` がレビューの頼みから作るので、書かない）。HTML の file に書いて `roster page put <file> --kind brief --key <Key>` で置き（protocol.md の「ページ」）、出た URL を `roster assign <Key> … --brief <URL>` で渡す（担当が動いていれば【brief】で届き、いなければ起こされた担当が `roster hello` で受け取る）。
 
-**書かない物**: 連絡の仕方・見出しの表・状態・終わり方・文書の食い違いの扱い・共有の環境の扱い・TPM 担当の宛先。これらは `/software-engineer`・`/devops-engineer` と `_shared/protocol.md`、`tpm` の命令にある。依頼書には、その課題だけのことを書く。
+**書かない物**: 連絡の仕方・見出しの表・状態・終わり方・文書の食い違いの扱い・共有の環境の扱い・TPM 担当の宛先。これらは `/software-engineer`・`/devops-engineer` と `_shared/protocol.md`、`roster` の命令にある。依頼書には、その課題だけのことを書く。
 
 ## 欄
 
 | 欄 | 中身 |
 |---|---|
 | 題 | 何をするか 1 行（例: 「案 2 の計画を立てる」） |
-| 頭書き | 課題の Key（`SKILL.md` の 2。Jira・GitHub の Issue の Key なら、担当は `tpm issue view` で課題を読む）・repo か folder・前の依頼書や成果の URL |
+| 頭書き | 課題の Key（`SKILL.md` の 2。Jira・GitHub の Issue の Key なら、担当は `roster issue view` で課題を読む）・repo か folder・前の依頼書や成果の URL |
 | 課題の概要 | 新しい担当を起こす依頼書だけ。何が求められているか（あなたの言葉で 3〜8 行）・受け入れの条件（原文のまま）・わからない所（無ければ「なし」）。形は下の「課題の概要の節」 |
 | やること | 番号付きで。どこまでやるか（提案まで・計画まで・実装まで）をはっきり書く |
 | 前提 | その課題だけの決まり（破壊的でよいか・後方互換を考えるか・触ってはいけない物・使う model の指示）。レビューを必ず受けさせる課題は「レビューを受ける: 計画と PR を Staff Engineer 担当に頼む」と書く（`SKILL.md` の 2） |
 | 材料 | 読む物（貼られた文・ファイル・URL）。長い文は `<pre>` でそのまま |
 | TPM が知っていること | 調べ済みのこと・試して駄目だったこと |
-| 成果の形 | 何を出せば終わりか（`tpm page put` で置く提案・計画・結果のページ・PR）。担当は【done】の後に次の【brief】か【dismiss】を待つので、「【done】の後は待つ」とは書かなくてよい |
+| 成果の形 | 何を出せば終わりか（`roster page put` で置く提案・計画・結果のページ・PR）。担当は【done】の後に次の【brief】か【dismiss】を待つので、「【done】の後は待つ」とは書かなくてよい |
 
 ## 書き方
 
@@ -27,11 +27,11 @@ TPM 担当が Software Engineer 担当・DevOps Engineer 担当に渡す依頼�
   - **案の軸**: 何を変えて案を分けるか（例: 「どこまで切り離すか」）。Product Manager が言っていなければ、聞くか、「軸は担当が選び、選んだ軸と訳を提案の頭に書く」と書く。
 - Product Manager が言っていない前提（今の振る舞いを守る など）を足さない。「遅い」「手間」など改善の依頼なら、速くする案の前に「その処理がそもそも要るか」を問わせる。
 - Product Manager の答えが要ることが先にわかっていれば、「Product Manager に確かめること」として依頼書に書き、担当に確認のページを書かせる（protocol.md の「Product Manager に確かめる」）。
-- 「課題に成果の URL のコメントを足す」は書かなくてよい。記録は `tpm` の命令が書く（protocol.md の「記録」）。
+- 「課題に成果の URL のコメントを足す」は書かなくてよい。記録は `roster` の命令が書く（protocol.md の「記録」）。
 
 ## 課題の概要の節
 
-`<section id="summary">` で囲む。新しい担当を起こすとき、`tpm assign` はこの節が無いか、見出しを除いて 40 字に足りなければ止まる（中身の良し悪しは見ないので、字の数を満たすために埋めない）。課題があれば `tpm issue view <Key>` で読んでから書き、課題が無ければ Product Manager の言葉から書く（`SKILL.md` の 2 の「振る前に課題をつかむ」）。
+`<section id="summary">` で囲む。新しい担当を起こすとき、`roster assign` はこの節が無いか、見出しを除いて 40 字に足りなければ止まる（中身の良し悪しは見ないので、字の数を満たすために埋めない）。課題があれば `roster issue view <Key>` で読んでから書き、課題が無ければ Product Manager の言葉から書く（`SKILL.md` の 2 の「振る前に課題をつかむ」）。
 
 ```html
 <section id="summary">

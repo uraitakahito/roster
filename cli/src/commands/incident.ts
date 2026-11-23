@@ -1,5 +1,5 @@
-// tpm incident …: 台帳（思わぬ出来事の記録）を書く・見直す・扱いを決める・追いかける。
-// 書く（add）のは TPM 担当（担当と Auditor は tpm report incident。messages.ts）。見直す・追いかけるのは TPM 担当と Auditor。
+// roster incident …: 台帳（思わぬ出来事の記録）を書く・見直す・扱いを決める・追いかける。
+// 書く（add）のは TPM 担当（担当と Auditor は roster report incident。messages.ts）。見直す・追いかけるのは TPM 担当と Auditor。
 // 種類のある件（出来事）を「調べない」「済み」にできるのは Auditor だけ（TPM 担当の誤りの件を、TPM 担当が自分で決めないため）。
 // 種類の無い件（「残り」と「PM の手」）は、TPM 担当も決められる。
 import type { Command } from 'commander';
@@ -12,13 +12,13 @@ import { TpmError } from '../skill-sets.ts';
 import { roleOf } from './infra.ts';
 import { DEFAULT_MINUTES, incidentTimeline } from './timeline.ts';
 
-/** 台帳に tpm incident add で書くのは TPM 担当だけ（担当と Auditor は【incident】で書く）。 */
-const requireAdder = (ctx: Context): void => requireTpmSide(ctx, 'tpm incident add', 'tpm incident add で書くのは TPM 担当です。担当は tpm report incident "<起きた事実>" --type <種類> で書いてください');
+/** 台帳に roster incident add で書くのは TPM 担当だけ（担当と Auditor は【incident】で書く）。 */
+const requireAdder = (ctx: Context): void => requireTpmSide(ctx, 'roster incident add', 'roster incident add で書くのは TPM 担当です。担当は roster report incident "<起きた事実>" --type <種類> で書いてください');
 
 /** 台帳を見直す・扱いを決める・追いかけるのは、TPM 担当と Auditor（ほかの担当は書くだけ）。 */
 function requireLedgerSide(ctx: Context): void {
   if (ctx.env.TPM_KEY && roleOf(ctx.env) !== 'auditor') {
-    throw new TpmError('台帳を見直す・扱いを決めるのは TPM 担当と Auditor です。担当は tpm report incident "<起きた事実>" --type <種類> で書いてください');
+    throw new TpmError('台帳を見直す・扱いを決めるのは TPM 担当と Auditor です。担当は roster report incident "<起きた事実>" --type <種類> で書いてください');
   }
 }
 
@@ -29,7 +29,7 @@ export function numberOf(value: string): number {
   return Number(m[1]);
 }
 
-/** `tpm incident add` の旗。 */
+/** `roster incident add` の旗。 */
 export interface AddOptions {
   text: string
   type: string
@@ -46,7 +46,7 @@ export function incidentAdd(ctx: Context, key: string, options: AddOptions): str
   return [`台帳に書いた: ${incidentLine(incident)}`, ...tagLines(ctx, incident), ...(incident.severe ? ['重い件: すぐ Product Manager に伝える（監査を呼ぶなら、Audit の席で /audit <番号>）'] : [])];
 }
 
-/** `tpm incident review` の旗。 */
+/** `roster incident review` の旗。 */
 export interface ReviewOptions {
   all?: boolean
   tag?: string
@@ -130,7 +130,7 @@ export function incidentClose(ctx: Context, numbers: string[], options: { pr?: s
   return decide(ctx, numbers, 'closed', fields);
 }
 
-/** `tpm incident follow` の旗。 */
+/** `roster incident follow` の旗。 */
 export interface FollowOptions {
   /** 「TPM 担当の決め」に出す件を、この時より後に決めた物に絞る（前の監査の日。Date が読める字）。 */
   since?: string
@@ -217,13 +217,13 @@ export function incidentFollow(ctx: Context, options: FollowOptions = {}): strin
 
 const collect = (value: string, all: string[]): string[] => [...all, value];
 
-/** `tpm incident` の命令を命令の木に足す。 */
+/** `roster incident` の命令を命令の木に足す。 */
 export function registerIncident(program: Command, print: (lines: string[]) => void): void {
   const types = Object.keys(INCIDENT_TYPES).join('・');
-  const incident = program.command('incident').description('台帳（思わぬ出来事の記録）を書く・見直す・扱いを決める・追いかける（TPM 担当と Auditor。ほかの担当は tpm report incident で書く）');
+  const incident = program.command('incident').description('台帳（思わぬ出来事の記録）を書く・見直す・扱いを決める・追いかける（TPM 担当と Auditor。ほかの担当は roster report incident で書く）');
   incident.command('add <key> <text>').description('TPM 担当が、気づいた出来事（起きた事実）を台帳に書く')
     .requiredOption('--type <種類>', types)
-    .option('--tag <tag>', '同じ種の出来事を数える印（繰り返せる。後から tpm incident tag で付けられる）', collect, [] as string[])
+    .option('--tag <tag>', '同じ種の出来事を数える印（繰り返せる。後から roster incident tag で付けられる）', collect, [] as string[])
     .option('--msg <id>', '引き金になったメッセージの id')
     .option('--severe', 'すぐ止めないと害が広がる（見直しを待たずに振る）', false)
     .action((key: string, text: string, options: { type: string, tag: string[], msg?: string, severe: boolean }) => print(incidentAdd(createContext(), key, { ...options, text, tags: options.tag })));

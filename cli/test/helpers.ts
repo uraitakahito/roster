@@ -23,7 +23,7 @@ export interface Call {
 }
 
 /**
- * 偽の置き場: tpm が打つ curl を受け、本物（pagetray）と同じ決まりで答える。
+ * 偽の置き場: roster が打つ curl を受け、本物（pagetray）と同じ決まりで答える。
  * 番号は種類ごとに今の最大＋1（消した番号も数える）、名指した番号が使われているか消した番号なら 409。消した URL は 410。本物との揃いは、CI のつなぎの段が見る。
  * file（/api/files）も同じ決まり。番号は名と拡張子ごと。
  */
@@ -264,7 +264,7 @@ export interface World {
   role: (key: string, address: string) => Context
   /** file の連携（届いたメッセージ・起こす命令を読む）。 */
   wire: FileTransport
-  /** 偽の置き場（tpm page …・tpm file … と、tpm assign の課題の写しが使う）。 */
+  /** 偽の置き場（roster page …・roster file … と、roster assign の課題の写しが使う）。 */
   store: FakeStore
   /** sleep で待った回数。 */
   slept: () => number
@@ -281,7 +281,7 @@ export interface World {
  * folders は、project の直下の folder の名前 → その folder の設定の中身（上の folder から、下のいくつもの repo を触る形）。
  */
 export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessEnv = {}, folders: Record<string, Record<string, unknown>> = {}): World {
-  const base = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-world-')));
+  const base = realpathSync(mkdtempSync(join(tmpdir(), 'roster-world-')));
   const project = join(base, 'project');
   const put = (dir: string, body: Record<string, unknown>): void => {
     mkdirSync(join(dir, '.claude', 'roles'), { recursive: true });
@@ -308,7 +308,7 @@ export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessE
     calls.push({ cmd, args, ...(options === undefined ? {} : { options }) });
     const answer = answers.get([cmd, ...args].join(' '));
     if (answer !== undefined) return answer;
-    // curl は置き場への要求（tpm page …・tpm assign の課題の写し）。偽の置き場が答える。
+    // curl は置き場への要求（roster page …・roster assign の課題の写し）。偽の置き場が答える。
     return cmd === 'curl' ? store.curl(args, options) : { status: 0, stdout: '{}', stderr: '' };
   };
   let slept = 0;
@@ -342,9 +342,9 @@ export function finish(w: World, key: string, address: string): void {
   reportDone(se, { kind: 'result', summary: '済んだ', remaining: 'なし', decisions: 'なし', points: [] });
 }
 
-/** Staff Engineer 担当の skill が在る、偽の roster の root（tpm assign --role staff-engineer は、skill が無ければ起こす前に止まる）。 */
+/** Staff Engineer 担当の skill が在る、偽の roster の root（roster assign --role staff-engineer は、skill が無ければ起こす前に止まる）。 */
 export function staffRoot(): string {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-root-')));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'roster-root-')));
   mkdirSync(join(root, 'skill-sets', 'core', '.claude', 'skills', 'staff-engineer'), { recursive: true });
   writeFileSync(join(root, 'skill-sets', 'core', '.claude', 'skills', 'staff-engineer', 'SKILL.md'), '# Staff Engineer 担当\n');
   return root;

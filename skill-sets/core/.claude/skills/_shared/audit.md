@@ -4,11 +4,11 @@ Auditor（`/audit`）が、監査のたびに読む手順。何のために・�
 
 ## 定期の監査の 4 段
 
-段が変わるたびに `tpm wait work "<段>"` を打つ。
+段が変わるたびに `roster wait work "<段>"` を打つ。
 
 ### 1. 見直す
 
-`tpm incident review` で未決の件を見る。**扱いを決めるのは、種類のある件（出来事）だけ。**種類の無い件（「残り」と「PM の手」）は TPM 担当が扱うので、ここでは決めず、3 の追いかけで見る。
+`roster incident review` で未決の件を見る。**扱いを決めるのは、種類のある件（出来事）だけ。**種類の無い件（「残り」と「PM の手」）は TPM 担当が扱うので、ここでは決めず、3 の追いかけで見る。
 
 - 並べ方: 「[重い]」の件 → 同じ tag が重なっている件（3 件が目安）→ 放置の長い件。
 - 件ごとに、調べる・調べない・まとめる、を決める。
@@ -16,8 +16,8 @@ Auditor（`/audit`）が、監査のたびに読む手順。何のために・�
 | 決め | すること |
 |---|---|
 | 調べる | 2 へ。同じ原因に見える件は、1 つの指摘にまとめて調べる |
-| 調べない | 1 度きりで害が無い・もう訂正してある件。`tpm incident drop <番号>… --why "<訳>"`。訳は、後で読む人が納得できる事実で書く |
-| まとめる | 同じ種の件に、同じ tag を付ける（`tpm incident tag <番号> <tag>`） |
+| 調べない | 1 度きりで害が無い・もう訂正してある件。`roster incident drop <番号>… --why "<訳>"`。訳は、後で読む人が納得できる事実で書く |
+| まとめる | 同じ種の件に、同じ tag を付ける（`roster incident tag <番号> <tag>`） |
 
 - 決めた件と訳は、監査のページの「見直しの結果」に載せる。
 
@@ -31,28 +31,28 @@ Auditor（`/audit`）が、監査のたびに読む手順。何のために・�
 |---|---|
 | a. 集めさせる | Skill tool で `audit-evidence <件の番号>` を呼ぶ（件ごとに 1 回）。会話の外の助手（`context: fork`）が時系列のページと関わるページ・記録を読み、事実と、その証拠の在り処と字の表を返す。原因・勧告・扱いは返さない。記録の出力でこの会話を埋めず、件ごとに前の件の結論に引きずられない目で集めるため |
 | b. 受ける | 返った表は、まだ事実として使わない（助手の要約を、確かめずに引き継がない。監査の規程の 3） |
-| c. 確かめる | **指摘の事実に使う行は、すべて在り処を自分で開き、証拠の字がそこに在るかを見る**（`tpm page path`・state の `*.jsonl` を記録の id か時刻で探す・`git log`）。無い・違う行は使わず、「確かめられなかった所」に回す。足りない事実は、自分で記録を読んで足す |
+| c. 確かめる | **指摘の事実に使う行は、すべて在り処を自分で開き、証拠の字がそこに在るかを見る**（`roster page path`・state の `*.jsonl` を記録の id か時刻で探す・`git log`）。無い・違う行は使わず、「確かめられなかった所」に回す。足りない事実は、自分で記録を読んで足す |
 
-- **事実**: c で確かめた証拠の行だけで、時刻の順に書く。件の時系列は `tpm incident timeline <番号>` が 1 枚のページにする。
+- **事実**: c で確かめた証拠の行だけで、時刻の順に書く。件の時系列は `roster incident timeline <番号>` が 1 枚のページにする。
 - **原因**: 「誰が誤ったか」で終えず、**仕組みのどこが許したか**まで書く（どの skill の文・どの命令・どの権限が、それを止めなかったか）。
-- **勧告**: 何で防ぐか（`tpm` の検査・skill や決まりの文・権限・教訓）と手間。同じ tag の前の件にも効くかを書く。効かない件があれば、そう書く。
+- **勧告**: 何で防ぐか（`roster` の検査・skill や決まりの文・権限・教訓）と手間。同じ tag の前の件にも効くかを書く。効かない件があれば、そう書く。
 - 記録で確かめられなかった所は、推したと分かるように書く。
-- 関わった担当に事実を確かめたい時は、`tpm ask tpm` で TPM 担当に問う（依頼書の URL・担当の居場所の様子など）。答えが無くても、記録で言える所まで書く。
+- 関わった担当に事実を確かめたい時は、`roster ask tpm` で TPM 担当に問う（依頼書の URL・担当の居場所の様子など）。答えが無くても、記録で言える所まで書く。
 
 証拠の材料:
 
 | 材料 | 在り処 |
 |---|---|
 | state の記録（メッセージ・届いた時刻・課題管理への書き込み・guard と入口の検査が止めた回・状態の移り・監査線の記録） | 状態の folder の `*.jsonl`。file ごとの中身の表は `docs-site/src/content/docs/protocol.md` にある（名簿と状態の置き場の節） |
-| 台帳 | `tpm incident review --all`・`tpm incident follow`。1 件ずつは状態の folder の `incidents/` |
-| 依頼書・成果のページ | `tpm page list`（`--key`・`--kind`・`--role` で絞る）と `tpm page path <URL>` |
+| 台帳 | `roster incident review --all`・`roster incident follow`。1 件ずつは状態の folder の `incidents/` |
+| 依頼書・成果のページ | `roster page list`（`--key`・`--kind`・`--role` で絞る）と `roster page path <URL>` |
 | コードと skill の文 | repo（読むだけ）。変わった所は git の記録（`git log`・`git diff`） |
-| 課題 | `tpm issue view <Key>` |
-| アクター（誰が・誰に起こされ・どの model と effort で） | castlist（アクターの台帳）のプロフィールの画面の URL（`<castlist>/actors/<id>`）。`tpm castlist find --label tpm.key:<Key>`・`tpm castlist show <名か id>`・`tpm castlist lineage <名か id>`・`tpm castlist settings --actor <名か id> --at <時刻>`・`tpm castlist events`（どれも読むだけ。castlist を設定した project だけ） |
+| 課題 | `roster issue view <Key>` |
+| アクター（誰が・誰に起こされ・どの model と effort で） | castlist（アクターの台帳）のプロフィールの画面の URL（`<castlist>/actors/<id>`）。`roster castlist find --label tpm.key:<Key>`・`roster castlist show <名か id>`・`roster castlist lineage <名か id>`・`roster castlist settings --actor <名か id> --at <時刻>`・`roster castlist events`（どれも読むだけ。castlist を設定した project だけ） |
 
 ### 3. 追いかける
 
-`tpm incident follow`（前の監査があれば `--since <前の報告の時>`。`tpm audit begin` が出す）で、次の 4 つを見る。
+`roster incident follow`（前の監査があれば `--since <前の報告の時>`。`roster audit begin` が出す）で、次の 4 つを見る。
 
 | 見る物 | 何を確かめるか |
 |---|---|
@@ -63,9 +63,9 @@ Auditor（`/audit`）が、監査のたびに読む手順。何のために・�
 
 あわせて、次も見る。
 
-- **前の監査の勧告**: Product Manager が「する」とした勧告が入ったか（PR・skill の文）、入った後に同じ事が起きていないか。入ったと確かめた件は `tpm incident close <番号>… --pr <URL>`（教訓や文だけなら `--lesson "<file と一言>"`）で済みにする。前の監査のページの結論は、証拠で確かめ直す。
+- **前の監査の勧告**: Product Manager が「する」とした勧告が入ったか（PR・skill の文）、入った後に同じ事が起きていないか。入ったと確かめた件は `roster incident close <番号>… --pr <URL>`（教訓や文だけなら `--lesson "<file と一言>"`）で済みにする。前の監査のページの結論は、証拠で確かめ直す。
 - **監査線そのもの**: 監査の規程・`/audit`・`audit-evidence`・この手順・guard（`cli/src/guard.ts`）が前の監査の後に変わっていれば、Product Manager の承認の記録（確認のページと答え）と突き合わせる。Auditor の置いたページが消されていないか（状態の folder の `audits.jsonl` の `page-deleted`）。
-- **答えの出ていない報告**: `tpm audit begin` が出したら、Product Manager に聞き直す。
+- **答えの出ていない報告**: `roster audit begin` が出したら、Product Manager に聞き直す。
 
 ### 4. 報告する
 
@@ -77,7 +77,7 @@ Auditor（`/audit`）が、監査のたびに読む手順。何のために・�
 
 ## 監査のページの書き方
 
-HTML の file を一時の folder に書き、`tpm page put <file> --kind audit` で置く。Product Manager が読んで分かるように、指摘の数の推移と、勧告ごとの比べは図にする（protocol.md の「ページ」の図の項。ひな形は `_shared/figures.md`）。
+HTML の file を一時の folder に書き、`roster page put <file> --kind audit` で置く。Product Manager が読んで分かるように、指摘の数の推移と、勧告ごとの比べは図にする（protocol.md の「ページ」の図の項。ひな形は `_shared/figures.md`）。
 
 | 節 | 中身 |
 |---|---|
@@ -90,8 +90,8 @@ HTML の file を一時の folder に書き、`tpm page put <file> --kind audit`
 | 確かめられなかった所 | 推した所・読めなかった記録 |
 
 - 人を名指して責めない。書くのは、役割と仕組み。
-- 台帳と記録の中身は、メッセージや命令の字を持つ。監査のページ（tpm を動かす機械の置き場）には書いてよいが、tpm を動かす機械の外には写さない。
-- 自分の前の監査のページに誤りを見つけたら、新しいページで訂正し、`tpm report incident` で台帳に書く。
+- 台帳と記録の中身は、メッセージや命令の字を持つ。監査のページ（roster を動かす機械の置き場）には書いてよいが、roster を動かす機械の外には写さない。
+- 自分の前の監査のページに誤りを見つけたら、新しいページで訂正し、`roster report incident` で台帳に書く。
 
 ## 評価の基準
 
@@ -100,6 +100,6 @@ HTML の file を一時の folder に書き、`tpm page put <file> --kind audit`
 1. 担当のあいだの決まり（`protocol.md`）と、担当ごとの skill の文。
 2. 承認された計画と、依頼書（Product Manager の言葉の原文）。
 3. 監査の規程。
-4. `tpm` の docs（`docs-site/`）と、コードの註。
+4. `roster` の docs（`docs-site/`）と、コードの註。
 
 基準そのものが足りない・食い違う時は、それも指摘にする（「決まりに書かれていないので、止める物が無かった」）。

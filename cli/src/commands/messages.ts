@@ -1,7 +1,7 @@
 // 見出しの付いたメッセージを送る命令。送る・課題に記録を書く・状態を替える、を 1 度にする（届いたか・見たかは、送る時には見ない。見た時刻は seen.ts の口が引く）。
 // 担当が打つ物（ask・report・wait）と、TPM 担当が打つ物（answer・notify・dismiss・show）。brief は命令でなく、assign の中で使う。
-// レビューの頼み（tpm ask review）と判定（tpm report review）は staff.ts にある（課題の担当と Staff Engineer 担当の席の間を、じかに届ける）。
-// Auditor は、成果を tpm report audit（Product Manager へじかに出した報告の写し）と tpm report decided（Product Manager の決定）で出す。
+// レビューの頼み（roster ask review）と判定（roster report review）は staff.ts にある（課題の担当と Staff Engineer 担当の席の間を、じかに届ける）。
+// Auditor は、成果を roster report audit（Product Manager へじかに出した報告の写し）と roster report decided（Product Manager の決定）で出す。
 import { basename } from 'node:path';
 import { appendAudit } from '../audits.ts';
 import type { Context } from '../context.ts';
@@ -23,7 +23,7 @@ const SUMMARY_LIMIT = 80;
 
 /**
  * 送り手・受け手の担当: 名簿の Key（TPM 担当は tpm）と、起こしの id（$TPM_LAUNCH・名簿の launch。castlist を設定した時だけある）。
- * 届いた所で、宛先の担当と受けた session を比べるのに使う（tpm returned check）。
+ * 届いた所で、宛先の担当と受けた session を比べるのに使う（roster returned check）。
  */
 export interface Party {
   key: string
@@ -124,7 +124,7 @@ function toTpm(ctx: Context, self: RoleRecord, id: HeadingId, body: string, repl
 }
 
 /**
- * 届け違いのメッセージを、担当から TPM 担当へ【returned】で返す（tpm returned check が呼ぶ。送る前の検査は通さない: hook の中なので止まれない）。
+ * 届け違いのメッセージを、担当から TPM 担当へ【returned】で返す（roster returned check が呼ぶ。送る前の検査は通さない: hook の中なので止まれない）。
  * TPM 担当の居場所が無ければ送らずに止まる。
  */
 export function returnToTpm(ctx: Context, self: RoleRecord, body: string): string {
@@ -136,7 +136,7 @@ export function returnToTpm(ctx: Context, self: RoleRecord, body: string): strin
 function seatOf(ctx: Context, role: RoleRecord): string {
   const address = role.address;
   if (address === undefined || !ctx.transport.seats().some(s => s.address === address)) {
-    throw new TpmError(`${role.key} の担当の居場所がありません（tpm roles で名簿を見る）`);
+    throw new TpmError(`${role.key} の担当の居場所がありません（roster roles で名簿を見る）`);
   }
   return address;
 }
@@ -150,7 +150,7 @@ function toRole(ctx: Context, role: RoleRecord, id: HeadingId, body: string, rep
 function peerSeat(ctx: Context, peer: RoleRecord): string {
   const address = peer.address;
   if (address === undefined || !ctx.transport.seats().some(s => s.address === address)) {
-    throw new TpmError(`${peer.key} の居場所がありません。送っていません・記録も書いていません。tpm ask tpm で TPM 担当に知らせてください`);
+    throw new TpmError(`${peer.key} の居場所がありません。送っていません・記録も書いていません。roster ask tpm で TPM 担当に知らせてください`);
   }
   return address;
 }
@@ -176,7 +176,7 @@ export function record(ctx: Context, role: RoleRecord, note: Note): string[] {
 /** 見せたメッセージの id を覚える数（居場所ごと）。 */
 const SHOWN_KEEP = 200;
 
-/** メッセージを「見せた」と、初めて見せた時刻とともに覚える（`tpm inbox`・`tpm hello` と、送る前の検査が呼ぶ）。覚えた物では、送る前の検査は止まらない。 */
+/** メッセージを「見せた」と、初めて見せた時刻とともに覚える（`roster inbox`・`roster hello` と、送る前の検査が呼ぶ）。覚えた物では、送る前の検査は止まらない。 */
 export function markShown(ctx: Context, messages: Incoming[]): void {
   const address = ctx.transport.whoami();
   const shown = readShown(ctx, address);
@@ -196,7 +196,7 @@ const READ_STOP = {
 /**
  * 送る前の検査。自分宛てでまだ届いていないメッセージのうち、まだ見せていない物があれば、それを出して 1 度だけ止まる（行き違いを減らす）。
  * from は相手の題（TPM 担当が担当に送るとき。ほかの担当からのメッセージでは止まらない）。担当が受けるのは TPM 担当と、レビューの相手（課題の担当と Staff Engineer 担当の席）からだけなので、付けずにどれでも止まる。
- * 見せた物は覚えるので、同じ命令を打ち直せば送る。action は止まった時の字（put は tpm page put が置く前に呼ぶとき）。
+ * 見せた物は覚えるので、同じ命令を打ち直せば送る。action は止まった時の字（put は roster page put が置く前に呼ぶとき）。
  * 自分が送った物は数えない: cmux は、自分の受信箱の「まだ届いていない物」に、自分が送ってまだ相手に届いていない物も返す
  * （送った直後の次の命令が、自分のメッセージを未読として出して止まった。台帳 #97・#100）。送った記録（log.jsonl）の、送り手が自分の行の id を除く。
  * 送り手は、担当なら「Key が自分で、TPM 担当の名でない行」、TPM 担当なら「TPM 担当の名の行」で見る（宛先では見ない。返事の形（--reply-to）は、
@@ -237,10 +237,10 @@ export function sender(ctx: Context): RoleRecord {
  */
 export function notAuditor(self: RoleRecord, command: string): void {
   if (self.role === 'auditor') {
-    throw new TpmError(`Auditor は ${command} を打ちません。監査の報告は tpm report audit、Product Manager の決定は tpm report decided で出してください（PR は出さず、Product Manager とは Audit の席でじかに話す）`);
+    throw new TpmError(`Auditor は ${command} を打ちません。監査の報告は roster report audit、Product Manager の決定は roster report decided で出してください（PR は出さず、Product Manager とは Audit の席でじかに話す）`);
   }
   if (self.role === 'staff-engineer') {
-    throw new TpmError(`Staff Engineer 担当は ${command} を打ちません。レビューの結果は tpm report review で返してください（PR は出さず、直さない。Product Manager に決めてほしいことは、tpm ask tpm で TPM 担当に送る）`);
+    throw new TpmError(`Staff Engineer 担当は ${command} を打ちません。レビューの結果は roster report review で返してください（PR は出さず、直さない。Product Manager に決めてほしいことは、roster ask tpm で TPM 担当に送る）`);
   }
 }
 
@@ -253,7 +253,7 @@ function auditor(ctx: Context, command: string): RoleRecord {
 
 /**
  * TPM 担当の居場所が今あれば、その宛先。TPM 担当が名乗っていない・居場所が無ければ undefined。
- * 居場所が状態を出しているかで見る（TPM 担当は tpm が起こした居場所ではないので、居場所の一覧に載らない連携がある）。
+ * 居場所が状態を出しているかで見る（TPM 担当は roster が起こした居場所ではないので、居場所の一覧に載らない連携がある）。
  */
 function tpmSeat(ctx: Context): string | undefined {
   const address = ctx.state.read<TpmRecord>('tpm.jsonc')?.address;
@@ -287,8 +287,8 @@ interface OpenBrief {
  * - Staff Engineer 担当の席には、課題の担当がじかに送った【ask-review】（頭が依頼書の URL）も積む。
  * - 【done】は、その時刻までに担当が見ていた依頼書のうち、いちばん古い物を 1 つ済ませる（担当は積まれた順にこなす）。まだ見ていない依頼書の分には数えない（行き違いで出た、前の依頼書の分）。【end】は全部を済ませる。
  * - 担当が --briefs で名指した【done】は、名指した依頼書をみな済ませる（見た時刻は問わない。名指したことが見た証し。1 通で依頼書いくつかを済ませた時。台帳 #110）。
- * 見た時刻は、見た時刻の口（seen.ts の seenTimes）が決める: 画面に届いた時刻と、tpm inbox・tpm hello・送る前の検査が見せた時刻（shown/）の早い方。
- * 担当は画面に届く前に tpm inbox で読んで済ませることがあるので、届いた時刻だけでは【done】が依頼書より前に見える（台帳 #36）。
+ * 見た時刻は、見た時刻の口（seen.ts の seenTimes）が決める: 画面に届いた時刻と、roster inbox・roster hello・送る前の検査が見せた時刻（shown/）の早い方。
+ * 担当は画面に届く前に roster inbox で読んで済ませることがあるので、届いた時刻だけでは【done】が依頼書より前に見える（台帳 #36）。
  * 前の版が時刻を書かずに覚えた物（shown/ の id だけの項目）は、送った時刻に見せた物とする。見せたのは確かで、担当の送る命令は未読をすべて見せてからでないと送れないので、
  * その後の【done】は見た後に出た物（時刻を使わないと、画面に届くのが【done】より後なら済まないまま残る。台帳 #58）。
  */
@@ -332,8 +332,8 @@ function openBriefs(role: RoleRecord, address: string, log: Sent[], seenAt: Seen
 
 /**
  * TPM 担当がその担当に送り、まだ済んでいない物。
- * unseen は、送って担当がまだ見ていないメッセージ（届いておらず、tpm も見せていない。headings があれば、その見出しだけ）。briefs は、【done】が返っていない依頼書（openBriefs）。
- * どちらも、見たかを見た時刻の口で決める（配られていなくても、送る前の検査や tpm inbox で見せた物は見た。台帳 #110）。
+ * unseen は、送って担当がまだ見ていないメッセージ（届いておらず、roster も見せていない。headings があれば、その見出しだけ）。briefs は、【done】が返っていない依頼書（openBriefs）。
+ * どちらも、見たかを見た時刻の口で決める（配られていなくても、送る前の検査や roster inbox で見せた物は見た。台帳 #110）。
  */
 function unsettled(ctx: Context, role: RoleRecord, address: string, headings?: HeadingId[]): { unseen: Sent[], briefs: OpenBrief[] } {
   const log = ctx.state.lines<Sent>('log.jsonl');
@@ -366,8 +366,8 @@ export function assertSettled(ctx: Context, role: RoleRecord, command: 'dismiss'
   throw new TpmError([
     `${role.key} の担当に、まだ済んでいない物があります。送っていません。`,
     ...unseen.flatMap(l => [returned.has(l.id)
-      ? `--- 届け違いで返した（${l.at} に送った。id ${l.id}。tpm returned show ${l.id}。送り直したか、要らないと決めたなら --supersede）`
-      : `--- まだ見ていない（届いておらず、tpm も見せていない。${l.at} に送った。id ${l.id}）`, l.text]),
+      ? `--- 届け違いで返した（${l.at} に送った。id ${l.id}。roster returned show ${l.id}。送り直したか、要らないと決めたなら --supersede）`
+      : `--- まだ見ていない（届いておらず、roster も見せていない。${l.at} に送った。id ${l.id}）`, l.text]),
     ...(briefs.length === 0 ? [] : [`--- 【done】が返っていない依頼書: ${briefs.map(b => `${briefName(b.url)}（${b.url}）`).join('・')}`]),
     '--- ここまで',
     how,
@@ -416,19 +416,19 @@ export const oneLine = (text: string): string => {
 
 // ---- 担当が打つ ----
 
-/** `tpm wait` が状態の folder の `waits/<宛先>.jsonc` に書く記録。通知のバナーの hook が「この回に wait pm を打ったか」を見る。 */
+/** `roster wait` が状態の folder の `waits/<宛先>.jsonc` に書く記録。通知のバナーの hook が「この回に wait pm を打ったか」を見る。 */
 export interface WaitRecord {
   kind: WaitKind
   text: string
   at: string
-  /** `tpm wait pm --hand` の回だけ: 頼んだ手を数えた台帳の件の番号（打ち直しを同じ件に寄せるため）。 */
+  /** `roster wait pm --hand` の回だけ: 頼んだ手を数えた台帳の件の番号（打ち直しを同じ件に寄せるため）。 */
   hand?: number
 }
 
 /** `waits/` の file の名（宛先の : などを替える）。 */
 export const waitFile = (address: string): string => `waits/${address.replaceAll(/[^A-Za-z0-9._-]/g, '-')}.jsonc`;
 
-/** Product Manager に頼んだ手の操作の tag（`tpm wait pm --hand`）。 */
+/** Product Manager に頼んだ手の操作の tag（`roster wait pm --hand`）。 */
 export const PM_HAND = 'pm-hand';
 
 /**
@@ -437,7 +437,7 @@ export const PM_HAND = 'pm-hand';
  * 前の wait がまだ同じ頼み（--hand で数えた未決の件）のままなら、打ち直しとしてその件に寄せる（同じ頼みを 2 件に数えない）。
  */
 export function wait(ctx: Context, kind: WaitKind, what: string, options: { hand?: boolean } = {}): string[] {
-  if (options.hand === true && kind !== 'pm') throw new TpmError('--hand は tpm wait pm だけに付ける（Product Manager に手の操作を頼んだ回）');
+  if (options.hand === true && kind !== 'pm') throw new TpmError('--hand は roster wait pm だけに付ける（Product Manager に手の操作を頼んだ回）');
   const text = WAIT[kind](what);
   const address = showWait(ctx, text);
   const before = ctx.state.read<WaitRecord>(waitFile(address));
@@ -476,7 +476,7 @@ function keepRemaining(ctx: Context, self: RoleRecord, heading: 'done' | 'end', 
   return [`台帳に入れた（TPM 担当が、振るか捨てるかを決める）: #${incident.n}`];
 }
 
-/** `tpm report incident` の旗。 */
+/** `roster report incident` の旗。 */
 export interface IncidentOptions {
   text: string
   type: string
@@ -508,14 +508,14 @@ export function askTpm(ctx: Context, options: { text: string, waitingFor: string
   if (options.review === undefined) return [toTpm(ctx, self, 'ask-tpm', options.text, options.replyTo), ...wait(ctx, 'tpm', options.waitingFor)];
   // レビューの判定を受けずに上げる: TPM 担当は判定を受け取っていないので、レビューのページの URL を本文に足し、上げたことを頼みの記録に残す。
   const review = readReviews(ctx).find(r => r.n === options.review);
-  if (review === undefined || review.key !== self.key) throw new TpmError(`--review は、自分の課題（${self.key}）のレビューの頼みの番号にしてください（tpm review list --key ${self.key} で見る）`);
+  if (review === undefined || review.key !== self.key) throw new TpmError(`--review は、自分の課題（${self.key}）のレビューの頼みの番号にしてください（roster review list --key ${self.key} で見る）`);
   if (review.verdict === undefined || review.page === undefined) throw new TpmError(`レビュー #${review.n} は、まだ判定が返っていません。送っていません`);
   // 上げるのは「直すべき」を受けない時だけ（ほかの判定は、受けるか・直すかを課題の担当が決めて進む）。
   if (review.verdict !== 'reject') throw new TpmError(`レビュー #${review.n} の判定は「${VERDICTS[review.verdict]}」です。--review で上げるのは「${VERDICTS.reject}」を受けない時だけです（ほかの判定は、指摘ごとに自分で決めて進む）。送っていません`);
   const sent = toTpm(ctx, self, 'ask-tpm', `レビュー #${review.n}（判定: ${VERDICTS[review.verdict]}。${review.page}）を受けない: ${options.text}`, options.replyTo);
   // 2 度目に上げても、最初に上げた時刻を残す。
   if (review.escalatedAt === undefined) patchReview(ctx, review.n, { escalatedAt: ctx.now().toISOString() });
-  // 置き場のレビューのページを「上げた」にする（TPM 担当が決めたら tpm page reply --answered --on tpm で外す）。
+  // 置き場のレビューのページを「上げた」にする（TPM 担当が決めたら roster page reply --answered --on tpm で外す）。
   return [sent, ...markEscalated(ctx, review.page), ...wait(ctx, 'tpm', options.waitingFor)];
 }
 
@@ -538,7 +538,7 @@ function assertSupersede(ctx: Context, self: RoleRecord, url: string, supersede:
   const notWaiting = supersede.filter(old => !waiting.some(w => samePage(ctx, w, old)));
   if (notWaiting.length > 0) {
     throw new TpmError([
-      `--supersede: 返事待ちではありません（答え済みか、tpm ask pm で送っていない）。何も送っていません:`,
+      `--supersede: 返事待ちではありません（答え済みか、roster ask pm で送っていない）。何も送っていません:`,
       ...notWaiting,
       `今の ${self.key} の返事待ち: ${waiting.length === 0 ? '無し' : waiting.join(' ')}`,
     ].join('\n'));
@@ -551,7 +551,7 @@ function assertSupersede(ctx: Context, self: RoleRecord, url: string, supersede:
  */
 export function askPm(ctx: Context, options: { url: string, items: string[], waitingFor: string, supersede?: string[] }): string[] {
   const self = sender(ctx);
-  notAuditor(self, 'tpm ask pm');
+  notAuditor(self, 'roster ask pm');
   if (options.items.length === 0) throw new TpmError('--item で、決めてほしい項目の題を 1 つ以上書いてください');
   const supersede = options.supersede ?? [];
   const body = [
@@ -588,7 +588,7 @@ export function askDevops(ctx: Context, options: { what: string, why: string, ur
 /** 自分の PR を 1 本 merge したと知らせる（【merged】）。 */
 export function reportMerged(ctx: Context, options: { pr: string, note: string, unchecked?: string }): string[] {
   const self = sender(ctx);
-  notAuditor(self, 'tpm report merged');
+  notAuditor(self, 'roster report merged');
   const checked = assertMerged(ctx, [options.pr], options.unchecked);
   return [toTpm(ctx, self, 'merged', `${options.pr} ${options.note}${checked}`)];
 }
@@ -596,7 +596,7 @@ export function reportMerged(ctx: Context, options: { pr: string, note: string, 
 /** 文書やコメントの食い違いを直した PR を merge したと知らせ、課題があれば記録を書く（【doc-fix】）。 */
 export function reportDocFix(ctx: Context, options: { pr: string, note: string, unchecked?: string }): string[] {
   const self = sender(ctx);
-  notAuditor(self, 'tpm report doc-fix');
+  notAuditor(self, 'roster report doc-fix');
   const checked = assertMerged(ctx, [options.pr], options.unchecked);
   const body = `${options.pr}（merge 済み）${options.note}${checked}`;
   notRepeatToTpm(ctx, self, 'doc-fix', body);
@@ -604,9 +604,9 @@ export function reportDocFix(ctx: Context, options: { pr: string, note: string, 
   return [...recorded, toTpm(ctx, self, 'doc-fix', body)];
 }
 
-/** `tpm report done --kind` の値（`tpm page put --kind` と同じ語）と、課題に書く記録の種類。 */
+/** `roster report done --kind` の値（`roster page put --kind` と同じ語）と、課題に書く記録の種類。 */
 export const DONE_KINDS = { proposal: '提案', plan: '計画', result: '結果', audit: '監査' } as const satisfies Record<string, NoteKind>;
-/** `tpm report done --kind` に書ける値。 */
+/** `roster report done --kind` に書ける値。 */
 export type DoneKind = keyof typeof DONE_KINDS;
 
 /** `--kind` の値を読む。前の値（提案・計画・結果）は誤りにし、替わりの値を案内する。 */
@@ -617,7 +617,7 @@ export function doneKind(value: string): DoneKind {
   throw new TpmError(`--kind は ${Object.keys(DONE_KINDS).join('・')} のどれかにしてください`);
 }
 
-/** `tpm report done` の旗。 */
+/** `roster report done` の旗。 */
 export interface DoneOptions {
   url?: string
   /** 成果の種類。課題の記録は DONE_KINDS の日本語の種類で書く。 */
@@ -676,7 +676,7 @@ const briefLabel = (open: OpenBrief[], url: string): string => {
 /** 依頼書 1 つの成果を出した。TPM 担当は「残り」と「決めてほしいこと」で【dismiss】を送るかを決めるので、どちらも必ず書く。 */
 export function reportDone(ctx: Context, options: DoneOptions): string[] {
   const self = sender(ctx);
-  notAuditor(self, 'tpm report done');
+  notAuditor(self, 'roster report done');
   const remaining = required(options.remaining, '--remaining（残り）');
   const decisions = required(options.decisions, '--decisions（決めてほしいこと）');
   const kind = DONE_KINDS[options.kind];
@@ -701,7 +701,7 @@ export function reportDone(ctx: Context, options: DoneOptions): string[] {
   return [...recorded, sent, ...keepRemaining(ctx, self, 'done', remaining), ...hint, `状態: ${WAIT_NEXT_BRIEF}（次の【brief】か【dismiss】を待つ。自分から【end】を送らない）`];
 }
 
-/** `tpm report end` の旗。 */
+/** `roster report end` の旗。 */
 export interface EndOptions {
   url?: string
   prs: string[]
@@ -715,7 +715,7 @@ export interface EndOptions {
 /** 【dismiss】を受けて片付けた。課題に結果を書き、課題を閉じる（担当の交代なら閉じない）。 */
 export function reportEnd(ctx: Context, options: EndOptions): string[] {
   const self = sender(ctx);
-  notAuditor(self, 'tpm report end');
+  notAuditor(self, 'roster report end');
   if (self.dismissed === undefined && !ROLES[self.role].endsWithoutDismiss) {
     throw new TpmError('【dismiss】がまだ来ていません。【done】の後は次の【brief】か【dismiss】を待ち、自分から【end】を送らない');
   }
@@ -760,9 +760,9 @@ export function reportDependabot(ctx: Context, id: 'merge-request' | 'not-yet' |
 
 // ---- Auditor が打つ ----
 
-/** `tpm report audit` の旗。 */
+/** `roster report audit` の旗。 */
 export interface AuditOptions {
-  /** 監査のページ（tpm page put --kind audit で置いた URL）。 */
+  /** 監査のページ（roster page put --kind audit で置いた URL）。 */
   url: string
   summary: string
   /** Product Manager に決めてほしい項目の題（無ければ空）。 */
@@ -775,8 +775,8 @@ export interface AuditOptions {
  * TPM 担当が起きていなくても報告はできる（写しは送らず、その事を出す）。
  */
 export function reportAudit(ctx: Context, options: AuditOptions): string[] {
-  const self = auditor(ctx, 'tpm report audit');
-  if (!isPageUrl(ctx.env, options.url)) throw new TpmError(`--url は、tpm page put --kind audit で置いた監査のページの URL にしてください: ${options.url}`);
+  const self = auditor(ctx, 'roster report audit');
+  if (!isPageUrl(ctx.env, options.url)) throw new TpmError(`--url は、roster page put --kind audit で置いた監査のページの URL にしてください: ${options.url}`);
   const decisions = options.items.length === 0 ? 'なし' : options.items.map((item, i) => `(${i + 1}) ${item}`).join(' ');
   const body = `${options.url} 要点: ${options.summary}／決めてほしいこと: ${decisions}（写し。Product Manager には Audit の席でじかに報告した。伝え直さなくてよい）`;
   const copied = tpmSeat(ctx) !== undefined;
@@ -785,7 +785,7 @@ export function reportAudit(ctx: Context, options: AuditOptions): string[] {
   return [sent, ...wait(ctx, 'pm', '監査の報告'), 'この席に、要点と決めてほしいことを書いて、Product Manager の答えを待つ'];
 }
 
-/** `tpm report decided` の旗。どれも、監査のページの勧告の題。 */
+/** `roster report decided` の旗。どれも、監査のページの勧告の題。 */
 export interface DecidedOptions {
   url: string
   /** する（TPM 担当が課題にして振る）。 */
@@ -801,7 +801,7 @@ export interface DecidedOptions {
  * TPM 担当が起きていなければ、送らず・記録せずに止まる（起きた後に打ち直す）。
  */
 export function reportDecided(ctx: Context, options: DecidedOptions): string[] {
-  const self = auditor(ctx, 'tpm report decided');
+  const self = auditor(ctx, 'roster report decided');
   if (options.adopted.length + options.accepted.length + options.later.length === 0) throw new TpmError('--do・--accept・--later のどれかで、勧告の題を 1 つ以上書いてください');
   if (tpmSeat(ctx) === undefined) throw new TpmError('TPM 担当が起きていません。決定は送っていません・記録していません。Product Manager にそう伝え、TPM 担当が起きた後に、同じ命令を打ち直してください');
   const part = (label: string, titles: string[]): string[] => titles.length === 0 ? [] : [`${label}: ${titles.join('・')}`];
@@ -827,14 +827,14 @@ export function brief(ctx: Context, role: RoleRecord, url: string, note?: string
   return [sent];
 }
 
-/** 課題の写しの一言（【brief】と担当の tpm hello）。写しも、作らなかった訳も無ければ undefined。 */
+/** 課題の写しの一言（【brief】と担当の roster hello）。写しも、作らなかった訳も無ければ undefined。 */
 export function issueCopyLine(role: RoleRecord): string | undefined {
   if (role.issuePage !== undefined) return `課題の写し: ${role.issuePage}`;
   if (role.issueCopySkipped !== undefined) return `課題の写し: 無し（${role.issueCopySkipped}）`;
   return undefined;
 }
 
-/** `tpm answer` の旗。 */
+/** `roster answer` の旗。 */
 export interface AnswerOptions {
   text: string
   replyTo?: string
@@ -867,7 +867,7 @@ function answeredPages(ctx: Context, key: string, options: AnswerOptions): strin
 
 /** Product Manager の答えを返す。課題があれば、返す前に「決定」の記録を書く。返した後、置き場の返事待ちのページを答えたにする。 */
 export function answer(ctx: Context, key: string, options: AnswerOptions): string[] {
-  requireTpmSide(ctx, 'tpm answer');
+  requireTpmSide(ctx, 'roster answer');
   const role = receiver(ctx, key);
   if (role.address !== undefined) assertNotRepeat(ctx, 'answer', TPM_TITLE, role.address, options.text, options.replyTo);
   const pages = answeredPages(ctx, key, options);
@@ -878,16 +878,16 @@ export function answer(ctx: Context, key: string, options: AnswerOptions): strin
 
 /** 担当に、返事の要らないメッセージを送る（【notify】）。 */
 export function notify(ctx: Context, key: string, options: { text: string, replyTo?: string }): string[] {
-  requireTpmSide(ctx, 'tpm notify');
+  requireTpmSide(ctx, 'roster notify');
   return [toRole(ctx, receiver(ctx, key), 'notify', options.text, options.replyTo)];
 }
 
 /** この課題に続きは無い、と知らせる。handover は担当の交代（課題は続くので、担当は課題を閉じない）。 */
 export function dismiss(ctx: Context, key: string, options: { handover: boolean, supersede?: boolean }): string[] {
-  requireTpmSide(ctx, 'tpm dismiss');
+  requireTpmSide(ctx, 'roster dismiss');
   if (readRole(ctx, key)?.role === 'auditor') throw new TpmError('Auditor の席に【dismiss】は送れません（Auditor の席は、Product Manager が起こし、閉じる）');
   // Staff Engineer 担当は worktree も PR も持たないので、片付けのやりとり（【dismiss】と【end】）は要らない。
-  if (readRole(ctx, key)?.role === 'staff-engineer') throw new TpmError(`Staff Engineer 担当の席に【dismiss】は送りません。tpm close ${key} で閉じます（課題の席を tpm close で閉じる時にも、一緒に閉じる）`);
+  if (readRole(ctx, key)?.role === 'staff-engineer') throw new TpmError(`Staff Engineer 担当の席に【dismiss】は送りません。roster close ${key} で閉じます（課題の席を roster close で閉じる時にも、一緒に閉じる）`);
   const role = receiver(ctx, key);
   const settled = assertSettled(ctx, role, 'dismiss', options.supersede === true ? 'supersede' : undefined);
   const body = [options.handover
@@ -902,7 +902,7 @@ export function dismiss(ctx: Context, key: string, options: { handover: boolean,
     const waiting = all?.[on] ?? [];
     return waiting.length === 0
       ? []
-      : [`置き場に、${key} の${WAITING_PAGES[on]}が ${waiting.length} 枚残っています:`, ...waiting, `もう答えが要らなければ、tpm page reply <URL>… --answered${on === 'pm' ? '' : ` --on ${on}`} で印を外す`];
+      : [`置き場に、${key} の${WAITING_PAGES[on]}が ${waiting.length} 枚残っています:`, ...waiting, `もう答えが要らなければ、roster page reply <URL>… --answered${on === 'pm' ? '' : ` --on ${on}`} で印を外す`];
   });
   return [sent, ...left];
 }

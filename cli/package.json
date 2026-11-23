@@ -13,7 +13,7 @@
     "node": ">=26"
   },
   "//scripts": {
-    "test": "Vitest を監視せずに 1 回だけ実行する（設定は vitest.config.ts）。build は無い（bin/tpm が src/cli.ts を node で直に動かす）。",
+    "test": "Vitest を監視せずに 1 回だけ実行する（設定は vitest.config.ts）。build は無い（bin/roster が src/cli.ts を node で直に動かす）。",
     "lint": "ESLint で cli/ を検査する（設定は eslint.config.mjs）。",
     "typecheck": "tsc で src・test・設定の型だけを検査し、何も書き出さない（設定は tsconfig.json）。Vitest は型を検査しないので、型の誤りはこれで見つける。",
     "doccheck": "TypeDoc で src の export にコメントがあるかなどを検査し、ページは作らない（設定は typedoc.json）。"

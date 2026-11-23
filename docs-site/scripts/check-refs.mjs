@@ -12,7 +12,7 @@
 // 7. skill（SKILL.md）の本文の ${CLAUDE_SKILL_DIR}/… の先が在り、realpath "${CLAUDE_SKILL_DIR}/…" が repo の一番上を指す
 // 8. skill（skill-sets/ の *.md）が「protocol.md の「見出し」」の形で _shared/ の決まりの見出しを名指したら、その見出しが在る
 // 9. skill（skill-sets/ の *.md）に、連携と課題管理の道具の命令（cmux …・acli …）が直に書かれていない
-// 10. skill・原稿・README が書いた tpm <命令> が、cli/src/protocol.ts の COMMANDS に在る
+// 10. skill・原稿・README が書いた roster <命令> が、cli/src/protocol.ts の COMMANDS に在る
 // 11. skill が書いた見出し（【done】など）が cli/src/protocol.ts の HEADINGS に在り、HEADINGS の見出しがどれかの skill に在る
 // 12. 本文の [x](/page/#見出し)・[x](#見出し) の見出しが、build した先のページ（dist/）に在る
 //
@@ -22,7 +22,7 @@
 // 8 が要るのは、担当どうしの決まり（_shared/）の節を別のファイルへ移したときに、その節を名指す
 // skill の読む先が無くなるのを止めるため。
 //
-// 9〜11 が要るのは、担当のあいだの決まりを文（skill）とコード（cli/src）に分けて持つため。skill は tpm の命令だけを書き、
+// 9〜11 が要るのは、担当のあいだの決まりを文（skill）とコード（cli/src）に分けて持つため。skill は roster の命令だけを書き、
 // 道具の命令はコードの adapter が打つ。文に道具の命令が戻ったり、文とコードで命令や見出しの名がずれたりするのを止める。
 // cli の依存（node_modules）を入れずに動くように、命令の木ではなく protocol.ts（Node の組み込みだけで読める）を読む。
 //
@@ -257,7 +257,7 @@ for (const f of skillFiles) {
   const text = readFileSync(join(REPO, f), "utf8");
   for (const m of text.matchAll(/\b(cmux|acli)\s+[a-z-]+/g))
     errors.push(
-      `${f}: 道具の命令が直に書いてある: ${m[0]}（tpm の命令に替える）`,
+      `${f}: 道具の命令が直に書いてある: ${m[0]}（roster の命令に替える）`,
     );
 }
 
@@ -275,16 +275,16 @@ const commandFiles = [
 ];
 for (const f of commandFiles) {
   const text = readFileSync(join(REPO, f), "utf8");
-  // tpm の後に英小文字の語が続く所だけを命令とみる（tpm --help・tpm <命令>・「tpm の命令」は数えない）
+  // roster の後に英小文字の語が続く所だけを命令とみる（roster --help・roster <命令>・「roster の命令」は数えない）
   for (const m of text.matchAll(
-    /(?<![\w/=-])tpm[ \t]+([a-z][a-z-]*)(?:[ \t]+([a-z][a-z-]*))?/g,
+    /(?<![\w/=-])roster[ \t]+([a-z][a-z-]*)(?:[ \t]+([a-z][a-z-]*))?/g,
   )) {
     const [, first, second] = m;
     if (groups.has(first)) {
       if (second && !COMMANDS.includes(`${first} ${second}`))
-        errors.push(`${f}: tpm ${first} ${second} という命令は無い`);
+        errors.push(`${f}: roster ${first} ${second} という命令は無い`);
     } else if (!COMMANDS.includes(first)) {
-      errors.push(`${f}: tpm ${first} という命令は無い`);
+      errors.push(`${f}: roster ${first} という命令は無い`);
     }
   }
 }

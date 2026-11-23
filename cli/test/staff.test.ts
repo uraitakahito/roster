@@ -23,7 +23,7 @@ const STAFF = { role: 'staff-engineer', wait: 0 } as const;
 const PLAN = 'http://127.0.0.1:8801/p/AI-8/plan-1.html';
 const PR = 'https://github.com/o/r/pull/7';
 
-/** TPM 担当と AI-8 の Software Engineer 担当（file:1）が名乗った世界。tpm は、Staff Engineer 担当の skill が在る root の TPM 担当。 */
+/** TPM 担当と AI-8 の Software Engineer 担当（file:1）が名乗った世界。w.tpm は、Staff Engineer 担当の skill が在る root の TPM 担当。 */
 function started(config: Record<string, unknown> = {}, issue?: string): World & { se: Context } {
   const w = world(config);
   const tpm = { ...w.tpm, root: staffRoot() };
@@ -31,7 +31,7 @@ function started(config: Record<string, unknown> = {}, issue?: string): World & 
   assign(tpm, 'AI-8', { ...SE, ...(issue === undefined ? {} : { issue }) });
   const se = w.role('AI-8', 'file:1');
   hello(se);
-  // 返っていないレビューの頼みが 1 つある（席はまだ無い。TPM 担当の tpm assign --role staff-engineer は、この形の席を起こす）。
+  // 返っていないレビューの頼みが 1 つある（席はまだ無い。TPM 担当の roster assign --role staff-engineer は、この形の席を起こす）。
   addReview(tpm, { key: 'AI-8', url: PLAN, by: 'SWE AI-8: 計画と実装' });
   return { ...w, tpm, se };
 }
@@ -54,7 +54,7 @@ describe('名簿の Key', () => {
   });
 });
 
-describe('tpm assign --role staff-engineer', () => {
+describe('roster assign --role staff-engineer', () => {
   test('課題の担当の隣に、別の名簿の行で起こす。題は レビュー <課題の Key>: <見る物>、既定は Opus 5.5・high', () => {
     const w = started({ tracker: 'jira' }, 'AI-8');
     const out = assign(w.tpm, 'AI-8', STAFF);
@@ -95,14 +95,14 @@ describe('tpm assign --role staff-engineer', () => {
   test('課題の担当が名簿に居なければ止まる。Staff の席の Key を手で書いても止まる', () => {
     const w = started();
     expect(() => assign(w.tpm, 'AI-9', STAFF)).toThrow(/AI-9 の担当が名簿にいません。Staff Engineer 担当は、課題の担当の隣に起こします/);
-    expect(() => assign(w.tpm, 'AI-8.staff', STAFF)).toThrow(/tpm assign <課題の Key> --role staff-engineer/);
-    expect(() => assign(w.tpm, 'AI-8.staff', SE)).toThrow(/tpm assign <課題の Key> --role staff-engineer/);
+    expect(() => assign(w.tpm, 'AI-8.staff', STAFF)).toThrow(/roster assign <課題の Key> --role staff-engineer/);
+    expect(() => assign(w.tpm, 'AI-8.staff', SE)).toThrow(/roster assign <課題の Key> --role staff-engineer/);
     expect(w.wire.seats().map(s => s.address)).toEqual(['file:1']);
   });
 
   test('skill がまだ無ければ、起こす前に止まる', () => {
     const w = started();
-    const bare = { ...w.tpm, root: realpathSync(mkdtempSync(join(tmpdir(), 'tpm-root-'))) };
+    const bare = { ...w.tpm, root: realpathSync(mkdtempSync(join(tmpdir(), 'roster-root-'))) };
     expect(() => assign(bare, 'AI-8', STAFF)).toThrow(/skill \/staff-engineer がまだありません/);
     expect(w.wire.seats().map(s => s.address)).toEqual(['file:1']);
   });
@@ -111,9 +111,9 @@ describe('tpm assign --role staff-engineer', () => {
     const args = claudeArgs({ key: 'AI-8.staff', subject: 'AI-8', role: 'staff-engineer', title: 'Staff AI-8', cwd: '/p', addDirs: ['/r/skill-sets/core'], ...ROLES['staff-engineer'].defaults }, '/r');
     expect(JSON.parse(args[1] ?? '')).toEqual({
       hooks: {
-        PreToolUse: [{ matcher: 'Bash|Edit|Write|NotebookEdit', hooks: [{ type: 'command', command: '/r/cli/bin/tpm guard' }] }],
-        SessionStart: [{ hooks: [{ type: 'command', command: '/r/cli/bin/tpm castlist session-start' }, { type: 'command', command: '/r/cli/bin/tpm returned check' }] }],
-        SessionEnd: [{ hooks: [{ type: 'command', command: '/r/cli/bin/tpm castlist session-end' }] }],
+        PreToolUse: [{ matcher: 'Bash|Edit|Write|NotebookEdit', hooks: [{ type: 'command', command: '/r/cli/bin/roster guard' }] }],
+        SessionStart: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-start' }, { type: 'command', command: '/r/cli/bin/roster returned check' }] }],
+        SessionEnd: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-end' }] }],
       },
     });
     expect(args.slice(2, 8)).toEqual(['--model', 'claude-opus-5-5', '--effort', 'high', '--permission-mode', 'bypassPermissions']);
@@ -135,7 +135,7 @@ describe('Staff の席の名乗り', () => {
   });
 });
 
-describe('tpm close', () => {
+describe('roster close', () => {
   test('課題の席を閉じると、Staff の席も閉じる。Staff の席だけを先に閉じることもできる', () => {
     const w = reviewed();
     expect(close(w.tpm, 'AI-8')).toEqual(['閉じた: SWE AI-8: 計画と実装（file:1）', '閉じた: レビュー AI-8: 計画 plan-1（file:2）']);
@@ -152,7 +152,7 @@ describe('Staff が打たない命令', () => {
   test('【done】【end】【merged】【doc-fix】【ask-pm】は断る。課題も閉じない', () => {
     const w = reviewed({ tracker: 'jira' }, 'AI-8');
     const before = w.calls.length;
-    const no = /Staff Engineer 担当は tpm .+ を打ちません。レビューの結果は tpm report review で返してください/;
+    const no = /Staff Engineer 担当は roster .+ を打ちません。レビューの結果は roster report review で返してください/;
     expect(() => reportDone(w.staff, { kind: 'result', summary: 'x', remaining: 'なし', decisions: 'なし', points: [] })).toThrow(no);
     expect(() => reportEnd(w.staff, { prs: [], removed: [], left: 'なし' })).toThrow(no);
     expect(() => reportMerged(w.staff, { pr: PR, note: 'x' })).toThrow(no);
@@ -170,17 +170,17 @@ describe('Staff が打たない命令', () => {
     expect(notify(w.tpm, 'AI-8.staff', { text: 'URL を直した' })).toEqual(['送った: 【notify】→ file:2（相手の手が空いた時に届く。送り直さない）']);
   });
 
-  test('Staff の席に【dismiss】は送れない（tpm close で閉じる）', () => {
+  test('Staff の席に【dismiss】は送れない（roster close で閉じる）', () => {
     const w = reviewed();
-    expect(() => dismiss(w.tpm, 'AI-8.staff', { handover: false })).toThrow(/Staff Engineer 担当の席に【dismiss】は送りません。tpm close AI-8\.staff で閉じます/);
+    expect(() => dismiss(w.tpm, 'AI-8.staff', { handover: false })).toThrow(/Staff Engineer 担当の席に【dismiss】は送りません。roster close AI-8\.staff で閉じます/);
     expect(requireRole(w.tpm, 'AI-8.staff').dismissed).toBeUndefined();
   });
 });
 
 describe('Staff の席のページ', () => {
-  test('tpm page put は、課題の Key の folder に置く', () => {
+  test('roster page put は、課題の Key の folder に置く', () => {
     const w = reviewed();
-    const html = join(realpathSync(mkdtempSync(join(tmpdir(), 'tpm-staff-'))), 'r.html');
+    const html = join(realpathSync(mkdtempSync(join(tmpdir(), 'roster-staff-'))), 'r.html');
     writeFileSync(html, '<title>レビュー</title>');
     const out = pagePut(w.staff, html, { kind: 'result' });
     expect(out.find(l => l.startsWith('URL: '))).toBe(`URL: http://127.0.0.1:8801/${basename(w.tpm.state.dir)}/AI-8/result-1.html`);

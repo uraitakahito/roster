@@ -20,7 +20,7 @@ const add = (w: World, key: string, text: string, more: Partial<Parameters<typeo
   incidentAdd(w.tpm, key, { text, type: 'efficiency', tags: [], severe: false, ...more });
 
 describe('台帳に書く', () => {
-  test('TPM 担当: tpm incident add。tag があれば、同じ tag の前の件を返す', () => {
+  test('TPM 担当: roster incident add。tag があれば、同じ tag の前の件を返す', () => {
     const w = started();
     expect(add(w, 't-8zuk', 'gh api の書き込みが断られた', { tags: ['権限'] })).toEqual(['台帳に書いた: #1 効率性 t-8zuk 11-20 12:00「gh api の書き込みが断られた」 tag: 権限', '権限: 初めて']);
     add(w, 't-3m36', 'acli でコンポーネントを付けられない', { tags: ['権限'] });
@@ -44,7 +44,7 @@ describe('台帳に書く', () => {
     expect(readIncidents(w.tpm)).toEqual([]);
   });
 
-  test('担当: tpm report incident は台帳に書き、【incident】を送る。課題管理には書かない', () => {
+  test('担当: roster report incident は台帳に書き、【incident】を送る。課題管理には書かない', () => {
     const w = started({ tracker: 'github' }, 'gh-12');
     const comments = w.calls.filter(c => c.args[1] === 'comment').length;
     expect(reportIncident(w.se, { text: 'merge が断られたのに【merged】を送った', type: 'reliability', tags: [], severe: false })).toEqual([
@@ -113,7 +113,7 @@ describe('台帳に書く', () => {
     ]);
   });
 
-  test('tpm wait pm --hand は、頼んだ手を pm-hand の件として数える。wait pm のほかには付けられない', () => {
+  test('roster wait pm --hand は、頼んだ手を pm-hand の件として数える。wait pm のほかには付けられない', () => {
     const w = started();
     expect(wait(w.tpm, 'pm', 'Jira の画面でコンポーネントを付ける', { hand: true })).toEqual([
       '状態: 回答待ち(PM): Jira の画面でコンポーネントを付ける',
@@ -122,11 +122,11 @@ describe('台帳に書く', () => {
     ]);
     wait(w.tpm, 'pm', '指示');
     expect(wait(w.tpm, 'pm', '! の 1 行', { hand: true }).at(-1)).toBe('pm-hand: これで 2 件目（前: #1 tpm）');
-    expect(() => wait(w.tpm, 'work', '実装', { hand: true })).toThrow(/--hand は tpm wait pm だけ/);
+    expect(() => wait(w.tpm, 'work', '実装', { hand: true })).toThrow(/--hand は roster wait pm だけ/);
     expect(readIncidents(w.tpm)).toHaveLength(2);
   });
 
-  test('tpm wait pm --hand の打ち直しは、前の wait がその頼みのままなら、同じ件に寄せる', () => {
+  test('roster wait pm --hand の打ち直しは、前の wait がその頼みのままなら、同じ件に寄せる', () => {
     const w = started();
     wait(w.tpm, 'pm', '/tpm の呼び直しと最初の監査', { hand: true });
     // 同じ字の打ち直しは、件の字も変えない
@@ -236,7 +236,7 @@ describe('台帳を見直す・扱いを決める', () => {
     expect(readIncidents(w.tpm).every(i => i.status === 'open')).toBe(true);
   });
 
-  test('担当は、見直す・扱いを決める命令を打てない（書くのは tpm report incident）', () => {
+  test('担当は、見直す・扱いを決める命令を打てない（書くのは roster report incident）', () => {
     const w = ledger();
     for (const run of [
       () => incidentReview(w.se),
@@ -245,8 +245,8 @@ describe('台帳を見直す・扱いを決める', () => {
       () => incidentDrop(w.se, ['1'], { why: 'x' }),
       () => incidentClose(w.se, ['1'], { why: 'x' }),
       () => incidentFollow(w.se),
-    ]) expect(run).toThrow(/TPM 担当と Auditor です。担当は tpm report incident/);
-    expect(() => incidentAdd(w.se, 't-x7k2', { text: 'x', type: 'safety', tags: [], severe: false })).toThrow(/tpm incident add で書くのは TPM 担当です。担当は tpm report incident/);
+    ]) expect(run).toThrow(/TPM 担当と Auditor です。担当は roster report incident/);
+    expect(() => incidentAdd(w.se, 't-x7k2', { text: 'x', type: 'safety', tags: [], severe: false })).toThrow(/roster incident add で書くのは TPM 担当です。担当は roster report incident/);
     expect(readIncidents(w.tpm).every(i => i.status === 'open')).toBe(true);
   });
 
@@ -265,19 +265,19 @@ describe('台帳を見直す・扱いを決める', () => {
       ['assigned', { by: 'audit', role: 'auditor' }],
       ['dropped', { by: 'tpm', role: 'tpm' }],
     ]);
-    // 書くのは、ほかの担当と同じく tpm report incident。
-    expect(() => incidentAdd(auditor, 'audit', { text: 'x', type: 'safety', tags: [], severe: false })).toThrow(/tpm incident add で書くのは TPM 担当です/);
+    // 書くのは、ほかの担当と同じく roster report incident。
+    expect(() => incidentAdd(auditor, 'audit', { text: 'x', type: 'safety', tags: [], severe: false })).toThrow(/roster incident add で書くのは TPM 担当です/);
   });
 
   test('未決の件があれば、名簿の終わりに 1 行出す', () => {
     const w = ledger();
-    expect(roles(w.tpm).at(-1)).toBe('台帳: 未決 4 件（重い 1）。tpm incident review で見る');
+    expect(roles(w.tpm).at(-1)).toBe('台帳: 未決 4 件（重い 1）。roster incident review で見る');
     incidentDrop(auditorOf(w), ['1', '2', '3', '4'], { why: '試し' });
     expect(roles(w.tpm).at(-1)).toMatch(/^- t-x7k2/);
   });
 });
 
-describe('追いかけの一覧（tpm incident follow）', () => {
+describe('追いかけの一覧（roster incident follow）', () => {
   const at = (w: World, iso: string): void => {
     w.tpm.now = () => new Date(iso);
   };

@@ -1,4 +1,4 @@
-// 課題管理の課題の中身を読む（tpm issue view）。どの担当も打つ。
+// 課題管理の課題の中身を読む（roster issue view）。どの担当も打つ。
 // 読むだけで記録を書かないので、設定の tracker が none の project でも、Key の形で道具を選んで読む。
 import type { Context } from '../context.ts';
 import { TpmError } from '../skill-sets.ts';
@@ -35,7 +35,7 @@ function readIssue(ctx: Context, key: string): TrackerIssue {
   }
   catch (e) {
     if (!(e instanceof TpmError)) throw e;
-    throw new TpmError(`${e.message}\nKey が正しいかと、認証を ${authCheck(tracker)} で確かめてください。認証が無ければ、tpm ask tpm で Product Manager に login を頼んでください`);
+    throw new TpmError(`${e.message}\nKey が正しいかと、認証を ${authCheck(tracker)} で確かめてください。認証が無ければ、roster ask tpm で Product Manager に login を頼んでください`);
   }
 }
 
@@ -72,7 +72,7 @@ export function issuePage(issue: TrackerIssue, at: Date): string {
     `<li>道具: ${e(issue.tool)}</li>`,
     `<li>状態: ${e(issue.status)}</li>`,
     ...(issue.url === undefined ? [] : [`<li>URL: <a href="${e(issue.url)}">${e(issue.url)}</a></li>`]),
-    `<li>写した時刻: ${e(at.toISOString())}（tpm assign が tpm issue view と同じ中身を写した。新しい中身は tpm issue view ${e(issue.key)}）</li>`,
+    `<li>写した時刻: ${e(at.toISOString())}（roster assign が roster issue view と同じ中身を写した。新しい中身は roster issue view ${e(issue.key)}）</li>`,
     '</ul>',
     '<h2>本文</h2>',
     issue.body === '' ? '<p>無し</p>' : `<pre>${e(issue.body)}</pre>`,
@@ -84,7 +84,7 @@ export function issuePage(issue: TrackerIssue, at: Date): string {
 }
 
 /**
- * 課題の写しのページを置き、URL を返す（tpm assign）。issueKey が読める形でなければ（t- の Key・Dependabot の PR）何もせず undefined。
+ * 課題の写しのページを置き、URL を返す（roster assign）。issueKey が読める形でなければ（t- の Key・Dependabot の PR）何もせず undefined。
  * 読めなければ、--no-issue-copy で抜けられることを添えて止まる。ページは担当の Key（roleKey）の folder に置く。
  */
 export function copyIssue(ctx: Context, issueKey: string, roleKey: string): string | undefined {

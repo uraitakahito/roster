@@ -1,5 +1,5 @@
-// 担当を起こす: 名簿に書き、居場所を作って tpm run-role を動かし、名乗るまで待つ。起こす前に決める物（設定に書いた担当の既定・課題の写し）も持つ。
-// tpm assign（tpm-side.ts）と tpm audit start（audit.ts）が使う。
+// 担当を起こす: 名簿に書き、居場所を作って roster run-role を動かし、名乗るまで待つ。起こす前に決める物（設定に書いた担当の既定・課題の写し）も持つ。
+// roster assign（tpm-side.ts）と roster audit start（audit.ts）が使う。
 import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { castlistUrl } from '../castlist.ts';
@@ -32,9 +32,9 @@ export function paint(ctx: Context, address: string, color: string): string[] {
 export class NotStartedError extends TpmError {}
 
 /**
- * 名簿の行の担当を起こす: 名簿に書き、居場所を作って tpm run-role を動かし、名乗るまで wait 秒待つ（0 なら待たない）。
- * again は起こし直しか（出す字が変わる）。more は、起こした行と folder の行の後に出す行。tpm assign と tpm audit start が使う。
- * castlist を設定していれば、起こしの id と、起こした者（launchedBy。castlist の付随する id）を名簿に書く（tpm run-role が担当の環境変数にする）。
+ * 名簿の行の担当を起こす: 名簿に書き、居場所を作って roster run-role を動かし、名乗るまで wait 秒待つ（0 なら待たない）。
+ * again は起こし直しか（出す字が変わる）。more は、起こした行と folder の行の後に出す行。roster assign と roster audit start が使う。
+ * castlist を設定していれば、起こしの id と、起こした者（launchedBy。castlist の付随する id）を名簿に書く（roster run-role が担当の環境変数にする）。
  * description は題の下に出す説明。色は役割の表（ROLES の color）から、宛先を名簿に書いた後に付ける（paint）。
  */
 export function launch(ctx: Context, record: RoleRecord, again: boolean, wait: number, more: string[] = [], launchedBy?: string, description?: string): string[] {
@@ -43,16 +43,16 @@ export function launch(ctx: Context, record: RoleRecord, again: boolean, wait: n
     if (launchedBy !== undefined) record.launchedBy = launchedBy;
   }
   writeRole(ctx, record);
-  const command = [join(ctx.root, 'cli', 'bin', 'tpm'), 'run-role', record.key, '--project', ctx.project, '--state', ctx.state.dir].map(shellQuote).join(' ');
+  const command = [join(ctx.root, 'cli', 'bin', 'roster'), 'run-role', record.key, '--project', ctx.project, '--state', ctx.state.dir].map(shellQuote).join(' ');
   record.address = ctx.transport.spawn({ title: record.title, cwd: record.cwd, command, ...(description === undefined ? {} : { description }) });
   writeRole(ctx, record);
   const head = [`${again ? '起こし直した' : '起こした'}: ${record.title}（${record.address}・${modelStatus(record.model, record.effort)}）`, `folder: ${record.cwd}`, ...more, ...paint(ctx, record.address, ROLES[record.role].color)];
-  if (wait === 0) return [...head, '名乗り（tpm hello）は待っていない'];
+  if (wait === 0) return [...head, '名乗り（roster hello）は待っていない'];
   for (let waited = 0; waited < wait * 1000; waited += HELLO_INTERVAL_MS) {
-    if (readRole(ctx, record.key)?.helloAt !== undefined) return [...head, '名乗った（tpm hello が来た）'];
+    if (readRole(ctx, record.key)?.helloAt !== undefined) return [...head, '名乗った（roster hello が来た）'];
     ctx.sleep(HELLO_INTERVAL_MS);
   }
-  if (readRole(ctx, record.key)?.helloAt !== undefined) return [...head, '名乗った（tpm hello が来た）'];
+  if (readRole(ctx, record.key)?.helloAt !== undefined) return [...head, '名乗った（roster hello が来た）'];
   throw new NotStartedError(notStarted(ctx, record, wait));
 }
 

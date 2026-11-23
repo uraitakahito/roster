@@ -14,7 +14,7 @@ const config = (text: string): string => {
 };
 
 beforeAll(() => {
-  dir = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-config-')));
+  dir = realpathSync(mkdtempSync(join(tmpdir(), 'roster-config-')));
 });
 
 describe('readRolesConfig', () => {

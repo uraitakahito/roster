@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseJsonc } from './jsonc.ts';
 
-/** tpm が利用者に見せて止まる誤り。cli は `tpm: <message>` と出して exit 1 にする。 */
+/** roster が利用者に見せて止まる誤り。cli は `roster: <message>` と出して exit 1 にする。 */
 export class TpmError extends Error {}
 
 const SKILL_SET_NAME = /^[a-z0-9-]+$/;

@@ -22,7 +22,7 @@ describe('hello（TPM 担当）', () => {
     expect(w.wire.status('file:tpm')).toEqual({ model: 'Opus 5.5 · medium', wait: '作業中: 起動' });
   });
 
-  test('状態の model・effort は、同じ環境変数で tpm start が出す 1 行と揃う', () => {
+  test('状態の model・effort は、同じ環境変数で roster start が出す 1 行と揃う', () => {
     const env = { TPM_MODEL: 'claude-fable-5-2', TPM_EFFORT: 'high' };
     const w = world({}, env);
     hello(w.tpm);
@@ -53,7 +53,7 @@ describe('居場所の色', () => {
     for (const blue of ['Blue', 'Navy', 'Indigo', 'Aqua', 'Teal', 'Charcoal']) expect(colors).not.toContain(blue);
   });
 
-  test('tpm assign は、起こした席に役割の色を付ける', () => {
+  test('roster assign は、起こした席に役割の色を付ける', () => {
     const w = world();
     assign(w.tpm, 't-x7k2', SE);
     assign(w.tpm, 'devops', { role: 'devops-engineer', wait: 0 });
@@ -84,10 +84,10 @@ describe('居場所の色', () => {
 });
 
 describe('assign', () => {
-  test('Auditor の席は、TPM 担当の tpm assign では起こせない（役割でも Key でも）', () => {
+  test('Auditor の席は、TPM 担当の roster assign では起こせない（役割でも Key でも）', () => {
     const w = world();
-    expect(() => assign(w.tpm, 't-x7k2', { role: 'auditor', wait: 0 })).toThrow(/Auditor の席（Key audit）は、Product Manager が tpm audit start で起こします/);
-    expect(() => assign(w.tpm, 'audit', { ...SE })).toThrow(/Auditor の席（Key audit）は、Product Manager が tpm audit start で起こします/);
+    expect(() => assign(w.tpm, 't-x7k2', { role: 'auditor', wait: 0 })).toThrow(/Auditor の席（Key audit）は、Product Manager が roster audit start で起こします/);
+    expect(() => assign(w.tpm, 'audit', { ...SE })).toThrow(/Auditor の席（Key audit）は、Product Manager が roster audit start で起こします/);
     expect(roles(w.tpm)).toEqual(['名簿: 担当はいない']);
     expect(w.wire.seats()).toEqual([]);
   });
@@ -109,9 +109,9 @@ describe('assign', () => {
       firstBrief: BRIEF,
       address: 'file:1',
     });
-    expect(w.wire.command('file:1')).toBe(`${w.tpm.root}/cli/bin/tpm run-role t-x7k2 --project ${w.project} --state ${w.tpm.state.dir}`);
+    expect(w.wire.command('file:1')).toBe(`${w.tpm.root}/cli/bin/roster run-role t-x7k2 --project ${w.project} --state ${w.tpm.state.dir}`);
     expect(w.wire.seats()).toEqual([{ address: 'file:1', title: 'SWE t-x7k2: 計画と実装' }]);
-    expect(out).toEqual(['起こした: SWE t-x7k2: 計画と実装（file:1・Opus 5.5 · medium）', `folder: ${w.project}`, '名乗り（tpm hello）は待っていない']);
+    expect(out).toEqual(['起こした: SWE t-x7k2: 計画と実装（file:1・Opus 5.5 · medium）', `folder: ${w.project}`, '名乗り（roster hello）は待っていない']);
   });
 
   test('model などは 旗 > config.jsonc > 役割の既定 の順で決まる', () => {
@@ -158,7 +158,7 @@ describe('assign', () => {
         if (n === 2) hello(w.role('t-x7k2', 'file:1'));
       },
     };
-    expect(assign(tpm, 't-x7k2', { ...SE, wait: 90 }).at(-1)).toBe('名乗った（tpm hello が来た）');
+    expect(assign(tpm, 't-x7k2', { ...SE, wait: 90 }).at(-1)).toBe('名乗った（roster hello が来た）');
     expect(n).toBe(2);
   });
 
@@ -211,7 +211,7 @@ describe('assign', () => {
 
   test('t- の Key は t- と英小文字・数字 4 文字だけ。課題管理の Key・devops・<repo>#<PR> は問わない', () => {
     for (const key of ['t-jsonc-check', 't-abc', 't-abcde', 't-AB12']) {
-      expect(() => assign(world().tpm, key, SE)).toThrow(/t- と英小文字・数字 4 文字にしてください（tpm key で作る）/);
+      expect(() => assign(world().tpm, key, SE)).toThrow(/t- と英小文字・数字 4 文字にしてください（roster key で作る）/);
     }
     const w = world();
     expect(assign(w.tpm, 't-0o1l', SE)[0]).toMatch(/^起こした: SWE t-0o1l: 計画と実装/);
@@ -260,11 +260,11 @@ describe('newKey', () => {
   });
 });
 
-describe('設定の出どころ（tpm hello・tpm assign）', () => {
+describe('設定の出どころ（roster hello・roster assign）', () => {
   const config = (w: ReturnType<typeof world>): string[] => configLines(w.tpm);
 
   test('設定の file がどこにも無ければ、無いので既定と出す', () => {
-    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-bare-')));
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'roster-bare-')));
     const ctx = createContext({ XDG_STATE_HOME: join(dir, 'state') }, dir);
     expect(configLines(ctx)).toEqual([`設定: ${dir}/.claude/roles/config.jsonc（無いので既定）`, '課題管理: none（既定）・連携: cmux（既定）']);
   });
@@ -288,7 +288,7 @@ describe('設定の出どころ（tpm hello・tpm assign）', () => {
       '- x  道具の欄は無い',
       '課題管理: Jira の Key（AI-12 の形）→ jira（skills）／gh- の Key → github（web）／t- の Key → 記録しない',
       '連携: file',
-      'infra: store（skills）（手続きは tpm infra list）',
+      'infra: store（skills）（手続きは roster infra list）',
     ]);
   });
 
@@ -297,13 +297,13 @@ describe('設定の出どころ（tpm hello・tpm assign）', () => {
     expect(lines[4]).toBe('課題管理: Jira の Key（AI-12 の形）→ 宣言した設定が無い（記録しない）／gh- の Key → 決まらない（github の設定が 2 つ以上: api・web。この folder の設定の folders で 1 つに絞る。Product Manager に伝える）／t- の Key → 記録しない');
   });
 
-  test('tpm assign は、担当を起こした folder と課題の記録の先を出す', () => {
+  test('roster assign は、担当を起こした folder と課題の記録の先を出す', () => {
     const w = world({}, {}, { skills: { tracker: 'jira' } });
     expect(assign(w.tpm, 'AI-20', { ...SE, issue: 'AI-20', noIssueCopy: '試験' })).toEqual([
       '起こした: SWE AI-20: 計画と実装（file:1・Opus 5.5 · medium）',
       `folder: ${w.project}`,
       '課題の記録: jira（skills の設定）',
-      '名乗り（tpm hello）は待っていない',
+      '名乗り（roster hello）は待っていない',
     ]);
     // project の folder 自身の設定なら、道具の名だけ
     const own = world({ tracker: 'jira' });
@@ -333,7 +333,7 @@ describe('hello', () => {
     const w = world();
     hello(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
     assign(w.tpm, 'AI-14', SE);
-    expect(hello(w.role('AI-14', 'file:1'))).toContain('課題の中身: tpm issue view AI-14');
+    expect(hello(w.role('AI-14', 'file:1'))).toContain('課題の中身: roster issue view AI-14');
   });
 
   test('名簿にいない Key なら止まる', () => {
@@ -371,7 +371,7 @@ describe('roles と close', () => {
     w.wire.close('file:2');
     expect(roles(w.tpm)).toEqual([
       '名簿:',
-      '- app#12  Sustaining app#12  消えた（居場所が無い。tpm assign で起こし直すか、tpm close で名簿から消す）',
+      '- app#12  Sustaining app#12  消えた（居場所が無い。roster assign で起こし直すか、roster close で名簿から消す）',
       `- t-a3b4  SWE t-a3b4: 計画と実装  file:1（作業中: 依頼書を読む）  依頼書: ${BRIEF}`,
     ]);
   });
@@ -395,7 +395,7 @@ describe('run-role', () => {
     assign(w.tpm, 'app#12', { role: 'sustaining-engineer', wait: 0 });
     expect(claudeArgs(requireRole(w.tpm, 'app#12'), '/r')).toEqual([
       '--settings',
-      '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"/r/cli/bin/tpm guard"}]}],"SessionStart":[{"hooks":[{"type":"command","command":"/r/cli/bin/tpm castlist session-start"},{"type":"command","command":"/r/cli/bin/tpm returned check"}]}],"SessionEnd":[{"hooks":[{"type":"command","command":"/r/cli/bin/tpm castlist session-end"}]}]}}',
+      '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"/r/cli/bin/roster guard"}]}],"SessionStart":[{"hooks":[{"type":"command","command":"/r/cli/bin/roster castlist session-start"},{"type":"command","command":"/r/cli/bin/roster returned check"}]}],"SessionEnd":[{"hooks":[{"type":"command","command":"/r/cli/bin/roster castlist session-end"}]}]}}',
       '--model',
       'claude-opus-5-5',
       '--effort',
@@ -414,16 +414,16 @@ describe('run-role', () => {
     const args = claudeArgs({ key: 'audit', role: 'auditor', title: 'Audit', cwd: '/p', addDirs: ['/r/skill-sets/core'], ...ROLES.auditor.defaults }, '/r');
     expect(JSON.parse(args[1] ?? '')).toEqual({
       hooks: {
-        PreToolUse: [{ matcher: 'Bash|Edit|Write|NotebookEdit', hooks: [{ type: 'command', command: '/r/cli/bin/tpm guard' }] }],
-        SessionStart: [{ hooks: [{ type: 'command', command: '/r/cli/bin/tpm audit fresh' }, { type: 'command', command: '/r/cli/bin/tpm castlist session-start' }, { type: 'command', command: '/r/cli/bin/tpm returned check' }] }],
-        SessionEnd: [{ hooks: [{ type: 'command', command: '/r/cli/bin/tpm castlist session-end' }] }],
+        PreToolUse: [{ matcher: 'Bash|Edit|Write|NotebookEdit', hooks: [{ type: 'command', command: '/r/cli/bin/roster guard' }] }],
+        SessionStart: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster audit fresh' }, { type: 'command', command: '/r/cli/bin/roster castlist session-start' }, { type: 'command', command: '/r/cli/bin/roster returned check' }] }],
+        SessionEnd: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-end' }] }],
       },
     });
     expect(args.slice(2, 8)).toEqual(['--model', 'claude-fable-5-2', '--effort', 'high', '--permission-mode', 'bypassPermissions']);
     expect(args.slice(-2)).toEqual(['--', '/audit hello']);
   });
 
-  test('担当に project・状態の folder・Key・役割と、tpm の在り処を渡し、置き場の CLI に消させない', () => {
+  test('担当に project・状態の folder・Key・役割と、roster の在り処を渡し、置き場の CLI に消させない', () => {
     const w = world();
     assign(w.tpm, 't-x7k2', SE);
     expect(roleEnv(requireRole(w.tpm, 't-x7k2'), '/p', '/s', '/r', { PATH: '/usr/bin', HOME: '/h' })).toEqual({

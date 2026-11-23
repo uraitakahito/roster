@@ -11,9 +11,9 @@ permissions:
   contents: read
 jobs:
   cli:
-    # tpm page put・path・list・import・delete を、.pagetray-version の版の pagetray に向けて流す。
-    # tpm file put・path・list・delete は、置き場に file のエンドポイントがある版（0.4.0 から）でだけ流れる（無い版では試験が飛ばす）。
-    # pagetray の image は arm64 だけ（tpm を動かす Apple silicon の機械と同じ）なので、arm64 の runner で流す。
+    # roster page put・path・list・import・delete を、.pagetray-version の版の pagetray に向けて流す。
+    # roster file put・path・list・delete は、置き場に file のエンドポイントがある版（0.4.0 から）でだけ流れる（無い版では試験が飛ばす）。
+    # pagetray の image は arm64 だけ（roster を動かす Apple silicon の機械と同じ）なので、arm64 の runner で流す。
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
@@ -38,7 +38,7 @@ jobs:
           cache-dependency-path: cli/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
         working-directory: cli
-      - name: tpm の命令を本物に向けて流す
+      - name: roster の命令を本物に向けて流す
         working-directory: cli
         # $TPM_E2E_PAGES_URL が無いと、この試験は飛ばされる（ふだんの pnpm test）。ここでは必ず渡す。
         run: TPM_E2E_PAGES_URL=http://127.0.0.1:8801 pnpm exec vitest run test/pagetray-e2e.test.ts

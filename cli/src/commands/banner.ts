@@ -1,9 +1,9 @@
-// tpm banner …: 通知のバナー（cmux の通知の desktop）を、居場所の役割 × きっかけで出すか消すか。
+// roster banner …: 通知のバナー（cmux の通知の desktop）を、居場所の役割 × きっかけで出すか消すか。
 // hook は cmux の通知の hook（~/.config/cmux/cmux.json の notifications.hooks）から通知ごとに呼ばれる。
 // cmux は hook が失敗・時間切れ・JSON の誤りになると、いつものバナーに加えて「Notification Hook Failed」を出すので、hook はどんな時も正しい JSON を返して 0 で終わる。
 import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { isAbsolute, join, relative } from 'node:path';
+import { basename, isAbsolute, join, relative } from 'node:path';
 import { BANNER_ROLES, bannerConfigFile, CATEGORY_TRIGGER, choiceOf, decide, toBannerConfig, TRIGGERS, type BannerConfig } from '../banner.ts';
 import type { Context } from '../context.ts';
 import type { Exec } from '../exec.ts';
@@ -19,7 +19,7 @@ import { waitFile, type WaitRecord } from './messages.ts';
 const LOG_DAYS = 7;
 /** cmux.json の hook の id。 */
 export const HOOK_ID = 'tpm-banner';
-/** cmux が hook を待つ秒（既定の 20 は長い。tpm が決めるのは 0.3 秒ほど）。 */
+/** cmux が hook を待つ秒（既定の 20 は長い。roster が決めるのは 0.3 秒ほど）。 */
 const HOOK_TIMEOUT_SECONDS = 5;
 
 /** cmux が hook の標準入力に渡す JSON のうち、使う所。 */
@@ -77,7 +77,7 @@ export function readBannerConfig(env: NodeJS.ProcessEnv): BannerConfig {
 
 /**
  * cmux の通知 1 件の JSON を読み、cmux に返す JSON の字を返す。替えない時は `{}`（cmux はそのまま出す）。
- * 名簿に無い居場所（tpm の外の Claude Code）と、知らない category は替えない。
+ * 名簿に無い居場所（roster の外の Claude Code）と、知らない category は替えない。
  */
 export function bannerHook(input: string, deps: { env: NodeJS.ProcessEnv, exec: Exec, now: Date }): string {
   const unchanged = '{}';
@@ -122,17 +122,17 @@ function realpathOrUndefined(path: string): string | undefined {
 }
 
 /**
- * cmux.json に足す hook の命令。hook は cmux の app から PATH が既定だけで動くが、node と cmux は入口（cli/bin/tpm）が自分で見つけるので、
+ * cmux.json に足す hook の命令。hook は cmux の app から PATH が既定だけで動くが、node と cmux は入口（cli/bin/roster）が自分で見つけるので、
  * 命令は入口を呼ぶだけにして Node・cmux の path を書かない（Node を上げても替えなくてよい）。
- * 入口は、~/.local/bin/tpm がこの repo を指していればそれ、home の下なら "$HOME/…"、ほかは絶対 path で書く。
+ * 入口は、~/.local/bin/roster がこの repo を指していればそれ、home の下なら "$HOME/…"、ほかは絶対 path で書く。
  * "$HOME/…" は二重引用符の中で $HOME だけを展開させるので、残りの path が二重引用符の中で意味を持つ字を含む時は絶対 path にする。
  */
 export function hookCommand(root: string, env: NodeJS.ProcessEnv): string {
-  const entry = join(root, 'cli', 'bin', 'tpm');
+  const entry = join(root, 'cli', 'bin', 'roster');
   const home = env.HOME === undefined || env.HOME === '' ? undefined : realpathOrUndefined(env.HOME);
   if (home !== undefined) {
     const real = realpathOrUndefined(entry) ?? entry;
-    if (realpathOrUndefined(join(home, '.local', 'bin', 'tpm')) === real) return '"$HOME/.local/bin/tpm" banner hook';
+    if (realpathOrUndefined(join(home, '.local', 'bin', 'roster')) === real) return '"$HOME/.local/bin/roster" banner hook';
     const rest = relative(home, entry);
     if (rest !== '' && !rest.startsWith('..') && !isAbsolute(rest) && /^[A-Za-z0-9._/-]+$/.test(rest)) return `"$HOME/${rest}" banner hook`;
   }
@@ -144,16 +144,21 @@ export function hookEntry(root: string, env: NodeJS.ProcessEnv): { id: string, c
   return { id: HOOK_ID, command: hookCommand(root, env), timeoutSeconds: HOOK_TIMEOUT_SECONDS };
 }
 
-/** cmux.json の hook の命令が、今 tpm banner setup が出す字と違う訳。同じなら undefined。 */
+/** cmux.json の hook の命令が、今 roster banner setup が出す字と違う訳。同じなら undefined。 */
 export function staleHook(command: string, root: string, env: NodeJS.ProcessEnv): string | undefined {
   if (command === hookCommand(root, env)) return undefined;
-  return command.startsWith('PATH=') ? '古い形です（Node と cmux の path を書いた形）' : '今の tpm の在り処と違います（repo を移した）';
+  if (command.startsWith('PATH=')) return '古い形です（Node と cmux の path を書いた形）';
+  // 道具の名を roster に替える前の入口（cli/bin の古い名）。切り替えの間は古い入口が hook を渡すので動くが、張り直すまで知らせる。
+  // 入口は命令の 1 語目（引用を外した物）。後ろに何か書き足してあっても（… banner hook 2>/dev/null など）見分ける。
+  const first = /^\s*(?:"([^"]*)"|'([^']*)'|(\S+))/.exec(command);
+  const entry = first?.[1] ?? first?.[2] ?? first?.[3] ?? '';
+  return basename(entry) === 'roster' ? '今の roster の在り処と違います（repo を移した）' : '古い入口です（道具の名を roster に替えた。cli/bin/roster を呼ぶ字に張り直す）';
 }
 
 /** cmux の設定の file。 */
 export const cmuxConfigFile = (): string => join(homedir(), '.config', 'cmux', 'cmux.json');
 
-/** cmux.json に tpm の hook があるか。読めなければ undefined。 */
+/** cmux.json に roster の hook があるか。読めなければ undefined。 */
 export function findHook(file: string = cmuxConfigFile()): { command: string, enabled: boolean } | undefined {
   if (!existsSync(file)) return undefined;
   const config = parseJsonc(readFileSync(file, 'utf8')) as { notifications?: { hooks?: { id?: string, command?: string, enabled?: boolean }[] } };
@@ -161,7 +166,7 @@ export function findHook(file: string = cmuxConfigFile()): { command: string, en
   return hook?.command === undefined ? undefined : { command: hook.command, enabled: hook.enabled !== false };
 }
 
-/** `tpm banner setup`: cmux.json に足す字と手順を出す（cmux.json は利用者の設定なので、tpm は書き替えない）。 */
+/** `roster banner setup`: cmux.json に足す字と手順を出す（cmux.json は利用者の設定なので、roster は書き替えない）。 */
 export function bannerSetup(root: string, env: NodeJS.ProcessEnv): string[] {
   const entry = JSON.stringify(hookEntry(root, env));
   return [
@@ -174,11 +179,11 @@ export function bannerSetup(root: string, env: NodeJS.ProcessEnv): string[] {
     '  }',
     '',
     `何を出すかは ${bannerConfigFile(env)} で選ぶ（無ければ既定: TPM 担当と Auditor が Product Manager を待つ回と、どこでも許可/質問だけ出す。消す時は音も消す）。`,
-    '足した後に cmux の設定を読み直し（Cmd+Shift+, か cmux reload-config）、tpm banner check で確かめる。node と cmux は入口（cli/bin/tpm）が自分で見つけるので、Node を上げても命令は替えなくてよい。repo を移したら、これを打ち直して命令を替える。',
+    '足した後に cmux の設定を読み直し（Cmd+Shift+, か cmux reload-config）、roster banner check で確かめる。node と cmux は入口（cli/bin/roster）が自分で見つけるので、Node を上げても命令は替えなくてよい。repo を移したら、これを打ち直して命令を替える。',
   ];
 }
 
-/** `tpm banner check`: 設定と cmux.json の hook を確かめる。ok が false なら直す物がある。 */
+/** `roster banner check`: 設定と cmux.json の hook を確かめる。ok が false なら直す物がある。 */
 export function bannerCheck(root: string, env: NodeJS.ProcessEnv, cmuxFile: string = cmuxConfigFile()): { ok: boolean, lines: string[] } {
   const lines: string[] = [];
   let ok = true;
@@ -207,7 +212,7 @@ export function bannerCheck(root: string, env: NodeJS.ProcessEnv, cmuxFile: stri
   const stale = hook === undefined ? undefined : staleHook(hook.command, root, env);
   if (hook === undefined) {
     ok = false;
-    lines.push(`cmux.json に hook がありません（tpm banner setup の字を ${cmuxFile} に足す）`);
+    lines.push(`cmux.json に hook がありません（roster banner setup の字を ${cmuxFile} に足す）`);
   }
   else if (!hook.enabled) {
     ok = false;
@@ -215,7 +220,7 @@ export function bannerCheck(root: string, env: NodeJS.ProcessEnv, cmuxFile: stri
   }
   else if (stale !== undefined) {
     ok = false;
-    lines.push(`cmux.json の hook の命令が${stale}。tpm banner setup の字に替える: ${hook.command}`);
+    lines.push(`cmux.json の hook の命令が${stale}。roster banner setup の字に替える: ${hook.command}`);
   }
   else {
     lines.push(`cmux.json の hook: あり（${cmuxFile}）`);
@@ -223,7 +228,7 @@ export function bannerCheck(root: string, env: NodeJS.ProcessEnv, cmuxFile: stri
   return { ok, lines };
 }
 
-/** `tpm banner log`: この project の hook の記録を新しい順に出す。 */
+/** `roster banner log`: この project の hook の記録を新しい順に出す。 */
 export function bannerLog(ctx: Context, limit: number): string[] {
   const all = ctx.state.lines<BannerLog>('banner.jsonl');
   if (all.length === 0) return ['記録なし（hook がまだ動いていないか、この project の居場所の通知が無い）'];

@@ -63,7 +63,7 @@ export class JiraTracker implements Tracker {
 
   comment(key: string, note: Note): void {
     // acli は ADF をファイルから読む。
-    const dir = mkdtempSync(join(tmpdir(), 'tpm-jira-'));
+    const dir = mkdtempSync(join(tmpdir(), 'roster-jira-'));
     try {
       const file = join(dir, 'comment.json');
       writeFileSync(file, JSON.stringify(noteToAdf(note)));

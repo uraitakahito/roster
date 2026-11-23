@@ -8,7 +8,7 @@ export const SETTINGS_ENV = { model: 'TPM_MODEL', effort: 'TPM_EFFORT', permissi
 /** 1 つの層で決めた値（書かなかった欄は undefined）。 */
 export type SettingsLayer = { [K in keyof RoleSettings]?: string | undefined };
 
-/** env に書いてある（空でない）SETTINGS_ENV の名前と値。tpm start が 1 行の頭に写し、TPM 担当とその担当に届ける。 */
+/** env に書いてある（空でない）SETTINGS_ENV の名前と値。roster start が 1 行の頭に写し、TPM 担当とその担当に届ける。 */
 export function presentSettingsEnv(env: NodeJS.ProcessEnv): [string, string][] {
   return Object.values(SETTINGS_ENV).flatMap(name => env[name] ? [[name, env[name]] as [string, string]] : []);
 }

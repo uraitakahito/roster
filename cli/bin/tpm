@@ -1,26 +1,29 @@
 #!/bin/sh
-# tpm: src/cli.ts を、この repo の .node-version の Node で直に動かす（Node が型を消して動かすので build は要らない）。
-# nodenv の node の shim は、node に渡した script の folder から .node-version を探す。
-# ~/.local/bin/tpm のような repo の外の symlink を #!/usr/bin/env node で直に動かすと、探す先がその symlink の
-# folder になり、作業する folder の .node-version で動いてしまう。だから readlink -f で本当の在り処を求め、
-# その path を node に渡す（nodenv が無ければ、ただ node で動かすだけ）。
+# 道具の古い名の入口。道具の名を tpm から roster に替えた（t-v28j）後、切り替えの間だけ残す。
+# 動いている席の hook（Claude Code の guard など）と、cmux.json のバナーの hook、名簿に書いた居場所の命令（run-role）は、
+# この入口を絶対 path で呼ぶ。入口が無いと hook は「命令が無い」で落ち、Claude Code はそれを止める答えと読まないので、
+# guard が黙って効かなくなる。だから、それらの命令だけを隣の roster に渡す（exec なので、標準入出力と exit の値はそのまま）。
+# 人と担当が打つ命令は渡さず、新しい名を案内して止まる。全部の席を起こし直した後の PR で、この file を消す。
 set -eu
-cli=$(CDPATH='' cd -- "$(dirname -- "$(readlink -f -- "$0")")/.." && pwd)
-if [ ! -d "$cli/node_modules" ]; then
-  echo "tpm: $cli/node_modules がありません。先に cd $cli && pnpm install --frozen-lockfile を打ってください" >&2
-  exit 1
+here=$(CDPATH='' cd -- "$(dirname -- "$(readlink -f -- "$0")")" && pwd)
+case "${1:-} ${2:-}" in
+  'guard '* | 'run-role '* | 'castlist session-start' | 'castlist session-end' | 'returned check' | 'audit fresh' | 'banner hook')
+    exec "$here/roster" "$@"
+    ;;
+esac
+# 案内に出す命令は、引数を shell に写せる形で引用する（空白や引用符を含む引数が割れないように）。
+args=''
+for a in "$@"; do
+  case $a in
+    '' | *[!A-Za-z0-9._/:=@%+,-]*) a="'$(printf %s "$a" | sed "s/'/'\\\\''/g")'" ;;
+  esac
+  args="$args $a"
+done
+# $TPM_KEY が無いのは、TPM 担当の居場所か Product Manager の shell（担当の居場所には roster run-role が付ける）。
+if [ -z "${TPM_KEY:-}" ]; then
+  who='TPM 担当の居場所なら、Product Manager が roster start の 1 行で起こし直す'
+else
+  who='この居場所が古い名の skill を読んでいるなら、TPM 担当に起こし直しを頼む'
 fi
-# cmux の通知の hook のように、PATH が macOS の既定（/usr/bin:/bin:/usr/sbin:/sbin）だけで呼ばれた時のため、
-# node（nodenv の shim）と cmux（app の中）を自分で見つける。だから hook の命令に Node や cmux の path を書かなくてよい。
-# PATH に node・cmux があれば（shell から打った時）何も足さない。
-if ! command -v node >/dev/null 2>&1; then
-  shims="${NODENV_ROOT:-${HOME:-}/.nodenv}/shims"
-  if [ ! -x "$shims/node" ]; then
-    echo "tpm: node が見つかりません（PATH と $shims/node を探した）" >&2
-    exit 127
-  fi
-  PATH="$shims:$PATH"
-fi
-command -v cmux >/dev/null 2>&1 || PATH="$PATH:/Applications/cmux.app/Contents/Resources/bin"
-export PATH
-exec node "$cli/src/cli.ts" "$@"
+echo "tpm: 道具の名は roster に替わりました。roster$args を打ってください（入口: $here/roster）。$who" >&2
+exit 1

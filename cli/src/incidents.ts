@@ -1,5 +1,5 @@
 // 台帳: 思わぬ出来事（信頼性・安全性・効率性が落ちた時）を 1 件 1 ファイルで覚える。状態の folder の incidents/<番号>.jsonc。
-// 書くのは事実だけ（何が起きたか）。原因は、後で監査の担当が調べる。中身は tpm を動かす機械の外に写さない。
+// 書くのは事実だけ（何が起きたか）。原因は、後で監査の担当が調べる。中身は roster を動かす機械の外に写さない。
 import type { Context } from './context.ts';
 import { actor } from './evidence.ts';
 import { TpmError } from './skill-sets.ts';
@@ -19,7 +19,7 @@ export function incidentType(value: string): IncidentType {
 
 /**
  * 件がどこから入ったか。add は TPM 担当が書いた、report は担当が書いた（【incident】）、
- * remaining は【done】の「残り」・【end】の「残っている物」、pm-hand は Product Manager に頼んだ手の操作（`tpm wait pm --hand`）。
+ * remaining は【done】の「残り」・【end】の「残っている物」、pm-hand は Product Manager に頼んだ手の操作（`roster wait pm --hand`）。
  */
 export type IncidentSource = 'add' | 'report' | 'remaining' | 'pm-hand';
 
@@ -57,7 +57,7 @@ export interface Incident {
   lesson?: string
   /** 調べない訳（dropped）・PR も教訓も無く済んだ訳（closed）。 */
   why?: string
-  /** 時系列のページの URL（tpm incident timeline が置いた、いちばん新しい物）。 */
+  /** 時系列のページの URL（roster incident timeline が置いた、いちばん新しい物）。 */
   timeline?: string
   /** 扱いを替えた時刻。 */
   decidedAt?: string
@@ -78,7 +78,7 @@ export function readIncidents(ctx: Context): Incident[] {
 /** 番号の件を読む。無ければ止まる。 */
 export function requireIncident(ctx: Context, n: number): Incident {
   const incident = ctx.state.read<Incident>(fileOf(n));
-  if (incident === undefined) throw new TpmError(`台帳に #${n} はありません（tpm incident review --all で見る）`);
+  if (incident === undefined) throw new TpmError(`台帳に #${n} はありません（roster incident review --all で見る）`);
   return incident;
 }
 
@@ -121,7 +121,7 @@ export function addIncident(ctx: Context, fields: NewIncident): Incident {
 }
 
 /**
- * 未決の件に、同じ中身の続き（【end】の「残っている物」・`tpm wait pm --hand` の打ち直し）を寄せ、新しい件を作らない。
+ * 未決の件に、同じ中身の続き（【end】の「残っている物」・`roster wait pm --hand` の打ち直し）を寄せ、新しい件を作らない。
  * 続きの字（body）が件の事実にもう入っていれば、足さない。寄せた後の件を返す。
  */
 export function foldIntoIncident(ctx: Context, incident: Incident, more: string, body: string): Incident {
@@ -161,5 +161,5 @@ export function openLine(ctx: Context): string[] {
   const open = readIncidents(ctx).filter(i => i.status === 'open');
   if (open.length === 0) return [];
   const severe = open.filter(i => i.severe).length;
-  return [`台帳: 未決 ${open.length} 件${severe === 0 ? '' : `（重い ${severe}）`}。tpm incident review で見る`];
+  return [`台帳: 未決 ${open.length} 件${severe === 0 ? '' : `（重い ${severe}）`}。roster incident review で見る`];
 }

@@ -13,7 +13,7 @@ const skill = (skillSet: string, name: string, withSkillMd = true): void => {
 };
 
 beforeAll(() => {
-  root = realpathSync(mkdtempSync(join(tmpdir(), 'tpm-verbose-')));
+  root = realpathSync(mkdtempSync(join(tmpdir(), 'roster-verbose-')));
   skill('core', 'tpm');
   skill('core', 'devops-engineer');
   skill('core', '_shared', false);

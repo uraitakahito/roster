@@ -1,6 +1,6 @@
 // repo の Markdown の中の ```json と ```jsonc の塊と、*.jsonc の file を見る（pnpm run format:check）。
 //
-// 1. 読める（<id> などの置き字は、文字列の中にある限り読める）。json は JSON.parse、jsonc は tpm が
+// 1. 読める（<id> などの置き字は、文字列の中にある限り読める）。json は JSON.parse、jsonc は roster が
 //    config.jsonc を読むのと同じ parseJsonc（cli/src/jsonc.ts。Node が型を消して動かす）で読む
 // 2. Prettier（--parser json か jsonc、既定の設定）で整えた形と同じ
 //

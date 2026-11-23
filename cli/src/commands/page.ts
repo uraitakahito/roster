@@ -1,5 +1,5 @@
 // 依頼書と成果のページを、置き場（別の repo の pagetray。127.0.0.1 で待つ、ページを DB に持つサーバー。頼む足場は store.ts）に置く・読む・探す・消す。
-// 番号は置き場が決める。置いた・読んだページは、tpm を動かす機械の控えの folder にも写す（Read tool で読むためと、置き場が止まっても読めるため）。
+// 番号は置き場が決める。置いた・読んだページは、roster を動かす機械の控えの folder にも写す（Read tool で読むためと、置き場が止まっても読めるため）。
 // ページが参照する file（画像など。file.ts）も、読む時に控えに写し、取り込む・消す時に一緒に扱う。
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
@@ -19,7 +19,7 @@ export const PAGE_KINDS = ['brief', 'confirm', 'proposal', 'plan', 'result', 're
 /** ページの種類の名前。 */
 export type PageKind = typeof PAGE_KINDS[number];
 /**
- * tpm page put が、置く前に未読のメッセージで 1 度止まる種類（担当の成果と確認、Staff Engineer 担当のレビュー）。
+ * roster page put が、置く前に未読のメッセージで 1 度止まる種類（担当の成果と確認、Staff Engineer 担当のレビュー）。
  * 相手の答えを読む前に、古い前提のページを置かないため（台帳 #45）。依頼書・課題の写し・時系列・監査のページは止めない。
  */
 const READ_FIRST: readonly PageKind[] = ['confirm', 'proposal', 'plan', 'result', 'review'];
@@ -42,13 +42,13 @@ export interface PageRecord {
   size: number
   /** 置き場の中の path（`/<project>/<Key>/<種類>-<番号>.html`）。 */
   path: string
-  /** 返事待ちにした時刻（tpm ask pm）。返事を求めていないページと、0.5.0 より前の置き場の答えには無い。 */
+  /** 返事待ちにした時刻（roster ask pm）。返事を求めていないページと、0.5.0 より前の置き場の答えには無い。 */
   asked_at?: string
-  /** 答えた時刻（tpm answer）。まだ答えていなければ無い。 */
+  /** 答えた時刻（roster answer）。まだ答えていなければ無い。 */
   answered_at?: string
   /** 誰の返事を待つか（review・tpm）。Product Manager を待つページと、0.8.0 より前の置き場の答えには無い。 */
   waits_on?: string
-  /** レビューの判定（tpm report review）。0.8.0 から。 */
+  /** レビューの判定（roster report review）。0.8.0 から。 */
   verdict?: string
   /** 見た物・見てほしい物（置き場のページの path か https の URL）。0.8.0 から。無ければ欄が無い。 */
   targets?: string[]
@@ -83,7 +83,7 @@ function assertReadBeforePut(ctx: Context, keyOption?: string): void {
   if (role !== undefined) assertRead(ctx, `${role.key} の担当`, role.title, 'put');
 }
 
-/** file の中身か字をページとして置き、控えの path と URL を返す（pagePut と、tpm assign の課題の写し）。 */
+/** file の中身か字をページとして置き、控えの path と URL を返す（pagePut と、roster assign の課題の写し）。 */
 export function putPage(ctx: Context, source: { file: string } | { text: string }, kind: PageKind, keyOption?: string): { path: string, url: string } {
   const key = requireKey(ctx, keyOption);
   const query = new URLSearchParams({
@@ -120,7 +120,7 @@ function post(ctx: Context, source: { file: string } | { text: string }, query: 
 /**
  * 置き場の URL を、控えの file の path にする（Read tool で読むため）。控えに無ければ、置き場から取って控えに写す。
  * ページが相対で参照する file（`files/…`・`../<Key>/files/…`）も、控えに無ければ取って、ページから同じ相対の所に写す（取れなければ注意の行を足す）。
- * 前の置き場の URL（8800）も受ける。置き場の外の URL・無いページは誤り。file の URL は tpm file path に回す。
+ * 前の置き場の URL（8800）も受ける。置き場の外の URL・無いページは誤り。file の URL は roster file path に回す。
  */
 export function pagePath(ctx: Context, url: string): string[] {
   const rest = inStore(ctx.env, url);
@@ -134,7 +134,7 @@ export function pagePath(ctx: Context, url: string): string[] {
     }
   });
   if (parts.some(p => p === '' || p === '.' || p === '..' || p.includes('/'))) throw new TpmError(`置き場の file を指す URL ではありません: ${url}`);
-  if (parts.length === 4 && parts[2] === 'files') throw new TpmError(`ページでなく file の URL です。tpm file path ${url} で読んでください`);
+  if (parts.length === 4 && parts[2] === 'files') throw new TpmError(`ページでなく file の URL です。roster file path ${url} で読んでください`);
   const path = join(pagesDir(ctx.env), ...parts);
   const [project = '', key = '', file = ''] = parts;
   const page = parts.length === 3 && PAGE_FILE.test(file);
@@ -154,7 +154,7 @@ function fetchPage(ctx: Context, storePath: string, path: string): void {
   throw new TpmError(`置き場にページがありません（${code}）: ${pagesUrl(ctx.env)}${storePath}`);
 }
 
-/** `tpm page list` の旗。 */
+/** `roster page list` の旗。 */
 export interface PageListOptions {
   key?: string
   role?: string
@@ -215,11 +215,11 @@ export function pageList(ctx: Context, options: PageListOptions): string[] {
 }
 
 /**
- * ページの返事の状態を、手で直す（TPM 担当だけ）。いつもは tpm ask pm が返事待ちに、tpm answer が答えたにする。
- * 使うのは、tpm answer を通らずに済んだ確認（取り下げた・次の依頼書で答えた）と、置き場が応えない間に送った確認。
+ * ページの返事の状態を、手で直す（TPM 担当だけ）。いつもは roster ask pm が返事待ちに、roster answer が答えたにする。
+ * 使うのは、roster answer を通らずに済んだ確認（取り下げた・次の依頼書で答えた）と、置き場が応えない間に送った確認。
  */
 export function pageReply(ctx: Context, urls: string[], options: { waiting?: boolean, answered?: boolean, on?: string }): string[] {
-  if (roleOf(ctx.env) !== undefined) throw new TpmError('ページの返事の状態を手で直せるのは TPM 担当だけです。直すページの URL と訳を、tpm ask tpm で TPM 担当に送って頼んでください');
+  if (roleOf(ctx.env) !== undefined) throw new TpmError('ページの返事の状態を手で直せるのは TPM 担当だけです。直すページの URL と訳を、roster ask tpm で TPM 担当に送って頼んでください');
   if (options.waiting === options.answered) throw new TpmError('--waiting（返事待ちにする）か --answered（答えたにする）の、どちらか 1 つを付けてください');
   if (urls.length === 0) throw new TpmError('ページの URL を 1 つ以上書いてください');
   const state: ReplyState = options.answered ? 'answered' : 'waiting';
@@ -233,13 +233,13 @@ export function pageReply(ctx: Context, urls: string[], options: { waiting?: boo
     if (result === 'down') throw down(ctx, '返事の状態は書いていません。');
     if (result === 'old') {
       throw new TpmError(on === 'pm'
-        ? '置き場（pagetray）の版が古く、返事の状態を持てません（0.5.0 から）。tpm ask devops で置き場の版を上げるよう頼んでください'
-        : `置き場（pagetray）の版が古く、待ちの相手（--on）を持てません（${PARTY_SINCE} から）。何も書いていません。tpm ask devops で置き場の版を上げるよう頼んでください`);
+        ? '置き場（pagetray）の版が古く、返事の状態を持てません（0.5.0 から）。roster ask devops で置き場の版を上げるよう頼んでください'
+        : `置き場（pagetray）の版が古く、待ちの相手（--on）を持てません（${PARTY_SINCE} から）。何も書いていません。roster ask devops で置き場の版を上げるよう頼んでください`);
     }
     if (result === 'conflict') {
       throw new TpmError(state === 'answered'
-        ? `そのページは、--on ${on} の相手の返事を待っていません（置き場は何も替えていない）: ${url}。今の待ちは tpm page list --reply waiting --on <相手> で見る`
-        : `そのページは、今ほかの相手の返事を待っています（置き場は待ちを移さない。何も替えていない）: ${url}。今の待ちは tpm page list --reply waiting --on <相手> で見る。先にその待ちを --answered --on <相手> で外す`);
+        ? `そのページは、--on ${on} の相手の返事を待っていません（置き場は何も替えていない）: ${url}。今の待ちは roster page list --reply waiting --on <相手> で見る`
+        : `そのページは、今ほかの相手の返事を待っています（置き場は待ちを移さない。何も替えていない）: ${url}。今の待ちは roster page list --reply waiting --on <相手> で見る。先にその待ちを --answered --on <相手> で外す`);
     }
     throw new TpmError(`そのページは置き場にありません: ${url}`);
   });
@@ -292,12 +292,12 @@ export function pageImport(ctx: Context): string[] {
   return [
     `入れた: ${added.length} 枚・もう入っていた: ${same} 枚・消したページ: ${removed} 枚・ぶつかった: ${conflicts.length} 枚（控えの folder: ${dir}）`,
     ...added.map(path => `+ ${pagesUrl(ctx.env)}${path}`),
-    ...conflicts.map(file => `! 同じ番号に別の中身がある（入れていない。要るなら tpm page put で置き直す）: ${file}`),
+    ...conflicts.map(file => `! 同じ番号に別の中身がある（入れていない。要るなら roster page put で置き直す）: ${file}`),
     ...fileImport(ctx),
   ];
 }
 
-/** `tpm page delete` の旗。 */
+/** `roster page delete` の旗。 */
 export interface PageDeleteOptions {
   /** この Key のページをみな消す。 */
   key?: string
@@ -329,7 +329,7 @@ interface DeleteTarget {
  * 消した後に、控えの file（Key・project ごとなら folder）も消す。
  */
 export function pageDelete(ctx: Context, urls: string[], options: PageDeleteOptions): string[] {
-  if (roleOf(ctx.env) !== undefined) throw new TpmError('ページを消せるのは TPM 担当だけです。消すページの URL と訳を、tpm ask tpm で TPM 担当に送って頼んでください');
+  if (roleOf(ctx.env) !== undefined) throw new TpmError('ページを消せるのは TPM 担当だけです。消すページの URL と訳を、roster ask tpm で TPM 担当に送って頼んでください');
   const targets = deleteTargets(ctx, urls, options);
   const dir = pagesDir(ctx.env);
   const found = targets.map((target) => {

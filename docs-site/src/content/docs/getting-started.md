@@ -20,48 +20,48 @@ pnpm は Node の version ごとに入る。`.node-version` を上げたら、�
 
 ## 起動のしかた
 
-`cli/bin/tpm start` が出す 1 行を写して打つ。
+`cli/bin/roster start` が出す 1 行を写して打つ。
 
 ```sh
 cd </foo/bar/roster> # rosterの置き場所
-cd cli && pnpm install --frozen-lockfile   # build は無い（tpm は src/ を node で直に動かす）
+cd cli && pnpm install --frozen-lockfile   # build は無い（roster は src/ を node で直に動かす）
 cd </your/workspace> # あなたが作業する場所
-/foo/bar/roster/cli/bin/tpm start --verbose             # 今いる folder で TPM 担当を起こす 1 行を出す
-/foo/bar/roster/cli/bin/tpm start --verbose <folder>    # その folder で起こす 1 行を出す
+/foo/bar/roster/cli/bin/roster start --verbose             # 今いる folder で TPM 担当を起こす 1 行を出す
+/foo/bar/roster/cli/bin/roster start --verbose <folder>    # その folder で起こす 1 行を出す
 ```
 
-`tpm start` は claude を起こさない。folder と、その直下の folder の `.claude/roles/config.jsonc`（[設定](/configuration/#直下の-folder-の設定)）を読み、`skill-sets` を確かめて、次の 1 行を出すだけ。それをそのまま打てばClaude Codeが適切に起動する。`PATH=…` は、TPM 担当が `tpm` を名前だけで打てるようにする。`--settings` は、shell の命令を実行の前に `tpm guard` に見せる hook（[担当のあいだの決まり](/protocol/#guard)）。`<repo>` は roster を置いた場所（上の例なら `/foo/bar/roster`）に替わる。違う場所に置いたときも、`<repo>` のところだけが変わる（場所に空白などがあれば `tpm start` が引用符も付けるので、出た 1 行をそのまま写す）。
+`roster start` は claude を起こさない。folder と、その直下の folder の `.claude/roles/config.jsonc`（[設定](/configuration/#直下の-folder-の設定)）を読み、`skill-sets` を確かめて、次の 1 行を出すだけ。それをそのまま打てばClaude Codeが適切に起動する。`PATH=…` は、TPM 担当が `roster` を名前だけで打てるようにする。`--settings` は、shell の命令を実行の前に `roster guard` に見せる hook（[担当のあいだの決まり](/protocol/#guard)）。`<repo>` は roster を置いた場所（上の例なら `/foo/bar/roster`）に替わる。違う場所に置いたときも、`<repo>` のところだけが変わる（場所に空白などがあれば `roster start` が引用符も付けるので、出た 1 行をそのまま写す）。
 
 ```sh
 # skill-sets が無い（既定）
-cd <folder> && PATH=<repo>/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"<repo>/cli/bin/tpm guard"}]}]}}' --add-dir <repo>/skill-sets/core -- /tpm
+cd <folder> && PATH=<repo>/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"<repo>/cli/bin/roster guard"}]}]}}' --add-dir <repo>/skill-sets/core -- /tpm
 # "skill-sets": ["dependabot"]
-cd <folder> && PATH=<repo>/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"<repo>/cli/bin/tpm guard"}]}]}}' --add-dir <repo>/skill-sets/core <repo>/skill-sets/dependabot -- /tpm
+cd <folder> && PATH=<repo>/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"<repo>/cli/bin/roster guard"}]}]}}' --add-dir <repo>/skill-sets/core <repo>/skill-sets/dependabot -- /tpm
 ```
 
 **最初の入力は `--` の後に置く**（`--add-dir` は後ろの語もまとめて folder として読むため）。
 
 ### model と effort を替える
 
-上の 1 行の `--model claude-opus-5-5 --effort medium --permission-mode bypassPermissions` は既定。替えるときは 1 行を書き替えず、環境変数 `TPM_MODEL`・`TPM_EFFORT`・`TPM_PERMISSION_MODE` を書いてから `tpm start` を打つ。
+上の 1 行の `--model claude-opus-5-5 --effort medium --permission-mode bypassPermissions` は既定。替えるときは 1 行を書き替えず、環境変数 `TPM_MODEL`・`TPM_EFFORT`・`TPM_PERMISSION_MODE` を書いてから `roster start` を打つ。
 
 ```sh
 # いつも替える: shell の profile（~/.zshrc など）で export する。TPM 担当にも、TPM 担当が起こす担当にも効く
 export TPM_MODEL=claude-fable-5-2
 export TPM_EFFORT=medium
 
-# 1 回だけ替える: tpm start の前に付ける。出る 1 行を打った TPM 担当と、その TPM 担当が起こす担当に効く
-TPM_EFFORT=high /foo/bar/roster/cli/bin/tpm start
+# 1 回だけ替える: roster start の前に付ける。出る 1 行を打った TPM 担当と、その TPM 担当が起こす担当に効く
+TPM_EFFORT=high /foo/bar/roster/cli/bin/roster start
 ```
 
-`tpm start` は、書いてある `TPM_MODEL`・`TPM_EFFORT`・`TPM_PERMISSION_MODE` を 1 行の頭（`PATH=…` の隣）にも写す。1 回だけ付けた値も TPM 担当の Claude Code の環境に入るので、TPM 担当の状態の `model` と、`tpm assign` で起こす担当に、profile に書いたときと同じに効く。
+`roster start` は、書いてある `TPM_MODEL`・`TPM_EFFORT`・`TPM_PERMISSION_MODE` を 1 行の頭（`PATH=…` の隣）にも写す。1 回だけ付けた値も TPM 担当の Claude Code の環境に入るので、TPM 担当の状態の `model` と、`roster assign` で起こす担当に、profile に書いたときと同じに効く。
 
 ```sh
-# TPM_EFFORT=high tpm start が出す 1 行（skill-sets が無いとき）
+# TPM_EFFORT=high roster start が出す 1 行（skill-sets が無いとき）
 cd <folder> && PATH=<repo>/cli/bin:"$PATH" TPM_EFFORT=high claude --model claude-opus-5-5 --effort high --permission-mode bypassPermissions --settings '…' --add-dir <repo>/skill-sets/core -- /tpm
 ```
 
-欄ごとに、命令の旗（`tpm assign --model` など）> `.claude/roles/config.jsonc` の担当の欄 > 環境変数 > コードの既定 の順で、先に値がある物が使われる。project の config に `"devops-engineer": { "effort": "low" }` と書いてあれば、`TPM_EFFORT=high` でもその project の DevOps Engineer 担当は low のまま。表は[設定](/configuration/#model-などの既定の環境変数任意)。
+欄ごとに、命令の旗（`roster assign --model` など）> `.claude/roles/config.jsonc` の担当の欄 > 環境変数 > コードの既定 の順で、先に値がある物が使われる。project の config に `"devops-engineer": { "effort": "low" }` と書いてあれば、`TPM_EFFORT=high` でもその project の DevOps Engineer 担当は low のまま。表は[設定](/configuration/#model-などの既定の環境変数任意)。
 
 ## Auditor の席を起こす
 
@@ -69,7 +69,7 @@ cd <folder> && PATH=<repo>/cli/bin:"$PATH" TPM_EFFORT=high claude --model claude
 
 ```sh
 cd </your/workspace> # TPM 担当を起こした folder
-/foo/bar/roster/cli/bin/tpm audit start   # cmux の中の shell で打つ
+/foo/bar/roster/cli/bin/roster audit start   # cmux の中の shell で打つ
 ```
 
 - cmux に `Audit` の居場所ができ、Auditor が名乗って待つ。席は project に 1 つ。もうあれば、起こさずに「その席で `/clear` を打ってから、`/audit` を呼んでください」と返す。
@@ -95,4 +95,4 @@ cd </your/workspace> # TPM 担当を起こした folder
 
 - 信頼は、信頼した folder が git の repo ならその repo 全体に、そうでなければその下の全部に効く。**この repo は別の git の repo なので、信頼済みの folder の下に置いても信頼は及ばない**（信頼済みの folder の下の、git の repo でない folder では出なかった）。
 - 置いた場所ごとに、**この repo の folder で 1 度 Claude Code を対話で起こし**、「Yes, I trust this folder」を選んでおく。信頼は残る。
-- 起こした担当がこのダイアログで止まると、担当が名乗らない。`tpm assign` は 90 秒待っても名乗らなければ画面を読み、このダイアログなら Yes を押さずに閉じて、人に信頼を頼むよう返す。
+- 起こした担当がこのダイアログで止まると、担当が名乗らない。`roster assign` は 90 秒待っても名乗らなければ画面を読み、このダイアログなら Yes を押さずに閉じて、人に信頼を頼むよう返す。

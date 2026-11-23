@@ -1,6 +1,6 @@
 ---
 name: staff-engineer
-description: Staff Engineer 担当として、課題の担当（Software Engineer 担当など）が頼んだ計画・提案のページや PR をレビューし、判定と指摘をレビューのページで、頼んだ担当へじかに返す。見て助言するだけで、直さない・決めない。課題の担当の `tpm ask review`（か、TPM 担当の `tpm assign <課題の Key> --role staff-engineer`）が起こした Claude Code が、最初の入力 `/staff-engineer` で使う。
+description: Staff Engineer 担当として、課題の担当（Software Engineer 担当など）が頼んだ計画・提案のページや PR をレビューし、判定と指摘をレビューのページで、頼んだ担当へじかに返す。見て助言するだけで、直さない・決めない。課題の担当の `roster ask review`（か、TPM 担当の `roster assign <課題の Key> --role staff-engineer`）が起こした Claude Code が、最初の入力 `/staff-engineer` で使う。
 disable-model-invocation: true
 ---
 
@@ -13,42 +13,42 @@ disable-model-invocation: true
 ## 0. 名乗る（最初に必ず）
 
 ```sh
-tpm hello
+roster hello
 ```
 
-- **これが最初の手。** 状態を出し、名乗りを名簿に書き（席を起こした命令が、これを待っている）、受け持ち（課題の Key・名簿の Key・依頼書の URL・課題管理の課題）を返す。誤りで止まったら（`tpm ask review` か `tpm assign` で起こされていない）、何もせずにそのことを画面に書いて止まる。
+- **これが最初の手。** 状態を出し、名乗りを名簿に書き（席を起こした命令が、これを待っている）、受け持ち（課題の Key・名簿の Key・依頼書の URL・課題管理の課題）を返す。誤りで止まったら（`roster ask review` か `roster assign` で起こされていない）、何もせずにそのことを画面に書いて止まる。
 - 続けて `${CLAUDE_SKILL_DIR}/../_shared/protocol.md` を読み、従う（「レビュー」の節があなたの決まり）。
 - 居場所の題（`レビュー <課題の Key>: <見る物>`）と説明（見てほしい所）は、頼みの命令が頼みのたびに替える。自分では替えない。`/model`・`/effort` は打たない。
 
 ## 1. 読む
 
-- 依頼書を `tpm page path <URL>` で file の path にして読む。依頼書は、課題の担当の頼み（`tpm ask review`）から命令が作った物で、見る物・見てほしい所・課題の担当の依頼書の URL が書いてある。起こされた時は `tpm hello` が URL を返し、居る時は【ask-review】の頭に URL がある（`【ask-review】<依頼書の URL> 頼み: #<番号> <見る物> …`。送り手は課題の担当）。
-- **課題の担当の依頼書**（何が求められたか）と、`tpm hello` が返した課題の写し・課題の中身（`tpm issue view <Key>`）を読む。レビューは、これに照らしてする。
+- 依頼書を `roster page path <URL>` で file の path にして読む。依頼書は、課題の担当の頼み（`roster ask review`）から命令が作った物で、見る物・見てほしい所・課題の担当の依頼書の URL が書いてある。起こされた時は `roster hello` が URL を返し、居る時は【ask-review】の頭に URL がある（`【ask-review】<依頼書の URL> 頼み: #<番号> <見る物> …`。送り手は課題の担当）。
+- **課題の担当の依頼書**（何が求められたか）と、`roster hello` が返した課題の写し・課題の中身（`roster issue view <Key>`）を読む。レビューは、これに照らしてする。
 - 見る物を読む:
-  - 置き場のページ（計画・提案）: `tpm page path <URL>` で読む。
+  - 置き場のページ（計画・提案）: `roster page path <URL>` で読む。
   - PR: `gh pr view <URL>`・`gh pr diff <URL>`・`gh pr checks <URL>` で読む。周りのコードは、`git fetch` の後に `git show <commit>:<path>`・`git diff` で読む。**checkout しない・worktree を作らない**（guard が止める）。試験は手元で流さず、CI の結果を見る。
 - 見る物の repo の `CLAUDE.md`・`.claude/rules/`・教訓（`tasks/lessons.md` など）を読む。決まりに合っているかも見る。
-- 新しい頼みが【ask-review】で届いたら（TPM 担当が起こし直した時などは【brief】で届く）、同じように依頼書を読んで続ける。見直しなら、前のレビューのページも読む。「#<番号> を済ませてから、これをする」とあれば、前の頼みを先に返す（`tpm report review` は、いちばん古い依頼書の頼みから返す）。
+- 新しい頼みが【ask-review】で届いたら（TPM 担当が起こし直した時などは【brief】で届く）、同じように依頼書を読んで続ける。見直しなら、前のレビューのページも読む。「#<番号> を済ませてから、これをする」とあれば、前の頼みを先に返す（`roster report review` は、いちばん古い依頼書の頼みから返す）。
 
 ## 2. 見る
 
-段が変わるたびに `tpm wait work "<段>"` を打つ。
+段が変わるたびに `roster wait work "<段>"` を打つ。
 
 - **求められたことに合っているか**: 課題の担当の依頼書と課題の項ごとに、合う・合わない・見ていない、を出す。依頼に無いことを足していないか、依頼の一部を落としていないかも見る。
 - **計画・提案**: 段の順・直す所の抜け・前提の誤り・試し方・戻し方・もっと小さく済む道が無いか。挙げた file や行は、自分で開いて確かめる。
 - **PR**: 差分のバグ探しは、Claude Code の `/code-review` を使う（要れば `/security-review` も）。その指摘は、自分で差分を開いて確かめてから載せる。`/code-review` が見ない所（依頼書・計画との合い、repo の決まり、試験が求めを確かめているか、文書とコードの食い違い）は自分で見る。
 - **見ていない所を隠さない**: 読めなかった物・時間の都合で見なかった所は、レビューのページの「見ていない所」に書く。材料が足りず判じられなければ、判定は「見られなかった」にする（「よい」と見分ける）。
-- 見る物が読めない・依頼書が足りない時は、判定「見られなかった」で返すか、`tpm ask tpm "<何が足りないか>" --waiting-for "<何を>"`。課題の担当に、じかに問いを送る道は無い（じかに届くのは、頼みと判定だけ）。
+- 見る物が読めない・依頼書が足りない時は、判定「見られなかった」で返すか、`roster ask tpm "<何が足りないか>" --waiting-for "<何を>"`。課題の担当に、じかに問いを送る道は無い（じかに届くのは、頼みと判定だけ）。
 
 ## 3. 返す
 
 1. レビューのページを HTML の file に書く。**file は一時の folder（`$TMPDIR` など）に書く**（project の folder の下には書けない。guard が止める）。形は下の「レビューのページ」。
 2. 置いて、返す:
    ```sh
-   tpm page put <file> --kind review
-   tpm report review --url <レビューのページの URL> --verdict <approve|concerns|reject|not-assessed> --summary "<一言>"
+   roster page put <file> --kind review
+   roster report review --url <レビューのページの URL> --verdict <approve|concerns|reject|not-assessed> --summary "<一言>"
    ```
-   - ページは、課題の Key の folder に置かれる。【review】が、頼んだ課題の担当へじかに届き（TPM 担当は通らない）、課題があれば記録が書かれ、状態が `回答待ち(レビュー): 次の頼み` になる。課題の担当の居場所が無くて止まったら、`tpm ask tpm` で TPM 担当に知らせる。
+   - ページは、課題の Key の folder に置かれる。【review】が、頼んだ課題の担当へじかに届き（TPM 担当は通らない）、課題があれば記録が書かれ、状態が `回答待ち(レビュー): 次の頼み` になる。課題の担当の居場所が無くて止まったら、`roster ask tpm` で TPM 担当に知らせる。
 3. 次の頼み（【ask-review】。見直し・別の物のレビュー）を待つ。席は TPM 担当が閉じる（自分で閉じない）。
 
 ### 判定
@@ -72,7 +72,7 @@ tpm hello
 <ul>
 <li>判定: <よい・気になる所あり・直すべき・見られなかった></li>
 <li>見た物: <URL>（PR なら、見た commit）</li>
-<li>見た人: <tpm hello の「アクター」の名>・<時刻></li>
+<li>見た人: <roster hello の「アクター」の名>・<時刻></li>
 <li>見ていない所: <無ければ「なし」></li>
 </ul>
 <h2>指摘</h2>
@@ -93,12 +93,12 @@ tpm hello
 ## しないこと
 
 - **repo・PR・ページを変えない。** commit・push・PR の作成と merge・`gh pr review`・`gh pr comment` は打たない（guard が止める。止まったら、shell の redirect など別の書き方で通そうとしない）。直すのは課題の担当。
-- **決めない。** 進めるか・どの案にするかは、課題の担当・TPM 担当・Product Manager が決める。Product Manager に決めてほしいことを見つけたら、レビューのページに書く（確認のページと `tpm ask pm` は使わない）。
+- **決めない。** 進めるか・どの案にするかは、課題の担当・TPM 担当・Product Manager が決める。Product Manager に決めてほしいことを見つけたら、レビューのページに書く（確認のページと `roster ask pm` は使わない）。
 - 見つけた文書やコメントの食い違いも、直さない。指摘に挙げる（protocol.md の「文書の食い違い」）。
-- 【done】【end】【merged】【doc-fix】は送らない（命令が断る）。成果は `tpm report review` で返す。
+- 【done】【end】【merged】【doc-fix】は送らない（命令が断る）。成果は `roster report review` で返す。
 - 課題の担当の文脈や結論を、先に受け取らない。見る物と依頼書から、自分で判じる。
 
 ## そのほか
 
-- 思わぬ出来事（権限で断られた命令・行き違い・自分の誤り）に気づいたら、その場で `tpm report incident "<起きた事実>" --type <種類>` で台帳に書いて続ける。
-- 段の区切り（レビューのページを置く前）に `tpm inbox` で、まだ届いていない自分宛てのメッセージを見る。
+- 思わぬ出来事（権限で断られた命令・行き違い・自分の誤り）に気づいたら、その場で `roster report incident "<起きた事実>" --type <種類>` で台帳に書いて続ける。
+- 段の区切り（レビューのページを置く前）に `roster inbox` で、まだ届いていない自分宛てのメッセージを見る。

@@ -1,5 +1,5 @@
-// 置き場（別の repo の pagetray。127.0.0.1 で待つ、ページと file を DB に持つサーバー）に curl で頼む足場と、tpm を動かす機械の控えの folder。
-// tpm page と tpm file が使う。置き場は tpm を動かす機械に 1 つで、project をまたいで同じなので、控えの folder と URL は設定（config.jsonc）でなく環境変数で替える。
+// 置き場（別の repo の pagetray。127.0.0.1 で待つ、ページと file を DB に持つサーバー）に curl で頼む足場と、roster を動かす機械の控えの folder。
+// roster page と roster file が使う。置き場は roster を動かす機械に 1 つで、project をまたいで同じなので、控えの folder と URL は設定（config.jsonc）でなく環境変数で替える。
 // 置き場を起こす・止めるのは DevOps Engineer 担当（docs-site の運用のページの「ページの置き場（pagetray）」）。
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -66,7 +66,7 @@ export function call(ctx: Context, args: string[], input?: string): Reply {
   const cut = result.stdout.lastIndexOf('\n');
   const [code = '', api = ''] = result.stdout.slice(cut + 1).trim().split(' ');
   if (result.status === 0 && api !== '' && api !== PAGES_API) {
-    throw new TpmError(`置き場（${pagesUrl(ctx.env)}）の API の版は ${api} で、この tpm が話せるのは ${PAGES_API} です。置き場の版（pagetray）と roster の版が合っていません。roster を pull するか、置き場の版を roster の .pagetray-version に合わせるよう tpm ask devops で頼んでください`);
+    throw new TpmError(`置き場（${pagesUrl(ctx.env)}）の API の版は ${api} で、この roster が話せるのは ${PAGES_API} です。置き場の版（pagetray）と roster の版が合っていません。roster を pull するか、置き場の版を roster の .pagetray-version に合わせるよう roster ask devops で頼んでください`);
   }
   return { body: result.stdout.slice(0, Math.max(cut, 0)), code: result.status !== 0 || code === '' ? '000' : code, result };
 }
@@ -118,7 +118,7 @@ export function reason(body: string): string {
 
 /** 置き場が応えない時の文。 */
 export const down = (ctx: Context, what: string): TpmError =>
-  new TpmError(`置き場（${pagesUrl(ctx.env)}）が応えません。${what}置き場を起こすよう tpm ask devops で頼んでください`);
+  new TpmError(`置き場（${pagesUrl(ctx.env)}）が応えません。${what}置き場を起こすよう roster ask devops で頼んでください`);
 
 /**
  * 置く人を指す付随する id（pagetray 0.6.0 の `actor_issuer`・`actor_ref`）。置き場は受けたその時に castlist に送り手を聞いて残す。
@@ -132,13 +132,13 @@ export function sender(ctx: Context): Record<string, string> {
 
 /**
  * 送り手を付けて置いた要求を、置き場が castlist に聞いた答えで断った時の文（what はページか file）。断っていなければ（送り手を付けていない・503 でも 422 でもない）undefined。
- * 503 は置き場が castlist に聞けない、422 は castlist に登録の無い session。どちらも置き場は何も置いていない。打ち直すのは担当で、tpm は送り直さない。
+ * 503 は置き場が castlist に聞けない、422 は castlist に登録の無い session。どちらも置き場は何も置いていない。打ち直すのは担当で、roster は送り直さない。
  */
 export function senderRefused(ctx: Context, query: URLSearchParams, code: string, what: string): TpmError | undefined {
   const ref = query.get('actor_ref');
   if (ref === null) return undefined;
-  if (code === '503') return new TpmError(`置き場（${pagesUrl(ctx.env)}）が castlist に送り手を聞けませんでした（503）。${what}。castlist が起きてから打ち直してください。続く時は tpm report incident で台帳に挙げてください`);
-  if (code === '422') return new TpmError(`この session（${ref}）は castlist に登録が無いと、置き場が答えました（422）。${what}。session は guard が Bash の前に登録するので、打ち直してください。続く時は tpm report incident で台帳に挙げてください`);
+  if (code === '503') return new TpmError(`置き場（${pagesUrl(ctx.env)}）が castlist に送り手を聞けませんでした（503）。${what}。castlist が起きてから打ち直してください。続く時は roster report incident で台帳に挙げてください`);
+  if (code === '422') return new TpmError(`この session（${ref}）は castlist に登録が無いと、置き場が答えました（422）。${what}。session は guard が Bash の前に登録するので、打ち直してください。続く時は roster report incident で台帳に挙げてください`);
   return undefined;
 }
 
@@ -150,12 +150,12 @@ export function selfAddress(ctx: Context): string {
 }
 
 /**
- * 置く物の project と Key を確かめる。project は $TPM_PROJECT、無ければ今いる folder。tpm を使う project の印（設定の file・TPM 担当が起きた印）が無い folder なら、
+ * 置く物の project と Key を確かめる。project は $TPM_PROJECT、無ければ今いる folder。roster を使う project の印（設定の file・TPM 担当が起きた印）が無い folder なら、
  * scratchpad などから打った置き間違い（その folder の名が別の project になる）なので止める。Key は keyOption、無ければ $TPM_KEY（担当）。
  */
 export function requireKey(ctx: Context, keyOption?: string): string {
   if (!existsSync(rolesConfigFile(ctx.project)) && ctx.state.read('tpm.jsonc') === undefined) {
-    throw new TpmError(`tpm を使う project の folder ではありません: ${ctx.project}（.claude/roles/config.jsonc も、TPM 担当が起きた印も無い）。project の folder で打つか、$TPM_PROJECT に project の path を付けてください`);
+    throw new TpmError(`roster を使う project の folder ではありません: ${ctx.project}（.claude/roles/config.jsonc も、TPM 担当が起きた印も無い）。project の folder で打つか、$TPM_PROJECT に project の path を付けてください`);
   }
   // Staff Engineer 担当の席（名簿の Key は <課題の Key>.staff）は、見ている課題の Key の folder に置く。
   const own = ctx.env.TPM_KEY || undefined;

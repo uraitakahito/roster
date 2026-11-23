@@ -1,5 +1,5 @@
 // 課題管理への書き込みを、状態の folder の tracker.jsonl に残す包み。
-// 課題管理の側の履歴は、人も担当も同じ account で書くので、誰の手かが分からない。tpm が書いた物はここに残る（残っていなければ、tpm の手ではない）。
+// 課題管理の側の履歴は、人も担当も同じ account で書くので、誰の手かが分からない。roster が書いた物はここに残る（残っていなければ、roster の手ではない）。
 import type { State } from '../state.ts';
 import type { Note, NoteKind, Tracker, TrackerIssue } from './types.ts';
 

@@ -1,5 +1,5 @@
 // castlist（別の repo。127.0.0.1 で待つ、アクターの台帳のサーバー）への組み込み。API は castlist の docs/src/api.md。
-// アクターは Claude Code の session 1 つ（担当・TPM 担当・Auditor）と、人の Product Manager。tpm は、登録・出来事・線・model と effort を送る。
+// アクターは Claude Code の session 1 つ（担当・TPM 担当・Auditor）と、人の Product Manager。roster は、登録・出来事・線・model と effort を送る。
 // 設定（config.jsonc の castlist か $TPM_CASTLIST_URL）が無ければ、どれも何もしない。
 // 送るのは curl（置き場の pagetray と同じ。命令が同期なので）。castlist を起こすのは Product Manager だけで、止まっていれば打つ 1 行を出す。
 import { createHash } from 'node:crypto';
@@ -41,7 +41,7 @@ const ROLE_ABBREV = {
   'auditor': 'audit',
 } as const satisfies Record<RoleName, string>;
 
-/** castlist の URL が受ける形（tpm を動かす機械の中だけ）。 */
+/** castlist の URL が受ける形（roster を動かす機械の中だけ）。 */
 const URL_FORM = /^http:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\/?$/;
 
 /** castlist の URL（末尾の / は落とす）。$TPM_CASTLIST_URL、無ければ project の folder の設定の castlist。どちらも無ければ undefined（castlist に何も送らない）。 */
@@ -143,7 +143,7 @@ export function downMessage(ctx: Pick<Context, 'exec'>, url: string, done: strin
 export const busyMessage = (url: string, done: string): string => `castlist（${url}）が混んでいます（503）。${done}少し待ってから打ち直してください`;
 
 /**
- * 起こす前（tpm start・tpm assign・tpm audit start・tpm hello）に、castlist が起きているかを /healthz で見る。設定が無ければ何もしない。
+ * 起こす前（roster start・roster assign・roster audit start・roster hello）に、castlist が起きているかを /healthz で見る。設定が無ければ何もしない。
  * 止まっていれば、done（しなかった事）と Product Manager が打つ 1 行を添えて止める。起きていれば、時計の差が 2 秒を超える時だけ 1 行を返す（止めない）。
  */
 export function requireUp(ctx: Pick<Context, 'env' | 'config' | 'exec' | 'now'>, done: string, after: string[] = []): string[] {
@@ -157,7 +157,7 @@ export function requireUp(ctx: Pick<Context, 'env' | 'config' | 'exec' | 'now'>,
   const at = Date.parse(now);
   const skew = at - ctx.now().getTime();
   if (Math.abs(skew) <= MAX_SKEW_MS) return [];
-  return [`castlist の時計と、tpm を動かす機械の時計が ${Number((Math.abs(skew) / 1000).toFixed(1))} 秒ずれています（castlist ${now}・tpm ${ctx.now().toISOString()}）。castlist の記録の時刻がずれるので、tpm report incident で台帳に挙げてください（止めてはいない）`];
+  return [`castlist の時計と、roster を動かす機械の時計が ${Number((Math.abs(skew) / 1000).toFixed(1))} 秒ずれています（castlist ${now}・roster ${ctx.now().toISOString()}）。castlist の記録の時刻がずれるので、roster report incident で台帳に挙げてください（止めてはいない）`];
 }
 
 /** この project の issuer。 */
@@ -166,7 +166,7 @@ export const issuerOf = (ctx: Pick<Context, 'state'>): string => castlistIssuer(
 /** Claude Code の session を指す鍵の付随する id（`claude.session:<session の id>`。session の登録の鍵）。 */
 export const sessionRef = (sid: string): string => `claude.session:${sid}`;
 
-/** 人の Product Manager を登録する（tpm start。鍵が同じなので何度打っても同じアクター）。 */
+/** 人の Product Manager を登録する（roster start。鍵が同じなので何度打っても同じアクター）。 */
 export function registerPm(ctx: Context, url: string): Reply {
   return request(ctx, url, 'POST', '/v1/actors', {
     issuer: issuerOf(ctx),
@@ -192,7 +192,7 @@ export interface Seat {
 /**
  * 今の周りの席。$TPM_KEY があれば名簿の行（無ければ $TPM_ROLE）の役割の担当、Auditor は project に 1 つの席。
  * Staff Engineer 担当の席は、名の接頭辞を課題の Key から作り（`ai-33-staff`）、見ている課題の Key を subject に持つ。
- * $TPM_KEY が無ければ TPM 担当（castlist の hook と guard は、tpm が起こした session にしか付かない）。
+ * $TPM_KEY が無ければ TPM 担当（castlist の hook と guard は、roster が起こした session にしか付かない）。
  */
 export function seatOf(ctx: Context): Seat {
   const key = ctx.env.TPM_KEY || undefined;

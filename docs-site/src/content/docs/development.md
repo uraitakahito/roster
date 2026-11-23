@@ -5,7 +5,7 @@ description: 試験の流し方・ページの置き場のサーバー（pagetra
 
 ## 試験
 
-TypeScript の道具（`tpm` と判定の道具）は `cli/` の pnpm の project にある。試験は `cli/` で打つ。Node と pnpm は [はじめる](/getting-started/#node-と-pnpm-を入れる) のとおりに入れる（version は `.node-version`）。
+TypeScript の道具（`roster` と判定の道具）は `cli/` の pnpm の project にある。試験は `cli/` で打つ。Node と pnpm は [はじめる](/getting-started/#node-と-pnpm-を入れる) のとおりに入れる（version は `.node-version`）。
 
 ```sh
 cd cli
@@ -16,7 +16,7 @@ pnpm run doccheck    # コメントの抜け（TypeDoc。ページは作らな�
 pnpm test            # Vitest
 ```
 
-build は無い。`cli/bin/tpm` は `cli/src/cli.ts` を node で直に動かす（Node が型を消して動かす）ので、main を pull すれば次から新しいコードで動く。そのため `cli/src/` には消せる型だけを書き、import の先は `.ts` と書く（`cli/tsconfig.json` の `erasableSyntaxOnly`・`allowImportingTsExtensions`）。GitHub Actions でも上と同じ順に流す（`.github/workflows/test.yml`）。
+build は無い。`cli/bin/roster` は `cli/src/cli.ts` を node で直に動かす（Node が型を消して動かす）ので、main を pull すれば次から新しいコードで動く。そのため `cli/src/` には消せる型だけを書き、import の先は `.ts` と書く（`cli/tsconfig.json` の `erasableSyntaxOnly`・`allowImportingTsExtensions`）。GitHub Actions でも上と同じ順に流す（`.github/workflows/test.yml`）。
 
 `cli/src/` のコメントの決まり:
 
@@ -25,39 +25,39 @@ build は無い。`cli/bin/tpm` は `cli/src/cli.ts` を node で直に動かす
 - `/** */` の中の `<…>` と `@` は `` `…` `` で囲む（TSDoc が HTML や tag と読む。`pnpm run lint` の `tsdoc/syntax` が止める）。
 - file の頭の説明は `//` で書く。
 
-## tpm のコード
+## roster のコード
 
 `cli/src/` は層ごとにファイルを分けてある（層の説明は [担当のあいだの決まり](/protocol/#層)）。
 
 | ファイル | 中身 |
 |---|---|
-| `cli/src/program.ts` | 命令の木（`tpm --help`）。`cli/src/cli.ts` が動かす |
+| `cli/src/program.ts` | 命令の木（`roster --help`）。`cli/src/cli.ts` が動かす |
 | `cli/src/protocol.ts` | 担当の種類・見出しの表・状態の字の形・命令の一覧 |
 | `cli/src/commands/` | 決まりの命令（`tpm-side.ts`・`role-side.ts`・`messages.ts`・`launch.ts`・`staff.ts`・`infra.ts`・`page.ts`・`issue.ts`・`review.ts`） |
 | `cli/src/roster.ts`・`cli/src/state.ts`・`cli/src/reviews.ts` | 名簿と、状態の folder と、レビューの頼みの記録 |
 | `cli/src/transport/` | 連携の口（`types.ts`）と adapter（`cmux.ts`・`file.ts`） |
 | `cli/src/tracker/` | 課題管理の口（`types.ts`）と adapter（`jira.ts`・`github.ts`）、課題の Key の形で adapter を選ぶ `routed.ts` |
 | `cli/src/guard.ts` | guard |
-| `cli/src/run-role.ts` | 連携の道具が担当の居場所で動かす `tpm run-role`（名簿を読んで claude を起こす） |
+| `cli/src/run-role.ts` | 連携の道具が担当の居場所で動かす `roster run-role`（名簿を読んで claude を起こす） |
 
 - **担当の種類を足す**: `cli/src/protocol.ts` の `ROLES` に足し、名の略（`cli/src/castlist.ts`）を書く（書き忘れは型の検査で落ちる）。設定で既定を替えられるようにするなら `cli/src/config.ts`、読むだけの担当なら `cli/src/guard.ts` の読むだけの担当の表にも足す。skill は `skill-sets/<名前>/.claude/skills/<役割>/SKILL.md`。
 - **見出しを足す・変える**: `cli/src/protocol.ts` の `HEADINGS` と、`skill-sets/core/.claude/skills/_shared/protocol.md` の表を合わせる（`check` が揃いを見る）。
-- **命令を足す**: `cli/src/program.ts`（か `cli/src/commands/register.ts`）に足し、`cli/src/protocol.ts` の `COMMANDS` にも書く（試験が命令の木との揃いを、`check` が skill と docs の `tpm <命令>` が在るかを見る）。
+- **命令を足す**: `cli/src/program.ts`（か `cli/src/commands/register.ts`）に足し、`cli/src/protocol.ts` の `COMMANDS` にも書く（試験が命令の木との揃いを、`check` が skill と docs の `roster <命令>` が在るかを見る）。
 - **道具を足す**: `transport/` か `tracker/` に口を満たす adapter を書き、`cli/src/config.ts` の選択肢と `cli/src/context.ts`（課題管理は `cli/src/tracker/routed.ts`）に足す。上の層は変えない。
 - **試し方**: 決まりの命令は、連携を `file`（メッセージ・居場所・状態をファイルに書くだけ）にした project で cmux 無しに試せる（`cli/test/helpers.ts`）。実機で担当を起こして試すときは、`TPM_STATE` を一時の folder に向けて本物の名簿を汚さない。
-- **道具を直に打つ**: `tpm` が起こした session では、guard が `cmux` のメッセージ・状態・居場所の命令と、`acli`・`gh issue` の記録と状態の命令の直打ちを止める（課題を読む命令は止めない。見るのは単純な命令の頭だけなので、commit の文や here-document に道具の名を書いても止まらない）。担当が置き場に消す要求（`curl -X DELETE …/api/pages…`・`…/api/files…`）を直に送るのも、置き場の CLI の消す命令（`pagetray page delete`・`pagetray file delete`・`pagetray api -X DELETE`）を打つのも止める（消してよいのは TPM 担当だけ。担当には環境変数 `PAGETRAY_NO_DELETE=1` も渡すので、guard をすり抜けても CLI が消さない）。adapter の開発で直に打つときは、命令の頭に `TPM_RAW=1` を付ける。
+- **道具を直に打つ**: `roster` が起こした session では、guard が `cmux` のメッセージ・状態・居場所の命令と、`acli`・`gh issue` の記録と状態の命令の直打ちを止める（課題を読む命令は止めない。見るのは単純な命令の頭だけなので、commit の文や here-document に道具の名を書いても止まらない）。担当が置き場に消す要求（`curl -X DELETE …/api/pages…`・`…/api/files…`）を直に送るのも、置き場の CLI の消す命令（`pagetray page delete`・`pagetray file delete`・`pagetray api -X DELETE`）を打つのも止める（消してよいのは TPM 担当だけ。担当には環境変数 `PAGETRAY_NO_DELETE=1` も渡すので、guard をすり抜けても CLI が消さない）。adapter の開発で直に打つときは、命令の頭に `TPM_RAW=1` を付ける。
 
 ## pagetray（ページの置き場のサーバー）とのつなぎ
 
-担当が置くページを DB に持つサーバー（Rust）は、別の repo [pagetray](https://github.com/uraitakahito/pagetray) にある（もとは、この repo の folder だった物を履歴ごと分けた）。作り・API の一覧・Rust の開発の手引きは、[pagetray の docs](https://uraitakahito.github.io/pagetray/)（[開発](https://uraitakahito.github.io/pagetray/development.html) の章）。この repo が持つのは、その API を `curl` で呼ぶ側（`tpm page put`・`path`・`list`・`import`・`delete` は `cli/src/commands/page.ts`、`tpm file put`・`path`・`list`・`delete` は `cli/src/commands/file.ts`、curl で頼む足場と控えの folder は `cli/src/commands/store.ts`）と、つなぎの試験。
+担当が置くページを DB に持つサーバー（Rust）は、別の repo [pagetray](https://github.com/uraitakahito/pagetray) にある（もとは、この repo の folder だった物を履歴ごと分けた）。作り・API の一覧・Rust の開発の手引きは、[pagetray の docs](https://uraitakahito.github.io/pagetray/)（[開発](https://uraitakahito.github.io/pagetray/development.html) の章）。この repo が持つのは、その API を `curl` で呼ぶ側（`roster page put`・`path`・`list`・`import`・`delete` は `cli/src/commands/page.ts`、`roster file put`・`path`・`list`・`delete` は `cli/src/commands/file.ts`、curl で頼む足場と控えの folder は `cli/src/commands/store.ts`）と、つなぎの試験。
 
-- **合わせる版**: `.pagetray-version` に、合わせる pagetray の版を `v<版>@<image の digest>` の形で書く（digest は pagetray の release にある）。workflow の `pagetray-e2e`（`.github/workflows/pagetray-e2e.yml`）が、その版の image（`ghcr.io/uraitakahito/pagetray`）を digest で pull して起こし、`cli/test/pagetray-e2e.test.ts` で `tpm page put`・`path`・`list`・`import`・`delete` を本物に向けて流す（`cli/src/` のすべての役割とページの種類で 1 枚ずつ置いて読む）。返事の状態（`cli/src/commands/reply.ts`）の試験は、置き場がその状態を持てるか（0.5.0 から）をエンドポイントで見て、持てる置き場には「書いて絞る」方を、持てない置き場には「印を付けずに通る」方を流す。`tpm file` の試験は、置き場が `GET /api/files` に `200` を返す時（pagetray 0.4.0 から）だけ流し、それより前の版では飛ばす。送り手（`actor_issuer`・`actor_ref`）の試験は、置き場の `/api/version` が 0.6.0 からの時だけ流し、ページと file の記録に付けた送り手が残るかを見る（CI の置き場は `PAGETRAY_CASTLIST_URL` 無しで起こすので、castlist には聞かず `sender.actor` は `null`）。
+- **合わせる版**: `.pagetray-version` に、合わせる pagetray の版を `v<版>@<image の digest>` の形で書く（digest は pagetray の release にある）。workflow の `pagetray-e2e`（`.github/workflows/pagetray-e2e.yml`）が、その版の image（`ghcr.io/uraitakahito/pagetray`）を digest で pull して起こし、`cli/test/pagetray-e2e.test.ts` で `roster page put`・`path`・`list`・`import`・`delete` を本物に向けて流す（`cli/src/` のすべての役割とページの種類で 1 枚ずつ置いて読む）。返事の状態（`cli/src/commands/reply.ts`）の試験は、置き場がその状態を持てるか（0.5.0 から）をエンドポイントで見て、持てる置き場には「書いて絞る」方を、持てない置き場には「印を付けずに通る」方を流す。`roster file` の試験は、置き場が `GET /api/files` に `200` を返す時（pagetray 0.4.0 から）だけ流し、それより前の版では飛ばす。送り手（`actor_issuer`・`actor_ref`）の試験は、置き場の `/api/version` が 0.6.0 からの時だけ流し、ページと file の記録に付けた送り手が残るかを見る（CI の置き場は `PAGETRAY_CASTLIST_URL` 無しで起こすので、castlist には聞かず `sender.actor` は `null`）。
 - **偽の置き場**: `cli/` のほかの試験は、偽の置き場（`cli/test/helpers.ts` の `FakeStore`）で流す。API の形（URL・引数の名・JSON の欄）が変わったら、`FakeStore` と `page.ts`・`file.ts`・`reply.ts`（返事の状態）を合わせて直す。受ける file の種類（`file.ts` の `FILE_TYPES`）は、pagetray の `crates/api` の一覧と揃える。
-- **API の版**: 置き場は、どの答えにも header `Pagetray-Api` で API の版を付ける（決まりは pagetray の docs の「[API の仕様](https://uraitakahito.github.io/pagetray/api.html)」）。`tpm page`・`tpm file` は、話せる版（`cli/src/commands/store.ts` の `PAGES_API`）と違う答えを使わずに止まる。header の無い答え（API の版ができる前の置き場）は通す。
+- **API の版**: 置き場は、どの答えにも header `Pagetray-Api` で API の版を付ける（決まりは pagetray の docs の「[API の仕様](https://uraitakahito.github.io/pagetray/api.html)」）。`roster page`・`roster file` は、話せる版（`cli/src/commands/store.ts` の `PAGES_API`）と違う答えを使わずに止まる。header の無い答え（API の版ができる前の置き場）は通す。
 - **pagetray を上げる時**: pagetray で release を出す → この repo で `.pagetray-version` を新しい版と digest にする PR を出す（つなぎの試験が通る）→ [運用](/operations/#版を上げる)の「版を上げる」で container を作り直し、読むだけの試験で一覧の UI を見る。API を変える変更は、古い cli でも新しい cli でも通る順に分ける。
 - **手元で流す**: pagetray の checkout で `PAGETRAY_DB=/tmp/pages.db PAGETRAY_LISTEN=127.0.0.1:18801 cargo run --bin pagetray-server` と起こした後に、`cd cli && TPM_E2E_PAGES_URL=http://127.0.0.1:18801 pnpm exec vitest run test/pagetray-e2e.test.ts`。
 - **種類と役割の名**: 一覧は `cli/src/` だけが持つ。サーバーは字の形（英小文字で始まり、英小文字・数字・`-` で 32 字まで）だけを見るので、`cli` に種類や役割を足してもサーバーは変えない。
-- **だれが消してよいか**: サーバーは人を見分けない。「消してよいのは TPM 担当だけ」という決まりは、`tpm page delete`・`tpm file delete` と guard（`cli/src/guard.ts`）が持つ。置き場の CLI（`pagetray`）の消す命令（ページも file も）も、guard と、担当に渡す `PAGETRAY_NO_DELETE=1` で止める。
+- **だれが消してよいか**: サーバーは人を見分けない。「消してよいのは TPM 担当だけ」という決まりは、`roster page delete`・`roster file delete` と guard（`cli/src/guard.ts`）が持つ。置き場の CLI（`pagetray`）の消す命令（ページも file も）も、guard と、担当に渡す `PAGETRAY_NO_DELETE=1` で止める。
 
 ## castlist（アクターの台帳）とのつなぎ
 
@@ -68,21 +68,21 @@ build は無い。`cli/bin/tpm` は `cli/src/cli.ts` を node で直に動かす
 
 ## 判定の道具
 
-Dependabot の PR の判定の道具は `cli/src/release-age.ts`（`node cli/src/release-age.ts <owner>/<repo> <PR> [--hours <時間>] [--now <ISO 時刻>]`）。version は PR の差分（pnpm-lock・package-lock・yarn.lock・workflow の `uses:`）から読み、依存の依存も数える。終了コードは 0 対象・10 まだ・20 判定できない・1 道具の誤り。skill は Dependabot の PR を見る repo の folder でこれを打つが、nodenv の `node` の shim は渡された script の folder から `.node-version` を探すので、この repo の version で動く。`cli/bin/tpm` も同じ訳で、`~/.local/bin/tpm` のような repo の外の symlink から呼ばれても、本当の在り処の path を `node` に渡す sh にしてある。また cmux の通知の hook のように PATH が既定だけで呼ばれたときは、`node`（nodenv の shim）と `cmux`（app の中）を自分で PATH に足す（見つからなければ、探した所を出して 127 で終わる）。
+Dependabot の PR の判定の道具は `cli/src/release-age.ts`（`node cli/src/release-age.ts <owner>/<repo> <PR> [--hours <時間>] [--now <ISO 時刻>]`）。version は PR の差分（pnpm-lock・package-lock・yarn.lock・workflow の `uses:`）から読み、依存の依存も数える。終了コードは 0 対象・10 まだ・20 判定できない・1 道具の誤り。skill は Dependabot の PR を見る repo の folder でこれを打つが、nodenv の `node` の shim は渡された script の folder から `.node-version` を探すので、この repo の version で動く。`cli/bin/roster` も同じ訳で、`~/.local/bin/roster` のような repo の外の symlink から呼ばれても、本当の在り処の path を `node` に渡す sh にしてある。また cmux の通知の hook のように PATH が既定だけで呼ばれたときは、`node`（nodenv の shim）と `cmux`（app の中）を自分で PATH に足す（見つからなければ、探した所を出して 127 で終わる）。
 
 ## skill の frontmatter
 
 `skill-sets/` の `SKILL.md` の frontmatter は、Claude Code に渡す設定。担当の居場所には、どの skill セットも `--add-dir` で全部渡る（`cli/src/run-role.ts`）ので、model が呼べる skill は、どの担当の居場所の一覧にも載る。
 
-- 担当の skill（`tpm start` や `tpm assign` が最初の入力で呼ぶ物・Product Manager が打つ物）は `disable-model-invocation: true` にする。一覧に載らず、model が自分で呼ばない。`when_to_use` は書かない（書いても効かない）。
+- 担当の skill（`roster start` や `roster assign` が最初の入力で呼ぶ物・Product Manager が打つ物）は `disable-model-invocation: true` にする。一覧に載らず、model が自分で呼ばない。`when_to_use` は書かない（書いても効かない）。
 - model に呼ばせる skill（今は `/dependabot-triage`・`dependabot-scan`・`audit-evidence`）は、`description` に何をするかを、`when_to_use` に呼ぶ場面（言い方の例）と呼ばない場面（どの担当の居場所で呼ばないか）を書く。2 つは一覧で続けて載り、合わせて 1,536 字で切られる。
 - 引用符の無い値に「`: `」を書くと YAML として読めない。全角の「：」にするか、言い換える。
 - 引数を取る skill（本文で `$ARGUMENTS` などを使う物。今は `/audit`・`/dependabot-triage`・`audit-evidence`）は、`argument-hint` に打てる物を書く（例 `"[dry-run] [max=<n>]"`）。/ を打つと、命令の名の後ろに出る。`[` で始まる値は `"…"` で囲む（囲まないと YAML の配列か誤りになる）。引数を取らない skill には書かない。
 - `allowed-tools` は書かない。担当はどれも `bypassPermissions` で起きる（[設定](/configuration/)）ので、許可を渡す欄は効かない。bypass をやめても、skill の `allowed-tools` が効くのは skill を呼んだ turn の間だけで、【brief】や【answer】が届いた後の turn には効かない（Claude Code の skills の文書「Pre-approve tools for a skill」）。担当の許可を変えるなら、skill でなく担当を起こす旗（`--permission-mode` など。`cli/src/run-role.ts`）か settings の allow で渡す（2026-11-22 t-qnfh）。道具を絞る `disallowed-tools` は、この決まりの外。
-- `model`・`effort` は、`context: fork` の skill にだけ書く。fork でない skill では、この 2 つは skill を呼んだ turn の残りだけ効き、次の入力で session の model・effort に戻る（Claude Code の skills の文書の frontmatter の表）。担当の skill に書くと、最初の依頼書の作業だけが別の model で動き、【brief】や【answer】が届いた後は黙って戻る。状態の model の字も替わらない。担当の model・effort は、`.claude/roles/config.jsonc` の担当の欄か `tpm assign --model`・`--effort` で決める（[設定](/configuration/)）。fork の skill では、fork の中の subagent の model・effort になり、呼んだ担当の model は替わらない（2026-11-22 t-4zk5）。
-- `context: fork` は、Claude が Skill tool で呼ぶ 1 回きりの仕事にだけ使う。skill を会話の外の subagent（`agent` の欄の種類。既定は `general-purpose`）に任せ、元の会話には結果の文だけが返る。担当の skill（`disable-model-invocation: true`）は fork にしない。手順が subagent の中に消え、【brief】や【answer】が届く 2 turn 目からの会話は手順を知らない。subagent に渡るのは SKILL.md の本文と引数だけで、会話の履歴も CLAUDE.md も見えない（Claude Code 2.1.330 で試した。公式の文書の比べの表は CLAUDE.md を読むように書くが、`general-purpose` の fork では見えなかった）。要る決まりは本文に書くか、`${CLAUDE_SKILL_DIR}` からの path で読ませる。`background: false` を書き、呼んだ turn で結果を受け取る（既定は裏で動き、結果は後の turn に届く）。subagent は担当の環境変数と guard の hook を受け継ぐので、fork の中の `tpm` は呼んだ担当として動き、guard も効く。だから本文に書いてよい `tpm` の命令は読む物（`tpm page path`・`tpm incident timeline` など。`check-skills.mjs` の `FORK_COMMANDS`）だけで、知らせ・状態・名簿の命令は呼んだ担当が打つ。`agent`・`background` は fork の skill にだけ書く（2026-11-22 t-hf43）。
+- `model`・`effort` は、`context: fork` の skill にだけ書く。fork でない skill では、この 2 つは skill を呼んだ turn の残りだけ効き、次の入力で session の model・effort に戻る（Claude Code の skills の文書の frontmatter の表）。担当の skill に書くと、最初の依頼書の作業だけが別の model で動き、【brief】や【answer】が届いた後は黙って戻る。状態の model の字も替わらない。担当の model・effort は、`.claude/roles/config.jsonc` の担当の欄か `roster assign --model`・`--effort` で決める（[設定](/configuration/)）。fork の skill では、fork の中の subagent の model・effort になり、呼んだ担当の model は替わらない（2026-11-22 t-4zk5）。
+- `context: fork` は、Claude が Skill tool で呼ぶ 1 回きりの仕事にだけ使う。skill を会話の外の subagent（`agent` の欄の種類。既定は `general-purpose`）に任せ、元の会話には結果の文だけが返る。担当の skill（`disable-model-invocation: true`）は fork にしない。手順が subagent の中に消え、【brief】や【answer】が届く 2 turn 目からの会話は手順を知らない。subagent に渡るのは SKILL.md の本文と引数だけで、会話の履歴も CLAUDE.md も見えない（Claude Code 2.1.330 で試した。公式の文書の比べの表は CLAUDE.md を読むように書くが、`general-purpose` の fork では見えなかった）。要る決まりは本文に書くか、`${CLAUDE_SKILL_DIR}` からの path で読ませる。`background: false` を書き、呼んだ turn で結果を受け取る（既定は裏で動き、結果は後の turn に届く）。subagent は担当の環境変数と guard の hook を受け継ぐので、fork の中の `roster` は呼んだ担当として動き、guard も効く。だから本文に書いてよい `roster` の命令は読む物（`roster page path`・`roster incident timeline` など。`check-skills.mjs` の `FORK_COMMANDS`）だけで、知らせ・状態・名簿の命令は呼んだ担当が打つ。`agent`・`background` は fork の skill にだけ書く（2026-11-22 t-hf43）。
 
-`pnpm run check` の `docs-site/scripts/check-skills.mjs` が、欄の名・`name` と folder の揃い・`when_to_use` と `disable-model-invocation` の組・字数・`argument-hint` と本文の引数の組・`allowed-tools` が無いこと・`model` と `effort` が fork の skill にだけあること・fork の skill の組（`agent` と `background` は fork だけ・担当の skill を fork にしない・`background: false`・本文の `tpm` の命令は読む物だけ）を見る。
+`pnpm run check` の `docs-site/scripts/check-skills.mjs` が、欄の名・`name` と folder の揃い・`when_to_use` と `disable-model-invocation` の組・字数・`argument-hint` と本文の引数の組・`allowed-tools` が無いこと・`model` と `effort` が fork の skill にだけあること・fork の skill の組（`agent` と `background` は fork だけ・担当の skill を fork にしない・`background: false`・本文の `roster` の命令は読む物だけ）を見る。
 
 ## この docs
 
@@ -97,11 +97,11 @@ pnpm run format               # code（astro.config.ts・src/ の .ts・scripts/
 pnpm run format:check         # 整っているかと、md の中の JSON の塊と *.jsonc を見る（site.yml が流す）
 ```
 
-Prettier は既定の設定のまま使い、設定のファイルは置かない。原稿の `.md` は Prettier に掛けない（表や日本語の折り返しを崩させないため）。その代わり、`format:check` は `docs-site/scripts/check-md-json.mjs` で repo の `.md`（skill・原稿・README など、git が追跡する物と add 前の新しい物）の中の ` ```json `・` ```jsonc ` の塊だけを取り出し、読めることと、Prettier（`--parser json`・`--parser jsonc`）で整えた形と同じことを見る。repo の `*.jsonc` の file（`.claude/roles/config.jsonc` など）も、file 全体を ` ```jsonc ` の塊と同じに見る。` ```jsonc ` の塊と `*.jsonc` の file は、`tpm` が `config.jsonc` を読むのと同じ `cli/src/jsonc.ts` で読む。`<id>` などの置き字は、文字列の中に書けば読める。落ちたら、塊を `prettier --parser json`（`jsonc`）に通した形に書き換える。`cli/` の整形は Prettier でなく ESLint（`@stylistic`）が見る。
+Prettier は既定の設定のまま使い、設定のファイルは置かない。原稿の `.md` は Prettier に掛けない（表や日本語の折り返しを崩させないため）。その代わり、`format:check` は `docs-site/scripts/check-md-json.mjs` で repo の `.md`（skill・原稿・README など、git が追跡する物と add 前の新しい物）の中の ` ```json `・` ```jsonc ` の塊だけを取り出し、読めることと、Prettier（`--parser json`・`--parser jsonc`）で整えた形と同じことを見る。repo の `*.jsonc` の file（`.claude/roles/config.jsonc` など）も、file 全体を ` ```jsonc ` の塊と同じに見る。` ```jsonc ` の塊と `*.jsonc` の file は、`roster` が `config.jsonc` を読むのと同じ `cli/src/jsonc.ts` で読む。`<id>` などの置き字は、文字列の中に書けば読める。落ちたら、塊を `prettier --parser json`（`jsonc`）に通した形に書き換える。`cli/` の整形は Prettier でなく ESLint（`@stylistic`）が見る。
 
 Prettier の `--parser jsonc` は複数行の最後に末尾のカンマを付けるが、VS Code は知らない `.jsonc` の末尾のカンマに警告（`jsonc(519)`）を出す。そこで `.vscode/settings.json` が、repo の `*.jsonc` に `.vscode/jsonc.schema.json`（`allowComments`・`allowTrailingCommas` だけの schema）を当てて、警告を出させない。欄の名や型は見ない。
 
-`astro build` は `.md` のページの中で何が落ちても exit 0 で終わるので、`check` は build の後に `docs-site/scripts/check-refs.mjs` を流す。見る物は、ページへのリンク・リンクの見出し（`#` の後ろ。見出しの id は Starlight が作るので、build の書き出しの id を読む）・本文が名指した repo の path（git が追跡する物と、add 前の新しい物だけを数える。build の書き出しなど `.gitignore` にある物は、手元に在っても無いとみなす）・README の URL・skill が名指す原稿の見出し・`config.jsonc` の欄の揃い・skill の中の相対パス（`${CLAUDE_SKILL_DIR}/…` の先）・skill が名指す `_shared/` の決まりの見出し・画面の絵（`docs-site/src/assets/screens/`）と本文の参照の揃い・skill に連携と課題管理の道具の命令が直に書かれていないこと・skill と原稿が書いた `tpm` の命令が在ること・`protocol.md` の見出しと `cli/src/protocol.ts` の見出しの表の揃い。続けて `docs-site/scripts/check-skills.mjs` が skill の frontmatter を見る（[skill の frontmatter](#skill-の-frontmatter)）。続けて `docs-site/scripts/check-wording.mjs` が、repo の字（docs・skill・`tpm` の code と試験・README・workflow）に、1 台の機械を指す語（`macOS` は当てない）と、ある人の home の path（`/Users/<名>`・`-Users-<名>`。見本の名 `me` は当てない）が無いかを見る。roster はだれの機械でも動かせる物として公開するので、機械は「tpm を動かす機械」、cmux のバナーは「通知のバナー」と書く（2026-11-23 t-q5mh）。Mermaid の図は書き間違えても検査を通るので、図を変えたら手元で見る。
+`astro build` は `.md` のページの中で何が落ちても exit 0 で終わるので、`check` は build の後に `docs-site/scripts/check-refs.mjs` を流す。見る物は、ページへのリンク・リンクの見出し（`#` の後ろ。見出しの id は Starlight が作るので、build の書き出しの id を読む）・本文が名指した repo の path（git が追跡する物と、add 前の新しい物だけを数える。build の書き出しなど `.gitignore` にある物は、手元に在っても無いとみなす）・README の URL・skill が名指す原稿の見出し・`config.jsonc` の欄の揃い・skill の中の相対パス（`${CLAUDE_SKILL_DIR}/…` の先）・skill が名指す `_shared/` の決まりの見出し・画面の絵（`docs-site/src/assets/screens/`）と本文の参照の揃い・skill に連携と課題管理の道具の命令が直に書かれていないこと・skill と原稿が書いた `roster` の命令が在ること・`protocol.md` の見出しと `cli/src/protocol.ts` の見出しの表の揃い。続けて `docs-site/scripts/check-skills.mjs` が skill の frontmatter を見る（[skill の frontmatter](#skill-の-frontmatter)）。続けて `docs-site/scripts/check-wording.mjs` が、repo の字（docs・skill・`roster` の code と試験・README・workflow）に、1 台の機械を指す語（`macOS` は当てない）と、ある人の home の path（`/Users/<名>`・`-Users-<名>`。見本の名 `me` は当てない）が無いかを見る。roster はだれの機械でも動かせる物として公開するので、機械は「roster を動かす機械」、cmux のバナーは「通知のバナー」と書く（2026-11-23 t-q5mh）。続けて `docs-site/scripts/check-old-name.mjs` が、git が追跡する物すべて（`cli/src`・`cli/test`・`.github` も）に、道具の古い名（命令の形・入口の path・道具を指す字）が残っていないかを見る。道具の名は 2026-11-23 に替えた（t-v28j）。替えなかった内の名（状態と控えと設定の folder・環境変数・castlist の鍵とラベル・TPM 担当を指す値・skill の名）は当てず、当てない型は file の頭に並べてある。Mermaid の図は書き間違えても検査を通るので、図を変えたら手元で見る。
 
 skill は Pages ではなく原稿の Markdown を読む（`/dependabot-triage` と `/sustaining-engineer` が [設定](/configuration/) を読む）。原稿の見出しや表を変えたら、`check` が skill の読む先を確かめる。
 

@@ -1,7 +1,7 @@
 // Staff Engineer 担当の席と、レビューのやりとり。
-// 課題の担当が tpm ask review で頼み、Staff Engineer 担当が tpm report review で返す。どちらも TPM 担当を通らず、相手へじかに届く。
-// 席が無ければ、頼みの命令が起こす（依頼書は頼みから作る）。TPM 担当の tpm assign <課題の Key> --role staff-engineer（tpm-side.ts）は、席の起こし直しに残る。
-// 判定を受けない時だけ、課題の担当が tpm ask tpm --review <番号> で TPM 担当に上げる（messages.ts の askTpm）。
+// 課題の担当が roster ask review で頼み、Staff Engineer 担当が roster report review で返す。どちらも TPM 担当を通らず、相手へじかに届く。
+// 席が無ければ、頼みの命令が起こす（依頼書は頼みから作る）。TPM 担当の roster assign <課題の Key> --role staff-engineer（tpm-side.ts）は、席の起こし直しに残る。
+// 判定を受けない時だけ、課題の担当が roster ask tpm --review <番号> で TPM 担当に上げる（messages.ts の askTpm）。
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { requireUp, sessionRef } from '../castlist.ts';
@@ -28,7 +28,7 @@ export const STAFF: RoleName = 'staff-engineer';
  */
 export function staffSubject(ctx: Context, key: string): RoleRecord {
   const subject = readRole(ctx, key);
-  if (subject === undefined) throw new TpmError(`${key} の担当が名簿にいません。Staff Engineer 担当は、課題の担当の隣に起こします（tpm roles で名簿を見る）`);
+  if (subject === undefined) throw new TpmError(`${key} の担当が名簿にいません。Staff Engineer 担当は、課題の担当の隣に起こします（roster roles で名簿を見る）`);
   const skill = join(skillSetDir(ctx.root, 'core'), '.claude', 'skills', 'staff-engineer', 'SKILL.md');
   if (!existsSync(skill)) throw new TpmError(`skill /staff-engineer がまだありません（${skill}）。roster の repo を新しくしてから打ってください`);
   return subject;
@@ -45,7 +45,7 @@ function staffBriefPage(subject: RoleRecord, asks: Review[]): string {
     `<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>${e(subject.key)} レビューの依頼書</title></head><body>`,
     `<h1>${e(subject.key)}: レビューの依頼書</h1>`,
     '<section id="summary"><h2>課題の概要</h2>',
-    `<p>課題 ${e(subject.key)} の担当（${e(subject.title)}）が、下の物のレビューを頼んだ。見る物を読み、課題の担当の依頼書と照らして、レビューのページを置き、tpm report review で返す。直さない・決めない（レビューは助言）。</p>`,
+    `<p>課題 ${e(subject.key)} の担当（${e(subject.title)}）が、下の物のレビューを頼んだ。見る物を読み、課題の担当の依頼書と照らして、レビューのページを置き、roster report review で返す。直さない・決めない（レビューは助言）。</p>`,
     `<ul><li>課題の担当の依頼書: ${subject.brief === undefined ? '無し' : link(subject.brief)}</li></ul>`,
     '</section>',
     '<h2>見る物</h2>',
@@ -90,7 +90,7 @@ export function relabelStaff(ctx: Context, seat: RoleRecord, subjectKey: string,
 
 /** `launchStaff` に渡す物。 */
 export interface LaunchStaffOptions {
-  /** model などの旗（TPM 担当の tpm assign だけ。tpm ask review からは付けられない）。 */
+  /** model などの旗（TPM 担当の roster assign だけ。roster ask review からは付けられない）。 */
   flags?: SettingsLayer
   cwd?: string
   issue?: string
@@ -108,8 +108,8 @@ export interface LaunchStaffOptions {
 /**
  * Staff Engineer 担当の席を起こす: 頼みから依頼書を作って置き、名簿の行（Key は `<課題の Key>.staff`）を書き、居場所を作る。
  * 題（`レビュー <課題の Key>: <見る物>`）と説明（見てほしい所）は頼みから作り、色は役割の表から付く。
- * 課題の担当の tpm ask review（席が無い時）と、TPM 担当の tpm assign --role staff-engineer（起こし直し）が使う。
- * 起こした者（castlist の launchedBy）は、命令を打った session（tpm ask review なら課題の担当）。
+ * 課題の担当の roster ask review（席が無い時）と、TPM 担当の roster assign --role staff-engineer（起こし直し）が使う。
+ * 起こした者（castlist の launchedBy）は、命令を打った session（roster ask review なら課題の担当）。
  */
 export function launchStaff(ctx: Context, subject: RoleRecord, asks: Review[], options: LaunchStaffOptions): string[] {
   // Staff Engineer 担当の記録は、見ている課題の課題管理の課題に書く。
@@ -159,7 +159,7 @@ export function launchStaff(ctx: Context, subject: RoleRecord, asks: Review[], o
 const PR_URL = /^https:\/\/[^\s/]+\/[^\s/]+\/[^\s/]+\/pull\/\d+/;
 /** 置き場のレビューのページの URL の終わり。 */
 const REVIEW_PAGE = /\/review-[1-9]\d*\.html(?:[?#].*)?$/;
-/** tpm ask review が、起こした席の名乗りを待つ秒の既定（tpm assign と同じ）。 */
+/** roster ask review が、起こした席の名乗りを待つ秒の既定（roster assign と同じ）。 */
 export const ASK_REVIEW_WAIT = 90;
 
 /**
@@ -172,7 +172,7 @@ export const ASK_REVIEW_WAIT = 90;
  */
 export function askReview(ctx: Context, options: { url: string, focus?: string, wait?: number }): string[] {
   const self = sender(ctx);
-  notAuditor(self, 'tpm ask review');
+  notAuditor(self, 'roster ask review');
   if (!isPageUrl(ctx.env, options.url) && !PR_URL.test(options.url)) throw new TpmError(`--url は、置き場のページか PR の URL にしてください（見る物）: ${options.url}`);
   const same = openReviews(ctx, self.key).find(r => r.url === options.url);
   if (same !== undefined) throw new TpmError(`同じ物のレビューを、もう頼んであります（#${same.n}。${same.askedAt} に頼んだ）。2 度目は送っていません。判定は Staff Engineer 担当から【review】で届きます`);
@@ -217,7 +217,7 @@ export function askReview(ctx: Context, options: { url: string, focus?: string, 
       out = launchStaff(ctx, subject, [...open, review], {
         wait: options.wait ?? ASK_REVIEW_WAIT,
         again: seat !== undefined,
-        castlistHint: ['この 1 行は自分で打たない。tpm ask tpm で、castlist が止まっていることを TPM 担当に知らせ、起きた後にもう 1 度 tpm ask review を打ってください。'],
+        castlistHint: ['この 1 行は自分で打たない。roster ask tpm で、castlist が止まっていることを TPM 担当に知らせ、起きた後にもう 1 度 roster ask review を打ってください。'],
       });
     }
     catch (e) {
@@ -229,7 +229,7 @@ export function askReview(ctx: Context, options: { url: string, focus?: string, 
         throw e;
       }
       const message = e instanceof Error ? e.message : String(e);
-      throw new TpmError(`${message}\n頼み #${review.n} は残してあります。Staff Engineer 担当の席が名乗らないことを、tpm ask tpm で TPM 担当に知らせてください（TPM 担当が、残った居場所を tpm close ${staffKey(self.key)} で閉じてから起こし直す）。`);
+      throw new TpmError(`${message}\n頼み #${review.n} は残してあります。Staff Engineer 担当の席が名乗らないことを、roster ask tpm で TPM 担当に知らせてください（TPM 担当が、残った居場所を roster close ${staffKey(self.key)} で閉じてから起こし直す）。`);
     }
   }
   // じかのメッセージは TPM 担当の命令を通らないので、届いた時刻をここで写す。
@@ -237,9 +237,9 @@ export function askReview(ctx: Context, options: { url: string, focus?: string, 
   return [...out, ...wait(ctx, 'review', reviewLabel([review]).target)];
 }
 
-/** `tpm report review` の旗。 */
+/** `roster report review` の旗。 */
 export interface ReviewOptions {
-  /** レビューのページ（tpm page put --kind review で置いた URL）。 */
+  /** レビューのページ（roster page put --kind review で置いた URL）。 */
   url: string
   /** 判定（VERDICTS の語）。 */
   verdict: string
@@ -256,10 +256,10 @@ const WAIT_NEXT_REVIEW = WAIT.review('次の頼み');
  */
 export function reportReview(ctx: Context, options: ReviewOptions): string[] {
   const self = sender(ctx);
-  if (self.role !== 'staff-engineer') throw new TpmError('tpm report review は Staff Engineer 担当（Staff の席）が打ちます。レビューを頼むのは tpm ask review');
+  if (self.role !== 'staff-engineer') throw new TpmError('roster report review は Staff Engineer 担当（Staff の席）が打ちます。レビューを頼むのは roster ask review');
   if (!Object.hasOwn(VERDICTS, options.verdict)) throw new TpmError(`--verdict は ${Object.keys(VERDICTS).join('・')} のどれかにしてください（${Object.entries(VERDICTS).map(([id, label]) => `${id}＝${label}`).join('・')}）`);
   const verdict = options.verdict as Verdict;
-  if (!isPageUrl(ctx.env, options.url) || !REVIEW_PAGE.test(options.url)) throw new TpmError(`--url は、tpm page put --kind review で置いたレビューのページの URL にしてください: ${options.url}`);
+  if (!isPageUrl(ctx.env, options.url) || !REVIEW_PAGE.test(options.url)) throw new TpmError(`--url は、roster page put --kind review で置いたレビューのページの URL にしてください: ${options.url}`);
   const subject = subjectOf(self);
   if (pageOwner(ctx, options.url)?.key !== subject) throw new TpmError(`--url は、${subject} のレビューのページにしてください（別の課題のページ）: ${options.url}`);
   // 返すのは、いちばん古い依頼書の頼みだけ（依頼書は積まれた順にこなす。後ろに積まれた依頼書の頼みは、次の【review】で返す）。
@@ -267,7 +267,7 @@ export function reportReview(ctx: Context, options: ReviewOptions): string[] {
   const asks = briefed.filter(r => r.brief === briefed[0]?.brief);
   if (asks.length === 0) throw new TpmError(`${subject} に、返していないレビューの頼みがありません（もう返したか、頼みがまだ来ていない）。送っていません`);
   const owner = readRole(ctx, subject);
-  if (owner === undefined) throw new TpmError(`${subject} の担当が名簿にいません。送っていません・記録も書いていません。tpm ask tpm で TPM 担当に知らせてください（レビューのページ: ${options.url}）`);
+  if (owner === undefined) throw new TpmError(`${subject} の担当が名簿にいません。送っていません・記録も書いていません。roster ask tpm で TPM 担当に知らせてください（レビューのページ: ${options.url}）`);
   const label = VERDICTS[verdict];
   const body = `${options.url} 判定: ${label}（${verdict}）／一言: ${options.summary}／頼み: ${asks.map(r => `#${r.n}`).join(' ')}`;
   // 相手の居場所と 2 度送りを、課題に記録を書く前に見る。

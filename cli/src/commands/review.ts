@@ -1,4 +1,4 @@
-// tpm review list: レビューの頼みと判定を、数で読む（reviews.ts の記録）。読むだけなので、どの担当も打てる。
+// roster review list: レビューの頼みと判定を、数で読む（reviews.ts の記録）。読むだけなので、どの担当も打てる。
 import type { Command } from 'commander';
 import { createContext, type Context } from '../context.ts';
 import { readReviews, VERDICTS, type Review, type Verdict } from '../reviews.ts';
@@ -41,9 +41,9 @@ export function reviewList(ctx: Context, options: { key?: string }): string[] {
   return [...lines, `結果の【done】を出した課題 ${results.length} 件のうち、レビューを頼んでいない課題: ${without.length} 件${without.length === 0 ? '' : `（${without.join('・')}）`}`];
 }
 
-/** `tpm review` の命令を命令の木に足す。 */
+/** `roster review` の命令を命令の木に足す。 */
 export function registerReview(program: Command, print: (lines: string[]) => void): void {
-  const review = program.command('review').description('レビューの頼みと判定を読む（頼むのは tpm ask review、返すのは tpm report review）');
+  const review = program.command('review').description('レビューの頼みと判定を読む（頼むのは roster ask review、返すのは roster report review）');
   review.command('list').description('頼みごとの行と、合わせた数（頼んだ回数・判定ごとの数・レビューを頼んでいない課題）')
     .option('--key <Key>', 'その課題の頼みだけ')
     .action((options: { key?: string }) => print(reviewList(createContext(), options)));

@@ -1,4 +1,4 @@
-// tpm が持つ状態（TPM 担当の宛先・担当の名簿・承認・送ったメッセージ）の置き場。
+// roster が持つ状態（TPM 担当の宛先・担当の名簿・承認・送ったメッセージ）の置き場。
 // project（TPM 担当を起こした folder）ごとに folder を分け、1 件 1 ファイルで書く（担当が同時に書いてもぶつからない）。
 // 1 件 1 ファイルは .jsonc（config.jsonc と同じ parseJsonc で読む）、足していく記録は 1 行 1 件の .jsonl。
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -16,7 +16,7 @@ export function stateDir(project: string, env: NodeJS.ProcessEnv = process.env):
   return join(stateBase(env), project.replaceAll(/[^A-Za-z0-9._-]/g, '-'));
 }
 
-/** project ごとの状態の folder を並べる folder。$XDG_STATE_HOME（無ければ ~/.local/state）の `tpm`。 */
+/** project ごとの状態の folder を並べる folder。$XDG_STATE_HOME（無ければ ~/.local/state）の `tpm`（道具の名を roster に替えた後も、folder の名は替えていない）。 */
 export function stateBase(env: NodeJS.ProcessEnv = process.env): string {
   return join(env.XDG_STATE_HOME || join(homedir(), '.local', 'state'), 'tpm');
 }
@@ -106,7 +106,7 @@ export class State {
  * 古い名の状態（*.json）を *.jsonc に移す。folder の下まで見る。.jsonl と書きかけ（*.tmp）には触らない。
  * 両方あれば（古いコードの命令が移した後に書いた）新しい方を .jsonc に残す。
  * 担当が同時に移して先を越された物（ENOENT）は無視する。命令はみな createContext でこれを通る。
- * 古い .json を書く tpm はもう無いので、使う project のどれでも 1 度 tpm を打った後は消してよい。
+ * 古い .json を書く版はもう無いので、使う project のどれでも 1 度 roster を打った後は消してよい。
  */
 export function migrateLegacyJson(dir: string): void {
   if (!existsSync(dir)) return;

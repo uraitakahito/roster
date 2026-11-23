@@ -6,7 +6,7 @@ import type { NoteKind } from './tracker/types.ts';
 export const TPM_TITLE = 'Technical Program Manager';
 
 /**
- * tpm の命令の一覧。skill と docs が書いた `tpm <命令>` が在るかを docs-site/scripts/check-refs.mjs がこれで見る
+ * roster の命令の一覧。skill と docs が書いた `roster <命令>` が在るかを docs-site/scripts/check-refs.mjs がこれで見る
  * （その検査は cli の依存を入れずに動くので、命令の木ではなくこの表を読む）。命令の木と揃っているかは試験が見る。
  */
 export const COMMANDS = [
@@ -109,7 +109,7 @@ export interface RoleDef {
 /** TPM 担当の居場所の色（RoleDef の color と同じ決め）。名乗る時に自分に付ける。 */
 export const TPM_COLOR = 'Amber';
 
-/** tpm start が起こす TPM 担当の model など。 */
+/** roster start が起こす TPM 担当の model など。 */
 export const TPM_SETTINGS: RoleSettings = { model: 'claude-opus-5-5', effort: 'medium', permissionMode: 'bypassPermissions' };
 
 /** Auditor の席の課題の Key（席は project に 1 つだけ）。 */
@@ -192,14 +192,14 @@ export const HEADINGS = {
   'merged': { from: 'role' },
   'done': { from: 'role' },
   'end': { from: 'role', record: '結果' },
-  // 課題管理には書かない（台帳の中身は、tpm を動かす機械の外に出さない）。
+  // 課題管理には書かない（台帳の中身は、roster を動かす機械の外に出さない）。
   'incident': { from: 'role' },
   // Auditor だけが送る。audit は Product Manager へじかに出した報告の写し、decided は Product Manager の決定。
   'audit': { from: 'role' },
   'decided': { from: 'role' },
   // Staff Engineer 担当だけが送る。レビューのページと判定。頼んだ課題の担当へじかに届く。
   'review': { from: 'role', record: 'レビュー', peer: true },
-  // 新しい session の始まりに、tpm の hook（tpm returned check）が、前の session 宛てに届いたメッセージを TPM 担当へ返す。台帳には hook が直に書く。
+  // 新しい session の始まりに、roster の hook（roster returned check）が、前の session 宛てに届いたメッセージを TPM 担当へ返す。台帳には hook が直に書く。
   'returned': { from: 'role' },
   'merge-request': { from: 'role' },
   'not-yet': { from: 'role' },
@@ -227,7 +227,7 @@ export const WAIT = {
   /** レビューの相手を待つ（課題の担当は判定を、Staff Engineer 担当は次の頼みを）。 */
   review: (what: string) => `回答待ち(レビュー): ${what}`,
 } as const;
-/** 待ちの種類（`tpm wait` の kind）。 */
+/** 待ちの種類（`roster wait` の kind）。 */
 export type WaitKind = keyof typeof WAIT;
 
 /** 【done】の後の待ち。 */
