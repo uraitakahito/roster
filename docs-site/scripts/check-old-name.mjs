@@ -187,12 +187,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     { cwd: REPO, encoding: "utf8" },
   )
     .split("\n")
-    .filter(
-      (f) =>
-        f !== "" &&
-        f !== SELF &&
-        !f.endsWith("pnpm-lock.yaml"),
-    )
+    .filter((f) => f !== "" && f !== SELF && !f.endsWith("pnpm-lock.yaml"))
     .filter((f) => !/\.(png|jpe?g|gif|ico|webp|pdf|woff2?)$/i.test(f));
   const errors = files.flatMap((f) => {
     let text;
