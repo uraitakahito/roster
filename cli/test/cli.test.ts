@@ -6,8 +6,7 @@ import { join } from 'node:path';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { buildProgram, commandPaths } from '../src/program.ts';
 import { COMMANDS } from '../src/protocol.ts';
-import { SETTINGS_ENV } from '../src/settings.ts';
-import { envName, legacyEnvName } from '../src/env.ts';
+import { withoutRosterEnv } from '../src/env.ts';
 
 /** cli/ の folder（bin/roster と src/ がある）と、その 1 つ上の repo。 */
 const cli = realpathSync(join(import.meta.dirname, '..'));
@@ -20,12 +19,11 @@ const mkdirp = (dir: string): string => {
   return dir;
 };
 
-/** 試験を流す人の profile の ROSTER_MODEL などを抜いた環境変数に、extra を足す。 */
+/** 試験を流す人の profile の ROSTER_MODEL など（roster の環境変数を新旧の名とも）を抜いた環境変数に、extra を足す。 */
 const env = (extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv => {
   // 状態と控えの folder は一時の folder にする（試験を流す機械の本物の folder を読まない）。
-  const e: NodeJS.ProcessEnv = { ...process.env, XDG_STATE_HOME: join(scratch, 'xdg-state'), XDG_DATA_HOME: join(scratch, 'xdg-data'), ...extra };
-  for (const name of Object.values(SETTINGS_ENV).flatMap(n => [envName(n), legacyEnvName(n)])) if (!(name in extra)) delete e[name];
-  return e;
+  // 試験を流す担当の居場所の roster の環境変数（新旧の名とも）は渡さない（$ROSTER_STATE は XDG_STATE_HOME より先に効く）。
+  return { ...withoutRosterEnv(process.env), XDG_STATE_HOME: join(scratch, 'xdg-state'), XDG_DATA_HOME: join(scratch, 'xdg-data'), ...extra };
 };
 const run = (bin: string, args: string[], cwd: string, extra: NodeJS.ProcessEnv = {}): string =>
   execFileSync(bin, args, { cwd, encoding: 'utf8', env: env(extra) }).trimEnd();
@@ -240,7 +238,7 @@ describe('命令の一覧', () => {
 
   test('決まりの誤りは roster: で始まる 1 行を出して exit 1', () => {
     // scratch の直下には、ほかの試験がわざと誤りを書いた設定がある（集めて読むと止まる）ので、空の folder で打つ。受け継いだ $ROSTER_PROJECT も消す。
-    const r = spawnSync(entry, ['ask', 'tpm', 'x', '--waiting-for', 'y'], { cwd: folder(null), encoding: 'utf8', env: { ...process.env, ROSTER_PROJECT: '', ROSTER_KEY: '', ROSTER_STATE: mkdirp(join(scratch, 'state')) } });
+    const r = spawnSync(entry, ['ask', 'tpm', 'x', '--waiting-for', 'y'], { cwd: folder(null), encoding: 'utf8', env: { ...withoutRosterEnv(process.env), ROSTER_STATE: mkdirp(join(scratch, 'state')) } });
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(/^roster: \$ROSTER_KEY がありません/);
   });

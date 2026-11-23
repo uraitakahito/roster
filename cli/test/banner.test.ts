@@ -263,6 +263,15 @@ describe('setup と check', () => {
     const legacy = bannerCheck(root, env, file);
     expect(legacy.ok).toBe(true);
     expect(legacy.lines.at(-1)).toBe('cmux.json の hook の id が前の名（tpm-banner）です。roster-banner に替えてください（動きは変わらない）');
+    // 命令が古い時も、id のことを一緒に出す（直す手を 1 回で済ませる）。
+    put([{ id: 'tpm-banner', command: OLD }]);
+    expect(bannerCheck(root, env, file).lines.slice(-2)).toEqual([expect.stringMatching(/古い形です/), expect.stringMatching(/id が前の名/)]);
+    // 新旧の 2 行が並べば、新しい id の行を見て、2 行あると知らせる。
+    put([{ id: 'tpm-banner', command: OLD }, hookEntry(root, env)]);
+    const both = bannerCheck(root, env, file);
+    expect(both.ok).toBe(false);
+    expect(both.lines).toContain(`cmux.json の hook: あり（${file}）`);
+    expect(both.lines.at(-1)).toBe('cmux.json に roster の hook が 2 行あります（通知ごとに重ねて動く）。roster-banner の 1 行だけを残してください');
   });
 
   test('check は古い在り処（~/.config/tpm）の設定を読まず、移す手を出して ok にしない', () => {

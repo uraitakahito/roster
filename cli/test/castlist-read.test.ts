@@ -14,6 +14,7 @@ import { buildProgram, commandPaths } from '../src/program.ts';
 import { COMMANDS } from '../src/protocol.ts';
 import { deadUrl, startFakeCastlist, type CastlistRequest, type FakeCastlist } from './castlist-fake.ts';
 import { world, type World } from './helpers.ts';
+import { withoutRosterEnv } from '../src/env.ts';
 
 const READS = ['castlist find', 'castlist show', 'castlist lineage', 'castlist events', 'castlist settings'];
 const tpmBin = join(realpathSync(join(import.meta.dirname, '..')), 'bin', 'roster');
@@ -365,7 +366,7 @@ describe('読むだけ', () => {
     const w = world({ castlist: fake.url });
     await seed(w, 't-cl01-swe', { 'tpm.project': w.project, 'tpm.key': 't-cl01' }, '2026-11-20T11:00:00.000Z');
     const env = (url: string): NodeJS.ProcessEnv => ({
-      ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('TPM_') && !k.startsWith('CMUX_'))),
+      ...Object.fromEntries(Object.entries(withoutRosterEnv(process.env)).filter(([k]) => !k.startsWith('CMUX_'))),
       ROSTER_PROJECT: w.project,
       ROSTER_ROLE: 'auditor',
       ROSTER_KEY: 'audit',

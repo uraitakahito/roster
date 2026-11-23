@@ -700,6 +700,9 @@ describe('置き場の既定', () => {
   test('古い在り処（.local/share/tpm）が本物の folder なら止め、symlink なら新しい在り処を使う', () => {
     const data = realpathSync(mkdtempSync(join(tmpdir(), 'roster-data-')));
     mkdirSync(join(data, 'tpm'));
+    // 印（pages/）の無い share/tpm は roster の物でないので、触らない。
+    expect(pagesDir({ XDG_DATA_HOME: data })).toBe(join(data, 'roster', 'pages'));
+    mkdirSync(join(data, 'tpm', 'pages'));
     expect(() => pagesDir({ XDG_DATA_HOME: data })).toThrow(/古い在り処です.*mv /);
     renameSync(join(data, 'tpm'), join(data, 'roster'));
     symlinkSync('roster', join(data, 'tpm'));

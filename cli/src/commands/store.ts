@@ -35,7 +35,7 @@ const TIMEOUT = '10';
 export function pagesDir(env: NodeJS.ProcessEnv): string {
   const given = envOf(env, 'PAGES_DIR');
   if (given) return given;
-  return join(rosterHome(env.XDG_DATA_HOME || join(homedir(), '.local', 'share')), 'pages');
+  return join(rosterHome(env.XDG_DATA_HOME || join(homedir(), '.local', 'share'), dir => existsSync(join(dir, 'pages'))), 'pages');
 }
 
 /** 置き場の URL（末尾の / は落とす）。$ROSTER_PAGES_URL、無ければ既定。 */

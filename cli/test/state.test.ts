@@ -23,7 +23,7 @@ describe('stateDir', () => {
 
   test('渡された folder が無ければ、作らずに止める（古い在り処の path のまま復元された居場所）', () => {
     const gone = join(state.dir, 'gone');
-    expect(() => stateDir('/w', { ROSTER_STATE: gone })).toThrow(/状態の folder .*gone.*がありません.*居場所を閉じ/);
+    expect(() => stateDir('/w', { ROSTER_STATE: gone })).toThrow(/状態の folder .*gone がありません.*先に作った folder.*居場所を閉じ/);
     expect(existsSync(gone)).toBe(false);
   });
 
@@ -39,30 +39,56 @@ describe('stateDir', () => {
 });
 
 describe('rosterHome（古い在り処 state/tpm）', () => {
+  const marked = (dir: string): boolean => existsSync(join(dir, 'mark'));
+  /** parent の下に roster の印のある本物の folder を作る。 */
+  const real = (name: string): string => {
+    mkdirSync(join(state.dir, name, 'mark'), { recursive: true });
+    return join(state.dir, name);
+  };
+
   test('古い名が無ければ、新しい名の folder', () => {
-    expect(rosterHome(state.dir)).toBe(join(state.dir, 'roster'));
+    expect(rosterHome(state.dir, marked)).toBe(join(state.dir, 'roster'));
   });
 
-  test('古い名が symlink（移した後の形）なら、新しい名の folder', () => {
-    mkdirSync(join(state.dir, 'roster'));
+  test('古い名が新しい名への symlink（移した後の形）なら、新しい名の folder', () => {
+    real('roster');
     symlinkSync('roster', join(state.dir, 'tpm'));
-    expect(rosterHome(state.dir)).toBe(join(state.dir, 'roster'));
+    expect(rosterHome(state.dir, marked)).toBe(join(state.dir, 'roster'));
+  });
+
+  test('新しい名が古い名への symlink（逆向き）でも、同じ folder なので新しい名を使い、割れているとは言わない', () => {
+    real('tpm');
+    symlinkSync('tpm', join(state.dir, 'roster'));
+    expect(rosterHome(state.dir, marked)).toBe(join(state.dir, 'roster'));
+  });
+
+  test('古い名が印の無い folder（別の道具の物）なら、触らずに新しい名を使う', () => {
+    mkdirSync(join(state.dir, 'tpm'));
+    expect(rosterHome(state.dir, marked)).toBe(join(state.dir, 'roster'));
   });
 
   test('古い名が本物の folder で新しい名が無ければ、空の状態を作らずに止め、移す 1 行を出す', () => {
-    mkdirSync(join(state.dir, 'tpm'));
-    expect(() => rosterHome(state.dir)).toThrow(`移してください: mv ${join(state.dir, 'tpm')} ${join(state.dir, 'roster')} && ln -s roster ${join(state.dir, 'tpm')}`);
+    real('tpm');
+    expect(() => rosterHome(state.dir, marked)).toThrow(`移してください: mv ${join(state.dir, 'tpm')} ${join(state.dir, 'roster')} && ln -s roster ${join(state.dir, 'tpm')}`);
     expect(existsSync(join(state.dir, 'roster'))).toBe(false);
   });
 
-  test('古い名も新しい名も本物の folder なら、割れていると止める', () => {
-    mkdirSync(join(state.dir, 'tpm'));
-    mkdirSync(join(state.dir, 'roster'));
-    expect(() => rosterHome(state.dir)).toThrow(/両方が本物の folder です（割れている）/);
+  test('古い名が別の所への symlink で新しい名が無ければ、止めて、新しい名をその所への link にする 1 行を出す', () => {
+    const elsewhere = real('elsewhere');
+    symlinkSync(elsewhere, join(state.dir, 'tpm'));
+    expect(() => rosterHome(state.dir, marked)).toThrow(`移してください: ln -s ${elsewhere} ${join(state.dir, 'roster')}`);
   });
 
-  test('stateBase も同じ守りを通る', () => {
-    mkdirSync(join(state.dir, 'tpm'));
+  test('古い名と新しい名が別の folder なら、割れていると止める', () => {
+    real('tpm');
+    real('roster');
+    expect(() => rosterHome(state.dir, marked)).toThrow(/別の folder です（割れている）/);
+  });
+
+  test('stateBase の印は project の状態の folder（tpm.jsonc か roles/）', () => {
+    mkdirSync(join(state.dir, 'tpm', 'other-tool'), { recursive: true });
+    expect(stateDir('/w', { XDG_STATE_HOME: state.dir })).toBe(join(state.dir, 'roster', '-w'));
+    mkdirSync(join(state.dir, 'tpm', '-p', 'roles'), { recursive: true });
     expect(() => stateDir('/w', { XDG_STATE_HOME: state.dir })).toThrow(/古い在り処です/);
   });
 });

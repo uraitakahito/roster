@@ -1,5 +1,4 @@
 import { spawnSync } from 'node:child_process';
-import { withEnv } from '../src/env.ts';
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +9,7 @@ import { commandOf, guardSettings, judge, judgeWrite, touched, writeOf, type App
 import type { RoleName } from '../src/protocol.ts';
 import { splitCommands } from '../src/shell.ts';
 import { world } from './helpers.ts';
+import { withoutRosterEnv } from '../src/env.ts';
 
 describe('splitCommands', () => {
   test('単純な命令に分け、引用を外し、頭の代入・前に付く語・path・redirect の先を外す', () => {
@@ -262,7 +262,7 @@ describe('hook の入力と settings', () => {
     const command = hookCommand(guardSettings(tpmBin));
     // 止めた記録（guard.jsonl）を、roster を動かす機械の本物の状態の folder でなく、一時の folder に書かせる。
     const state = mkdtempSync(join(tmpdir(), 'roster-guard-state-'));
-    const env = { ...withEnv(process.env, { PROJECT: undefined, STATE: undefined, KEY: undefined, ROLE: undefined }), XDG_STATE_HOME: state };
+    const env = { ...withoutRosterEnv(process.env), XDG_STATE_HOME: state };
     const run = (cmd: string) => spawnSync('/bin/sh', ['-c', command], { cwd: dir, env, encoding: 'utf8', input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: cmd } }) });
     const denied = run(['cmux', 'set-status', 'x'].join(' '));
     expect(denied.stderr).toContain('roster wait');

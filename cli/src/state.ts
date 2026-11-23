@@ -1,7 +1,7 @@
 // roster が持つ状態（TPM 担当の宛先・担当の名簿・承認・送ったメッセージ）の置き場。
 // project（TPM 担当を起こした folder）ごとに folder を分け、1 件 1 ファイルで書く（担当が同時に書いてもぶつからない）。
 // 1 件 1 ファイルは .jsonc（config.jsonc と同じ parseJsonc で読む）、足していく記録は 1 行 1 件の .jsonl。
-import { appendFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { parseJsonc } from './jsonc.ts';
@@ -17,7 +17,7 @@ import { shellQuote } from './shell.ts';
 export function stateDir(project: string, env: NodeJS.ProcessEnv = process.env): string {
   const given = envOf(env, 'STATE');
   if (given) {
-    if (!existsSync(given)) throw new TpmError(`状態の folder ${given}（$${envName('STATE')} で渡された物）がありません。居場所が古い在り処の path のまま復元された時に起きます。空の状態は作りません。この居場所を閉じ、TPM 担当が起こし直してください`);
+    if (!existsSync(given)) throw new TpmError(`$${envName('STATE')} で渡された状態の folder ${given} がありません（空の状態は作りません）。試すときは、先に作った folder を渡してください。よくある訳は、居場所が古い在り処の path のまま復元されたこと: その居場所を閉じ、TPM 担当が起こし直してください`);
     return given;
   }
   return join(stateBase(env), project.replaceAll(/[^A-Za-z0-9._-]/g, '-'));
@@ -25,7 +25,7 @@ export function stateDir(project: string, env: NodeJS.ProcessEnv = process.env):
 
 /** project ごとの状態の folder を並べる folder。$XDG_STATE_HOME（無ければ ~/.local/state）の `roster`（{@link rosterHome}）。 */
 export function stateBase(env: NodeJS.ProcessEnv = process.env): string {
-  return rosterHome(env.XDG_STATE_HOME || join(homedir(), '.local', 'state'));
+  return rosterHome(env.XDG_STATE_HOME || join(homedir(), '.local', 'state'), hasProjectState);
 }
 
 /** 道具の名を roster に替える前の folder の名（t-6ydg）。 */
@@ -33,30 +33,53 @@ const LEGACY_HOME = 'tpm';
 
 /**
  * parent の下の roster の folder（状態は ~/.local/state/roster、控えは ~/.local/share/roster）。
- * 古い在り処（.local/state/tpm・.local/share/tpm）が本物の folder（symlink でない）で在れば、使わずに止める: 新しい folder が無ければ移す 1 行を出し（空の状態を作らない）、
- * 在れば割れていると出す（移す間に古い在り処へ書かれた）。古い名が symlink（移した後の形）か、無ければそのまま。
+ * 古い在り処（.local/state/tpm・.local/share/tpm）を、symlink を解いた先で見る:
+ * 古い在り処が無い・新しい在り処と同じ所（移した後の symlink。逆向きの symlink も）・roster の印が無い（marked が false。別の道具の folder）なら、新しい在り処を使う。
+ * そうでなく、新しい在り処が無ければ、空の状態を作らずに止めて移す 1 行を出す。新しい在り処が別の所に在れば、割れていると止める。
  */
-export function rosterHome(parent: string): string {
+export function rosterHome(parent: string, marked: (dir: string) => boolean): string {
   const home = join(parent, 'roster');
   const legacy = join(parent, LEGACY_HOME);
-  if (!isRealDir(legacy)) return home;
-  if (!existsSync(home)) throw new TpmError(`${legacy} は古い在り処です（道具の名を roster に替えた）。roster は読まないので、移してください: mv ${shellQuote(legacy)} ${shellQuote(home)} && ln -s roster ${shellQuote(legacy)}`);
-  throw new TpmError(`${legacy} と ${home} の両方が本物の folder です（割れている）。${legacy} の中の file を ${home} へ写し（名が同じ物は新しい方を残す）、${legacy} を消して ln -s roster ${shellQuote(legacy)} を打ってください`);
+  const old = realOf(legacy);
+  const now = realOf(home);
+  if (old === undefined || old === now || !marked(old)) return home;
+  if (now === undefined) {
+    const move = isLink(legacy) ? `ln -s ${shellQuote(old)} ${shellQuote(home)}` : `mv ${shellQuote(legacy)} ${shellQuote(home)} && ln -s roster ${shellQuote(legacy)}`;
+    throw new TpmError(`${legacy} は古い在り処です（道具の名を roster に替えた）。roster は読まないので、移してください: ${move}`);
+  }
+  throw new TpmError(`${legacy}（${old}）と ${home}（${now}）が別の folder です（割れている）。どちらにも roster の記録があります。古い方の file を新しい方へ写し（名が同じ物は新しい方を残す）、${legacy} を ${home} への symlink にしてください`);
 }
 
-/** path が本物の folder か（symlink は辿らない）。 */
-function isRealDir(path: string): boolean {
+/** symlink を解いた path。無ければ（解けない symlink も）undefined。 */
+function realOf(path: string): string | undefined {
   try {
-    return lstatSync(path).isDirectory();
+    return realpathSync(path);
+  }
+  catch {
+    return undefined;
+  }
+}
+
+/** path が symlink か。 */
+function isLink(path: string): boolean {
+  try {
+    return lstatSync(path).isSymbolicLink();
   }
   catch {
     return false;
   }
 }
 
+/** 状態の base の印: project の状態の folder（tpm.jsonc か roles/ を持つ子の folder）が 1 つでも在る。 */
+const hasProjectState = (base: string): boolean => projectStateDirsIn(base).length > 0;
+
 /** 状態の base の下にある project の状態の folder（tpm.jsonc か roles/ がある物）。無ければ空。 */
 export function projectStateDirs(env: NodeJS.ProcessEnv = process.env): string[] {
-  const base = stateBase(env);
+  return projectStateDirsIn(stateBase(env));
+}
+
+/** base の下の project の状態の folder（tpm.jsonc か roles/ がある物）。base が無ければ空。 */
+function projectStateDirsIn(base: string): string[] {
   if (!existsSync(base)) return [];
   return readdirSync(base, { withFileTypes: true })
     .filter(e => e.isDirectory())

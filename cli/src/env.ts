@@ -53,3 +53,6 @@ export function withEnv(env: NodeJS.ProcessEnv, values: Partial<Record<EnvName, 
   }
   return out;
 }
+
+/** env から roster の環境変数を新旧の名ともみな抜いた物（試験が起こす roster に、試験を流す担当の居場所の物を渡さないため）。 */
+export const withoutRosterEnv = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv => withEnv(env, Object.fromEntries(ENV_NAMES.map(name => [name, undefined])));

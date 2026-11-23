@@ -176,12 +176,13 @@ export function staleHook(command: string, root: string, env: NodeJS.ProcessEnv)
 /** cmux の設定の file。 */
 export const cmuxConfigFile = (): string => join(homedir(), '.config', 'cmux', 'cmux.json');
 
-/** cmux.json に roster の hook があるか。読めなければ undefined。 */
-export function findHook(file: string = cmuxConfigFile()): { id: string | undefined, command: string, enabled: boolean } | undefined {
+/** cmux.json に roster の hook があるか（id が HOOK_ID の行を先に選ぶ。count は当たった行の数）。読めなければ undefined。 */
+export function findHook(file: string = cmuxConfigFile()): { id: string | undefined, command: string, enabled: boolean, count: number } | undefined {
   if (!existsSync(file)) return undefined;
   const config = parseJsonc(readFileSync(file, 'utf8')) as { notifications?: { hooks?: { id?: string, command?: string, enabled?: boolean }[] } };
-  const hook = config.notifications?.hooks?.find(h => h.id === HOOK_ID || h.command?.includes('banner hook'));
-  return hook?.command === undefined ? undefined : { id: hook.id, command: hook.command, enabled: hook.enabled !== false };
+  const hooks = (config.notifications?.hooks ?? []).filter(h => h.id === HOOK_ID || h.id === LEGACY_HOOK_ID || h.command?.includes('banner hook'));
+  const hook = hooks.find(h => h.id === HOOK_ID) ?? hooks[0];
+  return hook?.command === undefined ? undefined : { id: hook.id, command: hook.command, enabled: hook.enabled !== false, count: hooks.length };
 }
 
 /** `roster banner setup`: cmux.json に足す字と手順を出す（cmux.json は利用者の設定なので、roster は書き替えない）。 */
@@ -247,8 +248,12 @@ export function bannerCheck(root: string, env: NodeJS.ProcessEnv, cmuxFile: stri
   }
   else {
     lines.push(`cmux.json の hook: あり（${cmuxFile}）`);
-    // id は cmux が見分けに使うだけで、roster は命令でも hook を見つけるので、ok は落とさない。
-    if (hook.id === LEGACY_HOOK_ID) lines.push(`cmux.json の hook の id が前の名（${LEGACY_HOOK_ID}）です。${HOOK_ID} に替えてください（動きは変わらない）`);
+  }
+  // id は cmux が見分けに使うだけで、roster は命令でも hook を見つけるので、ok は落とさない。ほかの直す物と一緒に出す。
+  if (hook?.id === LEGACY_HOOK_ID) lines.push(`cmux.json の hook の id が前の名（${LEGACY_HOOK_ID}）です。${HOOK_ID} に替えてください（動きは変わらない）`);
+  if (hook !== undefined && hook.count > 1) {
+    ok = false;
+    lines.push(`cmux.json に roster の hook が ${hook.count} 行あります（通知ごとに重ねて動く）。${HOOK_ID} の 1 行だけを残してください`);
   }
   return { ok, lines };
 }
