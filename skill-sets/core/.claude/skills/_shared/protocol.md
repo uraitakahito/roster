@@ -266,6 +266,8 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 
 project の設定に castlist（アクターの台帳）の URL があれば、`roster` が、自分の session の始まり・終わり・名乗り・model と effort を castlist に送る（hook と命令が送るので、担当は何も打たない）。
 
+- 設定が無ければ何も送らず、`roster start` と `roster hello` が「⚠ 警告: castlist（アクターの台帳）を設定していません」の枠を出す（止めない）。担当は何もしなくてよい（TPM 担当が Product Manager に伝える）。
+
 - `roster hello` の出力の頭に `アクター: <名>`（`t-23zs-swe.1` など）が出る。結果のページや報告で自分を名指す時は、この名を使ってよい。
 - castlist が止まっていると、`roster hello` は名乗らずに止まり、guard は Bash を止める。どちらも、Product Manager が自分の terminal で打つ 1 行（`container start castlist.box` か `container run …`。0.1.0 の名 `castlist` で動いている間は、その名の `container start`）を出す。その 1 行は自分で打たない（castlist を起こすのは Product Manager だけ。guard も止める）。Bash が止まると `roster` の命令も打てないので、TPM 担当はその 1 行を返答に書いて Product Manager に頼み（打てれば `roster wait pm "castlist を起こす" --hand`）、担当はその 1 行を返答に書いて止まる（TPM 担当の Bash も同じく止まるので、Product Manager が起こした後に、TPM 担当が `roster notify` で打ち直すよう伝える）。起きたら、止まった命令を打ち直す。
 - castlist の時計がずれていると 1 行出る（止まらない）。出たら `roster report incident` で台帳に挙げる。

@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
+import { missingCastlistWarning } from '../src/castlist.ts';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
@@ -105,6 +106,7 @@ describe('Auditor の roster hello', () => {
   test('題と状態を出し、監査の材料を返す', () => {
     const w = seated();
     expect(hello(w.auditor)).toEqual([
+      ...missingCastlistWarning(w.tpm),
       '役割: Auditor',
       '課題の Key: audit',
       `監査の規程: 無い（${w.root}/skill-sets/core/.claude/skills/_shared/audit-charter.md）`,

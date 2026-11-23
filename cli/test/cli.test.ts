@@ -4,6 +4,8 @@ import { mkdirSync, mkdtempSync, readdirSync, realpathSync, symlinkSync, writeFi
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, test } from 'vitest';
+import { missingCastlistWarning } from '../src/castlist.ts';
+import { composeRolesConfig } from '../src/config.ts';
 import { buildProgram, commandPaths } from '../src/program.ts';
 import { COMMANDS } from '../src/protocol.ts';
 import { withoutRosterEnv } from '../src/env.ts';
@@ -31,6 +33,9 @@ const runFailing = (args: string[]) => spawnSync(entry, ['start', ...args], { cw
 
 // .claude/roles/config.jsonc に text を書いた folder を作る（text が null なら config.jsonc を置かない）
 let n = 0;
+/** castlist を設定していない folder で roster start が stderr に出す警告（1 行ずつ「roster: 」を頭に付ける）。 */
+const castlistWarning = (dir: string): string => missingCastlistWarning({ env: {}, config: composeRolesConfig(dir) }).map(l => `roster: ${l}\n`).join('');
+
 const folder = (text: string | null): string => {
   const d = join(scratch, `f${n++}`);
   mkdirSync(join(d, '.claude', 'roles'), { recursive: true });
@@ -160,14 +165,18 @@ describe('--verbose', () => {
 
   test('担当の居場所で打っても、受け継いだ状態の folder を使わない', () => {
     // 受け継いだ path が無い folder を指していると、使えば止まる（stateDir の守り）。
-    const r = spawnSync(entry, ['start', folder(null)], { cwd: scratch, encoding: 'utf8', env: env({ ROSTER_STATE: join(scratch, 'gone') }) });
-    expect(r.stderr).toBe('');
+    const dir = folder(null);
+    const r = spawnSync(entry, ['start', dir], { cwd: scratch, encoding: 'utf8', env: env({ ROSTER_STATE: join(scratch, 'gone') }) });
+    expect(r.stderr).toBe(castlistWarning(dir));
     expect(r.status).toBe(0);
   });
 
-  test('旗が無ければ stderr に何も出さない', () => {
-    const r = spawnSync(entry, ['start', folder(null)], { cwd: scratch, encoding: 'utf8', env: env() });
-    expect(r.stderr).toBe('');
+  test('旗が無ければ stderr には castlist の警告だけを出す（terminal でないので色の符号は無い）', () => {
+    const dir = folder(null);
+    const r = spawnSync(entry, ['start', dir], { cwd: scratch, encoding: 'utf8', env: env() });
+    expect(r.stderr).toBe(castlistWarning(dir));
+    expect(r.stderr).toContain('⚠ 警告: castlist（アクターの台帳）を設定していません');
+    expect(r.stderr).not.toContain('\u001b[');
   });
 });
 

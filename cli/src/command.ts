@@ -1,6 +1,6 @@
 // 利用者が写して打つ 1 行（cd と claude の命令）を組む。
 import { join } from 'node:path';
-import { busyMessage, castlistUrl, downMessage, PM_REF, registerPm, requireUp } from './castlist.ts';
+import { busyMessage, castlistUrl, downMessage, missingCastlistWarning, PM_REF, registerPm, requireUp } from './castlist.ts';
 import type { Context } from './context.ts';
 import { guardSettings } from './guard.ts';
 import { presentSettingsEnv, resolveSettings } from './settings.ts';
@@ -31,11 +31,12 @@ export function buildCommand(dir: string, root: string, skillSets: string[], env
  * 設定していれば、起きているかを見て（止まっていれば 1 行を出さずに、Product Manager が打つ 1 行を添えて止める）、Product Manager を人のアクターとして登録し、
  * 1 行の頭に起こしの印を付ける: 起こしの id（打つたびに uuidgen で作る）・起こした者（Product Manager）・頼んだ model と effort・起こしたばかりの印。
  * warnings は、castlist の時計がずれている時の 1 行（標準出力の 1 行と分けて出す）。
+ * alert は、castlist を設定していない時の警告の枠（強めて出す。missingCastlistWarning）。
  */
-export function startTpm(ctx: Context): { warnings: string[], line: string } {
+export function startTpm(ctx: Context): { warnings: string[], alert: string[], line: string } {
   const settings = resolveSettings('tpm', { env: ctx.env });
   const url = castlistUrl(ctx);
-  if (url === undefined) return { warnings: [], line: buildCommand(ctx.project, ctx.root, ctx.skillSets, ctx.env) };
+  if (url === undefined) return { warnings: [], alert: missingCastlistWarning(ctx), line: buildCommand(ctx.project, ctx.root, ctx.skillSets, ctx.env) };
   const done = 'TPM 担当を起こす 1 行は出していません。';
   const after = ['打ってから、もう 1 度 roster start を打ってください。'];
   const warnings = requireUp(ctx, done, after);
@@ -50,5 +51,5 @@ export function startTpm(ctx: Context): { warnings: string[], line: string } {
     `${envName('LAUNCH_EFFORT')}=${shellQuote(settings.effort)}`,
     `${envName('LAUNCH_FRESH')}=1`,
   ];
-  return { warnings, line: buildCommand(ctx.project, ctx.root, ctx.skillSets, ctx.env, launch) };
+  return { warnings, alert: [], line: buildCommand(ctx.project, ctx.root, ctx.skillSets, ctx.env, launch) };
 }

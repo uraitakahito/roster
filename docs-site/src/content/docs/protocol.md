@@ -97,7 +97,7 @@ flowchart TB
 
 ## アクターの台帳（castlist）
 
-設定に `castlist` の URL（[設定](/configuration/#アクターの台帳castlist任意)）があれば、`roster` は、Claude Code の session 1 つ（TPM 担当・担当・Auditor）を castlist のアクター 1 つとして登録し、登場から退場までを送る（API は castlist の docs の [API](https://uraitakahito.github.io/castlist/api.html)。コードは `cli/src/castlist.ts`・`cli/src/commands/castlist.ts`）。設定が無ければ、何も送らない。
+設定に `castlist` の URL（[設定](/configuration/#アクターの台帳castlist任意)）があれば、`roster` は、Claude Code の session 1 つ（TPM 担当・担当・Auditor）を castlist のアクター 1 つとして登録し、登場から退場までを送る（API は castlist の docs の [API](https://uraitakahito.github.io/castlist/api.html)。コードは `cli/src/castlist.ts`・`cli/src/commands/castlist.ts`）。設定が無ければ、何も送らず、`roster start`（stderr。terminal なら赤の太字）と `roster hello`（出力の頭）が、枠で囲んだ警告を出す（止めない。足す 1 行と、直下の folder の設定にだけ castlist があれば読まないことを書く）。
 
 | いつ | 送る物 |
 |---|---|

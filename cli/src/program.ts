@@ -2,6 +2,7 @@
 import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { Command, CommanderError } from 'commander';
+import { emphasize } from './castlist.ts';
 import { startTpm } from './command.ts';
 import { registerAudit } from './commands/audit.ts';
 import { sessionEnd, sessionStart } from './commands/castlist.ts';
@@ -65,8 +66,9 @@ export function buildProgram(): Command {
       }
       // 担当の居場所の中で打っても、その担当の project と状態の folder を受け継がない（設定と状態は、渡した folder の物）。
       const ctx = createContext(withEnv(process.env, { PROJECT: dir, STATE: undefined }), dir);
-      const { warnings, line } = startTpm(ctx);
-      for (const warning of warnings) process.stderr.write(`roster: ${warning}\n`);
+      const { warnings, alert, line } = startTpm(ctx);
+      // castlist を設定していない警告は、Product Manager の terminal で目立つよう強める（起こす 1 行は止めない）。
+      for (const warning of [...emphasize(alert, { isTTY: process.stderr.isTTY, env: process.env }), ...warnings]) process.stderr.write(`roster: ${warning}\n`);
       console.log(line);
     });
 
