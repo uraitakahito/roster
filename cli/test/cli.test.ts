@@ -310,4 +310,13 @@ describe('命令の入口（runProgram）は、非同期の誤りも同期の誤
     expect(r.status).toBe(2);
     expect(r.stderr).toBe('roster guard: guard が命令を見られません: $ROSTER_CASTLIST_URL は http://127.0.0.1:<port> か http://localhost:<port> の形にしてください: http://example.com:1\n');
   });
+
+  test.each(['session-start', 'session-end'])('castlist %s の hook は、非同期に誤っても stderr に 1 行を書いて 0 で終わる', async (hook) => {
+    const d = folder(null);
+    const stdin = JSON.stringify({ session_id: 's-async', source: 'startup', cwd: d });
+    const r = await runIn(buildProgram(() => stdin), ['castlist', hook], { ROSTER_PROJECT: d, ROSTER_STATE: mkdirp(join(d, 'state')), ROSTER_CASTLIST_URL: 'http://example.com:1' });
+    // hook の失敗を Claude Code の画面に出さないため、どんな誤りでも 0（process.exit を呼ばない）。
+    expect(r.status).toBeUndefined();
+    expect(r.stderr).toMatch(new RegExp(`^roster castlist ${hook}: [^\\n]+\\n$`));
+  });
 });

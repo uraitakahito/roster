@@ -449,6 +449,7 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
     const w = await sentBrief4(false);
     await expect(dismiss(w.tpm, 't-x7k2', { handover: false })).rejects.toThrow(/^t-x7k2 の担当に、まだ済んでいない物があります。[\s\S]*【done】が返っていない依頼書: brief-4/);
     await expect(assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B5, wait: 0 })).rejects.toThrow(/【done】が返っていない依頼書: brief-4[\s\S]*--after、取り消すなら --supersede/);
+    // 止まる訳は「済んでいない物がある」の方で、「依頼書が届いていない」の文は出ない（reject はする）。
     await expect(dismiss(w.tpm, 't-x7k2', { handover: false })).rejects.not.toThrow(/届いていない/);
   });
 
