@@ -221,7 +221,7 @@ roster banner check   # 設定と hook を確かめる
 ```
 
 - 役割の欄は、書いたきっかけだけを上書きする（`"devops-engineer": { "turn": "show" }` なら、DevOps Engineer 担当の答え終わったも出す）。
-- 役割の名は `cli/src/protocol.ts` の `ROLES` の名と `roster`。ここに無い名を書くと、hook は設定を読めないとして止まる（`/dependabot-triage` は TPM 担当が呼ぶ skill で、役割ではない）。
+- 役割の名は `cli/src/protocol.ts` の `ROLES` の名と tpm（TPM 担当）。ここに無い名を書くと、hook は設定を読めないとして止まる（`/dependabot-triage` は TPM 担当が呼ぶ skill で、役割ではない）。
 - `pm-wait` は「前に答え終わった時より後に `roster wait pm` を打った」回だけ出す。TPM 担当は手が空くと `回答待ち(PM): 指示` のまま待つので、状態の字だけでは、担当のメッセージをひとりで片付けた回まで鳴ってしまうため。TPM 担当は Product Manager に返して手を止める前に `roster wait pm` を打つ。
 - 設定を読めない間、hook はバナーを消さず、記録に訳を書く。`roster banner check` が誤りを出す。
 - hook が決めたことは、project の状態の folder の `banner.jsonl` に 1 行ずつ書く（7 日で消す）。`roster banner log` が新しい順に出す。
