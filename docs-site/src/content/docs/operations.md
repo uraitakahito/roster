@@ -24,11 +24,10 @@ description: この repo を別の folder へ移す手順、Node の version の
 | cmux.json の hook の id | `roster-banner` | `tpm-banner` |
 | 環境変数 | `ROSTER_KEY`・`ROSTER_STATE`・`ROSTER_MODEL` など | `TPM_KEY`・`TPM_STATE`・`TPM_MODEL` など |
 
-- **folder**: 古い名の folder が本物の folder（symlink でない）で在れば、`roster` は空の状態を作らずに止まり、移す 1 行（`mv ~/.local/state/tpm ~/.local/state/roster && ln -s roster ~/.local/state/tpm`。控えも同じ形）を出す。古い名の symlink を残すのは、移す前に起きた担当と、cmux が復元する居場所の命令が、古い path を持つため。両方が本物の folder なら（移す間に古い在り処へ書かれた）、割れていると言って止まる。
+- **folder**: 古い名の folder が本物の folder（symlink でない）で在れば、`roster` は空の状態を作らずに止まり、移す 1 行（`mv ~/.local/state/tpm ~/.local/state/roster && ln -s roster ~/.local/state/tpm`。控えも同じ形）を出す。移した後、その機械で移す前に起きた担当（古い path を持つ担当と、cmux が復元する居場所の命令）が居なくなったら、古い名の symlink は消してよい（`rm ~/.local/state/tpm ~/.local/share/tpm`）。両方が本物の folder なら（移す間に古い在り処へ書かれた）、割れていると言って止まる。
 - **渡された状態の folder が無い時**: `$ROSTER_STATE`（か `--state`）の folder が無ければ、作らずに止まる（古い在り処の path のまま復元された居場所）。その居場所を閉じ、TPM 担当が起こし直す。
-- **環境変数**: `roster` は新しい名を読み、無ければ古い名を読む（移す前に起きた担当のため）。書くのは新しい名だけで、担当を起こす時は受け継いだ古い名を消す。
+- **環境変数**: `roster` は新しい名だけを読む。古い名（`TPM_MODEL` など）が環境に残っていれば、TPM 担当の `roster hello` が 1 行で知らせる（新しい名に替える）。`guard` を通す開発の印も `ROSTER_RAW=1` だけ。
 - **hook の id**: 古い id でも、`roster` は命令で hook を見つけるので動く。`roster banner check` が替える 1 行を出す。
-- **後始末**: 移す前に起きた居場所がみな無くなり、どの project の TPM 担当も新しい `roster start` で起き直した後に、古い名の symlink を消し、古い名を読む所を外す（`cli/src/env.ts`・`guard.ts` の `TPM_RAW=1`）。
 
 ## Node の version を上げる
 

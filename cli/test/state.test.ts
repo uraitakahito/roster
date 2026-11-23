@@ -16,9 +16,9 @@ describe('stateDir', () => {
     expect(stateDir('/Users/me/my work/app', { XDG_STATE_HOME: '/s' })).toBe('/s/roster/-Users-me-my-work-app');
   });
 
-  test('ROSTER_STATE（無ければ古い名 TPM_STATE）があればそれを使う', () => {
+  test('ROSTER_STATE があればそれを使う。古い名 TPM_STATE は読まない', () => {
     expect(stateDir('/w', { ROSTER_STATE: state.dir, XDG_STATE_HOME: '/s' })).toBe(state.dir);
-    expect(stateDir('/w', { TPM_STATE: state.dir, XDG_STATE_HOME: '/s' })).toBe(state.dir);
+    expect(stateDir('/w', { TPM_STATE: state.dir, XDG_STATE_HOME: '/s' })).toBe('/s/roster/-w');
   });
 
   test('渡された folder が無ければ、作らずに止める（古い在り処の path のまま復元された居場所）', () => {

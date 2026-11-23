@@ -1,6 +1,5 @@
 // roster が読み書きする環境変数。名は `ROSTER_<名>`。
-// 古い名 `TPM_<名>` も読む: 道具の名を替える前に起きた担当は古い名を持っているため（t-6ydg の段 3）。
-// 古い名を読むのはここだけにし、後始末（t-6ydg の段 5）でここから外す。書くのは新しい名だけ。
+// 道具の名を替える前の古い名 `TPM_<名>` は読まない（t-6ydg で替え、t-cmf2 で読むのをやめた）。残っていれば、TPM 担当の roster hello が知らせる（legacyEnvNotice）。
 
 /** roster の環境変数の名（頭の `ROSTER_` を除いた所）。 */
 export const ENV_NAMES = [
@@ -28,31 +27,30 @@ export type EnvName = typeof ENV_NAMES[number];
 /** 環境変数の名（`ROSTER_KEY` など）。 */
 export const envName = (name: EnvName): string => `ROSTER_${name}`;
 
-/** 古い名（`TPM_KEY` など）。 */
-export const legacyEnvName = (name: EnvName): string => `TPM_${name}`;
-
-/**
- * 環境変数の値。新しい名が無ければ古い名。空の字は書かなかったものとみなし、undefined を返す。
- * 新しい名を空の字で書いた時は、古い名を読まない（受け継いだ古い名を空の字で消す書き方が効くように）。
- */
+/** 環境変数の値。空の字は書かなかったものとみなし、undefined を返す。 */
 export function envOf(env: NodeJS.ProcessEnv, name: EnvName): string | undefined {
-  const value = env[envName(name)];
-  return (value === undefined ? env[legacyEnvName(name)] : value) || undefined;
+  return env[envName(name)] || undefined;
 }
 
-/**
- * env を写し、値を新しい名で書いた物。undefined の値は消す。どちらも古い名を消す
- * （新しい名だけを書き替えると、受け継いだ古い名を envOf が拾ってしまうため）。
- */
+/** env を写し、値を書いた物。undefined の値は消す。 */
 export function withEnv(env: NodeJS.ProcessEnv, values: Partial<Record<EnvName, string | undefined>>): NodeJS.ProcessEnv {
   const out = { ...env };
   for (const [name, value] of Object.entries(values) as [EnvName, string | undefined][]) {
-    delete out[legacyEnvName(name)];
     if (value === undefined) delete out[envName(name)];
     else out[envName(name)] = value;
   }
   return out;
 }
 
-/** env から roster の環境変数を新旧の名ともみな抜いた物（試験が起こす roster に、試験を流す担当の居場所の物を渡さないため）。 */
+/**
+ * 古い名（`TPM_MODEL` など）が env に残っていれば、読まないことと替える名を書いた 1 行。無ければ undefined。
+ * 利用者が profile に書いた古い名は黙って効かなくなるので、TPM 担当の roster hello で知らせる（t-6ydg の confirm-1 の決定）。
+ */
+export function legacyEnvNotice(env: NodeJS.ProcessEnv): string | undefined {
+  const names = ENV_NAMES.filter(name => env[`TPM_${name}`] !== undefined);
+  if (names.length === 0) return undefined;
+  return `環境変数の古い名は読みません。新しい名に替えてください: ${names.map(name => `TPM_${name} → ${envName(name)}`).join('・')}`;
+}
+
+/** env から roster の環境変数をみな抜いた物（試験が起こす roster に、試験を流す担当の居場所の物を渡さないため）。 */
 export const withoutRosterEnv = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv => withEnv(env, Object.fromEntries(ENV_NAMES.map(name => [name, undefined])));

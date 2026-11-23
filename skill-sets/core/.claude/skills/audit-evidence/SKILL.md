@@ -27,7 +27,7 @@ background: false
 
 ## 1. 読む
 
-材料の在り処は `${CLAUDE_SKILL_DIR}/../_shared/audit.md` の「2. 調べる」の「証拠の材料」の表にある。まずそれを読む。状態の folder は環境変数 `ROSTER_STATE` の folder（道具の名を替える前に起きた席では `TPM_STATE`）。
+材料の在り処は `${CLAUDE_SKILL_DIR}/../_shared/audit.md` の「2. 調べる」の「証拠の材料」の表にある。まずそれを読む。状態の folder は環境変数 `ROSTER_STATE` の folder。
 
 1. `roster incident review --all --json` で、件の番号の行（起きた事実・種類・tag・課題の Key・時刻）を読む。
 2. `roster incident timeline <件の番号>` で時系列のページを置き、出た URL を `roster page path` で file にして読む。

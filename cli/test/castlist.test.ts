@@ -550,7 +550,7 @@ describe('hook の settings', () => {
 });
 
 describe('roster castlist の命令（hook が bin/roster を動かす）', () => {
-  /** 試験を流す担当の居場所の TPM_* と cmux・Claude Code の変数を抜いた環境で、folder の中で roster を動かす。 */
+  /** 試験を流す担当の居場所の ROSTER_* と cmux・Claude Code の変数を抜いた環境で、folder の中で roster を動かす。 */
   const run = (dir: string, args: string[], input: string) => {
     const env: NodeJS.ProcessEnv = { PATH: process.env.PATH, HOME: process.env.HOME, XDG_STATE_HOME: join(dir, 'state') };
     return spawnSync(join(import.meta.dirname, '..', 'bin', 'roster'), args, { cwd: dir, env, input, encoding: 'utf8' });
@@ -593,13 +593,9 @@ describe('担当を起こす環境変数', () => {
     const w = world();
     assign(w.tpm, 't-x7k2', SE);
     const names = ['LAUNCH', 'LAUNCHED_BY', 'LAUNCH_MODEL', 'LAUNCH_EFFORT', 'LAUNCH_FRESH'];
-    // 道具の名を替える前に起きた TPM 担当は、古い名（TPM_*）で持っている。どちらも渡さない。
-    const inherited = { PATH: '/usr/bin', ...Object.fromEntries(names.flatMap(n => [[`ROSTER_${n}`, 'x'], [`TPM_${n}`, 'x']])) };
+    const inherited = { PATH: '/usr/bin', ...Object.fromEntries(names.map(n => [`ROSTER_${n}`, 'x'])) };
     const env = roleEnv(requireRole(w.tpm, 't-x7k2'), '/p', '/s', '/r', inherited);
-    for (const name of names) {
-      expect(env).not.toHaveProperty(`ROSTER_${name}`);
-      expect(env).not.toHaveProperty(`TPM_${name}`);
-    }
+    for (const name of names) expect(env).not.toHaveProperty(`ROSTER_${name}`);
   });
 
   test('roster audit start の起こした者は Product Manager', () => {

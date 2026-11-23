@@ -5,6 +5,7 @@ import { assertSummary } from '../brief.ts';
 import { requireUp, sessionRef } from '../castlist.ts';
 import { describeTrackers, OWN_LABEL, sourceLabel, type ConfigSource } from '../config.ts';
 import type { Context } from '../context.ts';
+import { legacyEnvNotice } from '../env.ts';
 import { syncDeliveries } from '../evidence.ts';
 import { AUDIT_KEY, modelStatus, ROLES, TPM_COLOR, TPM_TITLE, WAIT, type RoleName } from '../protocol.ts';
 import { lastAuditLine } from '../audits.ts';
@@ -39,7 +40,8 @@ export function tpmHello(ctx: Context, options: { model?: string, effort?: strin
   ctx.state.write('tpm.jsonc', { address } satisfies TpmRecord);
   // 連携の道具が古いメッセージを捨てる前に、届いた時刻を写す。
   syncDeliveries(ctx);
-  return [...actor, `TPM 担当の宛先: ${address}`, ...painted, ...configLines(ctx), ...bannerHint(ctx), ...roles(ctx)];
+  const legacy = legacyEnvNotice(ctx.env);
+  return [...actor, `TPM 担当の宛先: ${address}`, ...painted, ...configLines(ctx), ...bannerHint(ctx), ...(legacy === undefined ? [] : [`${legacy}（Product Manager に伝える）`]), ...roles(ctx)];
 }
 
 /** 既定で埋めた値には「（既定）」を付ける（設定に書いた値と見分けるため）。 */
