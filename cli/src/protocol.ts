@@ -65,6 +65,8 @@ export const COMMANDS = [
   'file list',
   'file delete',
   'guard',
+  'returned check',
+  'returned show',
   'castlist session-start',
   'castlist session-end',
   'castlist find',
@@ -197,6 +199,8 @@ export const HEADINGS = {
   'decided': { from: 'role' },
   // Staff Engineer 担当だけが送る。レビューのページと判定。頼んだ課題の担当へじかに届く。
   'review': { from: 'role', record: 'レビュー', peer: true },
+  // 新しい session の始まりに、tpm の hook（tpm returned check）が、前の session 宛てに届いたメッセージを TPM 担当へ返す。台帳には hook が直に書く。
+  'returned': { from: 'role' },
   'merge-request': { from: 'role' },
   'not-yet': { from: 'role' },
   'recreated': { from: 'role' },

@@ -101,6 +101,7 @@ disable-model-invocation: true
 | 【ask-pm】 | Product Manager に、確認のページの URL と項目を伝える（ページは置き場の一覧の UI の新着に出ている。その場で開いて見せる時だけ `tpm show <URL>`）。答えを `tpm answer <Key> "<答え>"` で返す（課題があれば「決定」の記録も書かれ、置き場の返事待ちの確認のページが「答えた」になる。その Key の返事待ちが 2 枚以上あって止まったら、出た URL から答えたページを `--url <URL>` で書くか、みなへの答えなら `--all` を付けて打ち直す） |
 | 【ask-devops】 | DevOps Engineer 担当に依頼書を書いて回す（`tpm assign devops …`） |
 | 【incident】 | 受け取ったと返す（台帳にはもう入っている）。「[重い]」と付いていたら、すぐ Product Manager に伝える（下の「6. 監査」） |
+| 【returned】 | 担当の session の始まりに、前の session 宛てのメッセージが届いた（届け違い。台帳にはもう入っている）。一覧の id ごとに `tpm returned show <id>` で宛先と全文を読み、扱いを決める: 宛先の Key の担当が今、名簿に居る（起こし直した担当がいる）なら、今も要る物だけを今の担当に送り直す（【brief】は `tpm assign`、【answer】【notify】はそれぞれの命令で。後の依頼書で済んだ物は送らない）。名簿に居ない（閉じた・消えた）なら送り直さず、要る中身は次に振る時の依頼書に書く。返した担当には `tpm notify <Key> "受け取った" --reply-to <id>` で返す。自分の session の始まりに「前の session 宛てのメッセージ」と示された時も（自分が TPM 担当なので【returned】は来ない）、示された一覧で同じように扱う |
 | 【audit】 | Auditor が Product Manager へじかに出した監査の報告の写し。**伝え直さない・止めない。**受け取ったと返す（`tpm notify audit "受け取った" --reply-to <id>`） |
 | 【decided】 | Product Manager の決定。「する」の勧告を、いつもの課題として担当に振る（上の 3 のとおり。勧告の中身は、本文の監査のページの URL を依頼書の頭書きに書いて担当に読ませる）。振ったら `tpm incident assign <番号>… --to <振り先の Key>` で件に結び、`tpm notify audit "<振った Key>" --reply-to <id>` で返す。「受け入れる」「見送る」は、Auditor が台帳に書いてある |
 | 【doc-fix】【merged】 | 受け取ったと返す（`tpm notify <Key> "受け取った" --reply-to <id>`）。PR が merge 済みかは、担当の命令が送る前に見ている。「merge は確かめていない: <訳>」と付いていたら、Product Manager に伝える前に自分で確かめる |

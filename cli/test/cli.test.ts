@@ -12,7 +12,7 @@ import { SETTINGS_ENV } from '../src/settings.ts';
 const cli = realpathSync(join(import.meta.dirname, '..'));
 const root = join(cli, '..');
 const tpm = join(cli, 'bin', 'tpm');
-const head = `PATH=${root}/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"${root}/cli/bin/tpm guard"}]}],"SessionStart":[{"hooks":[{"type":"command","command":"${root}/cli/bin/tpm castlist session-start"}]}],"SessionEnd":[{"hooks":[{"type":"command","command":"${root}/cli/bin/tpm castlist session-end"}]}]}}'`;
+const head = `PATH=${root}/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"${root}/cli/bin/tpm guard"}]}],"SessionStart":[{"hooks":[{"type":"command","command":"${root}/cli/bin/tpm castlist session-start"},{"type":"command","command":"${root}/cli/bin/tpm returned check"}]}],"SessionEnd":[{"hooks":[{"type":"command","command":"${root}/cli/bin/tpm castlist session-end"}]}]}}'`;
 let scratch: string;
 
 /** 試験を流す人の profile の TPM_MODEL などを抜いた環境変数に、extra を足す。 */

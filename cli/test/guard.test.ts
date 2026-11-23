@@ -245,7 +245,7 @@ describe('hook の入力と settings', () => {
   });
 
   test('settings は Bash の前に tpm guard を呼ぶ hook と、session の始まりと終わりに tpm castlist を呼ぶ hook', () => {
-    expect(JSON.parse(guardSettings('/r/cli/bin/tpm'))).toEqual({ hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: '/r/cli/bin/tpm guard' }] }], SessionStart: [{ hooks: [{ type: 'command', command: '/r/cli/bin/tpm castlist session-start' }] }], SessionEnd: [{ hooks: [{ type: 'command', command: '/r/cli/bin/tpm castlist session-end' }] }] } });
+    expect(JSON.parse(guardSettings('/r/cli/bin/tpm'))).toEqual({ hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: '/r/cli/bin/tpm guard' }] }], SessionStart: [{ hooks: [{ type: 'command', command: '/r/cli/bin/tpm castlist session-start' }, { type: 'command', command: '/r/cli/bin/tpm returned check' }] }], SessionEnd: [{ hooks: [{ type: 'command', command: '/r/cli/bin/tpm castlist session-end' }] }] } });
   });
 
   test('path に空白などがあれば、hook の命令の中で引用する', () => {
@@ -411,8 +411,8 @@ describe('Staff Engineer 担当は repo を変えない', () => {
   test('席の settings は、file を書き替える道具の前にも tpm guard を呼ぶ。audit fresh は Auditor の席だけ', () => {
     const settings = (role: RoleName) => JSON.parse(guardSettings('/r/cli/bin/tpm', role)) as { hooks: { PreToolUse: { matcher: string }[], SessionStart: { hooks: { command: string }[] }[] } };
     expect(settings('staff-engineer').hooks.PreToolUse[0]?.matcher).toBe('Bash|Edit|Write|NotebookEdit');
-    expect(settings('staff-engineer').hooks.SessionStart[0]?.hooks.map(h => h.command)).toEqual(['/r/cli/bin/tpm castlist session-start']);
-    expect(settings('auditor').hooks.SessionStart[0]?.hooks.map(h => h.command)).toEqual(['/r/cli/bin/tpm audit fresh', '/r/cli/bin/tpm castlist session-start']);
+    expect(settings('staff-engineer').hooks.SessionStart[0]?.hooks.map(h => h.command)).toEqual(['/r/cli/bin/tpm castlist session-start', '/r/cli/bin/tpm returned check']);
+    expect(settings('auditor').hooks.SessionStart[0]?.hooks.map(h => h.command)).toEqual(['/r/cli/bin/tpm audit fresh', '/r/cli/bin/tpm castlist session-start', '/r/cli/bin/tpm returned check']);
   });
 });
 

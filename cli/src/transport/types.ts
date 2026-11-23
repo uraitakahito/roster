@@ -20,6 +20,17 @@ export interface Incoming {
   text: string
 }
 
+/** 居場所の受信箱の 1 件（その居場所宛ての物。state は道具の言う状態、deliveredVia は配った道。時刻は ISO の字）。 */
+export interface MailboxEntry {
+  id: string
+  from: string
+  text: string
+  state: 'queued' | 'delivered' | 'read' | 'failed'
+  /** 配った道（cmux なら claude.wake は Claude が起きた時の hook、claude.prompt-submit は次の入力の時）。 */
+  deliveredVia?: string
+  deliveredAt?: string
+}
+
 /** メッセージ 1 件の、送った・届いた・読んだ時刻（道具が覚えている物。ISO の字）。 */
 export interface MessageTrace {
   id: string
@@ -59,6 +70,10 @@ export interface Transport {
   pending(): Incoming[]
   /** 宛先に送り、まだ届いていないメッセージの id（送る前の検査が、自分の送った物の届きを見る）。 */
   queued(to: string): string[]
+  /** 居場所の受信箱（宛先がその居場所の物。状態を問わない）。 */
+  mailbox(address: string): MailboxEntry[]
+  /** 居場所の「まだ届いていない」物をみな既読にして、配らせない。既読にした物そのものを返す（道具は 1 通ずつは既読にできない）。 */
+  markQueuedRead(address: string): MailboxEntry[]
   /** 道具が覚えているメッセージの時刻（宛先を問わない。閉じた居場所の分も）。道具が持たない・読めないなら空。 */
   history(): MessageTrace[]
   /** 担当の居場所を作って命令を動かし、宛先を返す。 */

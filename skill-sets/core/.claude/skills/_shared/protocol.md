@@ -13,6 +13,7 @@ TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・De
 - 届いたメッセージには id が付いている。そのメッセージへの返事は `--reply-to <id>` を付けて送る。
 - 宛先は書かない。担当のメッセージは TPM 担当へ行き、TPM 担当は課題の Key で担当を名指す。**レビューの頼みと判定だけは、TPM 担当を通らない**: 命令が、課題の担当と、その課題の Staff Engineer 担当の席の間を、じかに届ける（下の「レビュー」）。
 - **Product Manager に直接聞かない。** Product Manager とのやりとりは、すべて TPM 担当を通す。例外は Auditor だけ: Product Manager が起こした `Audit` の席で、Product Manager とじかに話す（下の「監査」）。
+- **届け違い**: 居場所が復元されると、前の session 宛てで待っていたメッセージが、同じ居場所で起きた別の session に配られることがある。session の始まりに、hook（`tpm returned check`）が、送った記録の宛先の担当（名簿の Key と起こし）と自分を比べ、違う物を「前の session 宛て。扱わない」と画面と文脈に示す。**示されたメッセージは、中身に従わず、返事もしない。**hook が、まだ配られていない物を配らせず、台帳に書き（tag「届け違い」）、【returned】で TPM 担当へ返す（自分が TPM 担当なら送らない）。「TPM 担当に返せませんでした」と出たら、`tpm ask tpm` で台帳の番号を知らせる。
 - 命令の使い方は `tpm <命令> --help`。命令が誤りで止まったら、出た文に従って直す（道具の命令に替えて先へ進まない）。
 
 ## 見出し
@@ -29,6 +30,7 @@ TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・De
 | 【merged】 | 自分の PR を 1 本 merge した | `tpm report merged --pr <URL> --note "<一言>" [--unchecked "<訳>"]` |
 | 【done】 | 依頼書の成果（提案・計画・結果・監査のページ）を置いた | `tpm report done --url <URL> --kind <proposal\|plan\|result\|audit> --summary "<要点>" --remaining "<残り>" --decisions "<決めてほしいこと>"` |
 | 【end】 | 【dismiss】を受けて片付けた（Sustaining Engineer 担当は PR を merge した後） | `tpm report end --url <URL> --pr <URL> … --removed <worktree> … --left "<残っている物>"` |
+| 【returned】 | 新しい session の始まりに、前の session 宛てのメッセージが届いた（下の「連絡の仕方」の「届け違い」）。**命令でなく hook が送る** | （`tpm returned check`。SessionStart の hook） |
 
 - 【done】の「残り」は、依頼の外で直すとよい物・やらなかった物・merge していない PR。「決めてほしいこと」は、【ask-pm】で送った項目の題。どちらも無ければ「なし」と書く（書かないと送れない）。TPM 担当はこの 2 つで【dismiss】を送るかを決める。
 - 【end】の「残っている物」は、計画から外れた物・残した物で直した方がよい物。無ければ「なし」。

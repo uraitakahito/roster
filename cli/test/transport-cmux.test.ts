@@ -68,6 +68,37 @@ describe('CmuxTransport', () => {
     expect(calls[1]?.args).toEqual(['--json', 'agent', 'inbox', '--surface', 'workspace:7', '--state', 'queued']);
   });
 
+  const LIST = json({ workspaces: [{ id: 'W-ME', ref: 'workspace:7', title: '私' }, { id: 'W-TPM', ref: 'workspace:1', title: 'TPM' }] });
+  const TO_ME = { id: 'a', sender_name: 'TPM', body: '【notify】x', state: 'queued', recipient_workspace_id: 'W-ME', sender_workspace_id: 'W-TPM' };
+  /** 自分の面が送って、まだ相手に届いていない物（cmux の --surface の一覧は、これも並べる）。 */
+  const SENT = { id: 'b', sender_name: '私', body: '【done】y', state: 'queued', recipient_workspace_id: 'W-TPM', sender_workspace_id: 'W-ME' };
+
+  test('mailbox は、宛先がその居場所の物だけを返す（自分の面が送った物は除く）', () => {
+    const { transport } = fake([
+      ['--json workspace list', LIST],
+      ['--json agent inbox', json({ messages: [TO_ME, { ...SENT, state: 'delivered', delivered_via: 'claude.wake', delivered_at: 1795379832.75 }] })],
+    ]);
+    expect(transport.mailbox('workspace:7').map(m => m.id)).toEqual(['a']);
+  });
+
+  test('markQueuedRead は、自分の面が送った待ちがあれば既読にしない（--mark-read は並べた物をみな既読にするため）', () => {
+    const { transport, calls } = fake([
+      ['--json workspace list', LIST],
+      ['--json agent inbox', json({ messages: [TO_ME, SENT] })],
+    ]);
+    expect(transport.markQueuedRead('workspace:7')).toEqual([]);
+    expect(calls.some(c => c.args.includes('--mark-read'))).toBe(false);
+  });
+
+  test('markQueuedRead は、待ちがみな自分宛てなら既読にし、既読にした物を返す', () => {
+    const { transport, calls } = fake([
+      ['--json workspace list', LIST],
+      ['--json agent inbox', json({ messages: [TO_ME] })],
+    ]);
+    expect(transport.markQueuedRead('workspace:7').map(m => m.id)).toEqual(['a']);
+    expect(calls.at(-1)?.args).toEqual(['--json', 'agent', 'inbox', '--surface', 'workspace:7', '--state', 'queued', '--limit', '1000', '--mark-read']);
+  });
+
   test('queued は相手の宛先の、まだ届いていないメッセージの id を読む', () => {
     const { transport, calls } = fake([
       ['--json agent inbox', json({ messages: [{ id: ID, sender_name: 'Technical Program Manager', body: '【brief】u', state: 'queued' }] })],

@@ -545,7 +545,7 @@ describe('hook の settings', () => {
   });
 
   test('Auditor の席は、始まりに tpm audit fresh も呼ぶ', () => {
-    expect(hooks('auditor').SessionStart?.flatMap(g => g.hooks.map(x => x.command))).toEqual(['/r/cli/bin/tpm audit fresh', '/r/cli/bin/tpm castlist session-start']);
+    expect(hooks('auditor').SessionStart?.flatMap(g => g.hooks.map(x => x.command))).toEqual(['/r/cli/bin/tpm audit fresh', '/r/cli/bin/tpm castlist session-start', '/r/cli/bin/tpm returned check']);
   });
 });
 
