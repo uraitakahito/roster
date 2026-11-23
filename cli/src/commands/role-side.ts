@@ -16,14 +16,14 @@ import { envOf } from '../env.ts';
  * 担当なら、状態を出し、名簿に自分の宛先と時刻を書き、受け持ちを返す。担当の model と effort は roster assign が決めたので、旗は受けない。
  * castlist を設定していれば、名乗りを castlist に送り、`アクター: <名>` の行を頭に出す（castlist が止まっていれば、名乗らずに止まる）。設定していなければ、警告の枠を頭に出す。
  */
-export function hello(ctx: Context, options: { model?: string, effort?: string } = {}): string[] {
-  if (!envOf(ctx.env, 'KEY')) return tpmHello(ctx, options);
+export async function hello(ctx: Context, options: { model?: string, effort?: string } = {}): Promise<string[]> {
+  if (!envOf(ctx.env, 'KEY')) return await tpmHello(ctx, options);
   if (options.model !== undefined || options.effort !== undefined) {
     throw new TpmError('--model・--effort は TPM 担当が名乗るときだけ使う（担当の model と effort は roster assign が決める）');
   }
   const record = requireSelf(ctx);
   const tpm = record.role === 'auditor' ? undefined : requireTpm(ctx);
-  const actor = castlistHello(ctx);
+  const actor = await castlistHello(ctx);
   if (tpm === undefined) return [...actor, ...auditorHello(ctx, record)];
   record.address = ctx.transport.whoami();
   record.helloAt = ctx.now().toISOString();
@@ -49,7 +49,7 @@ export function hello(ctx: Context, options: { model?: string, effort?: string }
     `TPM 担当の宛先: ${tpm.address}`,
     `自分の宛先: ${record.address}`,
     // 落ちた session の推しの幕引き（castlist と cmux があれば。Auditor は打たない）。
-    ...sweep(ctx),
+    ...await sweep(ctx),
   ];
 }
 

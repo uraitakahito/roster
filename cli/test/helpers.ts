@@ -318,6 +318,7 @@ export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessE
     now: () => new Date('2026-11-20T12:00:00.000Z'),
     sleep: () => {
       slept += 1;
+      return Promise.resolve();
     },
   });
   const tpm = at(env);
@@ -336,9 +337,9 @@ export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessE
 }
 
 /** 担当が名乗り、いちばん新しい依頼書の【done】を返す（TPM 担当の dismiss・続きの assign が、済んでいない依頼書で止まらないように）。 */
-export function finish(w: World, key: string, address: string): void {
+export async function finish(w: World, key: string, address: string): Promise<void> {
   const se = w.role(key, address);
-  hello(se);
+  await hello(se);
   reportDone(se, { kind: 'result', summary: '済んだ', remaining: 'なし', decisions: 'なし', points: [] });
 }
 

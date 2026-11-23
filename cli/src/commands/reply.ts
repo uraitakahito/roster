@@ -64,15 +64,15 @@ export function pageParts(ctx: Context, url: string): { project: string, key: st
  * ページ 1 枚の返事の状態を書く（POST /api/pages/reply）。書けない訳は、止まらずに返す。
  * on（待ちの相手）が Product Manager でない時は、置き場が 0.8.0 より前なら送らずに old を返す（古い置き場は on を捨て、Product Manager の返事待ちにしてしまうため）。
  */
-export function setReply(ctx: Context, url: string, state: ReplyState, on: Party = 'pm'): ReplyResult {
+export async function setReply(ctx: Context, url: string, state: ReplyState, on: Party = 'pm'): Promise<ReplyResult> {
   const parts = pageParts(ctx, url);
   if (parts === undefined) return 'foreign';
   if (on !== 'pm') {
-    const since = storeAtLeast(ctx, PARTY_SINCE);
+    const since = await storeAtLeast(ctx, PARTY_SINCE);
     if (since !== 'yes') return since;
   }
   const query = new URLSearchParams({ ...parts, state, ...(on === 'pm' ? {} : { on }) });
-  const r = call(ctx, ['-X', 'POST', `${pagesUrl(ctx.env)}/api/pages/reply?${query.toString()}`]);
+  const r = await call(ctx, ['-X', 'POST', `${pagesUrl(ctx.env)}/api/pages/reply?${query.toString()}`]);
   if (r.code === '000') return 'down';
   if (r.code === '200') return 'done';
   if (r.code === '409') return 'conflict';
@@ -94,9 +94,9 @@ export function inState(page: PageRecord, state: ReplyState, on: Party = 'pm'): 
  * 0.5.0 より前の置き場は `reply` の絞りを読まずにみな返すので、記録の欄でも絞る（前の置き場では、いつも空になる）。
  * 0.8.0 からの置き場は、`on` の無い `reply` に Product Manager の分だけを返す（レビュー待ち・上げた件は入らない）。
  */
-export function waitingUrls(ctx: Context, key: string): string[] | undefined {
+export async function waitingUrls(ctx: Context, key: string): Promise<string[] | undefined> {
   const query = new URLSearchParams({ project: basename(ctx.state.dir), key, reply: 'waiting', sort: 'created_at', limit: '1000' });
-  const r = call(ctx, [`${pagesUrl(ctx.env)}/api/pages?${query.toString()}`]);
+  const r = await call(ctx, [`${pagesUrl(ctx.env)}/api/pages?${query.toString()}`]);
   if (r.code !== '200') return undefined;
   return (JSON.parse(r.body) as { pages: PageRecord[] }).pages.filter(p => inState(p, 'waiting')).map(p => `${pagesUrl(ctx.env)}${p.path}`);
 }
@@ -106,17 +106,17 @@ export function waitingUrls(ctx: Context, key: string): string[] | undefined {
  * 相手ごとに、置き場が返事待ちに絞った物を聞く（Key のページが多くても落とさない）。0.8.0 より前の置き場には、Product Manager の分だけを聞く
  * （古い置き場は on を捨てるため。レビュー待ち・上げた件は、古い置き場には無い）。
  */
-export function waitingByParty(ctx: Context, key: string): Record<Party, string[]> | undefined {
-  const of = (on: Party): string[] | undefined => {
+export async function waitingByParty(ctx: Context, key: string): Promise<Record<Party, string[]> | undefined> {
+  const of = async (on: Party): Promise<string[] | undefined> => {
     const query = new URLSearchParams({ project: basename(ctx.state.dir), key, reply: 'waiting', ...(on === 'pm' ? {} : { on }), sort: 'created_at', limit: '1000' });
-    const r = call(ctx, [`${pagesUrl(ctx.env)}/api/pages?${query.toString()}`]);
+    const r = await call(ctx, [`${pagesUrl(ctx.env)}/api/pages?${query.toString()}`]);
     if (r.code !== '200') return undefined;
     return (JSON.parse(r.body) as { pages: PageRecord[] }).pages.filter(p => inState(p, 'waiting', on)).map(p => `${pagesUrl(ctx.env)}${p.path}`);
   };
-  const pm = of('pm');
+  const pm = await of('pm');
   if (pm === undefined) return undefined;
-  if (storeAtLeast(ctx, PARTY_SINCE) !== 'yes') return { pm, review: [], tpm: [] };
-  return { pm, review: of('review') ?? [], tpm: of('tpm') ?? [] };
+  if (await storeAtLeast(ctx, PARTY_SINCE) !== 'yes') return { pm, review: [], tpm: [] };
+  return { pm, review: await of('review') ?? [], tpm: await of('tpm') ?? [] };
 }
 
 /** 返事待ちのページの、相手ごとの言い方（roster dismiss が並べる時の字）。 */
@@ -130,8 +130,8 @@ export const WAITING_PAGES: Record<Party, string> = {
  * メッセージを送る命令（ask pm・answer・ask review・report review・ask tpm --review）が、状態を書いた結果を 1 行で出す。書けなくても止まらない。
  * done は、書けた時の行（既定は「（状態の名）にした」）。on は待ちの相手。
  */
-export function replyLine(ctx: Context, url: string, state: ReplyState, done?: string, on: Party = 'pm'): string[] {
-  const result = setReply(ctx, url, state, on);
+export async function replyLine(ctx: Context, url: string, state: ReplyState, done?: string, on: Party = 'pm'): Promise<string[]> {
+  const result = await setReply(ctx, url, state, on);
   if (result === 'done') return [`置き場の印: ${done ?? `${REPLY_LABELS[on][state]}にした`} ${url}`];
   return markFailure(url, result, `roster page reply ${url} --${state}${on === 'pm' ? '' : ` --on ${on}`}`, on === 'pm' ? '返事の状態を持てない' : `レビューの印を持てない（${PARTY_SINCE} から）`);
 }

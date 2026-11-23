@@ -1,7 +1,7 @@
 // castlist（別の repo。127.0.0.1 で待つ、アクターの台帳のサーバー）への組み込み。API は castlist の docs/src/api.md。
 // アクターは Claude Code の session 1 つ（担当・TPM 担当・Auditor）と、人の Product Manager。roster は、登録・出来事・線・model と effort を送る。
 // 設定（config.jsonc の castlist か $ROSTER_CASTLIST_URL）が無ければ、どれも何もしない。
-// 送るのは curl（置き場の pagetray と同じ。命令が同期なので）。castlist を起こすのは Product Manager だけで、止まっていれば打つ 1 行を出す。
+// 送るのは curl（置き場の pagetray と同じ。spawnSync で打つ。命令の形は非同期で、request が Promise を返す）。castlist を起こすのは Product Manager だけで、止まっていれば打つ 1 行を出す。
 import { createHash } from 'node:crypto';
 import { closeSync, existsSync, fstatSync, openSync, readSync } from 'node:fs';
 import { basename } from 'node:path';
@@ -116,8 +116,12 @@ export function projectPrefix(project: string, seat: 'tpm' | 'audit'): string {
 /** castlist の答え。ok の text は答えの本文の字のまま（--json で出す）。down は、つながらない・時間内に答えない。busy は 503（混んでいる）。 */
 export type Reply = { kind: 'ok', code: number, body: unknown, text: string } | { kind: 'down' } | { kind: 'busy' } | { kind: 'refused', code: number, error: string };
 
-/** castlist に頼む。body があれば JSON で送る。Origin は付けない（castlist は Origin の付いた書く要求を断る）。 */
-export function request(ctx: Pick<Context, 'exec'>, url: string, method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown, timeout = REQUEST_TIMEOUT): Reply {
+/**
+ * castlist に頼む。body があれば JSON で送る。Origin は付けない（castlist は Origin の付いた書く要求を断る）。
+ * 今は curl を spawnSync で打つので、待つ物は無い。形だけ非同期にしておき、後で Promise を返す HTTP の client に替える（AI-36）。
+ */
+// eslint-disable-next-line @typescript-eslint/require-await
+export async function request(ctx: Pick<Context, 'exec'>, url: string, method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown, timeout = REQUEST_TIMEOUT): Promise<Reply> {
   const input = body === undefined ? undefined : JSON.stringify(body);
   const args = ['-sS', '--max-time', timeout, '-X', method, '-w', '\n%{http_code}', ...(input === undefined ? [] : ['-H', 'Content-Type: application/json', '--data-binary', '@-']), `${url}${path}`];
   const r = ctx.exec('curl', args, input === undefined ? undefined : { input });
@@ -180,10 +184,10 @@ export const busyMessage = (url: string, done: string): string => `castlist（${
  * 起こす前（roster start・roster assign・roster audit start・roster hello）に、castlist が起きているかを /healthz で見る。設定が無ければ何もしない。
  * 止まっていれば、done（しなかった事）と Product Manager が打つ 1 行を添えて止める。起きていれば、時計の差が 2 秒を超える時だけ 1 行を返す（止めない）。
  */
-export function requireUp(ctx: Pick<Context, 'env' | 'config' | 'exec' | 'now'>, done: string, after: string[] = []): string[] {
+export async function requireUp(ctx: Pick<Context, 'env' | 'config' | 'exec' | 'now'>, done: string, after: string[] = []): Promise<string[]> {
   const url = castlistUrl(ctx);
   if (url === undefined) return [];
-  const r = request(ctx, url, 'GET', '/healthz', undefined, HEALTH_TIMEOUT);
+  const r = await request(ctx, url, 'GET', '/healthz', undefined, HEALTH_TIMEOUT);
   if (r.kind === 'busy') throw new TpmError(busyMessage(url, done));
   if (r.kind !== 'ok') throw new TpmError(downMessage(ctx, url, done, after));
   const now = (r.body as { now?: unknown } | undefined)?.now;
@@ -201,7 +205,7 @@ export const issuerOf = (ctx: Pick<Context, 'state'>): string => castlistIssuer(
 export const sessionRef = (sid: string): string => `claude.session:${sid}`;
 
 /** 人の Product Manager を登録する（roster start。鍵が同じなので何度打っても同じアクター）。 */
-export function registerPm(ctx: Context, url: string): Reply {
+export async function registerPm(ctx: Context, url: string): Promise<Reply> {
   return request(ctx, url, 'POST', '/v1/actors', {
     issuer: issuerOf(ctx),
     kind: 'human',

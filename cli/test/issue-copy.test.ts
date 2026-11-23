@@ -50,64 +50,64 @@ describe('課題の写しのページ', () => {
 });
 
 describe('roster assign が課題の写しを作る', () => {
-  test('課題管理が none でも、Jira の Key なら写しを置き、名簿・担当の hello・roster roles に URL を出す', () => {
+  test('課題管理が none でも、Jira の Key なら写しを置き、名簿・担当の hello・roster roles に URL を出す', async () => {
     const w = world();
     const tpm = withAcli(w.tpm, { status: 0, stdout: JIRA, stderr: '' });
-    hello(tpm, TPM);
-    assign(tpm, 'AI-14', SE);
+    await hello(tpm, TPM);
+    await assign(tpm, 'AI-14', SE);
     const file = join(pageFolder(tpm, 'AI-14'), 'issue-1.html');
     expect(readFileSync(file, 'utf8')).toContain('Artifact を見る &lt;UI&gt;');
     const page = requireRole(tpm, 'AI-14').issuePage;
     expect(page).toMatch(/\/AI-14\/issue-1\.html$/);
-    expect(hello(w.role('AI-14', 'file:1'))).toContain(`課題の写し: ${page}`);
-    expect(roles(tpm).join('\n')).toContain(`課題の写し: ${page}`);
+    expect(await hello(w.role('AI-14', 'file:1'))).toContain(`課題の写し: ${page}`);
+    expect((await roles(tpm)).join('\n')).toContain(`課題の写し: ${page}`);
   });
 
-  test('続きの【brief】では写しを作り直し、【brief】に URL を載せる', () => {
+  test('続きの【brief】では写しを作り直し、【brief】に URL を載せる', async () => {
     const w = world();
     const tpm = withAcli(w.tpm, { status: 0, stdout: JIRA, stderr: '' });
-    hello(tpm, TPM);
-    assign(tpm, 'AI-14', SE);
-    finish(w, 'AI-14', 'file:1');
-    assign(tpm, 'AI-14', { ...SE, brief: 'https://claude.ai/artifact/b2', note: '計画まで' });
+    await hello(tpm, TPM);
+    await assign(tpm, 'AI-14', SE);
+    await finish(w, 'AI-14', 'file:1');
+    await assign(tpm, 'AI-14', { ...SE, brief: 'https://claude.ai/artifact/b2', note: '計画まで' });
     const page = requireRole(tpm, 'AI-14').issuePage ?? '';
     expect(page).toMatch(/\/AI-14\/issue-2\.html$/);
     expect(w.wire.inbox('file:1').map(m => m.text)).toEqual([`【brief】https://claude.ai/artifact/b2 課題の写し: ${page} 計画まで`]);
   });
 
-  test('t- の Key と Dependabot の PR の Key では写しを作らず、道具も打たない', () => {
+  test('t- の Key と Dependabot の PR の Key では写しを作らず、道具も打たない', async () => {
     const w = world();
-    hello(w.tpm, TPM);
-    assign(w.tpm, 't-x7k2', SE);
-    assign(w.tpm, 'app#12', { role: 'sustaining-engineer', wait: 0 });
+    await hello(w.tpm, TPM);
+    await assign(w.tpm, 't-x7k2', SE);
+    await assign(w.tpm, 'app#12', { role: 'sustaining-engineer', wait: 0 });
     expect(w.calls).toHaveLength(0);
     expect(requireRole(w.tpm, 't-x7k2').issuePage).toBeUndefined();
-    expect(hello(w.role('t-x7k2', 'file:1')).join('\n')).not.toContain('課題の写し');
+    expect((await hello(w.role('t-x7k2', 'file:1'))).join('\n')).not.toContain('課題の写し');
   });
 
-  test('読めなければ、居場所を作らずに --no-issue-copy を添えて止まる', () => {
+  test('読めなければ、居場所を作らずに --no-issue-copy を添えて止まる', async () => {
     const w = world();
     const tpm = withAcli(w.tpm, { status: 1, stdout: '', stderr: 'unauthorized' });
-    hello(tpm, TPM);
-    expect(() => assign(tpm, 'AI-14', SE)).toThrow(/AI-14 の課題の写しを作れませんでした: [\s\S]*unauthorized[\s\S]*acli jira auth status[\s\S]*--no-issue-copy "<訳>"/);
+    await hello(tpm, TPM);
+    await expect(assign(tpm, 'AI-14', SE)).rejects.toThrow(/AI-14 の課題の写しを作れませんでした: [\s\S]*unauthorized[\s\S]*acli jira auth status[\s\S]*--no-issue-copy "<訳>"/);
     expect(w.wire.seats()).toHaveLength(0);
     expect(existsSync(pageFolder(tpm, 'AI-14'))).toBe(false);
   });
 
-  test('--no-issue-copy の訳を付ければ、写しなしで振り、訳が担当に届く', () => {
+  test('--no-issue-copy の訳を付ければ、写しなしで振り、訳が担当に届く', async () => {
     const w = world();
     const tpm = withAcli(w.tpm, { status: 1, stdout: '', stderr: 'unauthorized' });
-    hello(tpm, TPM);
-    assign(tpm, 'AI-14', { ...SE, noIssueCopy: '認証切れ。中身は依頼書に写した' });
-    expect(hello(w.role('AI-14', 'file:1'))).toContain('課題の写し: 無し（認証切れ。中身は依頼書に写した）');
-    finish(w, 'AI-14', 'file:1');
-    assign(tpm, 'AI-14', { ...SE, brief: 'https://claude.ai/artifact/b2', noIssueCopy: 'まだ認証切れ' });
+    await hello(tpm, TPM);
+    await assign(tpm, 'AI-14', { ...SE, noIssueCopy: '認証切れ。中身は依頼書に写した' });
+    expect(await hello(w.role('AI-14', 'file:1'))).toContain('課題の写し: 無し（認証切れ。中身は依頼書に写した）');
+    await finish(w, 'AI-14', 'file:1');
+    await assign(tpm, 'AI-14', { ...SE, brief: 'https://claude.ai/artifact/b2', noIssueCopy: 'まだ認証切れ' });
     expect(w.wire.inbox('file:1').map(m => m.text)).toEqual(['【brief】https://claude.ai/artifact/b2 課題の写し: 無し（まだ認証切れ）']);
   });
 
-  test('--no-issue-copy の訳が空なら止まる', () => {
+  test('--no-issue-copy の訳が空なら止まる', async () => {
     const w = world();
-    hello(w.tpm, TPM);
-    expect(() => assign(w.tpm, 'AI-14', { ...SE, noIssueCopy: ' ' })).toThrow(/--no-issue-copy には、写しを作らずに振る訳を書いてください/);
+    await hello(w.tpm, TPM);
+    await expect(assign(w.tpm, 'AI-14', { ...SE, noIssueCopy: ' ' })).rejects.toThrow(/--no-issue-copy には、写しを作らずに振る訳を書いてください/);
   });
 });

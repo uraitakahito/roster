@@ -1,5 +1,5 @@
 // 偽の castlist: 127.0.0.1 の空いた port で待つ node の http サーバー。roster が curl で送る要求を記録し、本物（castlist の docs/src/api.md）の決まりの要る所だけで答える。
-// roster の命令は同期（spawnSync で curl を待つ）なので、同じ thread のサーバーは答えられない。サーバーは worker の thread で動かす。
+// roster の命令は curl を spawnSync で待つ（命令の形は非同期でも、待つ間 thread は止まる）ので、同じ thread のサーバーは答えられない。サーバーは worker の thread で動かす。
 // 記録は worker が file に 1 行ずつ足し、試験はそれを読む。castlist の時刻（/healthz の now と、書いた物の received_at）は、試験が書く file を worker が要求ごとに読む。
 // 書く 4 つの道は、送り手の時刻を 0.2.0 の名 sent_at で受け、前の名 at は断る（本物は移る間 at も受ける）。
 // 監査の検索（GET /v1/actors など）も、引数の名・1 つだけの引数の重なり・読めない時刻・limit の範囲を本物と同じ字で断る。頁の印（next）は本物と違う字（中は読まない決まりなので）。

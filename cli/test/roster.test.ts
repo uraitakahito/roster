@@ -16,33 +16,33 @@ import { BRIEF, world } from './helpers.ts';
 const SE = { role: 'software-engineer', title: '計画と実装', brief: BRIEF, wait: 0 } as const;
 
 describe('hello（TPM 担当）', () => {
-  test('$ROSTER_KEY が無ければ TPM 担当として名乗る: 宛先を状態に書き、状態を出し、名簿を出す', () => {
+  test('$ROSTER_KEY が無ければ TPM 担当として名乗る: 宛先を状態に書き、状態を出し、名簿を出す', async () => {
     const w = world();
-    expect(hello(w.tpm)).toEqual([...missingCastlistWarning(w.tpm), 'TPM 担当の宛先: file:tpm', `設定: ${w.project}/.claude/roles/config.jsonc`, '課題管理: none（既定）・連携: file', '名簿: 担当はいない']);
+    expect(await hello(w.tpm)).toEqual([...missingCastlistWarning(w.tpm), 'TPM 担当の宛先: file:tpm', `設定: ${w.project}/.claude/roles/config.jsonc`, '課題管理: none（既定）・連携: file', '名簿: 担当はいない']);
     expect(w.tpm.state.read('tpm.jsonc')).toEqual({ address: 'file:tpm' });
     expect(w.wire.status('file:tpm')).toEqual({ model: 'Opus 5.5 · medium', wait: '作業中: 起動' });
   });
 
-  test('状態の model・effort は、同じ環境変数で roster start が出す 1 行と揃う', () => {
+  test('状態の model・effort は、同じ環境変数で roster start が出す 1 行と揃う', async () => {
     const env = { ROSTER_MODEL: 'claude-fable-5-2', ROSTER_EFFORT: 'high' };
     const w = world({}, env);
-    hello(w.tpm);
+    await hello(w.tpm);
     const line = buildCommand('/w', w.tpm.root, [], env);
     expect(line).toContain(' --model claude-fable-5-2 --effort high ');
     expect(w.wire.status('file:tpm')?.model).toBe(modelStatus('claude-fable-5-2', 'high'));
   });
 
-  test('effort は 旗 > $CLAUDE_EFFORT（実際の effort）> $ROSTER_EFFORT、model は 旗 > $ROSTER_MODEL', () => {
+  test('effort は 旗 > $CLAUDE_EFFORT（実際の effort）> $ROSTER_EFFORT、model は 旗 > $ROSTER_MODEL', async () => {
     const w = world({}, { ROSTER_MODEL: 'claude-fable-5-2', ROSTER_EFFORT: 'high', CLAUDE_EFFORT: 'low' });
-    hello(w.tpm);
+    await hello(w.tpm);
     expect(w.wire.status('file:tpm')?.model).toBe('Fable 5.2 · low');
-    hello(w.tpm, { model: 'claude-opus-5-5', effort: 'max' });
+    await hello(w.tpm, { model: 'claude-opus-5-5', effort: 'max' });
     expect(w.wire.status('file:tpm')?.model).toBe('Opus 5.5 · max');
   });
 
-  test('古い名（TPM_MODEL など）は読まず、残っていれば知らせる。起こしの印の古い名は、起こし直すよう知らせる', () => {
+  test('古い名（TPM_MODEL など）は読まず、残っていれば知らせる。起こしの印の古い名は、起こし直すよう知らせる', async () => {
     const w = world({}, { TPM_MODEL: 'claude-fable-5-2', TPM_PAGES_URL: 'http://old', TPM_LAUNCH: 'x' });
-    const lines = hello(w.tpm);
+    const lines = await hello(w.tpm);
     expect(lines).toContain('環境変数の古い名は読みません。新しい名に替えてください: TPM_MODEL → ROSTER_MODEL・TPM_PAGES_URL → ROSTER_PAGES_URL（Product Manager に伝える）');
     expect(lines).toContain('この TPM 担当は、道具の名を替える前の roster start の 1 行で起きています（TPM_LAUNCH）。roster start の 1 行で起こし直してください（Product Manager に伝える）');
     expect(w.wire.status('file:tpm')?.model).toBe('Opus 5.5 · medium');
@@ -62,29 +62,29 @@ describe('居場所の色', () => {
     for (const blue of ['Blue', 'Navy', 'Indigo', 'Aqua', 'Teal', 'Charcoal']) expect(colors).not.toContain(blue);
   });
 
-  test('roster assign は、起こした席に役割の色を付ける', () => {
+  test('roster assign は、起こした席に役割の色を付ける', async () => {
     const w = world();
-    assign(w.tpm, 't-x7k2', SE);
-    assign(w.tpm, 'devops', { role: 'devops-engineer', wait: 0 });
-    assign(w.tpm, 'gh#1', { role: 'sustaining-engineer', wait: 0 });
+    await assign(w.tpm, 't-x7k2', SE);
+    await assign(w.tpm, 'devops', { role: 'devops-engineer', wait: 0 });
+    await assign(w.tpm, 'gh#1', { role: 'sustaining-engineer', wait: 0 });
     expect(['file:1', 'file:2', 'file:3'].map(a => w.wire.look(a)?.color)).toEqual(['Green', 'Orange', 'Magenta']);
   });
 
-  test('担当も、名乗る時に自分の居場所に役割の色を付け直す（起こす時に付けられなかった席・前から居る席）', () => {
+  test('担当も、名乗る時に自分の居場所に役割の色を付け直す（起こす時に付けられなかった席・前から居る席）', async () => {
     const w = world();
-    hello(w.tpm);
-    assign(w.tpm, 't-x7k2', SE);
+    await hello(w.tpm);
+    await assign(w.tpm, 't-x7k2', SE);
     w.wire.setColor('file:1', 'Red');
-    hello(w.role('t-x7k2', 'file:1'));
+    await hello(w.role('t-x7k2', 'file:1'));
     expect(w.wire.look('file:1')?.color).toBe('Green');
   });
 
-  test('TPM 担当は、名乗る時に自分の居場所に色を付ける。付けられなくても名乗りは止めず、1 行で知らせる', () => {
+  test('TPM 担当は、名乗る時に自分の居場所に色を付ける。付けられなくても名乗りは止めず、1 行で知らせる', async () => {
     const w = world();
     const painted: string[][] = [];
-    hello(painting(w.tpm, (address, color) => painted.push([address, color])));
+    await hello(painting(w.tpm, (address, color) => painted.push([address, color])));
     expect(painted).toEqual([['file:tpm', 'Amber']]);
-    const out = hello(painting(w.tpm, () => {
+    const out = await hello(painting(w.tpm, () => {
       throw new Error('unknown color');
     }));
     expect(out).toContain('居場所の色（Amber）を付けられなかった: unknown color');
@@ -93,17 +93,17 @@ describe('居場所の色', () => {
 });
 
 describe('assign', () => {
-  test('Auditor の席は、TPM 担当の roster assign では起こせない（役割でも Key でも）', () => {
+  test('Auditor の席は、TPM 担当の roster assign では起こせない（役割でも Key でも）', async () => {
     const w = world();
-    expect(() => assign(w.tpm, 't-x7k2', { role: 'auditor', wait: 0 })).toThrow(/Auditor の席（Key audit）は、Product Manager が roster audit start で起こします/);
-    expect(() => assign(w.tpm, 'audit', { ...SE })).toThrow(/Auditor の席（Key audit）は、Product Manager が roster audit start で起こします/);
-    expect(roles(w.tpm)).toEqual(['名簿: 担当はいない']);
+    await expect(assign(w.tpm, 't-x7k2', { role: 'auditor', wait: 0 })).rejects.toThrow(/Auditor の席（Key audit）は、Product Manager が roster audit start で起こします/);
+    await expect(assign(w.tpm, 'audit', { ...SE })).rejects.toThrow(/Auditor の席（Key audit）は、Product Manager が roster audit start で起こします/);
+    expect(await roles(w.tpm)).toEqual(['名簿: 担当はいない']);
     expect(w.wire.seats()).toEqual([]);
   });
 
-  test('名簿に書き、短い命令で居場所を作る', () => {
+  test('名簿に書き、短い命令で居場所を作る', async () => {
     const w = world();
-    const out = assign(w.tpm, 't-x7k2', SE);
+    const out = await assign(w.tpm, 't-x7k2', SE);
     const record = requireRole(w.tpm, 't-x7k2');
     expect(record).toEqual({
       key: 't-x7k2',
@@ -123,9 +123,9 @@ describe('assign', () => {
     expect(out).toEqual(['起こした: SWE t-x7k2: 計画と実装（file:1・Opus 5.5 · medium）', `folder: ${w.project}`, '名乗り（roster hello）は待っていない']);
   });
 
-  test('model などは 旗 > config.jsonc > 役割の既定 の順で決まる', () => {
+  test('model などは 旗 > config.jsonc > 役割の既定 の順で決まる', async () => {
     const w = world({ 'skill-sets': ['dependabot'], 'devops-engineer': { model: 'claude-fable-5-2' } });
-    assign(w.tpm, 'devops', { role: 'devops-engineer', wait: 0, effort: 'high' });
+    await assign(w.tpm, 'devops', { role: 'devops-engineer', wait: 0, effort: 'high' });
     expect(requireRole(w.tpm, 'devops')).toMatchObject({
       title: 'DevOps',
       model: 'claude-fable-5-2',
@@ -135,46 +135,46 @@ describe('assign', () => {
     });
   });
 
-  test('担当の既定は、担当を起こす folder（--cwd）の設定 > project の folder の設定。直下の folder どうしは合わせない', () => {
+  test('担当の既定は、担当を起こす folder（--cwd）の設定 > project の folder の設定。直下の folder どうしは合わせない', async () => {
     const w = world({ 'software-engineer': { model: 'claude-fable-5-2', effort: 'low' } }, {}, {
       skills: { 'software-engineer': { effort: 'high' }, 'skill-sets': ['dependabot'] },
       web: { 'software-engineer': { effort: 'max', permissionMode: 'acceptEdits' } },
     });
-    assign(w.tpm, 't-x7k2', { role: 'software-engineer', wait: 0, cwd: join(w.project, 'skills') });
+    await assign(w.tpm, 't-x7k2', { role: 'software-engineer', wait: 0, cwd: join(w.project, 'skills') });
     // skill-sets は、どの folder で起こしても合わせた物
     expect(requireRole(w.tpm, 't-x7k2')).toMatchObject({ model: 'claude-fable-5-2', effort: 'high', permissionMode: 'bypassPermissions', cwd: join(w.project, 'skills'), addDirs: [`${w.tpm.root}/skill-sets/core`, `${w.tpm.root}/skill-sets/dependabot`] });
-    assign(w.tpm, 't-y8m3', { role: 'software-engineer', wait: 0 });
+    await assign(w.tpm, 't-y8m3', { role: 'software-engineer', wait: 0 });
     expect(requireRole(w.tpm, 't-y8m3')).toMatchObject({ model: 'claude-fable-5-2', effort: 'low', permissionMode: 'bypassPermissions', cwd: w.project });
   });
 
-  test('環境変数は config.jsonc の担当の欄に負け、役割の既定に勝つ', () => {
+  test('環境変数は config.jsonc の担当の欄に負け、役割の既定に勝つ', async () => {
     const env = { ROSTER_MODEL: 'claude-sonnet-5-5', ROSTER_EFFORT: 'high', ROSTER_PERMISSION_MODE: 'acceptEdits' };
     const w = world({ 'devops-engineer': { model: 'claude-fable-5-2' } }, env);
-    assign(w.tpm, 'devops', { role: 'devops-engineer', wait: 0 });
+    await assign(w.tpm, 'devops', { role: 'devops-engineer', wait: 0 });
     expect(requireRole(w.tpm, 'devops')).toMatchObject({ model: 'claude-fable-5-2', effort: 'high', permissionMode: 'acceptEdits' });
-    assign(w.tpm, 'gh#1', { role: 'sustaining-engineer', wait: 0, effort: 'low' });
+    await assign(w.tpm, 'gh#1', { role: 'sustaining-engineer', wait: 0, effort: 'low' });
     expect(requireRole(w.tpm, 'gh#1')).toMatchObject({ model: 'claude-sonnet-5-5', effort: 'low', permissionMode: 'acceptEdits' });
   });
 
-  test('担当が名乗るまで待つ', () => {
+  test('担当が名乗るまで待つ', async () => {
     const w = world();
-    hello(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
+    await hello(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
     let n = 0;
     const tpm = {
       ...w.tpm,
-      sleep: () => {
+      sleep: async () => {
         n += 1;
-        if (n === 2) hello(w.role('t-x7k2', 'file:1'));
+        if (n === 2) await hello(w.role('t-x7k2', 'file:1'));
       },
     };
-    expect(assign(tpm, 't-x7k2', { ...SE, wait: 90 }).at(-1)).toBe('名乗った（roster hello が来た）');
+    expect((await assign(tpm, 't-x7k2', { ...SE, wait: 90 })).at(-1)).toBe('名乗った（roster hello が来た）');
     expect(n).toBe(2);
   });
 
-  test('名乗らなければ、画面の終わりを添えて止まり、居場所は残す', () => {
+  test('名乗らなければ、画面の終わりを添えて止まり、居場所は残す', async () => {
     const w = world();
     const tpm = { ...w.tpm, transport: Object.assign(w.wire, { screen: () => 'line 1\nError: something\n' }) };
-    expect(() => assign(tpm, 't-x7k2', { ...SE, wait: 4 })).toThrow(/4 秒たっても名乗りません。居場所は残してあります。画面の終わり:\nline 1\nError: something/);
+    await expect(assign(tpm, 't-x7k2', { ...SE, wait: 4 })).rejects.toThrow(/4 秒たっても名乗りません。居場所は残してあります。画面の終わり:\nline 1\nError: something/);
     expect(w.slept()).toBe(2);
     expect(w.wire.seats()).toHaveLength(1);
   });
@@ -182,58 +182,58 @@ describe('assign', () => {
   test.each([
     ['信頼のダイアログ', 'Adding a new directory: /x\nIs this a directory you created or one you trust?', /信頼のダイアログで止まっていたので、Yes は押さずに閉じました/],
     ['命令の誤り', 'Unknown command: /software-engineer', /Unknown command でした/],
-  ])('%sなら居場所を閉じてから止まる', (_, screen, message) => {
+  ])('%sなら居場所を閉じてから止まる', async (_, screen, message) => {
     const w = world();
     const tpm = { ...w.tpm, transport: Object.assign(w.wire, { screen: () => screen }) };
-    expect(() => assign(tpm, 't-x7k2', { ...SE, wait: 2 })).toThrow(message);
+    await expect(assign(tpm, 't-x7k2', { ...SE, wait: 2 })).rejects.toThrow(message);
     expect(w.wire.seats()).toEqual([]);
     expect(readRole(w.tpm, 't-x7k2')?.address).toBeUndefined();
   });
 
-  test.each([Number.NaN, -1, Number.POSITIVE_INFINITY])('--wait が %s なら、起こす前に止まる', (wait) => {
+  test.each([Number.NaN, -1, Number.POSITIVE_INFINITY])('--wait が %s なら、起こす前に止まる', async (wait) => {
     const w = world();
-    expect(() => assign(w.tpm, 't-x7k2', { ...SE, wait })).toThrow(/--wait は 0 以上の数にしてください/);
+    await expect(assign(w.tpm, 't-x7k2', { ...SE, wait })).rejects.toThrow(/--wait は 0 以上の数にしてください/);
     expect(w.wire.seats()).toEqual([]);
     expect(readRole(w.tpm, 't-x7k2')).toBeUndefined();
   });
 
-  test('動いている担当の Key では起こさない。居場所が消えていれば起こし直す', () => {
+  test('動いている担当の Key では起こさない。居場所が消えていれば起こし直す', async () => {
     const w = world();
-    assign(w.tpm, 't-x7k2', SE);
-    expect(() => assign(w.tpm, 't-x7k2', { role: 'software-engineer', wait: 0 })).toThrow(/t-x7k2 の担当はもう動いています（file:1）。新しい依頼書を --brief で/);
+    await assign(w.tpm, 't-x7k2', SE);
+    await expect(assign(w.tpm, 't-x7k2', { role: 'software-engineer', wait: 0 })).rejects.toThrow(/t-x7k2 の担当はもう動いています（file:1）。新しい依頼書を --brief で/);
     expect(w.wire.seats()).toHaveLength(1);
     w.wire.close('file:1');
-    expect(assign(w.tpm, 't-x7k2', SE)[0]).toMatch(/^起こし直した: .*file:2/);
+    expect((await assign(w.tpm, 't-x7k2', SE))[0]).toMatch(/^起こし直した: .*file:2/);
   });
 
-  test('どの設定の課題管理の Key でもない課題は、読んだ設定を並べて断る', () => {
-    expect(() => assign(world().tpm, 't-x7k2', { ...SE, issue: 'AI-12' })).toThrow(/AI-12 に記録を書く課題管理が、どの設定にもありません（読んだ設定: この folder＝none）/);
-    expect(() => assign(world({}, {}, { skills: { tracker: 'jira' } }).tpm, 'gh-12', { ...SE, issue: 'gh-12' })).toThrow(/読んだ設定: この folder＝none・skills＝jira/);
+  test('どの設定の課題管理の Key でもない課題は、読んだ設定を並べて断る', async () => {
+    await expect(assign(world().tpm, 't-x7k2', { ...SE, issue: 'AI-12' })).rejects.toThrow(/AI-12 に記録を書く課題管理が、どの設定にもありません（読んだ設定: この folder＝none）/);
+    await expect(assign(world({}, {}, { skills: { tracker: 'jira' } }).tpm, 'gh-12', { ...SE, issue: 'gh-12' })).rejects.toThrow(/読んだ設定: この folder＝none・skills＝jira/);
     const w = world({ tracker: 'github' });
-    assign(w.tpm, 'gh-12', { ...SE, issue: 'gh-12' });
+    await assign(w.tpm, 'gh-12', { ...SE, issue: 'gh-12' });
     expect(requireRole(w.tpm, 'gh-12').issue).toBe('gh-12');
   });
 
-  test('Key に空白などは使えない', () => {
-    expect(() => assign(world().tpm, 't x', SE)).toThrow(TpmError);
+  test('Key に空白などは使えない', async () => {
+    await expect(assign(world().tpm, 't x', SE)).rejects.toThrow(TpmError);
   });
 
-  test('t- の Key は t- と英小文字・数字 4 文字だけ。課題管理の Key・devops・<repo>#<PR> は問わない', () => {
+  test('t- の Key は t- と英小文字・数字 4 文字だけ。課題管理の Key・devops・<repo>#<PR> は問わない', async () => {
     for (const key of ['t-jsonc-check', 't-abc', 't-abcde', 't-AB12']) {
-      expect(() => assign(world().tpm, key, SE)).toThrow(/t- と英小文字・数字 4 文字にしてください（roster key で作る）/);
+      await expect(assign(world().tpm, key, SE)).rejects.toThrow(/t- と英小文字・数字 4 文字にしてください（roster key で作る）/);
     }
     const w = world();
-    expect(assign(w.tpm, 't-0o1l', SE)[0]).toMatch(/^起こした: SWE t-0o1l: 計画と実装/);
-    expect(assign(w.tpm, 'devops', { role: 'devops-engineer', wait: 0 })[0]).toMatch(/^起こした: DevOps（/);
-    expect(assign(w.tpm, 'app#12', { role: 'sustaining-engineer', wait: 0 })[0]).toMatch(/^起こした: Sustaining app#12（/);
+    expect((await assign(w.tpm, 't-0o1l', SE))[0]).toMatch(/^起こした: SWE t-0o1l: 計画と実装/);
+    expect((await assign(w.tpm, 'devops', { role: 'devops-engineer', wait: 0 }))[0]).toMatch(/^起こした: DevOps（/);
+    expect((await assign(w.tpm, 'app#12', { role: 'sustaining-engineer', wait: 0 }))[0]).toMatch(/^起こした: Sustaining app#12（/);
   });
 
-  test('名簿にある前の決まりの長い Key は、そのまま【brief】を送れ、起こし直せる', () => {
+  test('名簿にある前の決まりの長い Key は、そのまま【brief】を送れ、起こし直せる', async () => {
     const w = world();
     writeRole(w.tpm, { key: 't-jsonc-check', role: 'software-engineer', title: 'Software Engineer t-jsonc-check: JSONC', cwd: w.project, addDirs: [], model: 'claude-opus-5-5', effort: 'medium', permissionMode: 'bypassPermissions' });
-    expect(assign(w.tpm, 't-jsonc-check', SE)[0]).toMatch(/^起こし直した: SWE t-jsonc-check: 計画と実装/);
+    expect((await assign(w.tpm, 't-jsonc-check', SE))[0]).toMatch(/^起こし直した: SWE t-jsonc-check: 計画と実装/);
     // 起こし直した担当はまだ名乗っていない（最初の依頼書が済んでいない）ので、済ませてからと添えて送る
-    expect(assign(w.tpm, 't-jsonc-check', { role: 'software-engineer', brief: 'https://claude.ai/artifact/b2', wait: 0, after: true })[0]).toMatch(/^送った: 【brief】/);
+    expect((await assign(w.tpm, 't-jsonc-check', { role: 'software-engineer', brief: 'https://claude.ai/artifact/b2', wait: 0, after: true }))[0]).toMatch(/^送った: 【brief】/);
   });
 });
 
@@ -255,16 +255,16 @@ describe('newKey', () => {
     expect(newKey(tpm, sequence(0, 7, 8, 30))).toBe('t-29az');
   });
 
-  test('名簿の担当の Key と、置き場にページの folder がある Key は避ける', () => {
+  test('名簿の担当の Key と、置き場にページの folder がある Key は避ける', async () => {
     const { tpm, pages } = setup();
-    assign(tpm, 't-2222', SE);
+    await assign(tpm, 't-2222', SE);
     mkdirSync(join(pages, basename(tpm.state.dir), 't-3333'), { recursive: true });
     expect(newKey(tpm, sequence(0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2))).toBe('t-4444');
   });
 
-  test('100 回ぶつかれば止める', () => {
+  test('100 回ぶつかれば止める', async () => {
     const { tpm } = setup();
-    assign(tpm, 't-2222', SE);
+    await assign(tpm, 't-2222', SE);
     expect(() => newKey(tpm, () => 0)).toThrow(/使われていない Key を 100 回で作れませんでした/);
   });
 });
@@ -306,9 +306,9 @@ describe('設定の出どころ（roster hello・roster assign）', () => {
     expect(lines[4]).toBe('課題管理: Jira の Key（AI-12 の形）→ 宣言した設定が無い（記録しない）／gh- の Key → 決まらない（github の設定が 2 つ以上: api・web。この folder の設定の folders で 1 つに絞る。Product Manager に伝える）／t- の Key → 記録しない');
   });
 
-  test('roster assign は、担当を起こした folder と課題の記録の先を出す', () => {
+  test('roster assign は、担当を起こした folder と課題の記録の先を出す', async () => {
     const w = world({}, {}, { skills: { tracker: 'jira' } });
-    expect(assign(w.tpm, 'AI-20', { ...SE, issue: 'AI-20', noIssueCopy: '試験' })).toEqual([
+    expect(await assign(w.tpm, 'AI-20', { ...SE, issue: 'AI-20', noIssueCopy: '試験' })).toEqual([
       '起こした: SWE AI-20: 計画と実装（file:1・Opus 5.5 · medium）',
       `folder: ${w.project}`,
       '課題の記録: jira（skills の設定）',
@@ -316,17 +316,17 @@ describe('設定の出どころ（roster hello・roster assign）', () => {
     ]);
     // project の folder 自身の設定なら、道具の名だけ
     const own = world({ tracker: 'jira' });
-    expect(assign(own.tpm, 'AI-20', { ...SE, issue: 'AI-20', noIssueCopy: '試験', cwd: join(own.project, 'sub') })[1]).toBe(`folder: ${join(own.project, 'sub')}`);
+    expect((await assign(own.tpm, 'AI-20', { ...SE, issue: 'AI-20', noIssueCopy: '試験', cwd: join(own.project, 'sub') }))[1]).toBe(`folder: ${join(own.project, 'sub')}`);
     expect(recordingTo(own.tpm, 'AI-20')).toBe('jira');
   });
 });
 
 describe('hello', () => {
-  test('状態を出し、名簿に宛先と時刻を書き、受け持ちを返す', () => {
+  test('状態を出し、名簿に宛先と時刻を書き、受け持ちを返す', async () => {
     const w = world();
-    hello(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
-    assign(w.tpm, 't-x7k2', { ...SE, model: 'claude-fable-5-2' });
-    expect(hello(w.role('t-x7k2', 'file:1'))).toEqual([
+    await hello(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
+    await assign(w.tpm, 't-x7k2', { ...SE, model: 'claude-fable-5-2' });
+    expect(await hello(w.role('t-x7k2', 'file:1'))).toEqual([
       ...missingCastlistWarning(w.tpm),
       '役割: Software Engineer',
       '課題の Key: t-x7k2',
@@ -339,24 +339,24 @@ describe('hello', () => {
     expect(w.wire.status('file:1')).toEqual({ model: 'Fable 5.2 · medium', wait: '作業中: 依頼書を読む' });
   });
 
-  test('課題の Key が Jira の形なら、課題管理が none でも中身の読み方を返す', () => {
+  test('課題の Key が Jira の形なら、課題管理が none でも中身の読み方を返す', async () => {
     const w = world();
-    hello(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
-    assign(w.tpm, 'AI-14', SE);
-    expect(hello(w.role('AI-14', 'file:1'))).toContain('課題の中身: roster issue view AI-14');
+    await hello(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
+    await assign(w.tpm, 'AI-14', SE);
+    expect(await hello(w.role('AI-14', 'file:1'))).toContain('課題の中身: roster issue view AI-14');
   });
 
-  test('名簿にいない Key なら止まる', () => {
-    expect(() => hello(world().role('t-nope', 'file:9'))).toThrow(/名簿に担当がいません: t-nope/);
+  test('名簿にいない Key なら止まる', async () => {
+    await expect(hello(world().role('t-nope', 'file:9'))).rejects.toThrow(/名簿に担当がいません: t-nope/);
   });
 
-  test('担当が --model・--effort を付けたら止まり、名簿も状態も書かない', () => {
+  test('担当が --model・--effort を付けたら止まり、名簿も状態も書かない', async () => {
     const w = world();
-    hello(w.tpm);
-    assign(w.tpm, 't-x7k2', SE);
+    await hello(w.tpm);
+    await assign(w.tpm, 't-x7k2', SE);
     const se = w.role('t-x7k2', 'file:1');
-    expect(() => hello(se, { model: 'claude-fable-5-2' })).toThrow(/--model・--effort は TPM 担当が名乗るときだけ使う/);
-    expect(() => hello(se, { effort: 'high' })).toThrow(TpmError);
+    await expect(hello(se, { model: 'claude-fable-5-2' })).rejects.toThrow(/--model・--effort は TPM 担当が名乗るときだけ使う/);
+    await expect(hello(se, { effort: 'high' })).rejects.toThrow(TpmError);
     expect(requireRole(w.tpm, 't-x7k2').helloAt).toBeUndefined();
     expect(w.wire.status('file:1')).toBeUndefined();
   });
@@ -372,55 +372,55 @@ describe('inbox', () => {
 });
 
 describe('roles と close', () => {
-  test('動いている担当は状態を、消えた担当は消えたと出す', () => {
+  test('動いている担当は状態を、消えた担当は消えたと出す', async () => {
     const w = world();
-    hello(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
-    assign(w.tpm, 't-a3b4', SE);
-    assign(w.tpm, 'app#12', { role: 'sustaining-engineer', wait: 0 });
-    hello(w.role('t-a3b4', 'file:1'));
+    await hello(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
+    await assign(w.tpm, 't-a3b4', SE);
+    await assign(w.tpm, 'app#12', { role: 'sustaining-engineer', wait: 0 });
+    await hello(w.role('t-a3b4', 'file:1'));
     w.wire.close('file:2');
-    expect(roles(w.tpm)).toEqual([
+    expect(await roles(w.tpm)).toEqual([
       '名簿:',
       '- app#12  Sustaining app#12  消えた（居場所が無い。roster assign で起こし直すか、roster close で名簿から消す）',
       `- t-a3b4  SWE t-a3b4: 計画と実装  file:1（作業中: 依頼書を読む）  依頼書: ${BRIEF}`,
     ]);
   });
 
-  test('close は居場所を閉じて名簿から消す。居場所が無くても名簿からは消す', () => {
+  test('close は居場所を閉じて名簿から消す。居場所が無くても名簿からは消す', async () => {
     const w = world();
-    assign(w.tpm, 't-a3b4', SE);
-    assign(w.tpm, 't-b5c6', SE);
+    await assign(w.tpm, 't-a3b4', SE);
+    await assign(w.tpm, 't-b5c6', SE);
     w.wire.close('file:2');
-    expect(close(w.tpm, 't-a3b4')).toEqual(['閉じた: SWE t-a3b4: 計画と実装（file:1）']);
-    expect(close(w.tpm, 't-b5c6')).toEqual(['閉じた: SWE t-b5c6: 計画と実装（居場所はもう無かった）']);
+    expect(await close(w.tpm, 't-a3b4')).toEqual(['閉じた: SWE t-a3b4: 計画と実装（file:1）']);
+    expect(await close(w.tpm, 't-b5c6')).toEqual(['閉じた: SWE t-b5c6: 計画と実装（居場所はもう無かった）']);
     expect(w.wire.seats()).toEqual([]);
-    expect(roles(w.tpm)).toEqual(['名簿: 担当はいない']);
-    expect(() => close(w.tpm, 't-a3b4')).toThrow(/名簿に担当がいません/);
+    expect(await roles(w.tpm)).toEqual(['名簿: 担当はいない']);
+    await expect(close(w.tpm, 't-a3b4')).rejects.toThrow(/名簿に担当がいません/);
   });
 });
 
 describe('道具の名を替えた後（t-6ydg）', () => {
-  test('起こす命令の --state は symlink を解いた path（古い在り処を通って起きた担当が起こす席も、新しい path を持つ）', () => {
+  test('起こす命令の --state は symlink を解いた path（古い在り処を通って起きた担当が起こす席も、新しい path を持つ）', async () => {
     const real = realpathSync(mkdtempSync(join(tmpdir(), 'roster-real-state-')));
     const link = join(realpathSync(mkdtempSync(join(tmpdir(), 'roster-link-'))), 'old-state');
     symlinkSync(real, link);
     const w = world({}, { ROSTER_STATE: link });
-    assign(w.tpm, 't-x7k2', SE);
+    await assign(w.tpm, 't-x7k2', SE);
     expect(w.wire.command('file:1')).toBe(`${w.tpm.root}/cli/bin/roster run-role t-x7k2 --project ${w.project} --state ${real}`);
   });
 
-  test('担当に渡す project・状態の folder・Key・役割は、受け継いだ物を書き替える', () => {
+  test('担当に渡す project・状態の folder・Key・役割は、受け継いだ物を書き替える', async () => {
     const w = world();
-    assign(w.tpm, 't-x7k2', SE);
+    await assign(w.tpm, 't-x7k2', SE);
     const env = roleEnv(requireRole(w.tpm, 't-x7k2'), '/p', '/s', '/r', { PATH: '/usr/bin', ROSTER_PROJECT: '/old', ROSTER_STATE: '/old-state', ROSTER_KEY: 't-old', ROSTER_ROLE: 'devops-engineer', ROSTER_MODEL: 'claude-x' });
     expect(env).toMatchObject({ ROSTER_PROJECT: '/p', ROSTER_STATE: '/s', ROSTER_KEY: 't-x7k2', ROSTER_ROLE: 'software-engineer', ROSTER_MODEL: 'claude-x' });
   });
 });
 
 describe('run-role', () => {
-  test('claude の引数は、guard の hook を付け、最初の入力の前に -- を置く', () => {
+  test('claude の引数は、guard の hook を付け、最初の入力の前に -- を置く', async () => {
     const w = world({ 'skill-sets': ['dependabot'] });
-    assign(w.tpm, 'app#12', { role: 'sustaining-engineer', wait: 0 });
+    await assign(w.tpm, 'app#12', { role: 'sustaining-engineer', wait: 0 });
     expect(claudeArgs(requireRole(w.tpm, 'app#12'), '/r')).toEqual([
       '--settings',
       '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"/r/cli/bin/roster guard"}]}],"SessionStart":[{"hooks":[{"type":"command","command":"/r/cli/bin/roster castlist session-start"},{"type":"command","command":"/r/cli/bin/roster returned check"}]}],"SessionEnd":[{"hooks":[{"type":"command","command":"/r/cli/bin/roster castlist session-end"}]}]}}',
@@ -451,9 +451,9 @@ describe('run-role', () => {
     expect(args.slice(-2)).toEqual(['--', '/audit hello']);
   });
 
-  test('担当に project・状態の folder・Key・役割と、roster の在り処を渡し、置き場の CLI に消させない', () => {
+  test('担当に project・状態の folder・Key・役割と、roster の在り処を渡し、置き場の CLI に消させない', async () => {
     const w = world();
-    assign(w.tpm, 't-x7k2', SE);
+    await assign(w.tpm, 't-x7k2', SE);
     expect(roleEnv(requireRole(w.tpm, 't-x7k2'), '/p', '/s', '/r', { PATH: '/usr/bin', HOME: '/h' })).toEqual({
       HOME: '/h',
       ROSTER_PROJECT: '/p',

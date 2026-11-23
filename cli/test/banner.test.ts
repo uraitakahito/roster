@@ -69,12 +69,12 @@ describe('toBannerConfig', () => {
 });
 
 /** TPM 担当と t-x7k2 の担当が名乗った世界と、cmux の workspace list に見立てた居場所（UUID → 宛先・題）。 */
-function hooked(seats: { id: string, ref: string, title: string }[] = []) {
+async function hooked(seats: { id: string, ref: string, title: string }[] = []) {
   const w = world();
-  hello(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
-  assign(w.tpm, 't-x7k2', { role: 'software-engineer', title: '計画と実装', brief: BRIEF, wait: 0 });
+  await hello(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
+  await assign(w.tpm, 't-x7k2', { role: 'software-engineer', title: '計画と実装', brief: BRIEF, wait: 0 });
   const se = w.role('t-x7k2', 'file:1');
-  hello(se);
+  await hello(se);
   const stateHome = dirname(dirname(w.tpm.state.dir));
   const configHome = realpathSync(mkdtempSync(join(tmpdir(), 'roster-banner-config-')));
   const all = [
@@ -103,15 +103,15 @@ function hooked(seats: { id: string, ref: string, title: string }[] = []) {
 const HIDE = JSON.stringify({ effects: { desktop: false, sound: false } });
 
 describe('bannerHook', () => {
-  test('担当の答え終わった・入力待ちは消し（音も）、許可/質問は出す', () => {
-    const { hook } = hooked();
+  test('担当の答え終わった・入力待ちは消し（音も）、許可/質問は出す', async () => {
+    const { hook } = await hooked();
     expect(hook('U-SE', 'turn-complete')).toBe(HIDE);
     expect(hook('U-SE', 'idle-reminder')).toBe(HIDE);
     expect(hook('U-SE', 'needs-permission')).toBe('{}');
   });
 
-  test('TPM 担当の答え終わったは、その回に wait pm を打った時だけ出す', () => {
-    const { hook, tpmWait } = hooked();
+  test('TPM 担当の答え終わったは、その回に wait pm を打った時だけ出す', async () => {
+    const { hook, tpmWait } = await hooked();
     // 名乗った直後は wait の記録が無い（roster hello は wait を作業中にするだけ）。
     expect(hook('U-TPM', 'turn-complete')).toBe(HIDE);
     tpmWait('pm', '指示');
@@ -126,8 +126,8 @@ describe('bannerHook', () => {
   });
 
   // Auditor の席は Product Manager が起こすが、名簿の行（宛先と題 Audit）があれば、hook は役割 auditor と見分ける。
-  test('Auditor の席の答え終わったは、その回に Product Manager を待った時（報告した回）だけ出す', () => {
-    const { w, hook } = hooked([{ id: 'U-AUDIT', ref: 'file:7', title: 'Audit' }]);
+  test('Auditor の席の答え終わったは、その回に Product Manager を待った時（報告した回）だけ出す', async () => {
+    const { w, hook } = await hooked([{ id: 'U-AUDIT', ref: 'file:7', title: 'Audit' }]);
     writeRole(w.tpm, { key: 'audit', role: 'auditor', title: 'Audit', cwd: w.project, addDirs: [], model: 'claude-fable-5-2', effort: 'high', permissionMode: 'bypassPermissions', address: 'file:7' });
     // 名乗っただけの回（roster hello は wait の記録を書かない）と、入力待ちの催促は消す。
     expect(hook('U-AUDIT', 'turn-complete')).toBe(HIDE);
@@ -145,24 +145,24 @@ describe('bannerHook', () => {
     ]);
   });
 
-  test('名簿に無い居場所・題が違う居場所・知らない category・workspaceId が無い通知は替えない', () => {
-    const { hook } = hooked([{ id: 'U-OTHER', ref: 'file:9', title: 'zsh' }, { id: 'U-STALE', ref: 'file:1', title: '別の題' }]);
+  test('名簿に無い居場所・題が違う居場所・知らない category・workspaceId が無い通知は替えない', async () => {
+    const { hook } = await hooked([{ id: 'U-OTHER', ref: 'file:9', title: 'zsh' }, { id: 'U-STALE', ref: 'file:1', title: '別の題' }]);
     expect(hook('U-OTHER', 'turn-complete')).toBe('{}');
     expect(hook('U-NONE', 'turn-complete')).toBe('{}');
     expect(hook('U-SE', 'something-new')).toBe('{}');
     expect(bannerHook(JSON.stringify({ agent: { category: 'turn-complete' } }), { env: {}, exec: () => ({ status: 1, stdout: '', stderr: '' }), now: new Date() })).toBe('{}');
   });
 
-  test('設定を読めなければ消さず、記録に訳を書く', () => {
-    const { w, hook, configHome } = hooked();
+  test('設定を読めなければ消さず、記録に訳を書く', async () => {
+    const { w, hook, configHome } = await hooked();
     mkdirSync(join(configHome, 'roster'));
     writeFileSync(join(configHome, 'roster', 'banner.jsonc'), '{ "banner": { "tpm": { "turn": "never" } } }');
     expect(hook('U-SE', 'turn-complete')).toBe('{}');
     expect(bannerLog(w.tpm, 5)[0]).toMatch(/file:1 {2}software-engineer {2}turn-complete {2}出す {2}設定を読めないので出す/);
   });
 
-  test('設定で替えた物に従う（withBanner も）', () => {
-    const { hook, configHome } = hooked();
+  test('設定で替えた物に従う（withBanner も）', async () => {
+    const { hook, configHome } = await hooked();
     mkdirSync(join(configHome, 'roster'));
     writeFileSync(join(configHome, 'roster', 'banner.jsonc'), '{\n  // 担当の答え終わったも見る\n  "banner": { "software-engineer": { "turn": "show" } },\n  "withBanner": ["sound", "paneFlash"],\n}');
     expect(hook('U-SE', 'turn-complete')).toBe('{}');
@@ -170,8 +170,8 @@ describe('bannerHook', () => {
   });
 
   // 古い名の頃の在り処 ~/.config/tpm（t-4urw）は読まない。知らせるのは banner check と TPM 担当の roster hello。
-  test('古い在り処（~/.config/tpm）の設定は読まず、既定で決める', () => {
-    const { hook, configHome } = hooked();
+  test('古い在り処（~/.config/tpm）の設定は読まず、既定で決める', async () => {
+    const { hook, configHome } = await hooked();
     mkdirSync(join(configHome, 'tpm'));
     writeFileSync(join(configHome, 'tpm', 'banner.jsonc'), '{ "banner": { "software-engineer": { "turn": "show" } } }');
     expect(hook('U-SE', 'turn-complete')).toBe(HIDE);
@@ -181,8 +181,8 @@ describe('bannerHook', () => {
     expect(hook('U-SE', 'idle-reminder')).toBe('{}');
   });
 
-  test('決めたことを project の banner.jsonl に書き、roster banner log が新しい順に出す', () => {
-    const { w, hook } = hooked();
+  test('決めたことを project の banner.jsonl に書き、roster banner log が新しい順に出す', async () => {
+    const { w, hook } = await hooked();
     expect(bannerLog(w.tpm, 5)).toEqual(['記録なし（hook がまだ動いていないか、この project の居場所の通知が無い）']);
     hook('U-SE', 'turn-complete');
     hook('U-SE', 'needs-permission');
@@ -194,9 +194,9 @@ describe('bannerHook', () => {
 });
 
 describe('wait の記録', () => {
-  test('roster wait は waits/<宛先>.jsonc に種類と時刻を書く', () => {
+  test('roster wait は waits/<宛先>.jsonc に種類と時刻を書く', async () => {
     const w = world();
-    hello(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
+    await hello(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
     wait(w.tpm, 'pm', '指示');
     expect(w.tpm.state.read(waitFile('file:tpm'))).toEqual({ kind: 'pm', text: '回答待ち(PM): 指示', at: '2026-11-20T12:00:00.000Z' });
   });
@@ -412,8 +412,8 @@ describe('roster banner hook（bin/roster 経由）', () => {
   });
 });
 
-test('banner.jsonl は 7 日より古い行を消す', () => {
-  const { w, hook } = hooked();
+test('banner.jsonl は 7 日より古い行を消す', async () => {
+  const { w, hook } = await hooked();
   const file = join(w.tpm.state.dir, 'banner.jsonl');
   writeFileSync(file, `${JSON.stringify({ at: '2026-11-01T00:00:00.000Z', workspace: 'file:1', role: 'x', category: 'turn-complete', show: false, reason: '古い' })}\n`);
   hook('U-SE', 'turn-complete');

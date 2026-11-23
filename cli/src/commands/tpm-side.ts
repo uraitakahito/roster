@@ -28,9 +28,9 @@ import { launchStaff, markBriefed, putStaffBrief, relabelStaff, STAFF, staffSubj
  * 状態の model は、旗が無ければ起こす 1 行と同じ決め方（resolveSettings）。effort は、旗が無ければ Claude Code が入れる $CLAUDE_EFFORT（実際の effort）を旗と同じに扱う。
  * castlist を設定していれば、名乗りを送り、`アクター: <名>` の行を頭に出す（castlist が止まっていれば、名乗らずに止まる）。設定していなければ、警告の枠を頭に出す。
  */
-export function tpmHello(ctx: Context, options: { model?: string, effort?: string } = {}): string[] {
+export async function tpmHello(ctx: Context, options: { model?: string, effort?: string } = {}): Promise<string[]> {
   const settings = resolveSettings('tpm', { flags: { model: options.model, effort: options.effort ?? ctx.env.CLAUDE_EFFORT }, env: ctx.env });
-  const actor = castlistHello(ctx);
+  const actor = await castlistHello(ctx);
   const address = ctx.transport.whoami();
   ctx.transport.setTitle(TPM_TITLE);
   // TPM 担当の居場所は利用者が作るので、色は名乗る時に自分で付ける。
@@ -41,7 +41,7 @@ export function tpmHello(ctx: Context, options: { model?: string, effort?: strin
   // 連携の道具が古いメッセージを捨てる前に、届いた時刻を写す。
   syncDeliveries(ctx);
   const legacy = legacyEnvNotice(ctx.env).map(line => `${line}（Product Manager に伝える）`);
-  return [...actor, `TPM 担当の宛先: ${address}`, ...painted, ...configLines(ctx), ...bannerHint(ctx), ...legacy, ...roles(ctx)];
+  return [...actor, `TPM 担当の宛先: ${address}`, ...painted, ...configLines(ctx), ...bannerHint(ctx), ...legacy, ...await roles(ctx)];
 }
 
 /** 既定で埋めた値には「（既定）」を付ける（設定に書いた値と見分けるため）。 */
@@ -116,9 +116,9 @@ function hookHint(ctx: Context, cmuxFile?: string): string[] {
 }
 
 /** 名簿を、実際に動いている居場所と突き合わせて出す。 */
-export function roles(ctx: Context): string[] {
+export async function roles(ctx: Context): Promise<string[]> {
   // 落ちた session の推しの幕引き（castlist と cmux があれば）。
-  const swept = sweep(ctx);
+  const swept = await sweep(ctx);
   const seats = ctx.transport.seats();
   const records = allRoles(ctx);
   // 台帳に未決の件があれば、名簿の終わりに 1 行出す（見直しを忘れないため）。
@@ -179,14 +179,14 @@ export interface AssignOptions {
  * その依頼書は、課題の担当のレビューの頼み（roster ask review）から命令が作る（--brief は受けない）。いつもは roster ask review が席を起こし、じかに頼みを届けるので、
  * TPM 担当がこの形で打つのは、返っていない頼みがあるのに席が落ちた時の起こし直し。
  */
-export function assign(ctx: Context, subjectKey: string, options: AssignOptions): string[] {
-  const lines = assignSeat(ctx, subjectKey, options);
+export async function assign(ctx: Context, subjectKey: string, options: AssignOptions): Promise<string[]> {
+  const lines = await assignSeat(ctx, subjectKey, options);
   // 落ちた session の推しの幕引き（castlist と cmux があれば）。
-  return [...lines, ...sweep(ctx)];
+  return [...lines, ...await sweep(ctx)];
 }
 
 /** roster assign の本体（上の assign が、終わりに落ちた session の突き合わせを足す）。 */
-function assignSeat(ctx: Context, subjectKey: string, options: AssignOptions): string[] {
+async function assignSeat(ctx: Context, subjectKey: string, options: AssignOptions): Promise<string[]> {
   requireTpmSide(ctx, 'roster assign');
   assertKey(subjectKey);
   if (!Number.isFinite(options.wait) || options.wait < 0) throw new TpmError('--wait は 0 以上の数にしてください（0 なら待たない）');
@@ -217,12 +217,12 @@ function assignSeat(ctx: Context, subjectKey: string, options: AssignOptions): s
     const choice = options.supersede === true ? 'supersede' : options.after === true ? 'after' : undefined;
     const settled = assertSettled(ctx, existing, 'assign', choice);
     // 続きのときも写しを作り直す（コメントが増えているため）。
-    Object.assign(existing, issueCopy(ctx, existing.issue ?? subjectKey, subjectKey, options.noIssueCopy));
+    Object.assign(existing, await issueCopy(ctx, existing.issue ?? subjectKey, subjectKey, options.noIssueCopy));
     // 送る前の検査を通ってから、頼みを依頼書にする（止まった回に、渡した事にしない）。
-    const url = subject === undefined ? options.brief ?? '' : putStaffBrief(ctx, subject, asks);
+    const url = subject === undefined ? options.brief ?? '' : await putStaffBrief(ctx, subject, asks);
     const sent = brief(ctx, existing, url, options.note, settled === undefined || choice === undefined ? undefined : { text: settled, choice });
     const previous = markBriefed(ctx, asks, url);
-    return subject === undefined ? sent : [...sent, ...relabelStaff(ctx, existing, subjectKey, asks), ...markBrief(ctx, url, asks, previous)];
+    return subject === undefined ? sent : [...sent, ...relabelStaff(ctx, existing, subjectKey, asks), ...await markBrief(ctx, url, asks, previous)];
   }
   if (options.issue !== undefined && !ctx.tracker.owns(options.issue)) {
     throw new TpmError(`${options.issue} に記録を書く課題管理が、どの設定にもありません（読んだ設定: ${describeTrackers(ctx.config.sources)}）。記録するなら、その課題を扱う repo の .claude/roles/config.jsonc に "tracker"（jira・github）を書いてください`);
@@ -230,7 +230,7 @@ function assignSeat(ctx: Context, subjectKey: string, options: AssignOptions): s
   const castlistHint = [`この 1 行を Product Manager に頼み、roster wait pm "castlist を起こす" --hand で待ってから、もう 1 度 roster assign を打ってください。`];
   // Staff Engineer 担当の席の起こし直し（返っていない頼みがあるのに席が落ちた時）。いつもは、課題の担当の roster ask review が起こす。
   if (subject !== undefined) {
-    return launchStaff(ctx, subject, asks, {
+    return await launchStaff(ctx, subject, asks, {
       flags: options,
       wait: options.wait,
       again: existing !== undefined,
@@ -242,14 +242,14 @@ function assignSeat(ctx: Context, subjectKey: string, options: AssignOptions): s
     });
   }
   // 新しい担当（交代を含む）は背景を知らないので、依頼書に課題の概要の節を求める。続きの【brief】には求めない。
-  if (options.brief !== undefined) assertSummary(ctx, key, options.brief);
+  if (options.brief !== undefined) await assertSummary(ctx, key, options.brief);
   const issue = options.issue;
   const cwd = options.cwd ?? ctx.project;
   const settings = resolveSettings(options.role, { flags: options, config: roleDefaults(ctx, options.role, cwd), env: ctx.env });
   // castlist を設定していれば、起きているかを、写しを置く前に見る（止まっていれば、担当を起こさずに止まる）。
-  const skew = requireUp(ctx, '担当は起こしていません。', castlistHint);
+  const skew = await requireUp(ctx, '担当は起こしていません。', castlistHint);
   // 居場所を作る前に読む（読めなければ、担当を起こさずに止まる）。
-  const copy = issueCopy(ctx, issue ?? subjectKey, subjectKey, options.noIssueCopy);
+  const copy = await issueCopy(ctx, issue ?? subjectKey, subjectKey, options.noIssueCopy);
   const briefUrl = options.brief;
   const record: RoleRecord = {
     key,
@@ -265,11 +265,11 @@ function assignSeat(ctx: Context, subjectKey: string, options: AssignOptions): s
   // 担当を起こした folder と、記録の先を出す（上の folder から振ると、どちらも 1 つに決まっていないため）。
   const sid = ctx.env.CLAUDE_CODE_SESSION_ID;
   const more = [...(issue === undefined ? [] : [`課題の記録: ${recordingTo(ctx, issue)}`]), ...skew];
-  return launch(ctx, record, existing !== undefined, options.wait, more, sid ? sessionRef(sid) : undefined);
+  return await launch(ctx, record, existing !== undefined, options.wait, more, sid ? sessionRef(sid) : undefined);
 }
 
 /** 担当の居場所を閉じ、名簿から消す。課題の担当を閉じる時は、その課題の Staff Engineer 担当の席が残っていれば、一緒に閉じる。 */
-export function close(ctx: Context, key: string): string[] {
+export async function close(ctx: Context, key: string): Promise<string[]> {
   requireTpmSide(ctx, 'roster close');
   const record = readRole(ctx, key);
   if (record === undefined) throw new TpmError(`名簿に担当がいません: ${key}`);
@@ -278,9 +278,9 @@ export function close(ctx: Context, key: string): string[] {
   // 閉じる前に、この担当とのメッセージの届いた時刻を写す。
   syncDeliveries(ctx);
   // 居場所を閉じる前に、castlist に幕引きを送る（閉じた後の SessionEnd の hook が届くかは、閉じ方による）。
-  const castlist = closeLaunch(ctx, record);
+  const castlist = await closeLaunch(ctx, record);
   if (alive && record.address !== undefined) ctx.transport.close(record.address);
   removeRole(ctx, key);
-  const staff = isStaffKey(key) || readRole(ctx, staffKey(key)) === undefined ? [] : close(ctx, staffKey(key));
+  const staff = isStaffKey(key) || readRole(ctx, staffKey(key)) === undefined ? [] : await close(ctx, staffKey(key));
   return [`閉じた: ${record.title}${alive ? `（${record.address}）` : '（居場所はもう無かった）'}`, ...castlist, ...staff];
 }

@@ -141,17 +141,27 @@ const esc = (text: string): string => text.replaceAll('&', '&amp;').replaceAll('
  * 行ごとのアクターの欄（HTML）。席の分かる行は、その時刻にその席に居た castlist のアクターを、プロフィールの画面への link で出す。
  * castlist が止まっていれば、その後の行には聞かずに「castlist に聞けない」と書く（ページは置く）。聞けなかった訳は、初めの 1 つを返す。
  */
-function actorCells(ctx: Context, url: string, events: TimelineEvent[]): { cells: string[], failed?: string } {
+async function actorCells(ctx: Context, url: string, events: TimelineEvent[]): Promise<{ cells: string[], failed?: string }> {
   const asked = new Map<string, string>();
   let down = false;
   let failed: string | undefined;
-  const cells = events.map((e) => {
-    if (e.seat === undefined) return '-';
-    if (down) return 'castlist に聞けない';
+  const cells: string[] = [];
+  for (const e of events) {
+    if (e.seat === undefined) {
+      cells.push('-');
+      continue;
+    }
+    if (down) {
+      cells.push('castlist に聞けない');
+      continue;
+    }
     const key = `${e.seat} ${e.at}`;
     const had = asked.get(key);
-    if (had !== undefined) return had;
-    const answer = seatActorsAt(ctx, url, e.seat, e.at);
+    if (had !== undefined) {
+      cells.push(had);
+      continue;
+    }
+    const answer = await seatActorsAt(ctx, url, e.seat, e.at);
     let cell: string;
     if (answer.kind === 'failed') {
       failed ??= answer.reason;
@@ -162,8 +172,8 @@ function actorCells(ctx: Context, url: string, events: TimelineEvent[]): { cells
       cell = answer.body.actors.length === 0 ? 'castlist に無い' : answer.body.actors.map(a => `<a href="${esc(profileUrl(url, a.id))}">${esc(a.name)}</a>`).join('・');
     }
     asked.set(key, cell);
-    return cell;
-  });
+    cells.push(cell);
+  }
   return failed === undefined ? { cells } : { cells, failed };
 }
 
@@ -197,7 +207,7 @@ ${rows.join('\n')}
  * （件は、出来事のしばらく後に書かれることが多い）ので、その Key の初めから、件を書いた minutes 分後までを拾う。
  * Key なら、その Key の記録をみな拾う。
  */
-export function incidentTimeline(ctx: Context, target: string, options: { minutes?: number } = {}): string[] {
+export async function incidentTimeline(ctx: Context, target: string, options: { minutes?: number } = {}): Promise<string[]> {
   const minutes = options.minutes ?? DEFAULT_MINUTES;
   if (!Number.isFinite(minutes) || minutes <= 0) throw new TpmError('--minutes は 1 以上の数にしてください');
   // 連携の道具が古いメッセージを捨てる前に、届いた時刻を写す。
@@ -230,12 +240,12 @@ export function incidentTimeline(ctx: Context, target: string, options: { minute
   }
   if (events.length === 0) throw new TpmError(`${key} の記録がありません（Key を確かめる。記録は state の log.jsonl など）`);
   const castlist = castlistUrl(ctx);
-  const actors = castlist === undefined ? undefined : actorCells(ctx, castlist, events);
+  const actors = castlist === undefined ? undefined : await actorCells(ctx, castlist, events);
   if (castlist !== undefined) {
     const failed = actors?.failed === undefined ? '' : `聞けなかった行がある: ${actors.failed}`;
     lead.push(`アクターの欄は、castlist（${castlist}）に、その時刻にその席（担当は課題の Key、TPM 担当は tpm）に居たアクターを聞いた答え（名はプロフィールの画面への link）。${failed}`);
   }
-  const { url } = putPage(ctx, { text: render(title, lead, events, actors?.cells) }, 'timeline', key);
+  const { url } = await putPage(ctx, { text: render(title, lead, events, actors?.cells) }, 'timeline', key);
   if (incident !== undefined) writeIncident(ctx, { ...incident, timeline: url });
   return [`時系列を置いた（${events.length} 行）: ${url}`, ...(incident === undefined ? [] : [`件に結んだ: #${incident.n}`])];
 }

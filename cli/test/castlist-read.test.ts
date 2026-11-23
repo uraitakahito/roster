@@ -42,9 +42,9 @@ const query = (r: CastlistRequest | undefined): [string, string][] => [...new UR
 const pathname = (r: CastlistRequest | undefined): string => new URL(r?.path ?? '/', 'http://x').pathname;
 
 /** 投げた誤りの字（投げなければ空）。 */
-function thrown(run: () => unknown): string {
+async function thrown(run: () => Promise<unknown>): Promise<string> {
   try {
-    run();
+    await run();
   }
   catch (e) {
     return (e as Error).message;
@@ -119,7 +119,7 @@ describe('roster castlist find', () => {
     const b = await seed(w, 't-f1nd-swe', { 'tpm.project': p, 'tpm.key': 't-f1nd', 'tpm.role': 'software-engineer' }, '2026-11-20T11:41:00.000Z');
     await seed(w, 't-0ther-swe', { 'tpm.project': p, 'tpm.key': 't-0ther', 'tpm.role': 'software-engineer' }, '2026-11-20T11:10:00.000Z');
     const since = mark();
-    const out = castlistFind(auditor, { label: ['tpm.key:t-f1nd', 'tpm.role:software-engineer'] });
+    const out = await castlistFind(auditor, { label: ['tpm.key:t-f1nd', 'tpm.role:software-engineer'] });
     const sent = since();
     expect(sent.map(r => [r.method, pathname(r)])).toEqual([['GET', '/v1/actors']]);
     expect(query(sent[0])).toEqual([['label', 'tpm.key:t-f1nd'], ['label', 'tpm.role:software-engineer']]);
@@ -136,10 +136,10 @@ describe('roster castlist find', () => {
     expect(rows[1]).toContain('high');
   });
 
-  test('ほかの旗も、castlist の引数の名にそのまま写す', () => {
+  test('ほかの旗も、castlist の引数の名にそのまま写す', async () => {
     const { auditor } = auditorWorld();
     const since = mark();
-    castlistFind(auditor, {
+    await castlistFind(auditor, {
       label: ['tpm.key:t-zz01'],
       binding: 'cmux.workspace.ref:workspace:3',
       at: '2026-11-20T11:30:00+09:00',
@@ -178,14 +178,14 @@ describe('roster castlist find', () => {
     const labels = { 'tpm.project': w.project, 'tpm.key': 't-pg01' };
     const a = await seed(w, 't-pg01-swe', labels, '2026-11-20T11:00:00.000Z');
     const b = await seed(w, 't-pg01-swe', labels, '2026-11-20T11:05:00.000Z');
-    const first = castlistFind(auditor, { label: ['tpm.key:t-pg01'], limit: '1' });
+    const first = await castlistFind(auditor, { label: ['tpm.key:t-pg01'], limit: '1' });
     expect(first.some(l => l.endsWith(page(`/actors/${a.id}`)))).toBe(true);
     const next = /--after (\S+)/.exec(first.join('\n'))?.[1] ?? '';
     expect(next).not.toBe('');
-    const second = castlistFind(auditor, { label: ['tpm.key:t-pg01'], limit: '1', after: next });
+    const second = await castlistFind(auditor, { label: ['tpm.key:t-pg01'], limit: '1', after: next });
     expect(second.some(l => l.endsWith(page(`/actors/${b.id}`)))).toBe(true);
     expect(second.join('\n')).not.toContain('--after');
-    const none = castlistFind(auditor, { label: ['tpm.key:t-none'] });
+    const none = await castlistFind(auditor, { label: ['tpm.key:t-none'] });
     expect(none.some(l => l.includes('/actors/'))).toBe(false);
     expect(none.join('\n')).toContain('当たるアクターは無い');
   });
@@ -193,30 +193,30 @@ describe('roster castlist find', () => {
   test('--json は castlist の答えをそのまま出す', async () => {
     const { w, auditor } = auditorWorld();
     const a = await seed(w, 't-js01-swe', { 'tpm.project': w.project, 'tpm.key': 't-js01' }, '2026-11-20T11:00:00.000Z');
-    const out = castlistFind(auditor, { label: ['tpm.key:t-js01'], json: true });
+    const out = await castlistFind(auditor, { label: ['tpm.key:t-js01'], json: true });
     expect(out).toHaveLength(1);
     const asIs = await (await fetch(`${fake.url}/v1/actors?label=tpm.key%3At-js01`)).text();
     expect(out[0]).toBe(asIs);
     expect((JSON.parse(out[0] ?? '{}') as { actors: { id: string }[] }).actors.map(x => x.id)).toEqual([a.id]);
   });
 
-  test('castlist が断った（400）ら、castlist の訳をそのまま出して止まる', () => {
+  test('castlist が断った（400）ら、castlist の訳をそのまま出して止まる', async () => {
     const { auditor } = auditorWorld();
-    expect(thrown(() => castlistFind(auditor, {}))).toBe('絞る条件を 1 つ以上付ける（label・binding・active_from・active_to・active=true・model・effort・launched_by・skewed のどれか）');
-    expect(thrown(() => castlistFind(auditor, { label: ['tpm.key:t-x'], activeFrom: 'きのう' }))).toBe('active_from は RFC 3339 の時刻（例 2026-11-22T13:00:00+09:00）');
+    expect(await thrown(() => castlistFind(auditor, {}))).toBe('絞る条件を 1 つ以上付ける（label・binding・active_from・active_to・active=true・model・effort・launched_by・skewed のどれか）');
+    expect(await thrown(() => castlistFind(auditor, { label: ['tpm.key:t-x'], activeFrom: 'きのう' }))).toBe('active_from は RFC 3339 の時刻（例 2026-11-22T13:00:00+09:00）');
   });
 
-  test('castlist が止まっていれば「castlist に聞けない」の 1 行で止まり、何も書かない', () => {
+  test('castlist が止まっていれば「castlist に聞けない」の 1 行で止まり、何も書かない', async () => {
     const { w, auditor } = auditorWorld(dead);
-    const message = thrown(() => castlistFind(auditor, { label: ['tpm.key:t-x'] }));
+    const message = await thrown(() => castlistFind(auditor, { label: ['tpm.key:t-x'] }));
     expect(message).toBe(`castlist に聞けない（${dead} が応えない）`);
     expect(w.tpm.state.list('sessions')).toEqual([]);
     expect(w.calls.filter(c => c.cmd === 'container')).toEqual([]);
   });
 
-  test('castlist を設定していなければ、そう言う 1 行で止まる（castlist に聞かない）', () => {
+  test('castlist を設定していなければ、そう言う 1 行で止まる（castlist に聞かない）', async () => {
     const w = world();
-    const message = thrown(() => castlistFind(w.tpm, { label: ['tpm.key:t-x'] }));
+    const message = await thrown(() => castlistFind(w.tpm, { label: ['tpm.key:t-x'] }));
     expect(message).toMatch(/^castlist を設定していない/);
     expect(message).not.toContain('\n');
     expect(w.calls.filter(c => c.cmd === 'curl')).toEqual([]);
@@ -232,7 +232,7 @@ describe('roster castlist show', () => {
     await link(w, 'launched', pm, tpm);
     await link(w, 'launched', tpm, se);
     const since = mark();
-    const out = castlistShow(auditor, se.id, {});
+    const out = await castlistShow(auditor, se.id, {});
     const text = out.join('\n');
     expect(since().every(r => r.method === 'GET')).toBe(true);
     expect(out[0] ?? '').toContain(se.name);
@@ -250,22 +250,22 @@ describe('roster castlist show', () => {
     expect(text).toContain(`${pm.name} → ${tpm.name}（launched`);
   });
 
-  test('名でも引ける（この project の roster が登録して控えたアクター）。castlist には名で引く道が無いので、無い名は id とみなし、無ければ find を勧める', () => {
+  test('名でも引ける（この project の roster が登録して控えたアクター）。castlist には名で引く道が無いので、無い名は id とみなし、無ければ find を勧める', async () => {
     const w = world({ castlist: fake.url });
-    startTpm(w.tpm);
+    await startTpm(w.tpm);
     const sid = 'cccccccc-0000-4000-8000-000000000001';
     const tpm = { ...w.tpm, env: { ...w.tpm.env, ROSTER_LAUNCH: 'launch-show', ROSTER_LAUNCHED_BY: PM_REF, ROSTER_LAUNCH_MODEL: 'claude-opus-5-5', ROSTER_LAUNCH_EFFORT: 'medium', ROSTER_LAUNCH_FRESH: '1' } };
-    sessionStart(tpm, JSON.stringify({ hook_event_name: 'SessionStart', session_id: sid, source: 'startup', transcript_path: '/nonexistent/t.jsonl' }));
+    await sessionStart(tpm, JSON.stringify({ hook_event_name: 'SessionStart', session_id: sid, source: 'startup', transcript_path: '/nonexistent/t.jsonl' }));
     const record = w.tpm.state.read<{ id: string, name: string }>(`sessions/${sid}.jsonc`);
     expect(record?.name).toBe('project-tpm.1');
     const since = mark();
-    const out = castlistShow(w.tpm, 'project-tpm.1', {});
+    const out = await castlistShow(w.tpm, 'project-tpm.1', {});
     expect(pathname(since()[0])).toBe(`/v1/actors/${record?.id ?? ''}`);
     const text = out.join('\n');
     expect(text).toContain(page(`/actors/${record?.id ?? ''}`));
     expect(text).toContain('product-manager.1 → project-tpm.1（launched');
     expect(text).toContain('claude-opus-5-5');
-    const missing = thrown(() => castlistShow(w.tpm, 'nobody.1', {}));
+    const missing = await thrown(() => castlistShow(w.tpm, 'nobody.1', {}));
     expect(missing).toMatch(/^そのアクターは無い/);
     expect(missing).toContain('roster castlist find');
   });
@@ -273,7 +273,7 @@ describe('roster castlist show', () => {
   test('--json は GET /v1/actors/{id} の答えをそのまま出す', async () => {
     const { w, auditor } = auditorWorld();
     const a = await seed(w, 't-sj01-swe', { 'tpm.project': w.project }, '2026-11-20T11:00:00.000Z');
-    const out = castlistShow(auditor, a.id, { json: true });
+    const out = await castlistShow(auditor, a.id, { json: true });
     expect(out).toEqual([await (await fetch(`${fake.url}/v1/actors/${a.id}`)).text()]);
   });
 });
@@ -287,7 +287,7 @@ describe('roster castlist lineage', () => {
     await link(w, 'launched', pm, tpm);
     await link(w, 'launched', tpm, se);
     const since = mark();
-    const out = castlistLineage(auditor, se.id, { direction: 'up', depth: '5', type: 'launched' });
+    const out = await castlistLineage(auditor, se.id, { direction: 'up', depth: '5', type: 'launched' });
     const sent = since();
     expect(sent.map(r => [r.method, pathname(r)])).toEqual([['GET', `/v1/actors/${se.id}/lineage`]]);
     expect(query(sent[0])).toEqual([['direction', 'up'], ['depth', '5'], ['type', 'launched']]);
@@ -295,8 +295,8 @@ describe('roster castlist lineage', () => {
     for (const a of [pm, tpm, se]) expect(text).toContain(page(`/actors/${a.id}`));
     expect(text).toContain(`${pm.name} → ${tpm.name}（launched`);
     expect(text).toContain(`${tpm.name} → ${se.name}（launched`);
-    expect(thrown(() => castlistLineage(auditor, se.id, { depth: '99' }))).toBe('depth は 1 から 20 までの数');
-    expect(castlistLineage(auditor, se.id, { json: true })[0]).toBe(await (await fetch(`${fake.url}/v1/actors/${se.id}/lineage`)).text());
+    expect(await thrown(() => castlistLineage(auditor, se.id, { depth: '99' }))).toBe('depth は 1 から 20 までの数');
+    expect((await castlistLineage(auditor, se.id, { json: true }))[0]).toBe(await (await fetch(`${fake.url}/v1/actors/${se.id}/lineage`)).text());
   });
 });
 
@@ -305,7 +305,7 @@ describe('roster castlist events', () => {
     const { w, auditor } = auditorWorld();
     const a = await seed(w, 't-ev01-swe', { 'tpm.project': w.project }, '2026-11-20T11:00:00.000Z', '2026-11-20T11:30:00.000Z');
     const since = mark();
-    const out = castlistEvents(auditor, { type: ['exited', 'cleared'], actor: a.id, from: '2026-11-20T11:00:00Z', to: '2026-11-20T12:00:00Z', limit: '10' });
+    const out = await castlistEvents(auditor, { type: ['exited', 'cleared'], actor: a.id, from: '2026-11-20T11:00:00Z', to: '2026-11-20T12:00:00Z', limit: '10' });
     const sent = since();
     expect(sent.map(r => [r.method, pathname(r)])).toEqual([['GET', '/v1/events']]);
     expect(query(sent[0])).toEqual([['type', 'exited'], ['type', 'cleared'], ['actor', a.id], ['from', '2026-11-20T11:00:00Z'], ['to', '2026-11-20T12:00:00Z'], ['limit', '10']]);
@@ -315,7 +315,7 @@ describe('roster castlist events', () => {
     expect(rows[0]).toContain(a.name);
     expect(rows[0]).toContain('exited');
     expect(rows[0]?.endsWith(page(`/actors/${a.id}`))).toBe(true);
-    expect(thrown(() => castlistEvents(auditor, { type: ['left'] }))).toMatch(/^type は entered・/);
+    expect(await thrown(() => castlistEvents(auditor, { type: ['left'] }))).toMatch(/^type は entered・/);
   });
 });
 
@@ -327,7 +327,7 @@ describe('roster castlist settings', () => {
     await fake.send('PUT', `/v1/settings/${a.sid}-seen`, { issuer: castlistIssuer(w.tpm.state.dir), by: `claude.session:${a.sid}`, model: 'claude-sonnet-5', effort: 'high', source: 'observed', sent_at: '2026-11-20T11:20:00.000Z' });
     fake.setNow('2026-11-20T12:00:00.000Z');
     const since = mark();
-    const out = castlistSettings(auditor, { mismatch: true, source: 'observed' });
+    const out = await castlistSettings(auditor, { mismatch: true, source: 'observed' });
     const sent = since();
     expect(sent.map(r => [r.method, pathname(r)])).toEqual([['GET', '/v1/settings']]);
     expect(query(sent[0])).toEqual([['source', 'observed'], ['mismatch', 'true']]);
@@ -337,11 +337,11 @@ describe('roster castlist settings', () => {
     expect(row.endsWith(page(`/actors/${a.id}`))).toBe(true);
 
     const at = mark();
-    const then = castlistSettings(auditor, { actor: a.id, at: '2026-11-20T11:10:00Z' });
+    const then = await castlistSettings(auditor, { actor: a.id, at: '2026-11-20T11:10:00Z' });
     expect(at().map(r => [r.method, pathname(r), query(r)])).toEqual([['GET', `/v1/actors/${a.id}/settings`, [['at', '2026-11-20T11:10:00Z']]]]);
     expect(then.join('\n')).toContain('claude-opus-5-5');
     expect(then.join('\n')).not.toContain('claude-sonnet-5');
-    expect(castlistSettings(auditor, { actor: a.id, at: '2026-11-20T10:00:00Z' }).join('\n')).toContain('まだ無い');
+    expect((await castlistSettings(auditor, { actor: a.id, at: '2026-11-20T10:00:00Z' })).join('\n')).toContain('まだ無い');
   });
 });
 
@@ -350,12 +350,12 @@ describe('読むだけ', () => {
     const { w, auditor } = auditorWorld();
     const a = await seed(w, 't-ro01-swe', { 'tpm.project': w.project, 'tpm.key': 't-ro01' }, '2026-11-20T11:00:00.000Z');
     const since = mark();
-    castlistFind(auditor, { label: ['tpm.key:t-ro01'] });
-    castlistShow(auditor, a.id, {});
-    castlistLineage(auditor, a.id, {});
-    castlistEvents(auditor, { actor: a.id });
-    castlistSettings(auditor, { skewed: true });
-    castlistSettings(auditor, { actor: a.id });
+    await castlistFind(auditor, { label: ['tpm.key:t-ro01'] });
+    await castlistShow(auditor, a.id, {});
+    await castlistLineage(auditor, a.id, {});
+    await castlistEvents(auditor, { actor: a.id });
+    await castlistSettings(auditor, { skewed: true });
+    await castlistSettings(auditor, { actor: a.id });
     const sent = since();
     expect(sent.length).toBeGreaterThanOrEqual(6);
     expect(sent.filter(r => r.method !== 'GET')).toEqual([]);
@@ -414,7 +414,7 @@ describe('roster incident timeline のアクターの欄', () => {
     const tpm = await seed(w, 'project-tpm', { 'tpm.project': w.project, 'tpm.role': 'tpm' }, '2026-11-20T11:00:00.000Z');
     records(w);
     const since = mark();
-    expect(incidentTimeline(w.tpm, 't-tl01')[0]).toMatch(/^時系列を置いた（5 行）/);
+    expect((await incidentTimeline(w.tpm, 't-tl01'))[0]).toMatch(/^時系列を置いた（5 行）/);
     expect(since().filter(r => r.method !== 'GET')).toEqual([]);
     const html = [...w.store.pages.values()].find(p => p.record.kind === 'timeline')?.body.toString() ?? '';
     expect(html).toContain('<th>アクター</th>');
@@ -430,18 +430,18 @@ describe('roster incident timeline のアクターの欄', () => {
     expect(row(w, '11:58:00')).not.toContain('<a href');
   });
 
-  test('castlist が止まっていれば、欄に「castlist に聞けない」と書き、ページは置く', () => {
+  test('castlist が止まっていれば、欄に「castlist に聞けない」と書き、ページは置く', async () => {
     const w = world({ castlist: dead });
     records(w);
-    expect(incidentTimeline(w.tpm, 't-tl01')[0]).toMatch(/^時系列を置いた（5 行）/);
+    expect((await incidentTimeline(w.tpm, 't-tl01'))[0]).toMatch(/^時系列を置いた（5 行）/);
     expect(row(w, '12:00:10')).toContain('castlist に聞けない');
     expect(row(w, '12:01:00')).toContain('castlist に聞けない');
   });
 
-  test('castlist を設定していなければ、欄は無い（今までどおり）', () => {
+  test('castlist を設定していなければ、欄は無い（今までどおり）', async () => {
     const w = world();
     records(w);
-    incidentTimeline(w.tpm, 't-tl01');
+    await incidentTimeline(w.tpm, 't-tl01');
     const html = [...w.store.pages.values()].find(p => p.record.kind === 'timeline')?.body.toString() ?? '';
     expect(html).not.toContain('アクター');
     expect(html).not.toContain('castlist');

@@ -63,8 +63,10 @@ export interface Reply {
 /**
  * 置き場に curl で頼む。答えの本文と HTTP の code を返す（つながらなければ code は 000）。
  * 答えの API の版がこの cli の話せる版と違えば、答えを使わずに止まる。header の無い答えは、API の版ができる前の置き場の物で、形は版 1 と同じなので通す。
+ * 今は curl を spawnSync で打つので、待つ物は無い。形だけ非同期にしておき、後で Promise を返す HTTP の client に替える（AI-36）。
  */
-export function call(ctx: Context, args: string[], input?: string): Reply {
+// eslint-disable-next-line @typescript-eslint/require-await
+export async function call(ctx: Context, args: string[], input?: string): Promise<Reply> {
   const result = ctx.exec('curl', ['-sS', '--max-time', TIMEOUT, '-w', '\n%{http_code} %header{pagetray-api}', ...args], input === undefined ? undefined : { input });
   const cut = result.stdout.lastIndexOf('\n');
   const [code = '', api = ''] = result.stdout.slice(cut + 1).trim().split(' ');
@@ -81,10 +83,10 @@ const storeVersions = new WeakMap<Context, string>();
  * 置き場の版が since（`<major>.<minor>.<patch>`）以上か。yes・old（古い。版を答えない置き場も）・down（応えない）。
  * 版は数にして比べる（字で比べると 0.10.0 を 0.8.0 より前とみなす）。1 つの命令（Context）の中では、置き場に 1 度だけ聞く。
  */
-export function storeAtLeast(ctx: Context, since: string): 'yes' | 'old' | 'down' {
+export async function storeAtLeast(ctx: Context, since: string): Promise<'yes' | 'old' | 'down'> {
   let version = storeVersions.get(ctx);
   if (version === undefined) {
-    const r = call(ctx, [`${pagesUrl(ctx.env)}/api/version`]);
+    const r = await call(ctx, [`${pagesUrl(ctx.env)}/api/version`]);
     // 覚えるのは、版を答えた（200）か、版を答えない古い置き場（404）の時だけ。起き直す間の 502・503 などは、応えないとみなす。
     if (r.code !== '200' && r.code !== '404') return 'down';
     let answered: unknown;
@@ -180,11 +182,11 @@ export function writeCopy(ctx: Context, path: string, body: Buffer): void {
 }
 
 /** 置き場の物（ページか file）を取り、控えの path に書く。200 のほかは書かず、途中の file も残さない。HTTP の code を返す。 */
-export function fetchTo(ctx: Context, storePath: string, path: string): string {
+export async function fetchTo(ctx: Context, storePath: string, path: string): Promise<string> {
   mkdirSync(dirname(path), { recursive: true });
   const partial = `${path}.part-${process.pid}`;
   try {
-    const r = call(ctx, ['-o', partial, `${pagesUrl(ctx.env)}${storePath}`]);
+    const r = await call(ctx, ['-o', partial, `${pagesUrl(ctx.env)}${storePath}`]);
     if (r.code === '200') renameSync(partial, path);
     return r.code;
   }
@@ -194,10 +196,10 @@ export function fetchTo(ctx: Context, storePath: string, path: string): string {
 }
 
 /** 取り込みで、置き場にもうある番号（409）の中身を、控えと比べる。消した番号（410）なら removed、同じなら same、違えば conflict。 */
-export function compareStored(ctx: Context, storePath: string, file: string): 'removed' | 'same' | 'conflict' {
+export async function compareStored(ctx: Context, storePath: string, file: string): Promise<'removed' | 'same' | 'conflict'> {
   const copy = `${file}.check-${process.pid}`;
   try {
-    const r = call(ctx, ['-o', copy, `${pagesUrl(ctx.env)}${storePath}`]);
+    const r = await call(ctx, ['-o', copy, `${pagesUrl(ctx.env)}${storePath}`]);
     if (r.code === '410') return 'removed';
     if (r.code !== '200') throw r.code === '000' ? down(ctx, '') : new TpmError(`置き場が ${storePath} に ${r.code} を返しました`);
     return readFileSync(copy).equals(readFileSync(file)) ? 'same' : 'conflict';

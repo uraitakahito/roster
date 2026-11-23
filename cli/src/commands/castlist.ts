@@ -83,14 +83,14 @@ function idOf(ctx: Context, head: 'e' | 'l' | 't', sid: string, rest: string): s
 }
 
 /** 出来事・線・model と effort を、決めた id で送る。 */
-function put(ctx: Context, url: string, kind: 'events' | 'links' | 'settings', id: string, body: Record<string, unknown>): Sent {
-  return settle(request(ctx, url, 'PUT', `/v1/${kind}/${encodeURIComponent(id)}`, { issuer: issuerOf(ctx), ...body, sent_at: ctx.now().toISOString() }), `${kind}/${id}`);
+async function put(ctx: Context, url: string, kind: 'events' | 'links' | 'settings', id: string, body: Record<string, unknown>): Promise<Sent> {
+  return settle(await request(ctx, url, 'PUT', `/v1/${kind}/${encodeURIComponent(id)}`, { issuer: issuerOf(ctx), ...body, sent_at: ctx.now().toISOString() }), `${kind}/${id}`);
 }
 
 /** 出来事を送る。seq なら、送れた数の次の番号を id に付け、送れたら数を進める。 */
-function event(ctx: Context, url: string, record: SessionRecord, type: string, detail: Record<string, unknown>, seq = false): Sent {
+async function event(ctx: Context, url: string, record: SessionRecord, type: string, detail: Record<string, unknown>, seq = false): Promise<Sent> {
   const n = (record.seq[type] ?? 0) + 1;
-  const sent = put(ctx, url, 'events', idOf(ctx, 'e', record.session, `${type}${seq ? `-${n}` : ''}`), { by: sessionRef(record.session), type, detail });
+  const sent = await put(ctx, url, 'events', idOf(ctx, 'e', record.session, `${type}${seq ? `-${n}` : ''}`), { by: sessionRef(record.session), type, detail });
   if (sent !== 'ok') return sent;
   if (seq) record.seq[type] = n;
   if (['entered', 'reentered', 'forked'].includes(type)) {
@@ -124,7 +124,7 @@ function workspaceRef(ctx: Context): string | undefined {
  * 頼んだ model と effort（$ROSTER_LAUNCH_MODEL・$ROSTER_LAUNCH_EFFORT）は、roster が起こしたばかりの process（$ROSTER_LAUNCH_FRESH）の初めの登録でだけ送る
  * （/clear の後の session は同じ環境変数を持つが、その後に /model で替えたかもしれないので送らない）。
  */
-function enter(ctx: Context, url: string, sid: string, source: Source, revive = false): Sent {
+async function enter(ctx: Context, url: string, sid: string, source: Source, revive = false): Promise<Sent> {
   const launch = text(envOf(ctx.env, 'LAUNCH'));
   const launched = launch === undefined ? { sessions: [] } : ctx.state.read<LaunchRecord>(launchFile(launch)) ?? { sessions: [] };
   const model = text(envOf(ctx.env, 'LAUNCH_MODEL'));
@@ -133,7 +133,7 @@ function enter(ctx: Context, url: string, sid: string, source: Source, revive = 
   const seat = seatOf(ctx);
   const ref = workspaceRef(ctx);
   const uuid = text(ctx.env.CMUX_WORKSPACE_ID);
-  const reply = request(ctx, url, 'POST', '/v1/actors', {
+  const reply = await request(ctx, url, 'POST', '/v1/actors', {
     issuer: issuerOf(ctx),
     kind: 'ai',
     name_prefix: seat.prefix,
@@ -163,7 +163,7 @@ function enter(ctx: Context, url: string, sid: string, source: Source, revive = 
   const workspace = ref === undefined && uuid === undefined ? had?.workspace : { ...(ref === undefined ? {} : { ref }), ...(uuid === undefined ? {} : { uuid }) };
   const record: SessionRecord = { ...had, session: sid, id: String(actor.id), name: String(actor.name), ...(launch === undefined ? {} : { launch }), present: had?.present ?? false, seq: had?.seq ?? {}, ...(workspace === undefined ? {} : { workspace }) };
   ctx.state.write(sessionFile(sid), record);
-  if (revive) return event(ctx, url, record, 'reentered', { source }, true);
+  if (revive) return await event(ctx, url, record, 'reentered', { source }, true);
   const previous = launched.sessions.filter(s => s !== sid).at(-1);
   if (launch !== undefined) {
     ctx.state.write(launchFile(launch), {
@@ -171,20 +171,20 @@ function enter(ctx: Context, url: string, sid: string, source: Source, revive = 
       ...(fresh || launched.requested === true ? { requested: true } : {}),
     } satisfies LaunchRecord);
   }
-  const sent = sourceEvent(ctx, url, record, source);
+  const sent = await sourceEvent(ctx, url, record, source);
   if (sent !== 'ok') return sent;
   const by = text(envOf(ctx.env, 'LAUNCHED_BY'));
   if (['startup', 'resume', 'guard', 'hello'].includes(source) && previous === undefined && by !== undefined) {
-    return put(ctx, url, 'links', idOf(ctx, 'l', sid, 'launched'), { type: 'launched', from: by, to: sessionRef(sid) });
+    return await put(ctx, url, 'links', idOf(ctx, 'l', sid, 'launched'), { type: 'launched', from: by, to: sessionRef(sid) });
   }
   if ((source === 'clear' || source === 'fork') && previous !== undefined) {
-    return put(ctx, url, 'links', idOf(ctx, 'l', sid, 'continued'), { type: 'continued', from: sessionRef(previous), to: sessionRef(sid) });
+    return await put(ctx, url, 'links', idOf(ctx, 'l', sid, 'continued'), { type: 'continued', from: sessionRef(previous), to: sessionRef(sid) });
   }
   return 'ok';
 }
 
 /** きっかけの出来事: 起こした・/clear・fork は 1 度きり（決まった id）、続きから開いた・要約したは何度も起きる（番号つき）。 */
-function sourceEvent(ctx: Context, url: string, record: SessionRecord, source: Source): Sent {
+async function sourceEvent(ctx: Context, url: string, record: SessionRecord, source: Source): Promise<Sent> {
   switch (source) {
     case 'startup': return event(ctx, url, record, 'entered', {});
     case 'clear': case 'guard': case 'hello': return event(ctx, url, record, 'entered', { source });
@@ -195,9 +195,9 @@ function sourceEvent(ctx: Context, url: string, record: SessionRecord, source: S
 }
 
 /** hook の中の誤りは、Claude Code を止めないように stderr に書くだけにする。 */
-function quietly(name: string, run: () => void): void {
+async function quietly(name: string, run: () => Promise<void>): Promise<void> {
   try {
-    run();
+    await run();
   }
   catch (e) {
     process.stderr.write(`roster castlist ${name}: ${(e as Error).message}\n`);
@@ -208,21 +208,21 @@ function quietly(name: string, run: () => void): void {
  * SessionStart の hook（`roster castlist session-start`）。session を登録し、source ごとの出来事と線を送る。
  * castlist が止まっていれば何もせずに終わる（hook で Claude Code を止めない。登録まで、guard が Bash を止める）。
  */
-export function sessionStart(ctx: Context, stdin: string): void {
-  quietly('session-start', () => {
+export async function sessionStart(ctx: Context, stdin: string): Promise<void> {
+  await quietly('session-start', async () => {
     const url = castlistUrl(ctx);
     if (url === undefined) return;
     const input = hookInput(stdin);
     const sid = text(input.session_id);
     if (sid === undefined) return;
     const source = SOURCES.find(s => s === input.source) ?? 'startup';
-    enter(ctx, url, sid, source);
+    await enter(ctx, url, sid, source);
   });
 }
 
 /** SessionEnd の hook（`roster castlist session-end`）。/clear は交代、ほかは退場（訳は detail.reason）。 */
-export function sessionEnd(ctx: Context, stdin: string): void {
-  quietly('session-end', () => {
+export async function sessionEnd(ctx: Context, stdin: string): Promise<void> {
+  await quietly('session-end', async () => {
     const url = castlistUrl(ctx);
     if (url === undefined) return;
     const input = hookInput(stdin);
@@ -230,7 +230,7 @@ export function sessionEnd(ctx: Context, stdin: string): void {
     const record = sid === undefined ? undefined : readSession(ctx, sid);
     if (record === undefined) return;
     const reason = text(input.reason) ?? 'other';
-    event(ctx, url, record, reason === 'clear' ? 'cleared' : 'exited', { reason }, true);
+    await event(ctx, url, record, reason === 'clear' ? 'cleared' : 'exited', { reason }, true);
   });
 }
 
@@ -245,7 +245,7 @@ function stop(ctx: Context, url: string, sent: Exclude<Sent, 'ok'>): Verdict {
  * 登録した session は、hook の入力の effort と、写しの最後の model を見て、前に送った物と違えば「見た」として送る。model を読めなければ session に 1 度だけ model 不明を送る（止めない）。
  * 送る物があるのに castlist が止まっていれば止める（送る物が無ければ、castlist に聞かない）。
  */
-export function castlistGuard(ctx: Context, stdin: string): Verdict {
+export async function castlistGuard(ctx: Context, stdin: string): Promise<Verdict> {
   const url = castlistUrl(ctx);
   if (url === undefined) return { allow: true };
   const input = hookInput(stdin);
@@ -254,14 +254,14 @@ export function castlistGuard(ctx: Context, stdin: string): Verdict {
   const had = readSession(ctx, sid);
   // 控えが無ければ登録する。推しの幕引きで居ないにした session が Bash を打てば、生きていたので、今の居場所で登録し直して再登場を送る。
   if (had === undefined || (had.present === false && had.endedBy === 'inferred')) {
-    const sent = enter(ctx, url, sid, 'guard', had !== undefined);
+    const sent = await enter(ctx, url, sid, 'guard', had !== undefined);
     if (sent !== 'ok') return stop(ctx, url, sent);
   }
   const record = readSession(ctx, sid);
   if (record === undefined) return { allow: true };
   const seen = modelOf(input.transcript_path);
   if (seen.kind === 'unreadable' && record.modelUnreadable !== true) {
-    const sent = event(ctx, url, record, 'model_unreadable', { reason: seen.reason });
+    const sent = await event(ctx, url, record, 'model_unreadable', { reason: seen.reason });
     if (sent !== 'ok') return stop(ctx, url, sent);
     record.modelUnreadable = true;
     ctx.state.write(sessionFile(sid), record);
@@ -270,7 +270,7 @@ export function castlistGuard(ctx: Context, stdin: string): Verdict {
   if (seen.kind !== 'found' || effort === undefined) return { allow: true };
   if (record.observed?.model === seen.model && record.observed.effort === effort) return { allow: true };
   const n = (record.seq.observed ?? 0) + 1;
-  const sent = put(ctx, url, 'settings', idOf(ctx, 't', sid, `observed-${n}`), { by: sessionRef(sid), model: seen.model, effort, source: 'observed' });
+  const sent = await put(ctx, url, 'settings', idOf(ctx, 't', sid, `observed-${n}`), { by: sessionRef(sid), model: seen.model, effort, source: 'observed' });
   if (sent !== 'ok') return stop(ctx, url, sent);
   record.seq.observed = n;
   record.observed = { model: seen.model, effort };
@@ -282,18 +282,18 @@ export function castlistGuard(ctx: Context, stdin: string): Verdict {
  * roster hello の castlist の分: 名乗り（reported_in）を送り、`アクター: <名>` の行を返す。控えが無い session は先に登録する。
  * castlist が止まっていれば、名乗らずに止まる。
  */
-function reportIn(ctx: Context, url: string, sid: string): string[] {
+async function reportIn(ctx: Context, url: string, sid: string): Promise<string[]> {
   const done = '名乗っていません。';
   const fail = (sent: Exclude<Sent, 'ok'>): TpmError => new TpmError(sent === 'busy' ? busyMessage(url, done) : downMessage(ctx, url, done));
   const had = readSession(ctx, sid);
   // 控えが無ければ登録する。推しの幕引きで居ないにした session なら、名乗りの前に今の居場所で登録し直して再登場を送る（guard と同じ）。
   if (had === undefined || (had.present === false && had.endedBy === 'inferred')) {
-    const sent = enter(ctx, url, sid, 'hello', had !== undefined);
+    const sent = await enter(ctx, url, sid, 'hello', had !== undefined);
     if (sent !== 'ok') throw fail(sent);
   }
   const record = readSession(ctx, sid);
   if (record === undefined) return ['アクター: わからない（castlist が登録を断った。stderr を見る）'];
-  const sent = event(ctx, url, record, 'reported_in', {}, true);
+  const sent = await event(ctx, url, record, 'reported_in', {}, true);
   if (sent !== 'ok') throw fail(sent);
   return [`アクター: ${record.name}`];
 }
@@ -303,22 +303,25 @@ function reportIn(ctx: Context, url: string, sid: string): string[] {
  * 設定が無ければ、castlist には送らず、警告の枠（missingCastlistWarning）を返す（名乗りの頭に出る）。
  * Claude Code の session の id（$CLAUDE_CODE_SESSION_ID）が無ければ、どのアクターかわからないので、castlist に聞かずに 1 行だけ返す。
  */
-export function castlistHello(ctx: Context): string[] {
+export async function castlistHello(ctx: Context): Promise<string[]> {
   const url = castlistUrl(ctx);
   if (url === undefined) return missingCastlistWarning(ctx);
   const sid = text(ctx.env.CLAUDE_CODE_SESSION_ID);
   if (sid === undefined) return ['アクター: わからない（$CLAUDE_CODE_SESSION_ID が無い。castlist には送っていない）'];
-  const skew = requireUp(ctx, '名乗っていません。');
-  return [...reportIn(ctx, url, sid), ...skew];
+  const skew = await requireUp(ctx, '名乗っていません。');
+  return [...await reportIn(ctx, url, sid), ...skew];
 }
 
 /** roster close の castlist の分: その担当の起こしのアクターのうち、まだ居る物に幕引き（closed）を送る。送れなければ 1 行を返す（閉じるのは止めない）。 */
-export function closeLaunch(ctx: Context, role: RoleRecord): string[] {
+export async function closeLaunch(ctx: Context, role: RoleRecord): Promise<string[]> {
   const url = castlistUrl(ctx);
   if (url === undefined || role.launch === undefined) return [];
   const launched = ctx.state.read<LaunchRecord>(launchFile(role.launch));
   const present = (launched?.sessions ?? []).map(sid => readSession(ctx, sid)).filter(r => r?.present === true);
-  const failed = present.filter(record => record !== undefined && event(ctx, url, record, 'closed', {}) !== 'ok');
+  const failed: (SessionRecord | undefined)[] = [];
+  for (const record of present) {
+    if (record !== undefined && await event(ctx, url, record, 'closed', {}) !== 'ok') failed.push(record);
+  }
   return failed.length === 0 ? [] : [`castlist（${url}）に幕引きを送れませんでした（${failed.map(r => r?.name).join('・')}）。castlist が起きてから送る道は無いので、台帳に要るなら roster report incident で挙げる`];
 }
 
@@ -333,9 +336,9 @@ const isPlace = (w: SessionRecord['workspace']): w is Place => w?.ref !== undefi
  * 控えの居場所。無ければ castlist のアクターの付随する id（種類ごとに最新）から引き、読み直した控えに居場所だけを足して書く
  * （引く間に、その session の hook が控えを書いても消さない）。引けなければ undefined、castlist が止まっている・混んでいれば、その印。
  */
-function placeOf(ctx: Context, url: string, record: SessionRecord): Place | undefined | Exclude<Sent, 'ok'> {
+async function placeOf(ctx: Context, url: string, record: SessionRecord): Promise<Place | undefined | Exclude<Sent, 'ok'>> {
   if (isPlace(record.workspace)) return record.workspace;
-  const reply = request(ctx, url, 'GET', `/v1/actors/${encodeURIComponent(record.id)}`);
+  const reply = await request(ctx, url, 'GET', `/v1/actors/${encodeURIComponent(record.id)}`);
   if (reply.kind === 'down' || reply.kind === 'busy') return reply.kind;
   if (reply.kind !== 'ok') return undefined;
   const bindings = (reply.body as { current_bindings?: { type?: unknown, value?: unknown }[] }).current_bindings ?? [];
@@ -356,7 +359,7 @@ function placeOf(ctx: Context, url: string, record: SessionRecord): Place | unde
  * 自分の session は見ない。自分の session の id が無い（roster の起こした session の外で打った）・一覧が引けない・自分の組が一覧に無い（一覧を信じられない）時は、
  * 何もしない。castlist が止まっている・混んでいれば、そこでやめる。送れなくても命令は止めず、送れなかった session を 1 行で出す。
  */
-export function sweep(ctx: Context): string[] {
+export async function sweep(ctx: Context): Promise<string[]> {
   const url = castlistUrl(ctx);
   if (url === undefined || ctx.config.transport !== 'cmux' || ctx.transport.seatsById === undefined || swept.has(ctx)) return [];
   swept.add(ctx);
@@ -377,7 +380,7 @@ export function sweep(ctx: Context): string[] {
   const stopped = (): string[] => [`castlist（${url}）が応えないので、落ちた session の突き合わせをやめました（次の roster roles などで、また見ます）`];
   const places = new Map<string, Place | undefined>();
   for (const r of records.filter(r => r.present)) {
-    const p = placeOf(ctx, url, r);
+    const p = await placeOf(ctx, url, r);
     if (p === 'down' || p === 'busy') return stopped();
     places.set(r.session, p);
   }
@@ -401,7 +404,7 @@ export function sweep(ctx: Context): string[] {
     // 送る直前に読み直す（その session の guard と書き合わないため）。
     const fresh = readSession(ctx, r.session);
     if (fresh?.present !== true) continue;
-    const sent = event(ctx, url, fresh, 'closed', { inferred: true, reason }, true);
+    const sent = await event(ctx, url, fresh, 'closed', { inferred: true, reason }, true);
     if (sent === 'ok') closed.push(`${fresh.name}（${reason === 'workspace_gone' ? '居場所が消えた' : '居場所に後から別の session が入った'}）`);
     else {
       failed.push(fresh.name);
