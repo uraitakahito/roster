@@ -1,6 +1,7 @@
 // roster banner …: 通知のバナー（cmux の通知の desktop）を、居場所の役割 × きっかけで出すか消すか。
 // hook は cmux の通知の hook（~/.config/cmux/cmux.json の notifications.hooks）から通知ごとに呼ばれる。
 // cmux は hook が失敗・時間切れ・JSON の誤りになると、いつものバナーに加えて「Notification Hook Failed」を出すので、hook はどんな時も正しい JSON を返して 0 で終わる。
+// cmux.json の命令は、roster の入口が無い機械（dotfiles で同じ cmux.json を配った機械）では、入口を呼ばずに `{}` を返して 0 で終わる。
 import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute, join, relative } from 'node:path';
@@ -122,21 +123,29 @@ function realpathOrUndefined(path: string): string | undefined {
 }
 
 /**
- * cmux.json に足す hook の命令。hook は cmux の app から PATH が既定だけで動くが、node と cmux は入口（cli/bin/roster）が自分で見つけるので、
- * 命令は入口を呼ぶだけにして Node・cmux の path を書かない（Node を上げても替えなくてよい）。
- * 入口は、~/.local/bin/roster がこの repo を指していればそれ、home の下なら "$HOME/…"、ほかは絶対 path で書く。
+ * hook の命令に書く入口（cli/bin/roster）の字。~/.local/bin/roster がこの repo を指していればそれ、home の下なら "$HOME/…"、ほかは絶対 path で書く。
  * "$HOME/…" は二重引用符の中で $HOME だけを展開させるので、残りの path が二重引用符の中で意味を持つ字を含む時は絶対 path にする。
  */
-export function hookCommand(root: string, env: NodeJS.ProcessEnv): string {
+function hookEntryPath(root: string, env: NodeJS.ProcessEnv): string {
   const entry = join(root, 'cli', 'bin', 'roster');
   const home = env.HOME === undefined || env.HOME === '' ? undefined : realpathOrUndefined(env.HOME);
   if (home !== undefined) {
     const real = realpathOrUndefined(entry) ?? entry;
-    if (realpathOrUndefined(join(home, '.local', 'bin', 'roster')) === real) return '"$HOME/.local/bin/roster" banner hook';
+    if (realpathOrUndefined(join(home, '.local', 'bin', 'roster')) === real) return '"$HOME/.local/bin/roster"';
     const rest = relative(home, entry);
-    if (rest !== '' && !rest.startsWith('..') && !isAbsolute(rest) && /^[A-Za-z0-9._/-]+$/.test(rest)) return `"$HOME/${rest}" banner hook`;
+    if (rest !== '' && !rest.startsWith('..') && !isAbsolute(rest) && /^[A-Za-z0-9._/-]+$/.test(rest)) return `"$HOME/${rest}"`;
   }
-  return `${shellQuote(entry)} banner hook`;
+  return shellQuote(entry);
+}
+
+/**
+ * cmux.json に足す hook の命令。hook は cmux の app から PATH が既定だけで動くが、node と cmux は入口（cli/bin/roster）が自分で見つけるので、
+ * 命令は入口を呼ぶだけにして Node・cmux の path を書かない（Node を上げても替えなくてよい）。
+ * 入口が無ければ（roster を入れていない機械）`{}`（何も替えない）を返して 0 で終わる。入口が有って落ちる時は、exec の後なので失敗が cmux に見える。
+ */
+export function hookCommand(root: string, env: NodeJS.ProcessEnv): string {
+  const entry = hookEntryPath(root, env);
+  return `[ -x ${entry} ] || { echo '{}'; exit 0; }; exec ${entry} banner hook`;
 }
 
 /** cmux.json の hook の欄 1 つ。 */
@@ -147,7 +156,9 @@ export function hookEntry(root: string, env: NodeJS.ProcessEnv): { id: string, c
 /** cmux.json の hook の命令が、今 roster banner setup が出す字と違う訳。同じなら undefined。 */
 export function staleHook(command: string, root: string, env: NodeJS.ProcessEnv): string | undefined {
   if (command === hookCommand(root, env)) return undefined;
-  return command.startsWith('PATH=') ? '古い形です（Node と cmux の path を書いた形）' : '今の roster の在り処と違います（repo を移した）';
+  if (command.startsWith('PATH=')) return '古い形です（Node と cmux の path を書いた形）';
+  if (command === `${hookEntryPath(root, env)} banner hook`) return '古い形です（roster の無い機械で通知のたびに失敗する形）';
+  return '今の roster の在り処と違います（repo を移した）';
 }
 
 /** cmux の設定の file。 */
@@ -174,7 +185,7 @@ export function bannerSetup(root: string, env: NodeJS.ProcessEnv): string[] {
     '  }',
     '',
     `何を出すかは ${bannerConfigFile(env)} で選ぶ（無ければ既定: TPM 担当と Auditor が Product Manager を待つ回と、どこでも許可/質問だけ出す。消す時は音も消す）。`,
-    '足した後に cmux の設定を読み直し（Cmd+Shift+, か cmux reload-config）、roster banner check で確かめる。node と cmux は入口（cli/bin/roster）が自分で見つけるので、Node を上げても命令は替えなくてよい。repo を移したら、これを打ち直して命令を替える。',
+    '足した後に cmux の設定を読み直し（Cmd+Shift+, か cmux reload-config）、roster banner check で確かめる。node と cmux は入口（cli/bin/roster）が自分で見つけるので、Node を上げても命令は替えなくてよい。roster を入れていない機械では、命令は何もしない（同じ cmux.json を配ってよい）。repo を移したら、これを打ち直して命令を替える。',
   ];
 }
 

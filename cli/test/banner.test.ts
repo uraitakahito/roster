@@ -192,29 +192,31 @@ describe('wait の記録', () => {
 
 describe('setup と check', () => {
   const home = realpathSync(mkdtempSync(join(tmpdir(), 'roster-banner-home-')));
+  /** 入口の字 E から、cmux.json に書く命令（入口が無ければ {} を返して 0 で終わる）を組む。 */
+  const guarded = (e: string): string => `[ -x ${e} ] || { echo '{}'; exit 0; }; exec ${e} banner hook`;
   /** 古い形（Node と cmux の folder を PATH に書いた形）の命令。 */
   const OLD = 'PATH=/Users/me/.nodenv/versions/26.13.0/bin:/Applications/cmux.app/Contents/Resources/bin:/usr/bin:/bin /Users/me/roster/cli/bin/roster banner hook';
 
-  test('hook の命令は Node と cmux の path を書かず、home の下なら "$HOME/…" で入口を呼ぶ', () => {
-    expect(hookCommand(join(home, 'projects', 'roster'), { HOME: home })).toBe('"$HOME/projects/roster/cli/bin/roster" banner hook');
-    expect(hookEntry(join(home, 'r'), { HOME: home })).toEqual({ id: 'tpm-banner', command: '"$HOME/r/cli/bin/roster" banner hook', timeoutSeconds: 5 });
+  test('hook の命令は Node と cmux の path を書かず、home の下なら "$HOME/…" で入口を呼ぶ。入口が無ければ何もしない', () => {
+    expect(hookCommand(join(home, 'projects', 'roster'), { HOME: home })).toBe(guarded('"$HOME/projects/roster/cli/bin/roster"'));
+    expect(hookEntry(join(home, 'r'), { HOME: home })).toEqual({ id: 'tpm-banner', command: guarded('"$HOME/r/cli/bin/roster"'), timeoutSeconds: 5 });
     expect(bannerSetup(root, { HOME: home }).join('\n')).toContain(JSON.stringify(hookEntry(root, { HOME: home })));
     expect(bannerSetup(root, { HOME: home }).join('\n')).not.toMatch(/Node を上げたら/);
   });
 
   test('二重引用符の中で意味を持つ字の path と home の外は、一重引用符の絶対 path にする', () => {
-    expect(hookCommand(join(home, 'my repo'), { HOME: home })).toBe(`'${home}/my repo/cli/bin/roster' banner hook`);
-    expect(hookCommand(join(home, 'a$b'), { HOME: home })).toBe(`'${home}/a$b/cli/bin/roster' banner hook`);
-    expect(hookCommand('/opt/roster', { HOME: home })).toBe('/opt/roster/cli/bin/roster banner hook');
-    expect(hookCommand('/opt/roster', {})).toBe('/opt/roster/cli/bin/roster banner hook');
+    expect(hookCommand(join(home, 'my repo'), { HOME: home })).toBe(guarded(`'${home}/my repo/cli/bin/roster'`));
+    expect(hookCommand(join(home, 'a$b'), { HOME: home })).toBe(guarded(`'${home}/a$b/cli/bin/roster'`));
+    expect(hookCommand('/opt/roster', { HOME: home })).toBe(guarded('/opt/roster/cli/bin/roster'));
+    expect(hookCommand('/opt/roster', {})).toBe(guarded('/opt/roster/cli/bin/roster'));
   });
 
   test('~/.local/bin/roster がこの repo の入口を指していれば、それを呼ぶ。別の repo を指していれば使わない', () => {
     const h = realpathSync(mkdtempSync(join(tmpdir(), 'roster-banner-link-')));
     mkdirSync(join(h, '.local', 'bin'), { recursive: true });
     symlinkSync(join(root, 'cli', 'bin', 'roster'), join(h, '.local', 'bin', 'roster'));
-    expect(hookCommand(root, { HOME: h })).toBe('"$HOME/.local/bin/roster" banner hook');
-    expect(hookCommand('/opt/other', { HOME: h })).toBe('/opt/other/cli/bin/roster banner hook');
+    expect(hookCommand(root, { HOME: h })).toBe(guarded('"$HOME/.local/bin/roster"'));
+    expect(hookCommand('/opt/other', { HOME: h })).toBe(guarded('/opt/other/cli/bin/roster'));
   });
 
   test('check は cmux.json の hook が無い・止めてある・古い形・合っている、を見分ける', () => {
@@ -227,7 +229,15 @@ describe('setup と check', () => {
     expect(bannerCheck(root, env, file).lines.at(-1)).toMatch(/enabled: false/);
     put([{ id: 'tpm-banner', command: OLD }]);
     expect(bannerCheck(root, env, file)).toMatchObject({ ok: false });
-    expect(bannerCheck(root, env, file).lines.at(-1)).toMatch(/古い形/);
+    expect(bannerCheck(root, env, file).lines.at(-1)).toMatch(/古い形です（Node と cmux の path/);
+    // 入口を呼ぶだけで、入口が無い時の guard が無い形（t-u5k9 から t-eda5 まで setup が出していた形）。
+    const unguarded = hookCommand(root, env).replace(/^\[ -x (.+) \] \|\| \{ echo '\{\}'; exit 0; \}; exec \1 banner hook$/, '$1 banner hook');
+    expect(unguarded).toMatch(/^\S+ banner hook$/);
+    put([{ id: 'tpm-banner', command: unguarded }]);
+    expect(bannerCheck(root, env, file)).toMatchObject({ ok: false });
+    expect(bannerCheck(root, env, file).lines.at(-1)).toMatch(/古い形です（roster の無い機械で通知のたびに失敗する形）/);
+    put([{ id: 'tpm-banner', command: guarded('/opt/moved/cli/bin/roster') }]);
+    expect(bannerCheck(root, env, file).lines.at(-1)).toMatch(/在り処と違います/);
     put([{ id: 'other', command: 'true' }, hookEntry(root, env)]);
     const ok = bannerCheck(root, env, file);
     expect(ok.ok).toBe(true);
@@ -295,16 +305,41 @@ describe('入口（bin/roster）を cmux の app と同じ既定の PATH で起�
     expect(run({ PATH: `${bin}:${APP_PATH}`, HOME: home, NODENV_ROOT: nodenv }).stdout).toBe(`${bin}:${APP_PATH}`);
   });
 
+  /** cmux.json に書く命令の字を、cmux の app と同じく HOME だけを持つ環境の /bin/sh -c で流す。 */
+  const sh = (command: string, home: string, nodenv: string) =>
+    spawnSync('/bin/sh', ['-c', command], { input: UNKNOWN, encoding: 'utf8', cwd: '/', env: { PATH: APP_PATH, HOME: home, NODENV_ROOT: nodenv, XDG_STATE_HOME: home, XDG_CONFIG_HOME: home } });
+
   test('cmux.json に書く命令の字を、HOME だけを持つ環境の /bin/sh -c で動かせる', () => {
     const { home, nodenv } = sandbox(NODE);
     const link = join(home, 'roster');
     symlinkSync(root, link);
     const command = hookCommand(link, { HOME: home });
-    expect(command).toBe('"$HOME/roster/cli/bin/roster" banner hook');
-    const r = spawnSync('/bin/sh', ['-c', command], { input: '{}', encoding: 'utf8', cwd: '/', env: { PATH: APP_PATH, HOME: home, NODENV_ROOT: nodenv, XDG_STATE_HOME: home, XDG_CONFIG_HOME: home } });
+    expect(command).toContain('"$HOME/roster/cli/bin/roster"');
+    const r = sh(command, home, nodenv);
     expect(r.stderr).toBe('');
     expect(r.status).toBe(0);
     expect(r.stdout).toBe('{}\n');
+  });
+
+  test('roster を入れていない機械（HOME に入口が無い）では、同じ字が {} を返して 0 で終わる', () => {
+    const { home: there, nodenv } = sandbox(NODE);
+    const command = hookCommand(join(there, 'roster'), { HOME: there });
+    const { home } = sandbox();
+    const r = sh(command, home, nodenv);
+    expect(r.stderr).toBe('');
+    expect(r.status).toBe(0);
+    expect(r.stdout).toBe('{}\n');
+  });
+
+  test('入口が有って落ちる時は、失敗を隠さない', () => {
+    const { home, nodenv } = sandbox();
+    const bin = join(home, 'roster', 'cli', 'bin');
+    mkdirSync(bin, { recursive: true });
+    writeFileSync(join(bin, 'roster'), '#!/bin/sh\necho boom >&2\nexit 3\n');
+    chmodSync(join(bin, 'roster'), 0o755);
+    const r = sh(hookCommand(join(home, 'roster'), { HOME: home }), home, nodenv);
+    expect(r.status).toBe(3);
+    expect(r.stderr).toBe('boom\n');
   });
 });
 

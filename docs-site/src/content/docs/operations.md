@@ -8,7 +8,7 @@ description: この repo を別の folder へ移す手順、Node の version の
 1. TPM 担当のほかに動いている担当（Software Engineer・DevOps Engineer・Staff Engineer・Sustaining Engineer・Auditor）が 0 のときに行う。
 2. `mv <今の folder> <新しい folder>`（git の履歴ごと移る）。
 3. 新しい folder で 1 度 Claude Code を対話で起こして信頼する（[信頼のダイアログ](/getting-started/#信頼のダイアログ)。信頼は path に付くので、移すたびに要る）。
-4. 新しい folder の `cli/` で `pnpm install --frozen-lockfile` を打つ（`cd <新しい folder>/cli && pnpm install --frozen-lockfile`）。`~/.local/bin/roster` の symlink を張っていれば張り直す（`ln -sf <新しい folder>/cli/bin/roster ~/.local/bin/roster`）。通知のバナーの hook（[設定](/configuration/#cmuxjson-に-hook-を足す)）を使っていれば、`roster banner setup` を打ち直して `~/.config/cmux/cmux.json` の命令を替え、`roster banner check` で確かめる（命令は repo の在り処を書いている）。
+4. 新しい folder の `cli/` で `pnpm install --frozen-lockfile` を打つ（`cd <新しい folder>/cli && pnpm install --frozen-lockfile`）。`~/.local/bin/roster` の symlink を張っていれば張り直す（`ln -sf <新しい folder>/cli/bin/roster ~/.local/bin/roster`）。通知のバナーの hook（[設定](/configuration/#cmuxjson-に-hook-を足す)）を使っていれば、`roster banner setup` を打ち直して `~/.config/cmux/cmux.json` の命令を替え、`roster banner check` で確かめる（命令は repo の在り処を書いている。替えないと、古い在り処に入口が無いので hook は何もせず、バナーを選ばなくなる。`roster banner check` と TPM 担当の `roster hello` が在り処の違いを知らせる）。
 5. 動いている TPM 担当は、`roster start` の 1 行で起こし直す（guard の hook と `roster` の在り処が古い folder を指しているため）。担当を起こす旗は `roster assign` が自分の場所から求めるので直さない。
 
 使う側の project（TPM 担当を起こす folder）を移したときは、状態の folder（`~/.local/state/tpm/<project の path から作った名>/`）も変わる。担当が 0 のときに移せば、古い folder は消してよい。

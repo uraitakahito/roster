@@ -193,7 +193,13 @@ roster banner setup   # ~/.config/cmux/cmux.json に足す 1 行と手順を出�
 roster banner check   # 設定と hook を確かめる
 ```
 
-`roster banner setup` が出す欄を、`~/.config/cmux/cmux.json` の `notifications.hooks` に Product Manager が足す（roster は cmux.json を書き替えない）。hook は cmux の app から動き、shell の PATH を受け継がない（PATH は macOS の既定の `/usr/bin:/bin:/usr/sbin:/sbin` だけ）。そのため `cli/bin/roster` は、PATH に `node` が無ければ nodenv の shim（`${NODENV_ROOT:-~/.nodenv}/shims`）を、`cmux` が無ければ cmux の app の中の folder を自分で足す。命令は `"$HOME/…/cli/bin/roster" banner hook` のように入口を呼ぶだけで、Node と cmux の path を書かないので、Node を上げても替えなくてよい。repo を移したときは打ち直す（[運用](/operations/#移す手順)）。古い形の命令（頭に `PATH=…` を書いた物）が残っていると、`roster banner check` と TPM 担当の `roster hello` が知らせる。hook が動けないと、cmux はいつものバナーに加えて「Notification Hook Failed」を出す（黙ってバナーが消えはしない）。
+`roster banner setup` が出す欄を、`~/.config/cmux/cmux.json` の `notifications.hooks` に Product Manager が足す（roster は cmux.json を書き替えない）。hook は cmux の app から動き、shell の PATH を受け継がない（PATH は macOS の既定の `/usr/bin:/bin:/usr/sbin:/sbin` だけ）。そのため `cli/bin/roster` は、PATH に `node` が無ければ nodenv の shim（`${NODENV_ROOT:-~/.nodenv}/shims`）を、`cmux` が無ければ cmux の app の中の folder を自分で足す。命令は入口を呼ぶだけで、Node と cmux の path を書かないので、Node を上げても替えなくてよい。repo を移したときは打ち直す（[運用](/operations/#移す手順)）。
+
+```sh
+[ -x "$HOME/…/cli/bin/roster" ] || { echo '{}'; exit 0; }; exec "$HOME/…/cli/bin/roster" banner hook
+```
+
+命令の頭の検査は、入口が無い機械（roster を入れていない機械）で、何も替えずに（`{}` を返して）0 で終わるための物。dotfiles などで同じ cmux.json をいくつもの機械に配っても、roster の無い機械で通知のたびに失敗しない（バナーは cmux のまま出る）。入口が有って動けない時（node が見つからない・roster が落ちる）は、cmux はいつものバナーに加えて「Notification Hook Failed」を出す（黙ってバナーが消えはしない）。古い形の命令（頭に `PATH=…` を書いた物・入口の検査が無い物）が残っていると、`roster banner check` と TPM 担当の `roster hello` が知らせる。
 
 ### `~/.config/tpm/banner.jsonc`（任意）
 
