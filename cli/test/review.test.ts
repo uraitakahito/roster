@@ -60,8 +60,8 @@ describe('tpm ask review（席が無い時: 命令が席を起こす）', () => 
     expect(askReview(w.se, { url: w.plan, focus: '名簿の Key の決め方', wait: 0 })).toEqual([
       '起こした: レビュー AI-8: 計画 plan-1（file:2・Opus 5.5 · high）',
       `folder: ${w.project}`,
-      expect.stringMatching(/^置き場の印: レビュー待ちにした http:\/\/127\.0\.0\.1:8801\/.+\/AI-8\/brief-1\.html$/) as string,
       '名乗り（tpm hello）は待っていない',
+      expect.stringMatching(/^置き場の印: レビュー待ちにした http:\/\/127\.0\.0\.1:8801\/.+\/AI-8\/brief-1\.html$/) as string,
       '状態: 回答待ち(レビュー): 計画 plan-1',
     ]);
     expect(texts(w, 'file:tpm')).toEqual([]);
@@ -558,7 +558,7 @@ describe('置き場のレビューの印（pagetray 0.8.0 から）', () => {
   test('【dismiss】は、残ったレビュー待ち・上げた件も、待ちの相手ごとに並べる', () => {
     const w = asked();
     const out = dismiss(w.tpm, 'AI-8', { handover: false, supersede: true });
-    expect(out).toContain('置き場に、AI-8 のレビュー待ちのページが 1 枚残っています:');
+    expect(out).toContain('置き場に、AI-8 のレビュー待ちの依頼書が 1 枚残っています:');
     expect(out).toContain('もう答えが要らなければ、tpm page reply <URL>… --answered --on review で印を外す');
     expect(out.join('\n')).not.toMatch(/の返事待ちのページが/);
   });
@@ -586,6 +586,59 @@ describe('置き場のレビューの印（pagetray 0.8.0 から）', () => {
   });
 });
 
+describe('置き場の印を付けられない時（review-3 の指摘）', () => {
+  /** 置き場の中の、AI-8 のページの記録。 */
+  const record = (w: World, page: string): PageRecord | undefined => w.store.pages.get(`/${basename(w.tpm.state.dir)}/AI-8/${page}.html`)?.record;
+
+  test('席を起こす前に止まった回は、依頼書をレビュー待ちにしない（頼みも消えるので、待ちが残り続けないように）', () => {
+    const w = started();
+    w.se.transport.spawn = () => {
+      throw new Error('居場所を作れない');
+    };
+    expect(() => askReview(w.se, { url: w.plan, wait: 0 })).toThrow('居場所を作れない');
+    expect(record(w, 'brief-1')?.asked_at).toBeUndefined();
+  });
+
+  test('席が名乗らなかった回は、頼みが残るので依頼書をレビュー待ちにする', () => {
+    const w = started();
+    expect(() => askReview(w.se, { url: w.plan, wait: 4 })).toThrow(/名乗りません/);
+    expect(record(w, 'brief-1')).toMatchObject({ waits_on: 'review' });
+  });
+
+  test('送った後に置き場が誤りを返しても、命令は止めずに 1 行で知らせる（状態も書く）', () => {
+    const w = asked();
+    const page = w.put(w.staff, 'review');
+    w.store.failMarks = 500;
+    const out = reportReview(w.staff, { url: page, verdict: 'reject', summary: '依頼と違う' });
+    expect(out[0]).toMatch(/^送った: 【review】/);
+    expect(out).toContainEqual(expect.stringMatching(/^置き場の印: 判定と見た物を書いていない（置き場が断った: 500 置き場の中の誤り）$/));
+    expect(out.at(-1)).toBe('状態: 回答待ち(レビュー): 次の頼み');
+    expect(w.wire.status('file:2')?.wait).toBe('回答待ち(レビュー): 次の頼み');
+    const escalated = askTpm(w.se, { text: '受けない', waitingFor: 'レビューの食い違い', review: 1 });
+    expect(escalated).toContainEqual(expect.stringMatching(/^置き場の印: 付けていない（置き場が誤りを返した: .+。メッセージは送った）$/));
+    expect(escalated.at(-1)).toBe('状態: 回答待ち(TPM): レビューの食い違い');
+  });
+
+  test('置き場が応えない時、判定を返すと、外せなかった依頼書ごとに直す手を出す（判定と見た物は手で書けないと別に書く）', () => {
+    const w = asked();
+    const page = w.put(w.staff, 'review');
+    const brief = requireRole(w.tpm, 'AI-8.staff').brief ?? '';
+    w.store.failVersion = 503;
+    const out = reportReview(w.staff, { url: page, verdict: 'approve', summary: 'よい' });
+    expect(out).toContain('置き場の印: 付けていない（置き場が応えない。メッセージは送った。判定と見た物は手では書けない。tpm review list と、レビューのページ・依頼書で見る）');
+    expect(out).toContain(`  後で TPM 担当が直せる: tpm page reply ${brief} --answered --on review`);
+    // 起き直す間の 503 は「版が古い」とみなさない
+    expect(out.join('\n')).not.toMatch(/版が古く/);
+  });
+
+  test('ほかの相手を待っているページを --waiting で移そうとすると、待ちを移さないと止まる', () => {
+    const w = asked();
+    const brief = requireRole(w.tpm, 'AI-8.staff').brief ?? '';
+    expect(() => pageReply(w.tpm, [brief], { waiting: true })).toThrow(/今ほかの相手の返事を待っています（置き場は待ちを移さない。何も替えていない）/);
+    expect(record(w, 'brief-1')).toMatchObject({ waits_on: 'review' });
+  });
+});
+
 describe('置き場の版の比べ（atLeast）', () => {
   test('数で比べる（0.10.0 は 0.8.0 より後）。形の違う字は、古いとみなす', () => {
     expect(atLeast('0.8.0', '0.8.0')).toBe(true);
@@ -594,5 +647,6 @@ describe('置き場の版の比べ（atLeast）', () => {
     expect(atLeast('0.7.9', '0.8.0')).toBe(false);
     expect(atLeast('', '0.8.0')).toBe(false);
     expect(atLeast('0.8', '0.8.0')).toBe(false);
+    expect(atLeast('0.8.0-dev', '0.8.0')).toBe(true);
   });
 });

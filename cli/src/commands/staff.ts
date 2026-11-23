@@ -61,12 +61,12 @@ export const putStaffBrief = (ctx: Context, subject: RoleRecord, asks: Review[])
 
 /**
  * 頼みに、渡した依頼書の URL を書く（渡した後に呼ぶ。渡せなかった回に、依頼書にした事にしない）。
- * 置き場には、依頼書の見る物と「レビュー待ち」の印を書き、置き換えた前の依頼書の待ちを外す（review-marks.ts）。印の結果の行を返す。
+ * 頼みが前に持っていた依頼書（置き換えた物）を返す。置き場の印は、その後に markBrief（review-marks.ts）で書く。
  */
 export function markBriefed(ctx: Context, asks: Review[], url: string): string[] {
   const previous = asks.flatMap(r => r.brief === undefined ? [] : [r.brief]);
   for (const r of asks) patchReview(ctx, r.n, { brief: url });
-  return markBrief(ctx, url, asks, previous);
+  return previous;
 }
 
 /**
@@ -123,7 +123,7 @@ export function launchStaff(ctx: Context, subject: RoleRecord, asks: Review[], o
   const label = reviewLabel(asks);
   // 起こす席には、依頼書を名簿の行で渡す（起こせなかった回は席が無いので、次の回に渡し直す）。
   const briefUrl = putStaffBrief(ctx, subject, asks);
-  const marks = markBriefed(ctx, asks, briefUrl);
+  const previous = markBriefed(ctx, asks, briefUrl);
   const seat: RoleRecord = {
     key: staffKey(subject.key),
     subject: subject.key,
@@ -138,7 +138,19 @@ export function launchStaff(ctx: Context, subject: RoleRecord, asks: Review[], o
     ...copy,
   };
   const sid = ctx.env.CLAUDE_CODE_SESSION_ID;
-  return launch(ctx, seat, options.again, options.wait, [...(options.more?.(issue) ?? []), ...skew, ...marks], sid ? sessionRef(sid) : undefined, label.description);
+  const before = readRole(ctx, seat.key)?.address;
+  let out: string[];
+  try {
+    out = launch(ctx, seat, options.again, options.wait, [...(options.more?.(issue) ?? []), ...skew], sid ? sessionRef(sid) : undefined, label.description);
+  }
+  catch (e) {
+    // 居場所ができた後の失敗（名乗らない など）は、頼みが残るので印も付ける。居場所を作る前に止まった回は付けない（依頼書の待ちを残さない）。
+    const after = readRole(ctx, seat.key)?.address;
+    if (e instanceof NotStartedError || (after !== undefined && after !== before)) markBrief(ctx, briefUrl, asks, previous);
+    throw e;
+  }
+  // 置き場の印は、居場所ができた後に付ける。
+  return [...out, ...markBrief(ctx, briefUrl, asks, previous)];
 }
 
 // ---- レビュー（課題の担当が頼み、Staff Engineer 担当が返す。どちらも相手へじかに届く） ----
@@ -193,11 +205,11 @@ export function askReview(ctx: Context, options: { url: string, focus?: string, 
       removeReview(ctx, review.n);
       throw e;
     }
-    const marks = markBriefed(ctx, asks, url);
+    const previous = markBriefed(ctx, asks, url);
     seat.brief = url;
     writeRole(ctx, seat);
     // 席の題は、返っていない頼みをみな数える（新しい頼みと +<残りの数>）。
-    out = [sent, ...relabelStaff(ctx, seat, self.key, [...before, ...asks]), ...marks];
+    out = [sent, ...relabelStaff(ctx, seat, self.key, [...before, ...asks]), ...markBrief(ctx, url, asks, previous)];
   }
   else {
     try {

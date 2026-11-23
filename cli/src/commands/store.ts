@@ -82,7 +82,8 @@ export function storeAtLeast(ctx: Context, since: string): 'yes' | 'old' | 'down
   let version = storeVersions.get(ctx);
   if (version === undefined) {
     const r = call(ctx, [`${pagesUrl(ctx.env)}/api/version`]);
-    if (r.code === '000') return 'down';
+    // 覚えるのは、版を答えた（200）か、版を答えない古い置き場（404）の時だけ。起き直す間の 502・503 などは、応えないとみなす。
+    if (r.code !== '200' && r.code !== '404') return 'down';
     let answered: unknown;
     try {
       answered = r.code === '200' ? (JSON.parse(r.body) as { version?: unknown }).version : undefined;
@@ -94,9 +95,9 @@ export function storeAtLeast(ctx: Context, since: string): 'yes' | 'old' | 'down
   return atLeast(version, since) ? 'yes' : 'old';
 }
 
-/** 版の字（`0.10.1`）が since 以上か。数の形でなければ false。 */
+/** 版の字（`0.10.1`。後ろの `-dev` などは読まない）が since 以上か。頭が `<数>.<数>.<数>` でなければ false。 */
 export function atLeast(version: string, since: string): boolean {
-  const parse = (v: string): number[] | undefined => /^\d+\.\d+\.\d+$/.test(v) ? v.split('.').map(Number) : undefined;
+  const parse = (v: string): number[] | undefined => /^\d+\.\d+\.\d+/.exec(v)?.[0].split('.').map(Number);
   const [a, b] = [parse(version), parse(since)];
   if (a === undefined || b === undefined) return false;
   for (let i = 0; i < 3; i++) {

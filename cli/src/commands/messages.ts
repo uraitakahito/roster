@@ -13,7 +13,7 @@ import { patchReview, readReviews, VERDICTS } from '../reviews.ts';
 import { TpmError } from '../skill-sets.ts';
 import { MAX_POINTS, type Note, type NoteKind, type NoteLink } from '../tracker/types.ts';
 import type { Incoming } from '../transport/types.ts';
-import { isStorePage, pageOwner, REPLY_LABELS, replyLine, samePage, waitingByParty, waitingUrls } from './reply.ts';
+import { isStorePage, pageOwner, replyLine, samePage, waitingByParty, waitingUrls, WAITING_PAGES } from './reply.ts';
 import { markEscalated } from './review-marks.ts';
 import { isPageUrl } from './store.ts';
 import { readShown, returnedIds, seenTimes, shownFile, type SeenAt } from '../seen.ts';
@@ -902,7 +902,7 @@ export function dismiss(ctx: Context, key: string, options: { handover: boolean,
     const waiting = all?.[on] ?? [];
     return waiting.length === 0
       ? []
-      : [`置き場に、${key} の${REPLY_LABELS[on].waiting}のページが ${waiting.length} 枚残っています:`, ...waiting, `もう答えが要らなければ、tpm page reply <URL>… --answered${on === 'pm' ? '' : ` --on ${on}`} で印を外す`];
+      : [`置き場に、${key} の${WAITING_PAGES[on]}が ${waiting.length} 枚残っています:`, ...waiting, `もう答えが要らなければ、tpm page reply <URL>… --answered${on === 'pm' ? '' : ` --on ${on}`} で印を外す`];
   });
   return [sent, ...left];
 }

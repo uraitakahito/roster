@@ -51,6 +51,9 @@ export class FakeStore {
    * 0.8.0 より前は、待ちの相手（on）を読まずに捨て、レビューの印の道（POST /api/pages/review）が無い（405）。
    */
   version: string | undefined = '0.8.0';
+  /** 置けば、印を書く要求（POST /api/pages/reply・/api/pages/review）と版を聞く要求に、この code で誤りを返す（置き場が誤りを返す・起き直す間の試験）。 */
+  failMarks: number | undefined;
+  failVersion: number | undefined;
   /** 置く要求（ページと file の POST）の引数。送った順。 */
   posts: URLSearchParams[] = [];
   /**
@@ -91,6 +94,8 @@ export class FakeStore {
       if (this.noFiles) return reply(404, '');
       return this.file(args, url, reply);
     }
+    if (this.failVersion !== undefined && url.pathname === '/api/version') return reply(this.failVersion, '{"error":"起き直している"}');
+    if (this.failMarks !== undefined && (url.pathname === '/api/pages/reply' || url.pathname === '/api/pages/review')) return reply(this.failMarks, '{"error":"置き場の中の誤り"}');
     if (url.pathname === '/api/version') {
       return this.version === undefined ? reply(404, '{"error":"そのページは無い"}') : reply(200, JSON.stringify({ api: 1, version: this.version }));
     }
@@ -104,6 +109,8 @@ export class FakeStore {
       const on = this.marks() ? q.get('on') ?? 'pm' : 'pm';
       const now_on = r.waits_on ?? 'pm';
       if (q.get('state') === 'waiting') {
+        // 今ほかの相手を待っていれば、待ちを移さない（0.8.0 から）。
+        if (r.asked_at !== undefined && r.answered_at === undefined && on !== now_on) return reply(409, '{"error":"そのページは、on の相手の返事を待っていない（何も替えていない）"}');
         if (r.asked_at === undefined || r.answered_at !== undefined) r.asked_at = now;
         delete r.answered_at;
         if (on === 'pm') delete r.waits_on;

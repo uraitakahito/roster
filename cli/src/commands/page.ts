@@ -236,7 +236,11 @@ export function pageReply(ctx: Context, urls: string[], options: { waiting?: boo
         ? '置き場（pagetray）の版が古く、返事の状態を持てません（0.5.0 から）。tpm ask devops で置き場の版を上げるよう頼んでください'
         : `置き場（pagetray）の版が古く、待ちの相手（--on）を持てません（${PARTY_SINCE} から）。何も書いていません。tpm ask devops で置き場の版を上げるよう頼んでください`);
     }
-    if (result === 'conflict') throw new TpmError(`そのページは、--on ${on} の相手の返事を待っていません（置き場は何も替えていない）: ${url}。今の待ちは tpm page list --reply waiting --on <相手> で見る`);
+    if (result === 'conflict') {
+      throw new TpmError(state === 'answered'
+        ? `そのページは、--on ${on} の相手の返事を待っていません（置き場は何も替えていない）: ${url}。今の待ちは tpm page list --reply waiting --on <相手> で見る`
+        : `そのページは、今ほかの相手の返事を待っています（置き場は待ちを移さない。何も替えていない）: ${url}。今の待ちは tpm page list --reply waiting --on <相手> で見る。先にその待ちを --answered --on <相手> で外す`);
+    }
     throw new TpmError(`そのページは置き場にありません: ${url}`);
   });
 }

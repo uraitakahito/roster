@@ -103,16 +103,28 @@ export function waitingUrls(ctx: Context, key: string): string[] | undefined {
 
 /**
  * 今の project の、その Key の返事待ちのページの URL を、待ちの相手ごとに（古い順）。置き場に聞けなければ undefined。
- * 置き場に聞くのは 1 度だけ（状態で絞らずに Key のページをみな読み、記録の欄で分ける）。
+ * 相手ごとに、置き場が返事待ちに絞った物を聞く（Key のページが多くても落とさない）。0.8.0 より前の置き場には、Product Manager の分だけを聞く
+ * （古い置き場は on を捨てるため。レビュー待ち・上げた件は、古い置き場には無い）。
  */
 export function waitingByParty(ctx: Context, key: string): Record<Party, string[]> | undefined {
-  const query = new URLSearchParams({ project: basename(ctx.state.dir), key, sort: 'created_at', limit: '1000' });
-  const r = call(ctx, [`${pagesUrl(ctx.env)}/api/pages?${query.toString()}`]);
-  if (r.code !== '200') return undefined;
-  const pages = (JSON.parse(r.body) as { pages: PageRecord[] }).pages;
-  const of = (on: Party): string[] => pages.filter(p => inState(p, 'waiting', on)).map(p => `${pagesUrl(ctx.env)}${p.path}`);
-  return { pm: of('pm'), review: of('review'), tpm: of('tpm') };
+  const of = (on: Party): string[] | undefined => {
+    const query = new URLSearchParams({ project: basename(ctx.state.dir), key, reply: 'waiting', ...(on === 'pm' ? {} : { on }), sort: 'created_at', limit: '1000' });
+    const r = call(ctx, [`${pagesUrl(ctx.env)}/api/pages?${query.toString()}`]);
+    if (r.code !== '200') return undefined;
+    return (JSON.parse(r.body) as { pages: PageRecord[] }).pages.filter(p => inState(p, 'waiting', on)).map(p => `${pagesUrl(ctx.env)}${p.path}`);
+  };
+  const pm = of('pm');
+  if (pm === undefined) return undefined;
+  if (storeAtLeast(ctx, PARTY_SINCE) !== 'yes') return { pm, review: [], tpm: [] };
+  return { pm, review: of('review') ?? [], tpm: of('tpm') ?? [] };
 }
+
+/** 返事待ちのページの、相手ごとの言い方（tpm dismiss が並べる時の字）。 */
+export const WAITING_PAGES: Record<Party, string> = {
+  pm: '返事待ちのページ',
+  review: 'レビュー待ちの依頼書',
+  tpm: '上げた（TPM 担当が決めていない）レビューのページ',
+};
 
 /**
  * メッセージを送る命令（ask pm・answer・ask review・report review・ask tpm --review）が、状態を書いた結果を 1 行で出す。書けなくても止まらない。
