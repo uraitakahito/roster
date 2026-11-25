@@ -22,8 +22,8 @@ export type NextAnswer =
   | { status: number, raw: string }
   | { throws: Error };
 
-/** 偽の handler を作る。answer が undefined を返す要求は 404 の UnknownOperationException。 */
-export function nextHandler(answer: (seen: NextSeen) => NextAnswer | undefined) {
+/** 偽の handler を作る。answer が undefined を返す要求は 404 の UnknownOperationException。record が false を返す要求は、答えるが seen に入れない。 */
+export function nextHandler(answer: (seen: NextSeen) => NextAnswer | undefined, record: (seen: NextSeen) => boolean = () => true) {
   const seen: NextSeen[] = [];
   const handler = {
     metadata: { handlerProtocol: 'http/1.1' },
@@ -34,8 +34,9 @@ export function nextHandler(answer: (seen: NextSeen) => NextAnswer | undefined) 
       const raw: unknown = request.body;
       const text = typeof raw === 'string' ? raw : raw instanceof Uint8Array ? Buffer.from(raw).toString() : undefined;
       const json = (request.headers['content-type'] ?? '').startsWith('application/json') && text !== undefined && text !== '';
-      seen.push({ method: request.method, path: request.path, query: { ...request.query }, headers: { ...request.headers }, text, body: json ? JSON.parse(text) as Record<string, unknown> : undefined });
-      const got = answer(seen.at(-1) as NextSeen) ?? { status: 404, type: 'UnknownOperationException', body: '知らない道' };
+      const one: NextSeen = { method: request.method, path: request.path, query: { ...request.query }, headers: { ...request.headers }, text, body: json ? JSON.parse(text) as Record<string, unknown> : undefined };
+      if (record(one)) seen.push(one);
+      const got = answer(one) ?? { status: 404, type: 'UnknownOperationException', body: '知らない道' };
       if ('throws' in got) return Promise.reject(got.throws);
       const type = 'type' in got ? got.type : undefined;
       const headers: Record<string, string> = { 'content-type': 'application/json', ...('headers' in got ? got.headers : {}), ...(type === undefined ? {} : { 'x-amzn-errortype': type }) };

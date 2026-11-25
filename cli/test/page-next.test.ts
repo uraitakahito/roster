@@ -28,14 +28,23 @@ function page(project: string, key: string, kind: string, n: string, extra: Reco
   return { project, key, kind, n, title: `${kind} の題`, role: 'software-engineer', workspace: 'file:1', createdAt: `2026-11-20T12:00:0${n}.000Z`, size: 10, path: `/${project}/${key}/${kind}-${n}.html`, ...extra };
 }
 
+/** 新しい API の版の /healthz の答え。 */
+const HEALTHY: NextAnswer = { status: 200, body: { status: 'ok', version: '1.0.0-rc.1' } };
+
 /**
  * api.pagetray が next の世界: 控えを一時の folder にし、t-x7k2 の Software Engineer 担当（居場所 file:1）と TPM 担当の周り。
  * 生成した client を作る関数は、偽の handler を持つ client を作る。made は作った数。
  */
-function setup(answer: (seen: NextSeen) => NextAnswer | undefined = () => undefined, config: Record<string, unknown> = { api: { pagetray: 'next' } }) {
+function setup(answer: (seen: NextSeen) => NextAnswer | undefined = () => undefined, config: Record<string, unknown> = { api: { pagetray: 'next' } }, health: NextAnswer = HEALTHY) {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'roster-pages-next-')));
   const w: World = world(config);
-  const { handler, seen } = nextHandler(answer);
+  // /healthz（版を見る GetHealth）は health で答え、seen に入れずに数える（next の道は、1 つの命令で 1 度だけ版を見てから頼む）。
+  let healths = 0;
+  const { handler, seen } = nextHandler((s) => {
+    if (s.path !== '/healthz') return answer(s);
+    healths += 1;
+    return health;
+  }, s => s.path !== '/healthz');
   let made = 0;
   const wire = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({
     ...ctx,
@@ -57,7 +66,7 @@ function setup(answer: (seen: NextSeen) => NextAnswer | undefined = () => undefi
   writeFileSync(html, HTML);
   /** 偽の置き場（今の道）への curl の引数。 */
   const curls = (): string[][] => w.calls.filter(c => c.cmd === 'curl').map(c => c.args);
-  return { dir, w, role, tpm, project, html, seen, made: () => made, curls, wire };
+  return { dir, w, role, tpm, project, html, seen, made: () => made, healths: () => healths, curls, wire };
 }
 
 /** 投げた誤りの字（投げなければ空）。 */
@@ -106,7 +115,8 @@ describe('pagetray の client を作る所（pagetrayClient）', () => {
     const s = setup(undefined, { api: { pagetray: 'next' } });
     const ctx: Context = { ...s.role, env: { ...s.role.env, ROSTER_PAGES_URL: url }, clients: { ...s.role.clients, pagetray: (u: string) => pagetrayClient(u) } };
     expect(await thrown(() => pagePut(ctx, s.html, { kind: 'brief' }))).toMatch(/^置き場がページを受け取りませんでした（503）: 混んでいる$/);
-    expect(seen.length).toBe(1);
+    // 版を見る /healthz（503 なので応えない扱いで、止めずに頼む）と、置く要求。どちらも 1 度だけ。
+    expect(seen.map(r => (r.url ?? '').split('?')[0])).toEqual(['/healthz', `/api/projects/${s.project}/keys/t-x7k2/kinds/brief/pages`]);
     expect(seen[0]?.headers.host).toBe(new URL(url).host);
     expect(seen[0]?.headers.origin).toBeUndefined();
   });
@@ -117,6 +127,12 @@ describe('pagetray の client の守り', () => {
     const stall = createServer((req, res) => {
       req.resume();
       req.on('end', () => {
+        // 版を見る /healthz には答え、置く要求には頭だけを返す。
+        if (req.url === '/healthz') {
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ status: 'ok', version: '1.0.0-rc.1' }));
+          return;
+        }
         res.writeHead(201, { 'content-type': 'application/json' });
         res.write('{"project":');
       });
@@ -172,6 +188,9 @@ describe('roster page put（CreatePage）', () => {
     // ほかの欄の 400 は、送り手の訳にしない。
     const other = setup(() => ({ status: 400, type: 'ValidationException', body: 'role の形が違う', fieldList: [{ path: '/role', message: '形が違う' }] }), { api: { pagetray: 'next' }, castlist: 'http://127.0.0.1:1' });
     expect(await thrown(() => pagePut(at(other), other.html, { kind: 'plan' }))).toBe('置き場がページを受け取りませんでした（400）: role の形が違う');
+    // actorRef の形の誤り（/actorRef の 400 でも、訳が「castlist に登録の無い送り手」でない）は、打ち直しても通らないので、登録を待つ訳にしない。
+    const shape = setup(() => ({ status: 400, type: 'ValidationException', body: 'actorRef の形が違う', fieldList: [{ path: '/actorRef', message: '形が違う' }] }), { api: { pagetray: 'next' }, castlist: 'http://127.0.0.1:1' });
+    expect(await thrown(() => pagePut(at(shape), shape.html, { kind: 'plan' }))).toBe('置き場がページを受け取りませんでした（400）: actorRef の形が違う');
   });
 
   test('止まっている・答えが読めない（2xx の JSON でない本文）は「置き場が応えません」、client を読めなければ install を言う', async () => {
@@ -290,12 +309,31 @@ const apiCurls = (s: { curls: () => string[][] }): string[] => s.curls().map(a =
 
 describe('置き場の版（storeAtLeast）', () => {
   test('api.pagetray が next なら /healthz（GetHealth）の version で見る。1 つの命令の中で 1 度だけ聞く', async () => {
-    const s = setup(health);
+    const s = setup();
     expect(await storeAtLeast(s.tpm, '0.8.0')).toBe('yes');
     expect(await storeAtLeast(s.tpm, '1.1.0')).toBe('old');
-    expect(s.seen.map(r => r.path)).toEqual(['/healthz']);
-    const down = setup(() => ({ throws: new Error('connect ECONNREFUSED') }));
+    expect(s.healths()).toBe(1);
+    const down = setup(undefined, undefined, { throws: new Error('connect ECONNREFUSED') });
     expect(await storeAtLeast(down.tpm, '0.8.0')).toBe('down');
+  });
+
+  test('今の版の置き場の /healthz（字の ok で読めない 2xx）と version の無い答えは、応えないでなく古い（版を答えない置き場）', async () => {
+    const text = setup(undefined, undefined, { status: 200, raw: 'ok' });
+    expect(await storeAtLeast(text.tpm, '0.8.0')).toBe('old');
+    const bare = setup(undefined, undefined, { status: 200, body: { status: 'ok' } });
+    expect(await storeAtLeast(bare.tpm, '0.8.0')).toBe('old');
+  });
+
+  test('next の道は、1 つの命令で 1 度だけ版を見て、1.0.0 より前なら送らずに止める（api.pagetray を外すか置き場を替える）', async () => {
+    const old = setup(created, undefined, { status: 200, body: { status: 'ok', version: '0.8.0' } });
+    expect(await thrown(() => pagePut(old.role, old.html, { kind: 'plan' }))).toBe('置き場（http://127.0.0.1:8801）の版は 0.8.0 で、新しい API（1.0.0 から）を持ちません。設定の api.pagetray を外すか、置き場を新しい版に替えてください（置き場を替えるのは、roster ask devops で頼む）');
+    expect(old.seen).toEqual([]);
+    const text = setup(created, undefined, { status: 200, raw: 'ok' });
+    expect(await thrown(() => pagePut(text.role, text.html, { kind: 'plan' }))).toMatch(/^置き場（http:\/\/127\.0\.0\.1:8801）の版は わからない で、新しい API（1\.0\.0 から）を持ちません。/);
+    const fresh = setup(r => r.path === '/api/pages' ? { status: 200, body: { pages: [] } } : r.path === '/api/files' ? { status: 200, body: { files: [] } } : undefined);
+    await pageDelete(fresh.tpm, [], { key: 't-x7k2' });
+    expect(fresh.seen.length).toBe(2);
+    expect(fresh.healths()).toBe(1);
   });
 
   test('設定が無ければ、今の道（/api/version）で聞く', async () => {
@@ -317,7 +355,6 @@ describe('返事の状態（SetReplyState）と返事待ちの一覧（ListPages
     const s = setup(replied);
     expect(await pageReply(s.tpm, [url(s)], { waiting: true, on: 'review' })).toEqual([`レビュー待ちにした: ${url(s)}`]);
     expect(s.seen.map(r => [r.method, r.path, r.body])).toEqual([
-      ['GET', '/healthz', undefined],
       ['PUT', `/api/projects/${s.project}/keys/t-x7k2/kinds/plan/pages/1/reply`, { state: 'waiting', on: 'review' }],
     ]);
     s.seen.length = 0;
@@ -347,7 +384,6 @@ describe('レビューの印（AddReviewMarks）', () => {
     const s = setup(r => r.path.endsWith('/review') ? { status: 200, body: page(s.project, 't-x7k2', 'review', '1', { verdict: 'approve' }) } : health(r));
     expect(await markVerdict(s.tpm, review(s), 'approve', [])).toEqual([`置き場の印: 判定と見た物を書いた ${review(s)}`]);
     expect(s.seen.map(r => [r.method, r.path, r.body])).toEqual([
-      ['GET', '/healthz', undefined],
       ['POST', `/api/projects/${s.project}/keys/t-x7k2/kinds/review/pages/1/review`, { verdict: 'approve', targets: [] }],
     ]);
     expect(apiCurls(s)).toEqual([]);
