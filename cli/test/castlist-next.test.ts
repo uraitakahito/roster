@@ -51,7 +51,7 @@ beforeAll(async () => {
 function nextSeat(answer?: (seen: Seen) => Answer | undefined, env: NodeJS.ProcessEnv = {}): { ctx: Context, seen: Seen[] } {
   const w = world({ castlist: dead, api: { castlist: 'next' } });
   const { handler, seen } = fakeHandler(answer);
-  const ctx: Context = { ...w.tpm, env: { ...w.tpm.env, CLAUDE_CODE_SESSION_ID: SID, ...env }, clients: { castlist: (url: string) => castlistClient(url, handler) } };
+  const ctx: Context = { ...w.tpm, env: { ...w.tpm.env, CLAUDE_CODE_SESSION_ID: SID, ...env }, clients: { ...w.tpm.clients, castlist: (url: string) => castlistClient(url, handler) } };
   return { ctx, seen };
 }
 
@@ -177,7 +177,7 @@ describe('castlist の client の守り（review-33）', () => {
     const unreadable = (): never => {
       throw new Error('Cannot find module \'@smithy/core\'');
     };
-    const seat: Context = { ...ctx, clients: { castlist: unreadable } };
+    const seat: Context = { ...ctx, clients: { ...ctx.clients, castlist: unreadable } };
     await expect(registerPm(seat, dead)).rejects.toThrow(/生成した castlist の client を読めません.*pnpm install --frozen-lockfile/s);
   });
 
@@ -186,7 +186,7 @@ describe('castlist の client の守り（review-33）', () => {
     const unreadable = (): never => {
       throw new Error('Cannot find module \'@smithy/core\'');
     };
-    const seat: Context = { ...ctx, clients: { castlist: unreadable } };
+    const seat: Context = { ...ctx, clients: { ...ctx.clients, castlist: unreadable } };
     const verdict = await castlistGuard(seat, bashInput({ transcript_path: transcript('claude-opus-5-5'), effort: { level: 'high' } })).catch((e: unknown) => ({ allow: false, reason: (e as Error).message }));
     expect(verdict.allow).toBe(false);
     expect('reason' in verdict ? verdict.reason : '').toMatch(/pnpm install --frozen-lockfile/);
@@ -292,7 +292,7 @@ describe('api.castlist が next の時の書く道', () => {
   test('api の欄が無ければ、生成した client を作らない（今の curl の道のまま。止まっている castlist には送れずに止める）', async () => {
     const w = world({ castlist: dead });
     let made = 0;
-    const ctx: Context = { ...w.tpm, clients: { castlist: (url: string) => {
+    const ctx: Context = { ...w.tpm, clients: { ...w.tpm.clients, castlist: (url: string) => {
       made += 1;
       return castlistClient(url);
     } } };

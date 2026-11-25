@@ -98,7 +98,7 @@ function answer(seen: NextSeen): NextAnswer | undefined {
 function nextWorld(over: (seen: NextSeen) => NextAnswer | undefined = () => undefined): { w: World, ctx: Context, seen: NextSeen[] } {
   const w = world({ castlist: url, api: { castlist: 'next' } });
   const { handler, seen } = nextHandler(s => over(s) ?? answer(s));
-  return { w, ctx: { ...w.tpm, clients: { castlist: (u: string) => castlistClient(u, handler) } }, seen };
+  return { w, ctx: { ...w.tpm, clients: { ...w.tpm.clients, castlist: (u: string) => castlistClient(u, handler) } }, seen };
 }
 
 /** 投げた誤りの字（投げなければ空）。 */
@@ -338,7 +338,7 @@ describe('読む道の client の守り（書く道と同じ。review-33）', ()
     const unreadable = (): never => {
       throw new Error('Cannot find module \'@smithy/core\'');
     };
-    const seat: Context = { ...ctx, clients: { castlist: unreadable } };
+    const seat: Context = { ...ctx, clients: { ...ctx.clients, castlist: unreadable } };
     await expect(castlistFind(seat, { label: ['tpm.key:t-1'] })).rejects.toThrow(/生成した castlist の client を読めません.*pnpm install --frozen-lockfile/s);
     await expect(requireUp(seat, '名乗っていません。')).rejects.toThrow(/生成した castlist の client を読めません/);
   });

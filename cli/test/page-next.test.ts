@@ -146,7 +146,10 @@ describe('roster page put（CreatePage）', () => {
     const unreadable = setup(() => ({ status: 201, raw: 'not json' }));
     expect(await thrown(() => pagePut(unreadable.role, unreadable.html, { kind: 'plan' }))).toMatch(/^置き場（http:\/\/127\.0\.0\.1:8801）が応えません。/);
     const missing = setup();
-    const ctx: Context = { ...missing.role, clients: { ...missing.role.clients, pagetray: () => { throw new Error('Cannot find module \'@smithy/core\''); } } };
+    const unloadable = (): never => {
+      throw new Error('Cannot find module \'@smithy/core\'');
+    };
+    const ctx: Context = { ...missing.role, clients: { ...missing.role.clients, pagetray: unloadable } };
     expect(await thrown(() => pagePut(ctx, missing.html, { kind: 'plan' }))).toMatch(/^生成した pagetray の client を読めません（.*）。cli\/ で pnpm install --frozen-lockfile を打ってください$/);
   });
 });
@@ -257,7 +260,8 @@ describe('置き場の版（storeAtLeast）と、次の PR まで今の道のま
   test('api.pagetray が next でも、返事の状態（roster page reply）と file（roster file put）は今の道（curl）で送り、生成した client を作らない', async () => {
     const s = setup();
     s.w.store.pages.set(`/${s.project}/t-x7k2/plan-1.html`, { record: { ...page(s.project, 't-x7k2', 'plan', '1'), n: 1, created_at: '2026-11-20T12:00:01.000Z' } as never, body: Buffer.from(HTML) });
-    expect(await pageReply(s.tpm, [`${BASE}/${s.project}/t-x7k2/plan-1.html`], { waiting: true })).toEqual([expect.stringContaining(`${BASE}/${s.project}/t-x7k2/plan-1.html`)]);
+    // --on review は、置き場の版（storeAtLeast）を今の道（/api/version）で見てから書く。
+    expect(await pageReply(s.tpm, [`${BASE}/${s.project}/t-x7k2/plan-1.html`], { waiting: true, on: 'review' })).toEqual([expect.stringContaining(`${BASE}/${s.project}/t-x7k2/plan-1.html`)]);
     const png = join(s.dir, '..', `${basename(s.dir)}-shot.png`);
     writeFileSync(png, Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('png')]));
     await filePut(s.role, png, { reviewed: true });

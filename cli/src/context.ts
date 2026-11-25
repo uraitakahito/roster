@@ -2,7 +2,9 @@
 import { realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import type { CastlistClient } from '../gen/castlist-client/dist-types/index.js';
+import type { PagetrayClient } from '../gen/pagetray-client/dist-types/index.js';
 import { castlistClient } from './castlist.ts';
+import { pagetrayClient } from './commands/store.ts';
 import { composeRolesConfig, composeSkillSets, type RolesConfig } from './config.ts';
 import { actor } from './evidence.ts';
 import { exec as realExec, type Exec } from './exec.ts';
@@ -19,6 +21,8 @@ import { assertNoLegacySeat, envOf } from './env.ts';
 export interface Clients {
   /** castlist の URL から、生成した castlist の client を作る（castlist.ts の castlistClient）。 */
   castlist: (url: string) => CastlistClient
+  /** 置き場の URL から、生成した pagetray の client を作る（commands/store.ts の pagetrayClient）。 */
+  pagetray: (url: string) => PagetrayClient
 }
 
 /** 命令が動くときの周り。命令はみなこれを受け取り、試験では偽物の道具を入れて組む。 */
@@ -62,5 +66,5 @@ export function createContext(env: NodeJS.ProcessEnv = process.env, cwd: string 
   const transport = config.transport === 'file' ? new FileTransport(state, envOf(env, 'ADDRESS') || 'file:tpm') : new CmuxTransport(exec);
   // 課題管理への書き込みは tracker.jsonl に残す。
   const tracker = new RecordedTracker(new RoutedTracker(config.trackers, exec), state, actor(env));
-  return { project, config, state, transport, tracker, env, exec, root, skillSets: composeSkillSets(config.sources, root), sleep, now: () => new Date(), clients: { castlist: url => castlistClient(url) } };
+  return { project, config, state, transport, tracker, env, exec, root, skillSets: composeSkillSets(config.sources, root), sleep, now: () => new Date(), clients: { castlist: url => castlistClient(url), pagetray: url => pagetrayClient(url) } };
 }

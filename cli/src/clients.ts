@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 import type { HttpHandler, HttpHandlerUserInput } from '@smithy/core/protocols';
 import type { Provider, UserAgent } from '@smithy/types';
 import type * as Castlist from '../gen/castlist-client/dist-types/index.js';
+import type * as Pagetray from '../gen/pagetray-client/dist-types/index.js';
 import type { ApiServer } from './config.ts';
 import type { Context } from './context.ts';
 
@@ -15,6 +16,9 @@ const load = createRequire(import.meta.url);
 
 /** 生成した castlist の client の module。初めて呼んだ時に読む（Node が控えるので、2 度目からは読まない）。 */
 export const castlistApi = (): typeof Castlist => load('../gen/castlist-client/dist-cjs/index.js') as typeof Castlist;
+
+/** 生成した pagetray の client の module。初めて呼んだ時に読む。 */
+export const pagetrayApi = (): typeof Pagetray => load('../gen/pagetray-client/dist-cjs/index.js') as typeof Pagetray;
 
 /** 生成した client を作る時に、必ず書く欄（clientConfig）。 */
 export interface ClientConfig {
