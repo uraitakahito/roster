@@ -1,6 +1,6 @@
 ---
 title: 開発
-description: 試験の流し方・ページの置き場のサーバー（pagetray）とのつなぎ・Dependabot の判定の道具・skill の frontmatter・この docs の見方と公開の流れ
+description: 試験の流し方・ページの置き場のサーバー（pagetray）とのつなぎ・生成した client・Dependabot の判定の道具・skill の frontmatter・この docs の見方と公開の流れ
 ---
 
 ## 試験
@@ -66,6 +66,22 @@ build は無い。`cli/bin/roster` は `cli/src/cli.ts` を node で直に動か
 - **合わせる版**: castlist が止まっていて container も無い時に出す `container run` の 1 行は、image の版に `cli/src/castlist.ts` の `CASTLIST_VERSION` を使う（[運用](/operations/)）。古い版のままだと、送る欄の名が替わった後に古い image を起こす 1 行を出してしまう（0.2.0 で送り手の時刻の名が `sent_at` に替わった）。
 - **castlist を上げる時**: castlist で release を出す（castlist の docs の「[release を出す](https://uraitakahito.github.io/castlist/release.html)」）→ この repo で `CASTLIST_VERSION` と、それを名指す試験（`cli/test/castlist.test.ts` の `expect(CASTLIST_VERSION).toBe(…)`）を新しい版にする PR を出す。API を変えた版なら、同じ PR で偽の castlist（`/healthz` の `version` も）と `cli/src/castlist.ts` を合わせる。
 
+## 生成した client（castlist・pagetray の定義から）
+
+castlist と pagetray の API は、それぞれの repo の Smithy の定義（`model/`）に書いてある。roster が呼ぶ TypeScript の client は、その定義から smithy-typescript で生成し、`cli/gen/<repo>-client/` に入れる（AI-36）。今は castlist の client（`cli/gen/castlist-client/`）と pagetray の client（`cli/gen/pagetray-client/`）で、どちらも `v1.0.0-rc.1` の定義から作る。roster はまだ使わない。
+
+```sh
+cd cli
+pnpm install --frozen-lockfile   # tsc と、client が引く @smithy/* など
+gen/gen.sh                       # 定義を tag から取り直し、client を作り直す
+gen/gen.sh --check               # 取った定義の digest と、作り直した物が入れた物と同じかを見る（CI が流す）
+```
+
+- **入れる物**: 取った定義（`cli/gen/model/<repo>/`）と、client ごとに生成した TS（`src/`）・tsc で build した JS（`dist-cjs/`）と型（`dist-types/`）・生成した `package.json`。手で直さない。生成した TS は拡張子の無い import なので、Node が型を消して直に動かせない。そこで build した CJS を入れ、ESM の roster からは `createRequire` で読み、型は `dist-types/` から `import type` で取る（`cli/test/gen-clients.test.ts`）。roster は今までどおり build 無しで動く。`cli/gen/` は `pnpm run lint`・`typecheck`・`doccheck` の外に置く。
+- **固める物**: 取る定義の repo・release の tag・SHA-256 は `cli/gen/gen.sh` の `DEFS` の 1 か所に書く。Smithy の CLI の版と digest も `gen.sh` に（pagetray の `ci/gen.sh` と同じ版）、生成器の版は `cli/gen/smithy-build.json` に書く。`smithy-build.json` に名指した Maven の物は、公開から 2 日たっていなければ `gen.sh` が止める（pnpm の `minimumReleaseAge` に合わせた物）。
+- **定義を上げる・足す**: `DEFS` の行を替える・足す（1 行に 1 つの file。client を作る file の行には、5 つ目の欄に service の shape id（`ai.pagetray#Pagetray` など）を書く。pagetray の定義が使う `ai.common` は、castlist の `common.smithy` の行の物を使う）。`gen/gen.sh` を流し、取った定義と作り直した client を同じ commit に入れる。生成した `package.json` の依存が `cli/package.json` の `dependencies` に無ければ `gen.sh` が止めるので、`pnpm add` で足す。
+- **CI**: `.github/workflows/test.yml` の `gen` の job が `gen/gen.sh --check` を流し、続けて入れた物（client ごとの build した JS と取った定義）を 1 byte 替えると `--check` が落ちることを見る。
+
 ## 判定の道具
 
 Dependabot の PR の判定の道具は `cli/src/release-age.ts`（`node cli/src/release-age.ts <owner>/<repo> <PR> [--hours <時間>] [--now <ISO 時刻>]`）。version は PR の差分（pnpm-lock・package-lock・yarn.lock・workflow の `uses:`）から読み、依存の依存も数える。終了コードは 0 対象・10 まだ・20 判定できない・1 道具の誤り。skill は Dependabot の PR を見る repo の folder でこれを打つが、nodenv の `node` の shim は渡された script の folder から `.node-version` を探すので、この repo の version で動く。`cli/bin/roster` も同じ訳で、`~/.local/bin/roster` のような repo の外の symlink から呼ばれても、本当の在り処の path を `node` に渡す sh にしてある。また cmux の通知の hook のように PATH が既定だけで呼ばれたときは、`node`（nodenv の shim）と `cmux`（app の中）を自分で PATH に足す（見つからなければ、探した所を出して 127 で終わる）。
@@ -101,7 +117,7 @@ Prettier は既定の設定のまま使い、設定のファイルは置かな�
 
 Prettier の `--parser jsonc` は複数行の最後に末尾のカンマを付けるが、VS Code は知らない `.jsonc` の末尾のカンマに警告（`jsonc(519)`）を出す。そこで `.vscode/settings.json` が、repo の `*.jsonc` に `.vscode/jsonc.schema.json`（`allowComments`・`allowTrailingCommas` だけの schema）を当てて、警告を出させない。欄の名や型は見ない。
 
-`astro build` は `.md` のページの中で何が落ちても exit 0 で終わるので、`check` は build の後に `docs-site/scripts/check-refs.mjs` を流す。見る物は、ページへのリンク・リンクの見出し（`#` の後ろ。見出しの id は Starlight が作るので、build の書き出しの id を読む）・本文が名指した repo の path（git が追跡する物と、add 前の新しい物だけを数える。build の書き出しなど `.gitignore` にある物は、手元に在っても無いとみなす）・README の URL・skill が名指す原稿の見出し・`config.jsonc` の欄の揃い・skill の中の相対パス（`${CLAUDE_SKILL_DIR}/…` の先）・skill が名指す `_shared/` の決まりの見出し・画面の絵（`docs-site/src/assets/screens/`）と本文の参照の揃い・skill に連携と課題管理の道具の命令が直に書かれていないこと・skill と原稿が書いた `roster` の命令が在ること・`protocol.md` の見出しと `cli/src/protocol.ts` の見出しの表の揃い。続けて `docs-site/scripts/check-skills.mjs` が skill の frontmatter を見る（[skill の frontmatter](#skill-の-frontmatter)）。続けて `docs-site/scripts/check-wording.mjs` が、repo の字（docs・skill・`roster` の code と試験・README・workflow）に、1 台の機械を指す語（`macOS` は当てない）と、ある人の home の path（`/Users/<名>`・`-Users-<名>`。見本の名 `me` は当てない）が無いかを見る。roster はだれの機械でも動かせる物として公開するので、機械は「roster を動かす機械」、cmux のバナーは「通知のバナー」と書く（2026-11-23 t-q5mh）。続けて `docs-site/scripts/check-old-name.mjs` が、git が追跡する物すべて（`cli/src`・`cli/test`・`.github` も）に、道具の古い名（命令の形・入口の path・道具を指す字）が残っていないかを見る。道具の名は 2026-11-23 に替えた（t-v28j）。替えなかった内の名（状態と控えと設定の folder・環境変数・castlist の鍵とラベル・TPM 担当を指す値・skill の名）は当てず、当てない型は file の頭に並べてある。Mermaid の図は書き間違えても検査を通るので、図を変えたら手元で見る。
+`astro build` は `.md` のページの中で何が落ちても exit 0 で終わるので、`check` は build の後に `docs-site/scripts/check-refs.mjs` を流す。見る物は、ページへのリンク・リンクの見出し（`#` の後ろ。見出しの id は Starlight が作るので、build の書き出しの id を読む）・本文が名指した repo の path（git が追跡する物と、add 前の新しい物だけを数える。build の書き出しなど `.gitignore` にある物は、手元に在っても無いとみなす）・README の URL・skill が名指す原稿の見出し・`config.jsonc` の欄の揃い・skill の中の相対パス（`${CLAUDE_SKILL_DIR}/…` の先）・skill が名指す `_shared/` の決まりの見出し・画面の絵（`docs-site/src/assets/screens/`）と本文の参照の揃い・skill に連携と課題管理の道具の命令が直に書かれていないこと・skill と原稿が書いた `roster` の命令が在ること・`protocol.md` の見出しと `cli/src/protocol.ts` の見出しの表の揃い。続けて `docs-site/scripts/check-skills.mjs` が skill の frontmatter を見る（[skill の frontmatter](#skill-の-frontmatter)）。続けて `docs-site/scripts/check-wording.mjs` が、repo の字（docs・skill・`roster` の code と試験・README・workflow）に、1 台の機械を指す語（`macOS` は当てない）と、ある人の home の path（`/Users/<名>`・`-Users-<名>`。見本の名 `me` は当てない）が無いかを見る。roster はだれの機械でも動かせる物として公開するので、機械は「roster を動かす機械」、cmux のバナーは「通知のバナー」と書く（2026-11-23 t-q5mh）。続けて `docs-site/scripts/check-old-name.mjs` が、git が追跡する物すべて（`cli/src`・`cli/test`・`.github` も。`cli/gen/` の取った定義と生成した client は、ほかの repo の tag の字なので除く）に、道具の古い名（命令の形・入口の path・道具を指す字）が残っていないかを見る。道具の名は 2026-11-23 に替えた（t-v28j）。替えなかった内の名（状態と控えと設定の folder・環境変数・castlist の鍵とラベル・TPM 担当を指す値・skill の名）は当てず、当てない型は file の頭に並べてある。Mermaid の図は書き間違えても検査を通るので、図を変えたら手元で見る。
 
 skill は Pages ではなく原稿の Markdown を読む（`/dependabot-triage` と `/sustaining-engineer` が [設定](/configuration/) を読む）。原稿の見出しや表を変えたら、`check` が skill の読む先を確かめる。
 

@@ -65,6 +65,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   )
     .split("\n")
     .filter((f) => f !== "" && f !== SELF && !f.endsWith("pnpm-lock.yaml"))
+    // cli/gen/ の取った定義と生成した client は、castlist・pagetray の release の tag の字で、roster では替えられない（check-old-name と同じ。AI-36）。
+    .filter((f) => !/^cli\/gen\/(model|[^/]+-client)\//.test(f))
     .filter((f) => !/\.(png|jpe?g|gif|ico|webp|pdf|woff2?)$/i.test(f));
   const errors = files.flatMap((f) => {
     let text;

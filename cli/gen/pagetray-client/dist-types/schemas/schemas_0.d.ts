@@ -1,0 +1,49 @@
+import { TypeRegistry } from "@smithy/core/schema";
+import type { StaticErrorSchema, StaticOperationSchema, StaticStructureSchema } from "@smithy/types";
+export declare var PagetrayServiceException$: StaticErrorSchema;
+export declare var Conflict$: StaticErrorSchema;
+export declare var Forbidden$: StaticErrorSchema;
+export declare var InternalError$: StaticErrorSchema;
+export declare var NotFound$: StaticErrorSchema;
+export declare var PayloadTooLarge$: StaticErrorSchema;
+export declare var Unavailable$: StaticErrorSchema;
+export declare var UnsupportedMediaType$: StaticErrorSchema;
+export declare var ValidationException$: StaticErrorSchema;
+/**
+ * TypeRegistry instances containing modeled errors.
+ * @internal
+ *
+ */
+export declare const errorTypeRegistries: TypeRegistry[];
+export declare var ActorSummary$: StaticStructureSchema;
+export declare var AddReviewMarksInput$: StaticStructureSchema;
+export declare var AddReviewMarksOutput$: StaticStructureSchema;
+export declare var CreateFileInput$: StaticStructureSchema;
+export declare var CreateFileOutput$: StaticStructureSchema;
+export declare var CreatePageInput$: StaticStructureSchema;
+export declare var CreatePageOutput$: StaticStructureSchema;
+export declare var DeleteFilesInput$: StaticStructureSchema;
+export declare var DeleteFilesOutput$: StaticStructureSchema;
+export declare var DeletePagesInput$: StaticStructureSchema;
+export declare var DeletePagesOutput$: StaticStructureSchema;
+export declare var File$: StaticStructureSchema;
+export declare var GetHealthInput$: StaticStructureSchema;
+export declare var GetHealthOutput$: StaticStructureSchema;
+export declare var ListFilesInput$: StaticStructureSchema;
+export declare var ListFilesOutput$: StaticStructureSchema;
+export declare var ListPagesInput$: StaticStructureSchema;
+export declare var ListPagesOutput$: StaticStructureSchema;
+export declare var Page$: StaticStructureSchema;
+export declare var Sender$: StaticStructureSchema;
+export declare var SetReplyStateInput$: StaticStructureSchema;
+export declare var SetReplyStateOutput$: StaticStructureSchema;
+export declare var ValidationExceptionField$: StaticStructureSchema;
+export declare var AddReviewMarks$: StaticOperationSchema;
+export declare var CreateFile$: StaticOperationSchema;
+export declare var CreatePage$: StaticOperationSchema;
+export declare var DeleteFiles$: StaticOperationSchema;
+export declare var DeletePages$: StaticOperationSchema;
+export declare var GetHealth$: StaticOperationSchema;
+export declare var ListFiles$: StaticOperationSchema;
+export declare var ListPages$: StaticOperationSchema;
+export declare var SetReplyState$: StaticOperationSchema;
