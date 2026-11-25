@@ -7,7 +7,7 @@ import type { Context } from '../context.ts';
 import { openReviews, type Review, type Verdict } from '../reviews.ts';
 import { TpmError } from '../skill-sets.ts';
 import { markFailure, PARTY_SINCE, pageParts, setReply, type ReplyResult } from './reply.ts';
-import { call, inStore, pagesUrl, reason, storeAtLeast } from './store.ts';
+import { inStore, pagesRequest, reason, storeAtLeast } from './store.ts';
 
 /** 古い置き場で持てない物の字。 */
 const OLD = `レビューの印を持てない（${PARTY_SINCE} から）`;
@@ -23,11 +23,11 @@ function target(ctx: Context, url: string): string {
 /** 置き場の答え。done のほかに、置き場が断った時の code と訳。 */
 type Posted = { result: ReplyResult } | { result: 'refused', why: string };
 
-/** ページ 1 枚に、判定と見た物を書く（POST /api/pages/review）。版は呼ぶ側が見てある。 */
+/** ページ 1 枚に、判定と見た物を書く（POST /api/pages/review。設定の api.pagetray が next なら AddReviewMarks）。版は呼ぶ側が見てある。 */
 async function postMarks(ctx: Context, url: string, marks: { verdict?: Verdict, targets: string[] }): Promise<Posted> {
   const parts = pageParts(ctx, url);
   if (parts === undefined) return { result: 'foreign' };
-  const r = await call(ctx, ['-X', 'POST', '-H', 'Content-Type: application/json', '--data-binary', '@-', `${pagesUrl(ctx.env)}/api/pages/review?${new URLSearchParams(parts).toString()}`], JSON.stringify(marks));
+  const r = await pagesRequest(ctx, { op: 'AddReviewMarks', query: new URLSearchParams(parts), marks });
   if (r.code === '000') return { result: 'down' };
   if (r.code === '200') return { result: 'done' };
   if (r.code === '404' || r.code === '410') return { result: 'missing' };

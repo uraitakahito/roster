@@ -6,7 +6,7 @@ import { basename } from 'node:path';
 import type { Context } from '../context.ts';
 import { TpmError } from '../skill-sets.ts';
 import type { PageRecord } from './page.ts';
-import { call, inStore, pagesUrl, reason, storeAtLeast } from './store.ts';
+import { inStore, pagesRequest, pagesUrl, reason, storeAtLeast } from './store.ts';
 
 /** 返事の状態。置き場の API の `state`・`reply` の値と同じ名。 */
 export type ReplyState = 'waiting' | 'answered';
@@ -61,7 +61,7 @@ export function pageParts(ctx: Context, url: string): { project: string, key: st
 }
 
 /**
- * ページ 1 枚の返事の状態を書く（POST /api/pages/reply）。書けない訳は、止まらずに返す。
+ * ページ 1 枚の返事の状態を書く（POST /api/pages/reply。設定の api.pagetray が next なら SetReplyState）。書けない訳は、止まらずに返す。
  * on（待ちの相手）が Product Manager でない時は、置き場が 0.8.0 より前なら送らずに old を返す（古い置き場は on を捨て、Product Manager の返事待ちにしてしまうため）。
  */
 export async function setReply(ctx: Context, url: string, state: ReplyState, on: Party = 'pm'): Promise<ReplyResult> {
@@ -72,7 +72,7 @@ export async function setReply(ctx: Context, url: string, state: ReplyState, on:
     if (since !== 'yes') return since;
   }
   const query = new URLSearchParams({ ...parts, state, ...(on === 'pm' ? {} : { on }) });
-  const r = await call(ctx, ['-X', 'POST', `${pagesUrl(ctx.env)}/api/pages/reply?${query.toString()}`]);
+  const r = await pagesRequest(ctx, { op: 'SetReplyState', query });
   if (r.code === '000') return 'down';
   if (r.code === '200') return 'done';
   if (r.code === '409') return 'conflict';
@@ -96,7 +96,7 @@ export function inState(page: PageRecord, state: ReplyState, on: Party = 'pm'): 
  */
 export async function waitingUrls(ctx: Context, key: string): Promise<string[] | undefined> {
   const query = new URLSearchParams({ project: basename(ctx.state.dir), key, reply: 'waiting', sort: 'created_at', limit: '1000' });
-  const r = await call(ctx, [`${pagesUrl(ctx.env)}/api/pages?${query.toString()}`]);
+  const r = await pagesRequest(ctx, { op: 'ListPages', query });
   if (r.code !== '200') return undefined;
   return (JSON.parse(r.body) as { pages: PageRecord[] }).pages.filter(p => inState(p, 'waiting')).map(p => `${pagesUrl(ctx.env)}${p.path}`);
 }
@@ -109,7 +109,7 @@ export async function waitingUrls(ctx: Context, key: string): Promise<string[] |
 export async function waitingByParty(ctx: Context, key: string): Promise<Record<Party, string[]> | undefined> {
   const of = async (on: Party): Promise<string[] | undefined> => {
     const query = new URLSearchParams({ project: basename(ctx.state.dir), key, reply: 'waiting', ...(on === 'pm' ? {} : { on }), sort: 'created_at', limit: '1000' });
-    const r = await call(ctx, [`${pagesUrl(ctx.env)}/api/pages?${query.toString()}`]);
+    const r = await pagesRequest(ctx, { op: 'ListPages', query });
     if (r.code !== '200') return undefined;
     return (JSON.parse(r.body) as { pages: PageRecord[] }).pages.filter(p => inState(p, 'waiting', on)).map(p => `${pagesUrl(ctx.env)}${p.path}`);
   };

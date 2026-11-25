@@ -1,9 +1,9 @@
 // 置き場（別の repo の pagetray。127.0.0.1 で待つ、ページと file を DB に持つサーバー）に curl で頼む足場と、roster を動かす機械の控えの folder。
 // roster page と roster file が使う。置き場は roster を動かす機械に 1 つで、project をまたいで同じなので、控えの folder と URL は設定（config.jsonc）でなく環境変数で替える。
 // 置き場を起こす・止めるのは DevOps Engineer 担当（docs-site の運用のページの「ページの置き場（pagetray）」）。
-// 設定の api.pagetray が next なら、ページの API（置く・探す・消す）と版は、生成した pagetray の client で新しい API に送る（pagesRequest・storeAtLeast。AI-36 の段 6c）。
+// 設定の api.pagetray が next なら、置き場の API（ページと file を置く・探す・消す・返事の状態・レビューの印）と版は、生成した pagetray の client で新しい API に送る（pagesRequest・storeAtLeast。AI-36 の段 6c）。
 // 答えは今の道の Reply の形（本文は今の API の JSON の字・code は状態の数の字）にそろえ、呼ぶ側（page.ts）は替えない。
-// ページと file の本文の URL は新しい API でも同じ手の道なので、fetchTo・compareStored は curl のまま。file・返事・レビューの印は、次の PR まで今の道。
+// ページと file の本文の URL は新しい API でも同じ手の道なので、fetchTo・compareStored は curl のまま（next の時に curl で打つのは、この 2 つだけ）。
 import type { HttpHandler } from '@smithy/core/protocols';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -110,20 +110,24 @@ async function viaPagetray<O extends { $metadata: { httpStatusCode?: number } }>
 }
 
 /**
- * 新しい API のページの記録を、今の API の記録の形にする（page.ts の PageRecord）。番号 n は数に、送り手の actor は無ければ null（今の API の未確認）。
+ * 新しい API の記録（ページか file）を、今の API の記録の形にする（page.ts の PageRecord・file.ts の FileRecord）。番号 n は数に、送り手の actor は無ければ null（今の API の未確認）。
  * 置く答えの url・location は、今の API の記録に無いので落とす。
  */
-function pageRecordOf(page: object): Record<string, unknown> {
-  const rest = Object.fromEntries(Object.entries(toSnake(page) as Record<string, unknown>).filter(([k]) => k !== 'url' && k !== 'location'));
+function recordOf(record: object): Record<string, unknown> {
+  const rest = Object.fromEntries(Object.entries(toSnake(record) as Record<string, unknown>).filter(([k]) => k !== 'url' && k !== 'location'));
   const sender = rest.sender as Record<string, unknown> | undefined;
   return { ...rest, n: Number(rest.n), ...(sender === undefined ? {} : { sender: { actor: null, ...sender } }) };
 }
 
-/** 置き場のページの API の要求（今の道の引数の名で書く）。 */
+/**
+ * 置き場の API の要求（今の道の引数の名で書く）。返事の状態（state・on）とレビューの印は、ページ 1 枚（project・key・kind・n）を引数で名指す。
+ * file を置く時の contentType は、file.ts の拡張子の表の Content-Type。
+ */
 export type PagesRequest =
   | { op: 'CreatePage', query: URLSearchParams, source: { file: string } | { text: string } }
-  | { op: 'ListPages', query: URLSearchParams }
-  | { op: 'DeletePages', query: URLSearchParams };
+  | { op: 'ListPages' | 'DeletePages' | 'ListFiles' | 'DeleteFiles' | 'SetReplyState', query: URLSearchParams }
+  | { op: 'CreateFile', query: URLSearchParams, file: string, contentType: string }
+  | { op: 'AddReviewMarks', query: URLSearchParams, marks: { verdict?: string, targets: string[] } };
 
 /** 今の API の引数の名 → 新しい API の名（ここに無い名は、どちらも同じ）。 */
 const RENAMED: Record<string, string> = { created_at: 'createdAt', actor_issuer: 'actorIssuer', actor_ref: 'actorRef' };
@@ -142,67 +146,103 @@ function inputOf(query: URLSearchParams, skip: string[] = []): Record<string, un
 /** 一覧の 1 頁の上限（新しい API の maxResults）。 */
 const PAGE_MAX = 1000;
 
+/** 今の道（curl）で頼む。 */
+function curlOf(ctx: Context, request: PagesRequest): Promise<Reply> {
+  const at = (path: string): string => `${pagesUrl(ctx.env)}${path}?${request.query.toString()}`;
+  switch (request.op) {
+    case 'CreatePage': {
+      const { source } = request;
+      return call(ctx, ['-X', 'POST', '-H', 'Content-Type: text/html; charset=utf-8', '--data-binary', 'file' in source ? `@${source.file}` : '@-', at('/api/pages')], 'file' in source ? undefined : source.text);
+    }
+    case 'ListPages': return call(ctx, [at('/api/pages')]);
+    case 'DeletePages': return call(ctx, ['-X', 'DELETE', at('/api/pages')]);
+    case 'CreateFile': return call(ctx, ['-X', 'POST', '-H', `Content-Type: ${request.contentType}`, '--data-binary', `@${request.file}`, at('/api/files')]);
+    case 'ListFiles': return call(ctx, [at('/api/files')]);
+    case 'DeleteFiles': return call(ctx, ['-X', 'DELETE', at('/api/files')]);
+    case 'SetReplyState': return call(ctx, ['-X', 'POST', at('/api/pages/reply')]);
+    case 'AddReviewMarks': return call(ctx, ['-X', 'POST', '-H', 'Content-Type: application/json', '--data-binary', '@-', at('/api/pages/review')], JSON.stringify(request.marks));
+  }
+}
+
 /**
- * 置き場のページの API に頼む（置く・探す・消す）。今の道なら curl、設定の api.pagetray が next なら生成した client。答えはどちらも今の道の形。
- * 探す時の limit は、新しい API では nextToken で辿って読む数（今の置き場と同じく 1 から 1000 に丸める）。sort の created_at は createdAt。
+ * 一覧（ListPages・ListFiles）を、limit の数まで nextToken で辿って読む（今の置き場と同じく 1 から 1000 に丸める）。sort の created_at は createdAt。
+ * 答えは今の道の形（`{"pages": […]}`・`{"files": […]}`）。
  */
-export async function pagesRequest(ctx: Context, request: PagesRequest): Promise<Reply> {
-  const { query } = request;
-  const base = `${pagesUrl(ctx.env)}/api/pages?${query.toString()}`;
-  if (!nextApi(ctx, 'pagetray')) {
-    if (request.op === 'ListPages') return call(ctx, [base]);
-    if (request.op === 'DeletePages') return call(ctx, ['-X', 'DELETE', base]);
-    const { source } = request;
-    return call(ctx, ['-X', 'POST', '-H', 'Content-Type: text/html; charset=utf-8', '--data-binary', 'file' in source ? `@${source.file}` : '@-', base], 'file' in source ? undefined : source.text);
-  }
-  if (request.op === 'CreatePage') {
-    const { source } = request;
-    const body = 'file' in source ? readFileSync(source.file) : Buffer.from(source.text);
-    const input = { ...inputOf(query), body } as unknown as Pagetray.CreatePageCommandInput;
-    return viaPagetray(ctx, (client, api, options) => client.send(new api.CreatePageCommand(input), options), pageRecordOf);
-  }
-  if (request.op === 'DeletePages') {
-    return viaPagetray(ctx, (client, api, options) => client.send(new api.DeletePagesCommand(inputOf(query) as unknown as Pagetray.DeletePagesCommandInput), options), out => ({ removed: out.removed ?? [] }));
-  }
+async function listAll(ctx: Context, op: 'ListPages' | 'ListFiles', query: URLSearchParams): Promise<Reply> {
   const limit = Number.parseInt(query.get('limit') ?? '', 10);
   const want = Math.min(Math.max(Number.isNaN(limit) ? 100 : limit, 1), PAGE_MAX);
   const filter = inputOf(query, ['limit']);
   if (typeof filter.sort === 'string') filter.sort = filter.sort.replace('created_at', 'createdAt');
-  const pages: Record<string, unknown>[] = [];
+  const items = op === 'ListPages' ? 'pages' : 'files';
+  const rows: Record<string, unknown>[] = [];
   let nextToken: string | undefined;
   do {
-    const input = { ...filter, maxResults: want - pages.length, ...(nextToken === undefined ? {} : { nextToken }) } as Pagetray.ListPagesCommandInput;
+    const input = { ...filter, maxResults: want - rows.length, ...(nextToken === undefined ? {} : { nextToken }) };
     let token: string | undefined;
-    const r = await viaPagetray(ctx, (client, api, options) => client.send(new api.ListPagesCommand(input), options), (out) => {
-      token = out.nextToken;
-      return { pages: (out.pages ?? []).map(pageRecordOf) };
-    });
+    const r = await viaPagetray<Pagetray.ListPagesCommandOutput | Pagetray.ListFilesCommandOutput>(
+      ctx,
+      (client, api, options) => op === 'ListPages'
+        ? client.send(new api.ListPagesCommand(input as Pagetray.ListPagesCommandInput), options)
+        : client.send(new api.ListFilesCommand(input as Pagetray.ListFilesCommandInput), options),
+      (out) => {
+        token = out.nextToken;
+        return { [items]: ('pages' in out ? out.pages : out.files) ?? [] };
+      },
+    );
     if (r.code !== '200') return r;
-    pages.push(...(JSON.parse(r.body) as { pages: Record<string, unknown>[] }).pages);
+    rows.push(...((JSON.parse(r.body) as Record<string, object[]>)[items] ?? []).map(recordOf));
     nextToken = token;
-  } while (nextToken !== undefined && pages.length < want);
-  return { body: JSON.stringify({ pages }), code: '200' };
+  } while (nextToken !== undefined && rows.length < want);
+  return { body: JSON.stringify({ [items]: rows }), code: '200' };
 }
 
-/** 1 つの命令の中で、置き場の版を引いた答え（引くのは道ごとに 1 度だけ）。 */
-const storeVersions = new WeakMap<Context, Map<string, string>>();
+/**
+ * 置き場の API に頼む（ページと file を置く・探す・消す・返事の状態とレビューの印を書く）。今の道なら curl、設定の api.pagetray が next なら生成した client。
+ * 答えはどちらも今の道の形（記録は今の API の欄の名。誤りは今の Reply の形）。
+ */
+export async function pagesRequest(ctx: Context, request: PagesRequest): Promise<Reply> {
+  if (!nextApi(ctx, 'pagetray')) return curlOf(ctx, request);
+  const input = inputOf(request.query);
+  switch (request.op) {
+    case 'CreatePage': {
+      const { source } = request;
+      const body = 'file' in source ? readFileSync(source.file) : Buffer.from(source.text);
+      return viaPagetray(ctx, (client, api, options) => client.send(new api.CreatePageCommand({ ...input, body } as unknown as Pagetray.CreatePageCommandInput), options), recordOf);
+    }
+    case 'CreateFile': {
+      const body = readFileSync(request.file);
+      return viaPagetray(ctx, (client, api, options) => client.send(new api.CreateFileCommand({ ...input, contentType: request.contentType, body } as unknown as Pagetray.CreateFileCommandInput), options), recordOf);
+    }
+    case 'ListPages': case 'ListFiles': return listAll(ctx, request.op, request.query);
+    case 'DeletePages':
+      return viaPagetray(ctx, (client, api, options) => client.send(new api.DeletePagesCommand(input as unknown as Pagetray.DeletePagesCommandInput), options), out => ({ removed: out.removed ?? [] }));
+    case 'DeleteFiles':
+      return viaPagetray(ctx, (client, api, options) => client.send(new api.DeleteFilesCommand(input as unknown as Pagetray.DeleteFilesCommandInput), options), out => ({ removed: out.removed ?? [] }));
+    case 'SetReplyState':
+      return viaPagetray(ctx, (client, api, options) => client.send(new api.SetReplyStateCommand(input as unknown as Pagetray.SetReplyStateCommandInput), options), recordOf);
+    case 'AddReviewMarks': {
+      const { marks } = request;
+      return viaPagetray(ctx, (client, api, options) => client.send(new api.AddReviewMarksCommand({ ...input, ...marks } as unknown as Pagetray.AddReviewMarksCommandInput), options), recordOf);
+    }
+  }
+}
+
+/** 1 つの命令の中で、置き場の版を引いた答え（引くのは 1 度だけ）。 */
+const storeVersions = new WeakMap<Context, string>();
 
 /**
  * 置き場の版が since（`<major>.<minor>.<patch>`）以上か。yes・old（古い。版を答えない置き場も）・down（応えない）。
  * 版は数にして比べる（字で比べると 0.10.0 を 0.8.0 より前とみなす）。1 つの命令（Context）の中では、置き場に 1 度だけ聞く。
- * api が next なら、新しい API の /healthz（GetHealth）の version で見る（新しい API に /api/version は無い）。
- * どちらの道で聞くかは呼ぶ側が決める（返事とレビューの印は、次の PR まで今の道の current で聞く）。
+ * 設定の api.pagetray が next なら、新しい API の /healthz（GetHealth）の version で見る（新しい API に /api/version は無い）。
  */
-export async function storeAtLeast(ctx: Context, since: string, api: 'current' | 'next' = 'current'): Promise<'yes' | 'old' | 'down'> {
-  const known = storeVersions.get(ctx) ?? new Map<string, string>();
-  storeVersions.set(ctx, known);
-  let version = known.get(api);
-  if (version === undefined && api === 'next') {
+export async function storeAtLeast(ctx: Context, since: string): Promise<'yes' | 'old' | 'down'> {
+  let version = storeVersions.get(ctx);
+  if (version === undefined && nextApi(ctx, 'pagetray')) {
     const r = await viaPagetray(ctx, (client, pagetray, options) => client.send(new pagetray.GetHealthCommand({}), options), out => ({ version: out.version }));
     if (r.code !== '200') return 'down';
     const answered = (JSON.parse(r.body) as { version?: unknown }).version;
     version = typeof answered === 'string' ? answered : '';
-    known.set(api, version);
+    storeVersions.set(ctx, version);
   }
   if (version === undefined) {
     const r = await call(ctx, [`${pagesUrl(ctx.env)}/api/version`]);
@@ -214,7 +254,7 @@ export async function storeAtLeast(ctx: Context, since: string, api: 'current' |
     }
     catch { /* JSON でない答えは、版を答えない置き場 */ }
     version = typeof answered === 'string' ? answered : '';
-    known.set(api, version);
+    storeVersions.set(ctx, version);
   }
   return atLeast(version, since) ? 'yes' : 'old';
 }

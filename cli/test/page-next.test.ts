@@ -234,11 +234,12 @@ describe('roster page delete（ListPages と DeletePages）', () => {
     const s = setup((r) => {
       if (r.method === 'GET' && r.path === '/api/pages') return { status: 200, body: { pages: [page(s.project, 't-x7k2', 'plan', '1')] } };
       if (r.method === 'DELETE' && r.path === '/api/pages') return { status: 200, body: { removed: [`/${s.project}/t-x7k2/plan-1.html`] } };
+      if (r.method === 'GET' && r.path === '/api/files') return { status: 200, body: { files: [] } };
       return undefined;
     });
-    // file の一覧（findFiles）は、次の PR まで今の道（偽の置き場）で聞く。
+    // --key の時は、合う file も ListFiles で探す（無ければ消さない）。
     expect(await pageDelete(s.tpm, [], { key: 't-x7k2' })).toEqual(['消すページ（1 枚。戻せない）:', `${BASE}/${s.project}/t-x7k2/plan-1.html  plan の題`, '消すには、同じ命令に --yes を付けて打ってください']);
-    expect(s.seen.map(r => [r.method, r.query])).toEqual([['GET', { maxResults: '1000', project: s.project, key: 't-x7k2' }]]);
+    expect(s.seen.map(r => [r.method, r.path, r.query])).toEqual([['GET', '/api/pages', { maxResults: '1000', project: s.project, key: 't-x7k2' }], ['GET', '/api/files', { maxResults: '1000', project: s.project, key: 't-x7k2' }]]);
     s.seen.length = 0;
     expect(await pageDelete(s.tpm, [`${BASE}/${s.project}/t-x7k2/plan-1.html`], { yes: true })).toEqual(['消した: 1 枚（控えも消した）', `- ${BASE}/${s.project}/t-x7k2/plan-1.html`]);
     expect(s.seen.map(r => [r.method, r.query])).toEqual([['GET', { maxResults: '1000', project: s.project, key: 't-x7k2' }], ['DELETE', { project: s.project, key: 't-x7k2', kind: 'plan', n: '1' }]]);
