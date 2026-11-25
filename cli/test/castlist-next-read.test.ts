@@ -21,25 +21,59 @@ beforeAll(async () => {
 
 /** 担当のアクターの一覧の行（欄が揃った物）。 */
 const FULL = {
-  id: A1, name: 't-1-swe.1', kind: 'ai', issuer: 'tpm.x', sentAt: '2026-11-20T11:00:00Z', receivedAt: '2026-11-20T11:00:00.001Z', clockSkew: false,
-  labels: { 'tpm.key': 't-1' }, firstEnteredAt: '2026-11-20T11:00:00.001Z', lastExitedAt: '2026-11-20T11:30:00.000Z', lastExitType: 'exited',
-  present: false, inferred: false, model: 'claude-opus-5-5', effort: 'high', url: `/actors/${A1}`,
+  id: A1,
+  name: 't-1-swe.1',
+  kind: 'ai',
+  issuer: 'tpm.x',
+  sentAt: '2026-11-20T11:00:00Z',
+  receivedAt: '2026-11-20T11:00:00.001Z',
+  clockSkew: false,
+  labels: { 'tpm.key': 't-1' },
+  firstEnteredAt: '2026-11-20T11:00:00.001Z',
+  lastExitedAt: '2026-11-20T11:30:00.000Z',
+  lastExitType: 'exited',
+  present: false,
+  inferred: false,
+  model: 'claude-opus-5-5',
+  effort: 'high',
+  url: `/actors/${A1}`,
 };
 /** 人のアクターの一覧の行（無い値は欄ごと無い）。 */
 const BARE = { id: A2, name: 'pm.1', kind: 'human', issuer: 'tpm.x', sentAt: '2026-11-20T10:00:00Z', receivedAt: '2026-11-20T10:00:00.000Z', clockSkew: false, labels: {}, present: true, inferred: false, url: `/actors/${A2}` };
 /** BARE を今の道の形にした物。 */
 const BARE_NOW = {
-  id: A2, name: 'pm.1', kind: 'human', issuer: 'tpm.x', sent_at: '2026-11-20T10:00:00.000Z', received_at: '2026-11-20T10:00:00.000Z', clock_skew: false, labels: {},
-  first_entered_at: null, last_exited_at: null, last_exit_type: null, present: true, inferred: false, model: null, effort: null, url: `/actors/${A2}`,
+  id: A2,
+  name: 'pm.1',
+  kind: 'human',
+  issuer: 'tpm.x',
+  sent_at: '2026-11-20T10:00:00.000Z',
+  received_at: '2026-11-20T10:00:00.000Z',
+  clock_skew: false,
+  labels: {},
+  first_entered_at: null,
+  last_exited_at: null,
+  last_exit_type: null,
+  present: true,
+  inferred: false,
+  model: null,
+  effort: null,
+  url: `/actors/${A2}`,
 };
 const SETTING = { actorId: A1, model: 'claude-opus-5-5', effort: 'high', source: 'observed', sentAt: '2026-11-20T11:00:00Z', receivedAt: '2026-11-20T11:00:00.004Z', clockSkew: false };
 const EDGE = { id: 'l-1', type: 'launched', from: A2, to: A1, sentAt: '2026-11-20T11:00:00Z', receivedAt: '2026-11-20T11:00:00.002Z', clockSkew: false };
 const BINDING = { issuer: 'tpm.x', sentAt: '2026-11-20T11:00:00Z', receivedAt: '2026-11-20T11:00:00.001Z' };
 /** GetActor の答え。 */
 const ACTOR = {
-  ...FULL, bindings: [], currentBindings: [{ ...BINDING, type: 'claude.session', value: 's-1', isKey: true }, { ...BINDING, type: 'cmux.workspace.ref', value: 'workspace:3', isKey: false }],
-  events: [], settings: [SETTING], currentSettings: SETTING, linksIn: [EDGE], linksOut: [],
-  state: { presence: 'entered', present: true, inferred: false, enteredAt: '2026-11-20T11:00:00.001Z' }, asOf: AS_OF,
+  ...FULL,
+  bindings: [],
+  currentBindings: [{ ...BINDING, type: 'claude.session', value: 's-1', isKey: true }, { ...BINDING, type: 'cmux.workspace.ref', value: 'workspace:3', isKey: false }],
+  events: [],
+  settings: [SETTING],
+  currentSettings: SETTING,
+  linksIn: [EDGE],
+  linksOut: [],
+  state: { presence: 'entered', present: true, inferred: false, enteredAt: '2026-11-20T11:00:00.001Z' },
+  asOf: AS_OF,
 };
 
 /** 道ごとの、決まりの形の答え（試験が替えない時）。 */
@@ -77,24 +111,48 @@ async function thrown(run: () => Promise<unknown>): Promise<string> {
 }
 
 const profile = (id: string): string => `${url}/actors/${id}`;
-const FULL_LINE = ['t-1-swe.1', 'ai', '停止', '登場 2026-11-20T11:00:00.001Z', '退場 2026-11-20T11:30:00.000Z（exited）', 'claude-opus-5-5・high', 'tpm.key=t-1', profile(A1)].join('  ');
-const BARE_LINE = ['pm.1', 'human', '稼働中', '登場 -', '退場 -', '-・-', '-', profile(A2)].join('  ');
+const fullLine = (): string => ['t-1-swe.1', 'ai', '停止', '登場 2026-11-20T11:00:00.001Z', '退場 2026-11-20T11:30:00.000Z（exited）', 'claude-opus-5-5・high', 'tpm.key=t-1', profile(A1)].join('  ');
+const bareLine = (): string => ['pm.1', 'human', '稼働中', '登場 -', '退場 -', '-・-', '-', profile(A2)].join('  ');
 
 describe('roster castlist find（ListActors）', () => {
   test('旗を新しい引数の名に写す（時刻は UTC・--limit は maxResults・--after は nextToken）。表は今と同じ形で、続きは nextToken を --after に渡す 1 行', async () => {
     const { ctx, seen } = nextWorld();
     const out = await castlistFind(ctx, {
-      label: ['tpm.key:t-1', 'tpm.role:software-engineer'], binding: 'cmux.workspace.ref:workspace:3', at: '2026-11-20T20:30:00+09:00',
-      activeFrom: '2026-11-20T20:00:00+09:00', activeTo: '2026-11-20T12:00:00Z', active: 'false', model: 'claude-opus-5-5', effort: 'high',
-      launchedBy: A2, skewed: true, kind: 'ai', sort: 'exited', order: 'desc', limit: '2', after: 'tok-1',
+      label: ['tpm.key:t-1', 'tpm.role:software-engineer'],
+      binding: 'cmux.workspace.ref:workspace:3',
+      at: '2026-11-20T20:30:00+09:00',
+      activeFrom: '2026-11-20T20:00:00+09:00',
+      activeTo: '2026-11-20T12:00:00Z',
+      active: 'false',
+      model: 'claude-opus-5-5',
+      effort: 'high',
+      launchedBy: A2,
+      skewed: true,
+      kind: 'ai',
+      sort: 'exited',
+      order: 'desc',
+      limit: '2',
+      after: 'tok-1',
     });
     expect(seen.map(s => `${s.method} ${s.path}`)).toEqual(['GET /api/actors']);
     expect(seen[0]?.query).toEqual({
-      label: ['tpm.key:t-1', 'tpm.role:software-engineer'], binding: 'cmux.workspace.ref:workspace:3', at: '2026-11-20T11:30:00Z',
-      activeFrom: '2026-11-20T11:00:00Z', activeTo: '2026-11-20T12:00:00Z', active: 'false', model: 'claude-opus-5-5', effort: 'high',
-      launchedBy: A2, skewed: 'true', kind: 'ai', sort: 'exited', order: 'desc', maxResults: '2', nextToken: 'tok-1',
+      label: ['tpm.key:t-1', 'tpm.role:software-engineer'],
+      binding: 'cmux.workspace.ref:workspace:3',
+      at: '2026-11-20T11:30:00Z',
+      activeFrom: '2026-11-20T11:00:00Z',
+      activeTo: '2026-11-20T12:00:00Z',
+      active: 'false',
+      model: 'claude-opus-5-5',
+      effort: 'high',
+      launchedBy: A2,
+      skewed: 'true',
+      kind: 'ai',
+      sort: 'exited',
+      order: 'desc',
+      maxResults: '2',
+      nextToken: 'tok-1',
     });
-    expect(out).toEqual([`アクター 2（castlist の時刻 ${AS_OF}）`, FULL_LINE, BARE_LINE, '続きがある: --after tok-2 を足して打ち直す']);
+    expect(out).toEqual([`アクター 2（castlist の時刻 ${AS_OF}）`, fullLine(), bareLine(), '続きがある: --after tok-2 を足して打ち直す']);
   });
 
   test('--json は今の道の形（欄は snake_case・無い値は null・頁の印は next）', async () => {
@@ -232,10 +290,10 @@ describe('roster incident timeline のアクターの欄（seatActorsAt）', () 
 });
 
 describe('起きているか（GetHealth）と版', () => {
-  test('/healthz を 1 秒だけ待って聞き、時計の差は今と同じに見る', async () => {
+  test('/healthz を GetHealth で聞き、時計の差は今と同じに見る', async () => {
     const { ctx, seen } = nextWorld();
     expect(await requireUp(ctx, '何もしていません。')).toEqual([]);
-    expect(seen.map(s => [s.method, s.path, s.timeout])).toEqual([['GET', '/healthz', 1000]]);
+    expect(seen.map(s => [s.method, s.path])).toEqual([['GET', '/healthz']]);
     const skewed = nextWorld(s => s.path === '/healthz' ? { status: 200, body: { status: 'ok', version: '1.0.0-rc.1', now: '2026-11-20T12:00:05.000Z' } } : undefined);
     expect((await requireUp(skewed.ctx, '何もしていません。'))[0]).toMatch(/^castlist の時計と、roster を動かす機械の時計が 5 秒ずれています/);
   });

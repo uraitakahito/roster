@@ -12,6 +12,7 @@ import { basename } from 'node:path';
 import type * as Castlist from '../gen/castlist-client/dist-types/index.js';
 import { castlistApi, clientConfig, nextApi, withoutAwsMiddleware } from './clients.ts';
 import type { Context } from './context.ts';
+import { atLeast } from './commands/store.ts';
 import { ROLE_NAMES, type RoleName } from './protocol.ts';
 import { readRole } from './roster.ts';
 import { TpmError } from './skill-sets.ts';
@@ -22,6 +23,15 @@ import { envOf } from './env.ts';
  * castlist の release を出したら、ここと試験の版を上げる（決まりは docs の開発の「castlist を上げる時」と、castlist の docs の「release を出す」）。
  */
 export const CASTLIST_VERSION = 'v0.4.0';
+/**
+ * 設定の api.castlist が next の時に、castlist が止まっていれば Product Manager へ出す `container run` の image の版（新しい API の castlist。gen/gen.sh の DEFS の castlist の tag と揃える）。
+ * 切り替え（AI-36 の段 8）の後は、CASTLIST_VERSION を上げて、これを消す。
+ */
+export const CASTLIST_NEXT_VERSION = 'v1.0.0-rc.1';
+/** 新しい API を持つ castlist の版（/healthz の version がこれより前なら、api.castlist の next では送らない）。 */
+export const NEXT_API_SINCE = '1.0.0';
+/** 新しい API の castlist の volume（今の volume の castlist-data では起こさない。castlist の docs の release.html の「rc を動かす時と切り替え」）。 */
+const NEXT_VOLUME = 'castlist-data-v1';
 /** castlist の docs（動かし方）。 */
 export const CASTLIST_DOCS = 'https://uraitakahito.github.io/castlist/';
 
@@ -172,8 +182,11 @@ function replyOf(error: unknown): Reply {
 /** castlist に書く要求の周り（設定・状態の folder の issuer・時計・curl・生成した client）。 */
 export type Sender = Pick<Context, 'config' | 'state' | 'now' | 'exec' | 'clients'>;
 
-/** 生成した client で 1 つ送り、答えを今の形にする。本文は shape で今の道の本文に合わせ、text はその JSON。client は送り終えたら閉じる。 */
-async function viaNext<O extends { status: number | undefined, $metadata: { httpStatusCode?: number } }>(ctx: Sender, url: string, send: (client: Castlist.CastlistClient, api: typeof Castlist, options: { abortSignal: AbortSignal }) => Promise<O>, shape: (out: O) => unknown): Promise<Reply> {
+/**
+ * 生成した client で 1 つ送り、答えを今の形にする。本文は shape で今の道の本文に合わせ、text はその JSON。client は送り終えたら閉じる。
+ * code は、答えの status（書く物）か、HTTP の状態の数（読む物）。wait は送る 1 回の全部の上限の秒（今の curl の --max-time と同じ。/healthz は HEALTH_TIMEOUT）。
+ */
+export async function viaNext<O extends { $metadata: { httpStatusCode?: number } }>(ctx: Pick<Context, 'clients'>, url: string, send: (client: Castlist.CastlistClient, api: typeof Castlist, options: { abortSignal: AbortSignal }) => Promise<O>, shape: (out: O) => unknown, wait: string = REQUEST_TIMEOUT): Promise<Reply> {
   let client: Castlist.CastlistClient;
   try {
     client = ctx.clients.castlist(url);
@@ -184,9 +197,10 @@ async function viaNext<O extends { status: number | undefined, $metadata: { http
   }
   try {
     // 送る 1 回の全部（つなぐ・送る・答えの本文を読み終えるまで）に、今の curl の --max-time と同じ上限を付ける。
-    const out = await send(client, castlistApi(), { abortSignal: AbortSignal.timeout(Number(REQUEST_TIMEOUT) * 1000) });
+    const out = await send(client, castlistApi(), { abortSignal: AbortSignal.timeout(Number(wait) * 1000) });
     const body = shape(out);
-    return { kind: 'ok', code: out.status ?? out.$metadata.httpStatusCode ?? 200, body, text: JSON.stringify(body) };
+    const status = (out as { status?: unknown }).status;
+    return { kind: 'ok', code: typeof status === 'number' ? status : out.$metadata.httpStatusCode ?? 200, body, text: JSON.stringify(body) };
   }
   catch (e) {
     return replyOf(e);
@@ -268,8 +282,9 @@ const exists = (ctx: Pick<Context, 'exec'>, name: string): boolean => ctx.exec('
 /**
  * castlist が止まっている時に、Product Manager が自分の terminal で打つ 1 行（と、要れば添える行）。
  * 新しい名の container が在れば起こし直し、0.1.0 の名の container だけが在ればその名で起こし直して名を替える docs を添え、どちらも無ければ作って起こす。
+ * 作って起こす時、設定の api.castlist が next なら、新しい API の版の image を新しい volume で起こし、今の volume の記録を先に移す docs を添える。
  */
-export function pmStartLines(ctx: Pick<Context, 'exec'>, url: string): string[] {
+export function pmStartLines(ctx: Pick<Context, 'exec' | 'config'>, url: string): string[] {
   if (exists(ctx, CASTLIST_CONTAINER)) return [`container start ${CASTLIST_CONTAINER}`];
   if (exists(ctx, LEGACY_CONTAINER)) {
     return [
@@ -277,11 +292,16 @@ export function pmStartLines(ctx: Pick<Context, 'exec'>, url: string): string[] 
       `（前の名 ${LEGACY_CONTAINER} で動いています。次に版を上げる時に、名を ${CASTLIST_CONTAINER} にして起こし直します: ${CASTLIST_DOCS}run.html の「版を上げる」）`,
     ];
   }
-  return [`container run -d --name ${CASTLIST_CONTAINER} -p 127.0.0.1:${portOf(url)}:8080 -v castlist-data:/data -m 200M -c 1 ghcr.io/uraitakahito/castlist:${CASTLIST_VERSION}`];
+  const run = (volume: string, version: string): string => `container run -d --name ${CASTLIST_CONTAINER} -p 127.0.0.1:${portOf(url)}:8080 -v ${volume}:/data -m 200M -c 1 ghcr.io/uraitakahito/castlist:${version}`;
+  if (!nextApi(ctx, 'castlist')) return [run('castlist-data', CASTLIST_VERSION)];
+  return [
+    run(NEXT_VOLUME, CASTLIST_NEXT_VERSION),
+    `（新しい API の castlist は、新しい volume（${NEXT_VOLUME}）で起こす。今の volume（castlist-data）の記録は、先に移す: ${CASTLIST_DOCS}release.html の「rc を動かす時と切り替え」）`,
+  ];
 }
 
 /** castlist が止まっている時の文。done はしなかった事、after は 1 行の後に続ける行。打つ 1 行は、それだけで 1 行に置く。 */
-export function downMessage(ctx: Pick<Context, 'exec'>, url: string, done: string, after: string[] = []): string {
+export function downMessage(ctx: Pick<Context, 'exec' | 'config'>, url: string, done: string, after: string[] = []): string {
   return [
     `castlist（${url}）が応えません。${done}castlist を起こすのは Product Manager です。Product Manager が自分の terminal で次の 1 行を打ちます（docs: ${CASTLIST_DOCS}）:`,
     ...pmStartLines(ctx, url),
@@ -295,13 +315,23 @@ export const busyMessage = (url: string, done: string): string => `castlist（${
 /**
  * 起こす前（roster start・roster assign・roster audit start・roster hello）に、castlist が起きているかを /healthz で見る。設定が無ければ何もしない。
  * 止まっていれば、done（しなかった事）と Product Manager が打つ 1 行を添えて止める。起きていれば、時計の差が 2 秒を超える時だけ 1 行を返す（止めない）。
+ * 設定の api.castlist が next なら GetHealth（同じ /healthz。待つのも同じ 1 秒）で聞き、答えの version が新しい API を持たない版（NEXT_API_SINCE より前）なら止める
+ * （今の版の castlist に新しい API の道で書くと、どれも断られるため。今の API には版を聞く道が無いので、/healthz の version で見る）。
  */
-export async function requireUp(ctx: Pick<Context, 'env' | 'config' | 'exec' | 'now'>, done: string, after: string[] = []): Promise<string[]> {
+export async function requireUp(ctx: Pick<Context, 'env' | 'config' | 'exec' | 'now' | 'clients'>, done: string, after: string[] = []): Promise<string[]> {
   const url = castlistUrl(ctx);
   if (url === undefined) return [];
-  const r = await request(ctx, url, 'GET', '/healthz', undefined, HEALTH_TIMEOUT);
+  const next = nextApi(ctx, 'castlist');
+  const r = next
+    ? await viaNext(ctx, url, (client, api, options) => client.send(new api.GetHealthCommand({}), options), out => ({ status: out.status, version: out.version, now: out.now?.toISOString() }), HEALTH_TIMEOUT)
+    : await request(ctx, url, 'GET', '/healthz', undefined, HEALTH_TIMEOUT);
   if (r.kind === 'busy') throw new TpmError(busyMessage(url, done));
   if (r.kind !== 'ok') throw new TpmError(downMessage(ctx, url, done, after));
+  const answered = (r.body as { version?: unknown } | undefined)?.version;
+  const version = typeof answered === 'string' ? answered : '';
+  if (next && !atLeast(version, NEXT_API_SINCE)) {
+    throw new TpmError(`castlist（${url}）の版は ${version || 'わからない'} で、新しい API（${NEXT_API_SINCE} から）を持ちません。${done}設定の api.castlist を外すか、castlist を新しい版に替えてください（Product Manager に伝える）`);
+  }
   const now = (r.body as { now?: unknown } | undefined)?.now;
   if (typeof now !== 'string' || Number.isNaN(Date.parse(now))) return [];
   const at = Date.parse(now);

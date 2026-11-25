@@ -1,9 +1,11 @@
 // roster castlist find・show・lineage・events・settings: castlist の監査の検索（castlist の docs/src/api.md の「監査の検索」）を読むだけの命令。
 // 送るのは GET だけで、castlist にも状態の folder にも書かない（Auditor の席から打つ物）。旗は castlist の引数の名にそのまま写し、値は確かめない（断るのは castlist）。
-// 答えは 1 件 1 行の字にし、アクターにはプロフィールの画面の URL（<castlist>/actors/<id>）を添える。--json は castlist の答えの字をそのまま出す。
+// 設定の api.castlist が next なら、castlist-query.ts が新しい API の操作と引数に直して聞き（断る値は、そこで今と同じ訳で断る）、答えを今の道の形に直す。
+// 答えは 1 件 1 行の字にし、アクターにはプロフィールの画面の URL（<castlist>/actors/<id>）を添える。--json は castlist の答えの字をそのまま出す（next では、今の道の形に直した物）。
 // castlist が断った（400・404）ら訳をそのまま、止まっていれば「castlist に聞けない」の 1 行で止まる。
 // castlist には名で引く道が無いので、名（t-23zs-swe.1 など）は、この project の roster が登録して控えた物（状態の folder の sessions/）から id にする。
-import { castlistUrl, request } from '../castlist.ts';
+import { castlistUrl } from '../castlist.ts';
+import { query, type Params, type Query } from '../castlist-query.ts';
 import type { Context } from '../context.ts';
 import { TpmError } from '../skill-sets.ts';
 import type { SessionRecord } from './castlist.ts';
@@ -120,9 +122,6 @@ interface ActorDetail {
   state: { presence: string | null, present: boolean, entered_at: string | null, exited_at: string | null }
 }
 
-/** 引数（名と値。同じ名を何度でも並べてよい。値が undefined の物は送らない）。 */
-type Params = [string, string | undefined][];
-
 /** 聞いた答え。failed の reason は、そのまま出す 1 行（castlist の訳か「castlist に聞けない」）。 */
 export type Answer<T> = { kind: 'ok', body: T, text: string } | { kind: 'failed', reason: string, down: boolean };
 
@@ -133,10 +132,9 @@ function requireUrl(ctx: Context): string {
   return url;
 }
 
-/** castlist に GET で聞く。 */
-async function ask<T>(ctx: Pick<Context, 'exec'>, url: string, path: string, params: Params = []): Promise<Answer<T>> {
-  const query = new URLSearchParams(params.filter((p): p is [string, string] => p[1] !== undefined)).toString();
-  const r = await request(ctx, url, 'GET', query === '' ? path : `${path}?${query}`);
+/** castlist に聞く（読む操作 1 つ）。 */
+async function ask<T>(ctx: Context, url: string, q: Query): Promise<Answer<T>> {
+  const r = await query(ctx, url, q);
   if (r.kind === 'ok') return { kind: 'ok', body: r.body as T, text: r.text };
   if (r.kind === 'down') return { kind: 'failed', reason: `castlist に聞けない（${url} が応えない）`, down: true };
   if (r.kind === 'busy') return { kind: 'failed', reason: `castlist に聞けない（${url} が混んでいる。503）。少し待ってから打ち直す`, down: true };
@@ -188,7 +186,7 @@ const settingLine = (url: string, s: SettingRow): string => [s.received_at, s.ac
 /** `roster castlist find`: アクターを探す（GET /v1/actors）。 */
 export async function castlistFind(ctx: Context, options: FindOptions): Promise<string[]> {
   const url = requireUrl(ctx);
-  const { body, text } = must(await ask<{ as_of: string, actors: ActorItem[], next: unknown }>(ctx, url, '/v1/actors', [
+  const { body, text } = must(await ask<{ as_of: string, actors: ActorItem[], next: unknown }>(ctx, url, { op: 'ListActors', params: [
     ...many('label', options.label),
     ['binding', options.binding],
     ['at', options.at],
@@ -204,7 +202,7 @@ export async function castlistFind(ctx: Context, options: FindOptions): Promise<
     ['order', options.order],
     ['limit', options.limit],
     ['after', options.after],
-  ]));
+  ] }));
   if (options.json === true) return [text];
   return [head('アクター', body.actors.length, body.as_of), ...body.actors.map(a => actorLine(url, a)), ...more(body.next)];
 }
@@ -213,14 +211,13 @@ export async function castlistFind(ctx: Context, options: FindOptions): Promise<
 export async function castlistShow(ctx: Context, target: string, options: JsonOption): Promise<string[]> {
   const url = requireUrl(ctx);
   const id = actorId(ctx, target);
-  const path = `/v1/actors/${encodeURIComponent(id)}`;
-  const answer = await ask<ActorDetail>(ctx, url, path);
+  const answer = await ask<ActorDetail>(ctx, url, { op: 'GetActor', id });
   if (answer.kind === 'failed' && !answer.down) {
     throw new TpmError(`${answer.reason}（${target}）。名で引けるのは、この project の roster が登録して控えたアクター（状態の folder の sessions/）だけ（castlist には名で引く道が無い）。id は roster castlist find で探す`);
   }
   const { body: a, text } = must(answer);
   if (options.json === true) return [text];
-  const { body: lineage } = must(await ask<{ nodes: ActorItem[], edges: Edge[] }>(ctx, url, `${path}/lineage`));
+  const { body: lineage } = must(await ask<{ nodes: ActorItem[], edges: Edge[] }>(ctx, url, { op: 'GetLineage', id }));
   const names = new Map(lineage.nodes.map(n => [n.id, n.name]));
   const s = a.state;
   const now = s.present
@@ -243,11 +240,11 @@ export async function castlistShow(ctx: Context, target: string, options: JsonOp
 export async function castlistLineage(ctx: Context, target: string, options: LineageOptions): Promise<string[]> {
   const url = requireUrl(ctx);
   const id = actorId(ctx, target);
-  const { body, text } = must(await ask<{ as_of: string, nodes: ActorItem[], edges: Edge[] }>(ctx, url, `/v1/actors/${encodeURIComponent(id)}/lineage`, [
+  const { body, text } = must(await ask<{ as_of: string, nodes: ActorItem[], edges: Edge[] }>(ctx, url, { op: 'GetLineage', id, params: [
     ['direction', options.direction],
     ['depth', options.depth],
     ['type', options.type],
-  ]));
+  ] }));
   if (options.json === true) return [text];
   const names = new Map(body.nodes.map(n => [n.id, n.name]));
   return [
@@ -262,7 +259,7 @@ export async function castlistLineage(ctx: Context, target: string, options: Lin
 /** `roster castlist events`: 出来事を、アクターをまたいで（GET /v1/events）。 */
 export async function castlistEvents(ctx: Context, options: EventsOptions): Promise<string[]> {
   const url = requireUrl(ctx);
-  const { body, text } = must(await ask<{ as_of: string, events: EventRow[], next: unknown }>(ctx, url, '/v1/events', [
+  const { body, text } = must(await ask<{ as_of: string, events: EventRow[], next: unknown }>(ctx, url, { op: 'ListEvents', params: [
     ...many('type', options.type),
     ['actor', options.actor === undefined ? undefined : actorId(ctx, options.actor)],
     ['from', options.from],
@@ -272,7 +269,7 @@ export async function castlistEvents(ctx: Context, options: EventsOptions): Prom
     ['skewed', flag(options.skewed)],
     ['limit', options.limit],
     ['after', options.after],
-  ]));
+  ] }));
   if (options.json === true) return [text];
   return [
     head('出来事', body.events.length, body.as_of),
@@ -301,12 +298,12 @@ export async function castlistSettings(ctx: Context, options: SettingsOptions): 
   ];
   if (options.actor !== undefined) {
     const id = actorId(ctx, options.actor);
-    const { body, text } = must(await ask<{ as_of: string, setting?: SettingRow | null, settings?: SettingRow[] }>(ctx, url, `/v1/actors/${encodeURIComponent(id)}/settings`, params));
+    const { body, text } = must(await ask<{ as_of: string, setting?: SettingRow | null, settings?: SettingRow[] }>(ctx, url, { op: 'ListActorSettings', id, params }));
     if (options.json === true) return [text];
     if (body.settings !== undefined) return [head('model と effort の行', body.settings.length, body.as_of), ...body.settings.map(s => settingLine(url, s))];
     return body.setting === null || body.setting === undefined ? [`その時（${options.at ?? ''}）の model と effort は、まだ無い（castlist の時刻 ${body.as_of}）`] : [settingLine(url, body.setting)];
   }
-  const { body, text } = must(await ask<{ as_of: string, settings: SettingRow[], next: unknown }>(ctx, url, '/v1/settings', params));
+  const { body, text } = must(await ask<{ as_of: string, settings: SettingRow[], next: unknown }>(ctx, url, { op: 'ListSettings', params }));
   if (options.json === true) return [text];
   return [head('model と effort の行', body.settings.length, body.as_of), ...body.settings.map(s => settingLine(url, s)), ...more(body.next)];
 }
@@ -316,10 +313,10 @@ export async function castlistSettings(ctx: Context, options: SettingsOptions): 
  * この project のラベル（tpm.project と、tpm.key か tpm.role=tpm）で、居た間がその時刻に掛かる者を聞く。
  */
 export async function seatActorsAt(ctx: Context, url: string, seat: string, at: string): Promise<Answer<{ actors: ActorItem[] }>> {
-  return await ask(ctx, url, '/v1/actors', [
+  return await ask(ctx, url, { op: 'ListActors', params: [
     ['label', `tpm.project:${ctx.project}`],
     ['label', seat === 'tpm' ? 'tpm.role:tpm' : `tpm.key:${seat}`],
     ['active_from', at],
     ['active_to', at],
-  ]);
+  ] });
 }

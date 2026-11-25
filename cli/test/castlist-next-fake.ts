@@ -3,14 +3,13 @@
 import { Readable } from 'node:stream';
 import type { HttpRequest } from '@smithy/types';
 
-/** 受けた要求 1 件。query は引数の名 → 値（重ねた物は配列）。timeout は send に渡された requestTimeout。 */
+/** 受けた要求 1 件。query は引数の名 → 値（重ねた物は配列）。 */
 export interface NextSeen {
   method: string
   path: string
   query: Record<string, string | string[] | null>
   headers: Record<string, string>
   body: Record<string, unknown> | undefined
-  timeout: number | undefined
 }
 
 /** 偽の handler の答え。type があれば restJson1 の誤り（body は message の字）。throws は、つながらない時のように handler が投げる。 */
@@ -24,7 +23,7 @@ export function nextHandler(answer: (seen: NextSeen) => NextAnswer | undefined) 
     updateHttpClientConfig: () => undefined,
     httpHandlerConfigs: () => ({}),
     destroy: () => undefined,
-    handle: (request: HttpRequest, options?: { requestTimeout?: number }) => {
+    handle: (request: HttpRequest) => {
       const raw: unknown = request.body;
       const text = typeof raw === 'string' ? raw : raw instanceof Uint8Array ? Buffer.from(raw).toString() : undefined;
       const one: NextSeen = {
@@ -33,7 +32,6 @@ export function nextHandler(answer: (seen: NextSeen) => NextAnswer | undefined) 
         query: { ...request.query },
         headers: { ...request.headers },
         body: text === undefined || text === '' ? undefined : JSON.parse(text) as Record<string, unknown>,
-        timeout: options?.requestTimeout,
       };
       seen.push(one);
       const got = answer(one) ?? { status: 404, type: 'UnknownOperationException', body: '知らない道' };

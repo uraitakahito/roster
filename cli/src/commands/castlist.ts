@@ -7,7 +7,8 @@
 // 落ちて終わりを送れなかった session は、hello・roles・assign が cmux の居場所の一覧と突き合わせ、推しの幕引き（detail.inferred）を送る（sweep）。
 import { createHash } from 'node:crypto';
 import type { Context } from '../context.ts';
-import { busyMessage, castlistUrl, downMessage, issuerOf, missingCastlistWarning, modelOf, putRecord, registerActor, request, requireUp, seatOf, sessionRef, type RecordInput, type Reply } from '../castlist.ts';
+import { busyMessage, castlistUrl, downMessage, issuerOf, missingCastlistWarning, modelOf, putRecord, registerActor, requireUp, seatOf, sessionRef, type RecordInput, type Reply } from '../castlist.ts';
+import { query } from '../castlist-query.ts';
 import type { Verdict } from '../guard.ts';
 import type { RoleRecord } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
@@ -336,7 +337,7 @@ const isPlace = (w: SessionRecord['workspace']): w is Place => w?.ref !== undefi
  */
 async function placeOf(ctx: Context, url: string, record: SessionRecord): Promise<Place | undefined | Exclude<Sent, 'ok'>> {
   if (isPlace(record.workspace)) return record.workspace;
-  const reply = await request(ctx, url, 'GET', `/v1/actors/${encodeURIComponent(record.id)}`);
+  const reply = await query(ctx, url, { op: 'GetActor', id: record.id });
   if (reply.kind === 'down' || reply.kind === 'busy') return reply.kind;
   if (reply.kind !== 'ok') return undefined;
   const bindings = (reply.body as { current_bindings?: { type?: unknown, value?: unknown }[] }).current_bindings ?? [];
