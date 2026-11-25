@@ -94,6 +94,15 @@ export function pagetrayClient(url: string, requestHandler?: HttpHandler): Paget
   return withoutAwsMiddleware(new PagetrayClient(clientConfig(url, Number(TIMEOUT) * 1000, requestHandler)));
 }
 
+/** 新しい置き場が、castlist に登録の無い送り手を断る訳の頭（pagetray の docs/src/next.md の「送り手」）。 */
+const UNREGISTERED = 'castlist に登録の無い送り手';
+
+/**
+ * 送り手を castlist に登録の無い物として断った答えか（今の API の 422 と同じ訳にする物）。fieldList に /actorRef があり、訳が UNREGISTERED で始まる時だけ。
+ * actorRef の形の誤りも /actorRef の 400 だが、打ち直しても通らないので、「登録されてから打ち直す」の訳にしない。
+ */
+const unknownSender = (sent: { message: string, fields: string[] }): boolean => sent.fields.includes('/actorRef') && sent.message.startsWith(UNREGISTERED);
+
 /** 誤りの型の無い 404 の訳: 新しい API の道を持たない置き場（今の 0.x の版）が答えた物。 */
 const OUTDATED = '置き場が新しい API を持たない（設定の api.pagetray は next だが、置き場（pagetray）の版が 1.0.0 より前に見える。置き場の版か、設定の api を見る）';
 
@@ -105,7 +114,7 @@ const OUTDATED = '置き場が新しい API を持たない（設定の api.page
 async function viaPagetray<O extends { $metadata: { httpStatusCode?: number } }>(ctx: Context, send: (client: Pagetray.PagetrayClient, api: typeof Pagetray, options: { abortSignal: AbortSignal }) => Promise<O>, shape: (out: O) => unknown): Promise<Reply> {
   const sent = await sendOnce(() => ctx.clients.pagetray(pagesUrl(ctx.env)), (client, options) => send(client, pagetrayApi(), options), { server: 'pagetray', wait: Number(TIMEOUT) * 1000, outdated: OUTDATED });
   if (sent.kind === 'down') return { body: '', code: '000' };
-  if (sent.kind === 'failed') return { body: JSON.stringify({ error: sent.message }), code: String(sent.code), ...(sent.fields.includes('/actorRef') ? { unknownSender: true } : {}) };
+  if (sent.kind === 'failed') return { body: JSON.stringify({ error: sent.message }), code: String(sent.code), ...(unknownSender(sent) ? { unknownSender: true } : {}) };
   return { body: JSON.stringify(shape(sent.out)), code: String(sent.out.$metadata.httpStatusCode ?? 200) };
 }
 
@@ -202,6 +211,7 @@ async function listAll(ctx: Context, op: 'ListPages' | 'ListFiles', query: URLSe
  */
 export async function pagesRequest(ctx: Context, request: PagesRequest): Promise<Reply> {
   if (!nextApi(ctx, 'pagetray')) return curlOf(ctx, request);
+  await requireNextStore(ctx);
   const input = inputOf(request.query);
   switch (request.op) {
     case 'CreatePage': {
@@ -227,36 +237,60 @@ export async function pagesRequest(ctx: Context, request: PagesRequest): Promise
   }
 }
 
+/** 新しい API を持つ置き場の版（設定の api.pagetray が next なのに、これより前の版なら送らない）。 */
+export const PAGES_NEXT_SINCE = '1.0.0';
+
 /** 1 つの命令の中で、置き場の版を引いた答え（引くのは 1 度だけ）。 */
 const storeVersions = new WeakMap<Context, string>();
 
 /**
- * 置き場の版が since（`<major>.<minor>.<patch>`）以上か。yes・old（古い。版を答えない置き場も）・down（応えない）。
- * 版は数にして比べる（字で比べると 0.10.0 を 0.8.0 より前とみなす）。1 つの命令（Context）の中では、置き場に 1 度だけ聞く。
+ * 置き場の版の字。版を答えない置き場は ''。応えなければ undefined（覚えない。次にまた聞く）。1 つの命令（Context）の中では、置き場に 1 度だけ聞く。
  * 設定の api.pagetray が next なら、新しい API の /healthz（GetHealth）の version で見る（新しい API に /api/version は無い）。
+ * 2xx で読めない答え（今の版の置き場の /healthz は字の ok）・version の無い答え・型の無い 404 は、新しい API を持たない置き場として ''。
  */
-export async function storeAtLeast(ctx: Context, since: string): Promise<'yes' | 'old' | 'down'> {
-  let version = storeVersions.get(ctx);
-  if (version === undefined && nextApi(ctx, 'pagetray')) {
-    const r = await viaPagetray(ctx, (client, pagetray, options) => client.send(new pagetray.GetHealthCommand({}), options), out => ({ version: out.version }));
-    if (r.code !== '200') return 'down';
-    const answered = (JSON.parse(r.body) as { version?: unknown }).version;
-    version = typeof answered === 'string' ? answered : '';
-    storeVersions.set(ctx, version);
+async function storeVersion(ctx: Context): Promise<string | undefined> {
+  const known = storeVersions.get(ctx);
+  if (known !== undefined) return known;
+  let version: string | undefined;
+  if (nextApi(ctx, 'pagetray')) {
+    const sent = await sendOnce(() => ctx.clients.pagetray(pagesUrl(ctx.env)), (client, options) => client.send(new (pagetrayApi().GetHealthCommand)({}), options), { server: 'pagetray', wait: Number(TIMEOUT) * 1000, outdated: OUTDATED });
+    if (sent.kind === 'ok') version = sent.out.version ?? '';
+    else if ((sent.kind === 'down' && sent.status !== undefined) || (sent.kind === 'failed' && sent.message === OUTDATED)) version = '';
   }
-  if (version === undefined) {
+  else {
     const r = await call(ctx, [`${pagesUrl(ctx.env)}/api/version`]);
     // 覚えるのは、版を答えた（200）か、版を答えない古い置き場（404）の時だけ。起き直す間の 502・503 などは、応えないとみなす。
-    if (r.code !== '200' && r.code !== '404') return 'down';
-    let answered: unknown;
-    try {
-      answered = r.code === '200' ? (JSON.parse(r.body) as { version?: unknown }).version : undefined;
+    if (r.code === '200' || r.code === '404') {
+      let answered: unknown;
+      try {
+        answered = r.code === '200' ? (JSON.parse(r.body) as { version?: unknown }).version : undefined;
+      }
+      catch { /* JSON でない答えは、版を答えない置き場 */ }
+      version = typeof answered === 'string' ? answered : '';
     }
-    catch { /* JSON でない答えは、版を答えない置き場 */ }
-    version = typeof answered === 'string' ? answered : '';
-    storeVersions.set(ctx, version);
   }
+  if (version !== undefined) storeVersions.set(ctx, version);
+  return version;
+}
+
+/**
+ * 置き場の版が since（`<major>.<minor>.<patch>`）以上か。yes・old（古い。版を答えない置き場も）・down（応えない）。
+ * 版は数にして比べる（字で比べると 0.10.0 を 0.8.0 より前とみなす）。道は設定の api.pagetray で決まる（storeVersion）。
+ */
+export async function storeAtLeast(ctx: Context, since: string): Promise<'yes' | 'old' | 'down'> {
+  const version = await storeVersion(ctx);
+  if (version === undefined) return 'down';
   return atLeast(version, since) ? 'yes' : 'old';
+}
+
+/**
+ * 設定の api.pagetray が next の時に、置き場が新しい API を持つかを見る（1 つの命令で 1 度だけ。castlist の requireUp の版の見方と同じ）。
+ * 1.0.0 より前の版なら、送らずに止める（今の版の置き場に新しい API の道で頼むと、どれも断られるため）。応えなければ止めない（頼む物の答えで、応えないと出る）。
+ */
+async function requireNextStore(ctx: Context): Promise<void> {
+  const version = await storeVersion(ctx);
+  if (version === undefined || atLeast(version, PAGES_NEXT_SINCE)) return;
+  throw new TpmError(`置き場（${pagesUrl(ctx.env)}）の版は ${version || 'わからない'} で、新しい API（${PAGES_NEXT_SINCE} から）を持ちません。設定の api.pagetray を外すか、置き場を新しい版に替えてください（置き場を替えるのは、roster ask devops で頼む）`);
 }
 
 /** 版の字（`0.10.1`。後ろの `-dev` などは読まない）が since 以上か。頭が `<数>.<数>.<数>` でなければ false。 */
