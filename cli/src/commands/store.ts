@@ -240,8 +240,7 @@ export async function pagesRequest(ctx: Context, request: PagesRequest): Promise
 /** 新しい API を持つ置き場の版（設定の api.pagetray が next なのに、これより前の版なら送らない）。 */
 export const PAGES_NEXT_SINCE = '1.0.0';
 
-/** 1 つの命令の中で、置き場の版を引いた答え（引くのは 1 度だけ）。 */
-/** 1 つの命令の中で、置き場の版を引いた答え（引くのは 1 度だけ）。null は応えなかった（覚えて、頼むたびに待ち直さない）。 */
+/** 1 つの命令の中で、置き場の版を引いた答え（引くのは 1 度だけ）。null は応えなかった（覚えて、頼むたびに待ち直さない。今の道も同じ）。 */
 const storeVersions = new WeakMap<Context, string | null>();
 
 /**
