@@ -1,6 +1,6 @@
 ---
 title: 設定
-description: 使う側の project に置く .claude/roles/config.jsonc（課題管理・連携・インフラの環境・担当の既定・アクターの台帳。直下の folder の設定も合わせる）、model などの既定を人ごとに決める環境変数、ページの置き場の環境変数、Dependabot の skill の設定
+description: 使う側の project に置く .claude/roles/config.jsonc（課題管理・連携・インフラの環境・担当の既定・アクターの台帳・生成した client への切り替え。直下の folder の設定も合わせる）、model などの既定を人ごとに決める環境変数、ページの置き場の環境変数、Dependabot の skill の設定
 ---
 
 ## `.claude/roles/config.jsonc`（任意）
@@ -17,6 +17,7 @@ TPM 担当を起こした folder（project）に置くと、道具の選び方�
 | `skill-sets` | core のほかに加える、追加の skill セットの名前の配列 | core だけ |
 | `folders` | 設定を集める folder（project の folder からの path）の配列。書くと、直下を探さずに書いた folder だけを集める。`[]` なら集めない | 直下の folder のうち、設定がある物を全部集める |
 | `castlist` | アクターの台帳（castlist）の URL（`http://127.0.0.1:<port>` か `http://localhost:<port>`）。project の folder の設定だけが効く（下の「[アクターの台帳（castlist）](#アクターの台帳castlist任意)」） | castlist に何も送らない |
+| `api` | server ごとに、生成した client（新しい API）で送るか。`{ "castlist": "next", "pagetray": "next" }` の形で、書いた server だけを替える。project の folder の設定だけが効く（下の「[生成した client への切り替え](#生成した-client-への切り替え任意)」） | どの server も今の client（curl） |
 | `software-engineer`・`devops-engineer`・`staff-engineer`・`auditor` | 起こす担当の `model`・`effort`・`permissionMode` | [環境変数](#model-などの既定の環境変数任意)、それも無ければ既定（Software Engineer 担当は Opus 5.5・medium、DevOps Engineer 担当は Opus 5.5・low、Staff Engineer 担当は Opus 5.5・high、Auditor は Fable 5.2・high、どれも `bypassPermissions`） |
 
 ```jsonc
@@ -181,6 +182,23 @@ export ROSTER_EFFORT=medium
 | 環境変数 | 決める物 | 無いとき |
 |---|---|---|
 | `ROSTER_CASTLIST_URL` | castlist の URL（`http://127.0.0.1:<port>` か `http://localhost:<port>`） | 設定の `castlist`。それも無ければ、castlist に何も送らない |
+
+## 生成した client への切り替え（任意）
+
+castlist と pagetray の作り直し（AI-36）の間だけの欄。`api` に server の名と `next` を書くと、`roster` はその server に、定義から生成した client（[開発](/development/#生成した-clientcastlistpagetray-の定義から)）で新しい API（`/api/…`）に送る。書かない server は今の client（curl で今の API）のまま。新しい server に替えた時に書き、切り替えが済んだら、今の client と共にこの欄を消す。
+
+```jsonc
+{
+  "castlist": "http://127.0.0.1:8802",
+  // castlist に書く物を、新しい API で送る
+  "api": { "castlist": "next" },
+}
+```
+
+- `castlist`: 書く物（session の登録・出来事・線・model と effort・Product Manager の登録）を、新しい API で送る。読む物（起きているかの `/healthz`・監査の検索）は、まだ今の client で送る。答えの見方（止まっている・混んでいる・断られた）は今の client と同じ。
+- `pagetray`: 書けるが、まだ何も替えない（置き場の client を替えるのは、この後の PR）。
+- 生成した client も、今の curl と同じに 1 度だけ送り（送り直さない）、castlist に書く要求は 6 秒まで待つ。`AWS_MAX_ATTEMPTS` などの `AWS_*` の環境変数と `~/.aws/config` は読まない。
+- 値は `next` だけ。今の client にするなら、その server の欄を書かない。知らない server の名と `next` でない値は、設定の誤りで止まる。直下の folder の設定に書いた値は読まない（`castlist` と同じ）。
 
 ## 通知のバナー（任意）
 
