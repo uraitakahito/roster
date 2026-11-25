@@ -48,13 +48,24 @@ jobs:
           path: ~/.cache/roster-smithy
           key: smithy-cli-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('cli/gen/gen.sh') }}
       - run: gen/gen.sh --check
-      # 見張りが本当に落とすか: 入れた物（build した JS と、取った定義）を 1 byte 替えると、--check が落ちる。
+      # 見張りが本当に落とすか: 入れた物（生成した TS・build した JS・取った定義）を 1 byte 替えると、--check が、期待した NG の字で落ちる
+      # （ほかの訳で落ちた回を「効いた」と数えない）。
       - name: 入れた物を 1 byte 替えると --check が落ちる
         run: |
-          for f in gen/castlist-client/dist-cjs/index.js gen/model/castlist/castlist.smithy gen/pagetray-client/dist-cjs/index.js gen/model/pagetray/pagetray.smithy; do
+          for f in gen/castlist-client/dist-cjs/index.js gen/castlist-client/src/index.ts gen/model/castlist/castlist.smithy \
+                   gen/pagetray-client/dist-cjs/index.js gen/pagetray-client/src/index.ts gen/model/pagetray/pagetray.smithy; do
+            case "$f" in
+              *.smithy) want="の物と違う" ;;
+              *) want="が定義と合わない" ;;
+            esac
             printf ' ' >>"$f"
-            if gen/gen.sh --check; then
+            if gen/gen.sh --check 2>"$RUNNER_TEMP/check.err"; then
               echo "::error::$f を替えても gen/gen.sh --check が通った"
+              exit 1
+            fi
+            if ! grep -q "^NG: .*$want" "$RUNNER_TEMP/check.err"; then
+              echo "::error::$f を替えた時、gen/gen.sh --check は期待した訳（$want）でなく、ほかの訳で落ちた"
+              cat "$RUNNER_TEMP/check.err"
               exit 1
             fi
             git checkout -- "$f"
