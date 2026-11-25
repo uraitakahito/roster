@@ -14,6 +14,7 @@ import type { HttpRequest } from '@smithy/types';
 import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 import type * as Castlist from '../gen/castlist-client/dist-types/index.js';
 import { castlistClient, castlistIssuer, projectPrefix, registerPm } from '../src/castlist.ts';
+import { withoutAwsMiddleware } from '../src/clients.ts';
 import { castlistGuard, readSession, sessionStart } from '../src/commands/castlist.ts';
 import type { Context } from '../src/context.ts';
 import { withoutRosterEnv } from '../src/env.ts';
@@ -168,6 +169,58 @@ describe('castlist の client を作る所（castlistClient）', () => {
     const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], { cwd: join(import.meta.dirname, '..'), encoding: 'utf8', env: withoutRosterEnv(process.env) });
     expect(r.stderr).toBe('');
     expect(JSON.parse(r.stdout)).toEqual([]);
+  });
+});
+
+describe('castlist の client の守り（review-33）', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  test('castlist が答えの頭を返して本文を送らなければ、送る 1 回の全部で 6 秒の上限に切って down', async () => {
+    const stall = createServer((req, res) => {
+      req.resume();
+      req.on('end', () => {
+        res.writeHead(201, { 'content-type': 'application/json' });
+        res.write('{"actor":');
+      });
+    });
+    await new Promise<void>(resolve => stall.listen(0, '127.0.0.1', resolve));
+    const url = `http://127.0.0.1:${(stall.address() as AddressInfo).port}`;
+    try {
+      const w = world({ castlist: url, api: { castlist: 'next' } });
+      const started = Date.now();
+      expect(await registerPm(w.tpm, url)).toEqual({ kind: 'down' });
+      expect(Date.now() - started).toBeLessThan(7500);
+    }
+    finally {
+      stall.closeAllConnections();
+      await new Promise(resolve => stall.close(resolve));
+    }
+  }, 15_000);
+
+  test('2xx の答えの本文を読めなければ、断られた（refused）でなく、読めない答えとして down', async () => {
+    const { ctx } = nextSeat();
+    const raw = fakeHandler();
+    raw.handler.handle = () => Promise.resolve({ response: { statusCode: 201, reason: '', headers: { 'content-type': 'application/json' }, body: Readable.from([Buffer.from('not json')]) } });
+    const seat: Context = { ...ctx, clients: { castlist: (url: string) => castlistClient(url, raw.handler) } };
+    expect(await registerPm(seat, dead)).toEqual({ kind: 'down' });
+  });
+
+  test('生成した client を読めなければ、pnpm install --frozen-lockfile を打つよう言う誤りで止まる（guard はこれを 2 で止める）', async () => {
+    const { ctx } = nextSeat();
+    const seat: Context = { ...ctx, clients: { castlist: () => { throw new Error('Cannot find module \'@smithy/core\''); } } };
+    await expect(registerPm(seat, dead)).rejects.toThrow(/生成した castlist の client を読めません.*pnpm install --frozen-lockfile/s);
+  });
+
+  test('AWS の Lambda の頭の middleware を外せなければ止まり、外せば _X_AMZN_TRACE_ID を置いても X-Amzn-Trace-Id を付けない', async () => {
+    expect(() => withoutAwsMiddleware({ middlewareStack: { remove: () => false } })).toThrow(/recursionDetectionMiddleware/);
+    vi.stubEnv('AWS_LAMBDA_FUNCTION_NAME', 'f');
+    vi.stubEnv('_X_AMZN_TRACE_ID', 'Root=1-00000000-000000000000000000000000');
+    const { ctx, seen } = nextSeat();
+    expect((await registerPm(ctx, dead)).kind).toBe('ok');
+    expect(seen.length).toBe(1);
+    expect(Object.keys(seen[0]?.headers ?? {}).map(k => k.toLowerCase())).not.toContain('x-amzn-trace-id');
   });
 });
 
