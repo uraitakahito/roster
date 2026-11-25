@@ -195,10 +195,17 @@ castlist と pagetray の作り直し（AI-36）の間だけの欄。`api` に s
 }
 ```
 
-- `castlist`: 書く物（session の登録・出来事・線・model と effort・Product Manager の登録）を、新しい API で送る。読む物（起きているかの `/healthz`・監査の検索）は、まだ今の client で送る。答えの見方（止まっている・混んでいる・断られた）は今の client と同じ。
-- `pagetray`: 書けるが、まだ何も替えない（置き場の client を替えるのは、この後の PR）。
-- 生成した client も、今の curl と同じに 1 度だけ送り（送り直さない）、castlist に書く要求は 6 秒まで待つ。`AWS_MAX_ATTEMPTS` などの `AWS_*` の環境変数と `~/.aws/config` は読まない。
+- `castlist`: castlist に送る物をみな新しい API で送る。書く物（session の登録・出来事・線・model と effort・Product Manager の登録）も、読む物（起きているかの `/healthz`・落ちた session の突き合わせが引くアクター・`roster castlist find` などの監査の検索・`roster incident timeline` のアクターの欄）も。答えの見方（止まっている・混んでいる・断られた）は今の client と同じ。
+- `pagetray`: 書けるが、まだ何も替えない（置き場の client を替えるのは、この後の PR）。置き場の版で分ける所（待ちの相手の `0.8.0` など。今は `/api/version` を聞く）は、新しい API に版の道が無いので、`/healthz` の `version` を見るようにする。
+- 生成した client も、今の curl と同じに 1 度だけ送り（送り直さない）、castlist に書く要求と監査の検索は 6 秒まで、`/healthz` は 1 秒まで待つ。`AWS_MAX_ATTEMPTS` などの `AWS_*` の環境変数と `~/.aws/config` は読まない。
 - 値は `next` だけ。今の client にするなら、その server の欄を書かない。知らない server の名と `next` でない値は、設定の誤りで止まる。直下の folder の設定に書いた値は読まない（`castlist` と同じ）。
+
+`api.castlist` を `next` にした時の、今の client との違い:
+
+- **版**: 起こす前に見る `/healthz`（`roster start`・`roster assign`・`roster audit start`・`roster hello`）の `version` が `1.0.0` より前（新しい API を持たない今の castlist）なら、`api.castlist` を外すか castlist を替えるよう言って止まる（今の castlist に新しい API の道で書くと、どれも断られるため）。castlist が止まっている時に Product Manager へ出す `container run` の 1 行は、新しい API の版の image（`v1.0.0-rc.1`）を新しい volume（`castlist-data-v1`）で起こす形にし、今の volume の記録を先に移す docs（castlist の「release を出す」の「rc を動かす時と切り替え」）を添える（container が在れば、今までどおり起こし直す 1 行）。
+- **監査の検索の旗**: 旗は今と同じ。`roster` が新しい API の引数に直す: `--active-from`・`--active-to`・`--launched-by` は `activeFrom`・`activeTo`・`launchedBy`、`--limit` は `maxResults`、`--after` は `nextToken`（答えの「続きがある: --after …」に出す字も、新しい API の頁の印）。時刻は UTC に直して送る（`+09:00` の時刻を書いてよい）。1 度に読むのは、今と同じく 1 頁（`--limit`。既定 100）。
+- **断る値**: 新しい API は知らない引数を読み飛ばすので、今の castlist が断る物（読めない時刻・`true` か `false` でない `--active`・範囲の外の `--limit` と `--depth`・`--actor` と一緒の `--at` のほかの旗）は、`roster` が送らずに今と同じ訳で断る。ほかの値（決まりの外の `--sort` など）は castlist が断り、訳は新しい API の物（引数の名も新しい名）になる。
+- **出す物**: 表は今と同じ字。`--json` は、新しい API の答えを今の API の形に直した物（欄の名は `snake_case`・無い値は `null`・頁の印は `next`・時刻は UTC のミリ秒まで）。今の API にあって新しい API に無い欄（model と effort の行の `model_id`・`effort_id` など）は無い。`roster castlist settings --actor` は、行にアクターの名を付けるため、先に 1 つのアクターを引く（聞くのが 1 度多い）。
 
 ## 通知のバナー（任意）
 
