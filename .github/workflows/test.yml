@@ -51,7 +51,7 @@ jobs:
       # 見張りが本当に落とすか: 入れた物（build した JS と、取った定義）を 1 byte 替えると、--check が落ちる。
       - name: 入れた物を 1 byte 替えると --check が落ちる
         run: |
-          for f in gen/castlist-client/dist-cjs/index.js gen/model/castlist/castlist.smithy; do
+          for f in gen/castlist-client/dist-cjs/index.js gen/model/castlist/castlist.smithy gen/pagetray-client/dist-cjs/index.js gen/model/pagetray/pagetray.smithy; do
             printf ' ' >>"$f"
             if gen/gen.sh --check; then
               echo "::error::$f を替えても gen/gen.sh --check が通った"
