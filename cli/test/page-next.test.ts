@@ -11,7 +11,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from 'vite
 import { castlistIssuer } from '../src/castlist.ts';
 import { fileDelete, fileList, filePath, filePut } from '../src/commands/file.ts';
 import { pageDelete, pageImport, pageList, pagePath, pagePut, pageReply } from '../src/commands/page.ts';
-import { waitingUrls } from '../src/commands/reply.ts';
+import { replyLine, setReply, waitingByParty, waitingUrls } from '../src/commands/reply.ts';
 import { markVerdict } from '../src/commands/review-marks.ts';
 import { pagetrayClient, storeAtLeast } from '../src/commands/store.ts';
 import type { Context } from '../src/context.ts';
@@ -479,4 +479,53 @@ describe('設定が無い時', () => {
     expect(s.made()).toBe(0);
     expect(s.curls().length).toBe(2);
   });
+});
+
+describe('版の古い・応えない置き場の扱い（review-38）', () => {
+  const OLD: NextAnswer = { status: 200, body: { status: 'ok', version: '0.8.0' } };
+  const url = (s: { project: string }): string => `${BASE}/${s.project}/t-x7k2/confirm-1.html`;
+
+  test('版の古い置き場では、返事の状態は止めずに old（ask pm・answer はメッセージを送った後に「付けていない（版が古く…）」の 1 行で続ける）', async () => {
+    const s = setup(undefined, undefined, OLD);
+    expect(await setReply(s.tpm, url(s), 'waiting')).toBe('old');
+    const lines = await replyLine(s.tpm, url(s), 'waiting');
+    expect(lines.join('\n')).toMatch(/^置き場の印: 付けていない（置き場の版が古く/);
+    expect(s.seen).toEqual([]);
+  });
+
+  test('版の古い置き場では、返事待ちの一覧は止めずに undefined（聞けなかった）', async () => {
+    const s = setup(undefined, undefined, OLD);
+    expect(await waitingUrls(s.tpm, 't-x7k2')).toBeUndefined();
+    expect(await waitingByParty(s.tpm, 't-x7k2')).toBeUndefined();
+    expect(s.seen).toEqual([]);
+  });
+
+  test('応えない置き場の版は、1 つの命令の中で覚え、頼むたびに /healthz を待ち直さない', async () => {
+    const s = setup(() => ({ throws: Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }) }), undefined, { throws: Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }) });
+    expect(await storeAtLeast(s.tpm, '0.8.0')).toBe('down');
+    expect(await storeAtLeast(s.tpm, '0.8.0')).toBe('down');
+    await waitingUrls(s.tpm, 't-x7k2');
+    expect(s.healths()).toBe(1);
+  });
+
+  test('新しい置き場が /healthz の頭を返して本文で止まれば、古いでなく応えない（down）', async () => {
+    const stall = createServer((req, res) => {
+      req.resume();
+      req.on('end', () => {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.write('{"status":');
+      });
+    });
+    await new Promise<void>(resolve => stall.listen(0, '127.0.0.1', resolve));
+    const at = `http://127.0.0.1:${(stall.address() as AddressInfo).port}`;
+    try {
+      const s = setup();
+      const ctx: Context = { ...s.tpm, env: { ...s.tpm.env, ROSTER_PAGES_URL: at }, clients: { ...s.tpm.clients, pagetray: (u: string) => pagetrayClient(u) } };
+      expect(await storeAtLeast(ctx, '0.8.0')).toBe('down');
+    }
+    finally {
+      stall.closeAllConnections();
+      await new Promise(resolve => stall.close(resolve));
+    }
+  }, 20_000);
 });
