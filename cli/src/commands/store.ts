@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type * as Pagetray from '../../gen/pagetray-client/dist-types/index.js';
-import { clientConfig, nextApi, pagetrayApi, withoutAwsMiddleware } from '../clients.ts';
+import { clientConfig, nextApi, pagetrayApi, sendOnce, toSnake, withoutAwsMiddleware } from '../clients.ts';
 import type { Context } from '../context.ts';
 import type { ExecResult } from '../exec.ts';
 import type { RoleRecord, TpmRecord } from '../roster.ts';
@@ -94,44 +94,19 @@ export function pagetrayClient(url: string, requestHandler?: HttpHandler): Paget
   return withoutAwsMiddleware(new PagetrayClient(clientConfig(url, Number(TIMEOUT) * 1000, requestHandler)));
 }
 
+/** 誤りの型の無い 404 の訳: 新しい API の道を持たない置き場（今の 0.x の版）が答えた物。 */
+const OUTDATED = '置き場が新しい API を持たない（設定の api.pagetray は next だが、置き場（pagetray）の版が 1.0.0 より前に見える。置き場の版か、設定の api を見る）';
+
 /**
- * 生成した pagetray の client で 1 つ送り、答えを今の道の Reply の形にする（本文は shape で今の API の JSON の形にした字、code は状態の数）。
- * 送る 1 回の全部に、今の curl の --max-time と同じ上限を付ける。client を読めなければ install を言って止める。
- * 答えの無い物（つながらない・時間切れ）と、2xx なのに本文を読めない答えは 000（今の curl の道で、つながらない時と同じ）。
+ * 生成した pagetray の client で 1 つ送り（clients.ts の sendOnce。送る 1 回は今の curl と同じ TIMEOUT で切る）、答えを今の道の Reply の形にする
+ * （本文は shape で今の API の JSON の形にした字、code は状態の数）。答えの無い物と、2xx なのに本文を読めない答えは 000（今の curl の道で、つながらない時と同じ）。
  * 誤りの答えの本文は、今の API の誤りの形（`{"error": <message>}`）にする。送り手を断った 400（fieldList に /actorRef）には unknownSender を付ける。
  */
 async function viaPagetray<O extends { $metadata: { httpStatusCode?: number } }>(ctx: Context, send: (client: Pagetray.PagetrayClient, api: typeof Pagetray, options: { abortSignal: AbortSignal }) => Promise<O>, shape: (out: O) => unknown): Promise<Reply> {
-  let client: Pagetray.PagetrayClient;
-  try {
-    client = ctx.clients.pagetray(pagesUrl(ctx.env));
-  }
-  catch (e) {
-    throw new TpmError(`生成した pagetray の client を読めません（${e instanceof Error ? e.message : String(e)}）。cli/ で pnpm install --frozen-lockfile を打ってください`);
-  }
-  try {
-    const out = await send(client, pagetrayApi(), { abortSignal: AbortSignal.timeout(Number(TIMEOUT) * 1000) });
-    return { body: JSON.stringify(shape(out)), code: String(out.$metadata.httpStatusCode ?? 200) };
-  }
-  catch (e) {
-    const status = (e as { $metadata?: { httpStatusCode?: unknown } } | undefined)?.$metadata?.httpStatusCode;
-    if (typeof status !== 'number' || (status >= 200 && status < 300)) return { body: '', code: '000' };
-    const fields = (e as { fieldList?: { path?: unknown }[] }).fieldList ?? [];
-    return { body: JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), code: String(status), ...(fields.some(f => f.path === '/actorRef') ? { unknownSender: true } : {}) };
-  }
-  finally {
-    client.destroy();
-  }
-}
-
-/** 欄の名（camelCase）を今の API の名（snake_case）にする。 */
-const snakeName = (name: string): string => name.replaceAll(/[A-Z]/g, c => `_${c.toLowerCase()}`);
-
-/** 新しい API の答えを今の API の形にする: 欄の名を snake_case に、時刻（Date）を字（UTC・ミリ秒まで）にする。 */
-function snake(value: unknown): unknown {
-  if (value instanceof Date) return value.toISOString();
-  if (Array.isArray(value)) return value.map(snake);
-  if (typeof value !== 'object' || value === null) return value;
-  return Object.fromEntries(Object.entries(value).filter(([k]) => k !== '$metadata').map(([k, v]) => [snakeName(k), snake(v)]));
+  const sent = await sendOnce(() => ctx.clients.pagetray(pagesUrl(ctx.env)), (client, options) => send(client, pagetrayApi(), options), { server: 'pagetray', wait: Number(TIMEOUT) * 1000, outdated: OUTDATED });
+  if (sent.kind === 'down') return { body: '', code: '000' };
+  if (sent.kind === 'failed') return { body: JSON.stringify({ error: sent.message }), code: String(sent.code), ...(sent.fields.includes('/actorRef') ? { unknownSender: true } : {}) };
+  return { body: JSON.stringify(shape(sent.out)), code: String(sent.out.$metadata.httpStatusCode ?? 200) };
 }
 
 /**
@@ -139,7 +114,7 @@ function snake(value: unknown): unknown {
  * 置く答えの url・location は、今の API の記録に無いので落とす。
  */
 function pageRecordOf(page: object): Record<string, unknown> {
-  const rest = Object.fromEntries(Object.entries(snake(page) as Record<string, unknown>).filter(([k]) => k !== 'url' && k !== 'location'));
+  const rest = Object.fromEntries(Object.entries(toSnake(page) as Record<string, unknown>).filter(([k]) => k !== 'url' && k !== 'location'));
   const sender = rest.sender as Record<string, unknown> | undefined;
   return { ...rest, n: Number(rest.n), ...(sender === undefined ? {} : { sender: { actor: null, ...sender } }) };
 }

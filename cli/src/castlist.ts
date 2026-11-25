@@ -10,7 +10,7 @@ import { createHash } from 'node:crypto';
 import { closeSync, existsSync, fstatSync, openSync, readSync } from 'node:fs';
 import { basename } from 'node:path';
 import type * as Castlist from '../gen/castlist-client/dist-types/index.js';
-import { castlistApi, clientConfig, nextApi, withoutAwsMiddleware } from './clients.ts';
+import { castlistApi, clientConfig, nextApi, sendOnce, withoutAwsMiddleware } from './clients.ts';
 import type { Context } from './context.ts';
 import { atLeast } from './commands/store.ts';
 import { ROLE_NAMES, type RoleName } from './protocol.ts';
@@ -167,50 +167,24 @@ export function castlistClient(url: string, requestHandler?: HttpHandler): Castl
   return withoutAwsMiddleware(new CastlistClient(clientConfig(url, Number(REQUEST_TIMEOUT) * 1000, requestHandler)));
 }
 
-/**
- * 生成した client の誤りを、今の答えの形にする。HTTP の答えがあれば（定義の誤りの型も、知らない型も）、503（Unavailable）は busy、ほかは refused（訳は本文の message）。
- * HTTP の答えが無い（つながらない・時間内に答えない）は down。
- */
-function replyOf(error: unknown): Reply {
-  const code = (error as { $metadata?: { httpStatusCode?: unknown } } | undefined)?.$metadata?.httpStatusCode;
-  // 答えの無い物（つながらない・時間切れ）と、2xx なのに本文を読めない答えは down（今の curl の道で、読めない答えを使わないのと同じ）。
-  if (typeof code !== 'number' || (code >= 200 && code < 300)) return { kind: 'down' };
-  if (code === 503) return { kind: 'busy' };
-  // 誤りの型の無い 404 は、新しい API の道を持たない castlist（今の 0.x の版）が答えた物（設定の api.castlist と castlist の版が合わない）。
-  const type = (error as { name?: unknown } | undefined)?.name;
-  if (code === 404 && type !== 'NotFound') return { kind: 'refused', code, error: 'castlist が新しい API を持たない（設定の api.castlist は next だが、castlist の版が 1.0.0 より前に見える。castlist の版か、設定の api を見る）' };
-  return { kind: 'refused', code, error: error instanceof Error ? error.message : String(error) };
-}
+/** 誤りの型の無い 404 の訳: 新しい API の道を持たない castlist（今の 0.x の版）が答えた物（設定の api.castlist と castlist の版が合わない）。 */
+const OUTDATED = 'castlist が新しい API を持たない（設定の api.castlist は next だが、castlist の版が 1.0.0 より前に見える。castlist の版か、設定の api を見る）';
 
 /** castlist に書く要求の周り（設定・状態の folder の issuer・時計・curl・生成した client）。 */
 export type Sender = Pick<Context, 'config' | 'state' | 'now' | 'exec' | 'clients'>;
 
 /**
- * 生成した client で 1 つ送り、答えを今の形にする。本文は shape で今の道の本文に合わせ、text はその JSON。client は送り終えたら閉じる。
+ * 生成した client で 1 つ送り（clients.ts の sendOnce）、答えを今の形にする。本文は shape で今の道の本文に合わせ、text はその JSON。
  * code は、答えの status（書く物）か、HTTP の状態の数（読む物）。wait は送る 1 回の全部の上限の秒（今の curl の --max-time と同じ。/healthz は HEALTH_TIMEOUT）。
+ * 答えの無い物と読めない 2xx は down、503（Unavailable）は busy、ほかの誤りは refused（訳は本文の message。型の無い 404 は版が合わないと言う）。
  */
 export async function viaNext<O extends { $metadata: { httpStatusCode?: number } }>(ctx: Pick<Context, 'clients'>, url: string, send: (client: Castlist.CastlistClient, api: typeof Castlist, options: { abortSignal: AbortSignal }) => Promise<O>, shape: (out: O) => unknown, wait: string = REQUEST_TIMEOUT): Promise<Reply> {
-  let client: Castlist.CastlistClient;
-  try {
-    client = ctx.clients.castlist(url);
-  }
-  catch (e) {
-    // 生成した client（と依存）を読めない: lock を替えた後に install していない。guard は、この誤りを 2 で止める。
-    throw new TpmError(`生成した castlist の client を読めません（${e instanceof Error ? e.message : String(e)}）。cli/ で pnpm install --frozen-lockfile を打ってください`);
-  }
-  try {
-    // 送る 1 回の全部（つなぐ・送る・答えの本文を読み終えるまで）に、今の curl の --max-time と同じ上限を付ける。
-    const out = await send(client, castlistApi(), { abortSignal: AbortSignal.timeout(Number(wait) * 1000) });
-    const body = shape(out);
-    const status = (out as { status?: unknown }).status;
-    return { kind: 'ok', code: typeof status === 'number' ? status : out.$metadata.httpStatusCode ?? 200, body, text: JSON.stringify(body) };
-  }
-  catch (e) {
-    return replyOf(e);
-  }
-  finally {
-    client.destroy();
-  }
+  const sent = await sendOnce(() => ctx.clients.castlist(url), (client, options) => send(client, castlistApi(), options), { server: 'castlist', wait: Number(wait) * 1000, outdated: OUTDATED });
+  if (sent.kind === 'down') return { kind: 'down' };
+  if (sent.kind === 'failed') return sent.code === 503 ? { kind: 'busy' } : { kind: 'refused', code: sent.code, error: sent.message };
+  const body = shape(sent.out);
+  const status = (sent.out as { status?: unknown }).status;
+  return { kind: 'ok', code: typeof status === 'number' ? status : sent.out.$metadata.httpStatusCode ?? 200, body, text: JSON.stringify(body) };
 }
 
 /** 登録するアクター（欄の名は新しい API の名。issuer と送り手の時刻は registerActor が足す）。 */
