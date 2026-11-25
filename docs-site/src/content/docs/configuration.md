@@ -196,10 +196,13 @@ castlist と pagetray の作り直し（AI-36）の間だけの欄。`api` に s
 ```
 
 - `castlist`: castlist に送る物をみな新しい API で送る。書く物（session の登録・出来事・線・model と effort・Product Manager の登録）も、読む物（起きているかの `/healthz`・落ちた session の突き合わせが引くアクター・`roster castlist find` などの監査の検索・`roster incident timeline` のアクターの欄）も。答えの見方（止まっている・混んでいる・断られた）は今の client と同じ。
-- `pagetray`: ページを置く・探す・消す（`roster page put`・`list`・`delete`・`import`。`roster assign` の課題の写しも）を、新しい API で送る。出す物（控えの path・URL・表・`--json`）は今と同じ形（`--json` の記録は今の API の欄の名で、番号 `n` は数）。ページの本文は新しい API でも同じ URL なので、`roster page path` と取り込みの見比べは今までどおり取る。file（`roster file …`）と、返事の状態・レビューの印は、まだ今の client で送る。
-  - `roster page list` の `--limit` は、新しい API の頁の印（`nextToken`）で辿って読む数（今と同じく 1 から 1000 に丸める）。`--oldest` は `sort=createdAt`。
-  - 送り手（castlist に登録の無い session）を断る答えは、新しい API では 400（欄 `/actorRef`）。訳は今の 422 と同じ文で、状態の数だけ 400 と出す。
-  - 置き場の版で分ける所（待ちの相手の `0.8.0` など）は、新しい API では `/healthz` の `version` を見る（新しい API に `/api/version` と頭の `Pagetray-Api` は無い。roster の API の版の検査も、新しい API には掛けない）。返事の状態とレビューの印を替える PR から使う。
+- `pagetray`: 置き場に頼む物をみな新しい API で送る。ページと file を置く・探す・消す（`roster page put`・`list`・`delete`・`import`・`roster file put`・`list`・`delete`。`roster assign` の課題の写しも）と、返事の状態とレビューの印（`roster ask pm`・`answer`・`page reply`・`ask review`・`report review`・`ask tpm --review`）。出す物（控えの path・URL・表・`--json`）は今と同じ形（`--json` の記録は今の API の欄の名で、番号 `n` は数）。
+  - ページの本文と file の中身は、新しい API でも同じ URL の手の道なので、`roster page path`・`roster file path`・取り込みの見比べは今までどおり curl で取る（next の時に curl で打つのは、この 2 つの道だけ）。
+  - `roster page list`・`roster file list` の `--limit` は、新しい API の頁の印（`nextToken`）で辿って読む数（今と同じく 1 から 1000 に丸める）。`--oldest` は `sort=createdAt`。
+  - 送り手（castlist に登録の無い session）を断る答えは、新しい API では 400（欄 `/actorRef`。訳が「castlist に登録の無い送り手」で始まる物）。訳は今の 422 と同じ文で、状態の数だけ 400 と出す。`/actorRef` の形の誤り（打ち直しても通らない）は、置き場が断った訳をそのまま出す。
+  - 置き場の版で分ける所（待ちの相手の `0.8.0` など）は、新しい API では `/healthz` の `version` を見る（新しい API に `/api/version` と頭の `Pagetray-Api` は無い。roster の API の版の検査も、新しい API には掛けない）。今の版の置き場の `/healthz`（字の `ok`）と `version` の無い答えは、版を答えない古い置き場とみなす。
+  - 置き場に頼む前に、1 つの命令で 1 度だけ `/healthz` の版を見る。`1.0.0` より前（新しい API を持たない今の置き場）なら、`api.pagetray` を外すか置き場を替えるよう言って止まる（castlist の版の見方と同じ。今の置き場に新しい API の道で頼むと、どれも断られるため）。`/healthz` が応えなければ止めず、頼む物の答えで「置き場が応えません」と出る。
+  - 置き場に頼む物がみな新しい API で働くのは、file と返事の状態とレビューの印も替えた版の roster から。それより前の roster（ページの道だけを替えた版）で `api.pagetray` を `next` にすると、file と返事は今の API の道のままなので、新しい置き場では断られる。
 - 生成した client も、今の curl と同じに 1 度だけ送り（送り直さない）、castlist に書く要求と監査の検索は 6 秒まで、castlist の `/healthz` は 1 秒まで、置き場の要求は 10 秒まで待つ。`AWS_MAX_ATTEMPTS` などの `AWS_*` の環境変数と `~/.aws/config` は読まない。
 - 値は `next` だけ。今の client にするなら、その server の欄を書かない。知らない server の名と `next` でない値は、設定の誤りで止まる。直下の folder の設定に書いた値は読まない（`castlist` と同じ）。
 
