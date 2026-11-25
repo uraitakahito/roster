@@ -196,8 +196,11 @@ castlist と pagetray の作り直し（AI-36）の間だけの欄。`api` に s
 ```
 
 - `castlist`: castlist に送る物をみな新しい API で送る。書く物（session の登録・出来事・線・model と effort・Product Manager の登録）も、読む物（起きているかの `/healthz`・落ちた session の突き合わせが引くアクター・`roster castlist find` などの監査の検索・`roster incident timeline` のアクターの欄）も。答えの見方（止まっている・混んでいる・断られた）は今の client と同じ。
-- `pagetray`: 書けるが、まだ何も替えない（置き場の client を替えるのは、この後の PR）。置き場の版で分ける所（待ちの相手の `0.8.0` など。今は `/api/version` を聞く）は、新しい API に版の道が無いので、`/healthz` の `version` を見るようにする。
-- 生成した client も、今の curl と同じに 1 度だけ送り（送り直さない）、castlist に書く要求と監査の検索は 6 秒まで、`/healthz` は 1 秒まで待つ。`AWS_MAX_ATTEMPTS` などの `AWS_*` の環境変数と `~/.aws/config` は読まない。
+- `pagetray`: ページを置く・探す・消す（`roster page put`・`list`・`delete`・`import`。`roster assign` の課題の写しも）を、新しい API で送る。出す物（控えの path・URL・表・`--json`）は今と同じ形（`--json` の記録は今の API の欄の名で、番号 `n` は数）。ページの本文は新しい API でも同じ URL なので、`roster page path` と取り込みの見比べは今までどおり取る。file（`roster file …`）と、返事の状態・レビューの印は、まだ今の client で送る。
+  - `roster page list` の `--limit` は、新しい API の頁の印（`nextToken`）で辿って読む数（今と同じく 1 から 1000 に丸める）。`--oldest` は `sort=createdAt`。
+  - 送り手（castlist に登録の無い session）を断る答えは、新しい API では 400（欄 `/actorRef`）。訳は今の 422 と同じ文で、状態の数だけ 400 と出す。
+  - 置き場の版で分ける所（待ちの相手の `0.8.0` など）は、新しい API では `/healthz` の `version` を見る（新しい API に `/api/version` と頭の `Pagetray-Api` は無い。roster の API の版の検査も、新しい API には掛けない）。返事の状態とレビューの印を替える PR から使う。
+- 生成した client も、今の curl と同じに 1 度だけ送り（送り直さない）、castlist に書く要求と監査の検索は 6 秒まで、castlist の `/healthz` は 1 秒まで、置き場の要求は 10 秒まで待つ。`AWS_MAX_ATTEMPTS` などの `AWS_*` の環境変数と `~/.aws/config` は読まない。
 - 値は `next` だけ。今の client にするなら、その server の欄を書かない。知らない server の名と `next` でない値は、設定の誤りで止まる。直下の folder の設定に書いた値は読まない（`castlist` と同じ）。
 
 `api.castlist` を `next` にした時の、今の client との違い:
