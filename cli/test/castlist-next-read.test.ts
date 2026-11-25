@@ -1,6 +1,8 @@
 // 設定の api.castlist が next の時に、castlist を読む物（/healthz・1 つのアクター・監査の検索）を、生成した client で新しい API に送る道（AI-36 の段 6c）。
 // Context の client を作る関数に、偽の HTTP の handler（castlist-next-fake.ts）を持つ client を差し込み、送った道と引数を見て、決まりの形（restJson1）で答える。
 // 出す物（表・--json）は、今の道と同じ形（欄の名は snake_case、無い値は null、頁の印は next）になることを見る。本物の castlist には触らない。
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { castlistClient, requireUp } from '../src/castlist.ts';
 import { castlistEvents, castlistFind, castlistLineage, castlistSettings, castlistShow, seatActorsAt } from '../src/commands/castlist-read.ts';
@@ -322,4 +324,44 @@ describe('起きているか（GetHealth）と版', () => {
     await expect(castlistHello({ ...ctx, env: { ...ctx.env, CLAUDE_CODE_SESSION_ID: 'bbbbbbbb-0000-4000-8000-000000000009' } })).resolves.toBeDefined();
     expect(seen[0]?.path).toBe('/healthz');
   });
+});
+
+describe('読む道の client の守り（書く道と同じ。review-33）', () => {
+  test('2xx の答えの本文を読めなければ、断られた訳でなく「castlist に聞けない」（down）で止まる', async () => {
+    const { ctx } = nextWorld(() => ({ status: 200, raw: 'not json' }));
+    expect(await thrown(() => castlistFind(ctx, { label: ['tpm.key:t-1'] }))).toBe(`castlist に聞けない（${url} が応えない）`);
+    expect(await thrown(() => requireUp(ctx, '名乗っていません。'))).toMatch(/が応えません。名乗っていません。/);
+  });
+
+  test('生成した client を読めなければ、pnpm install --frozen-lockfile を打つよう言う誤りで止まる', async () => {
+    const { ctx } = nextWorld();
+    const unreadable = (): never => {
+      throw new Error('Cannot find module \'@smithy/core\'');
+    };
+    const seat: Context = { ...ctx, clients: { castlist: unreadable } };
+    await expect(castlistFind(seat, { label: ['tpm.key:t-1'] })).rejects.toThrow(/生成した castlist の client を読めません.*pnpm install --frozen-lockfile/s);
+    await expect(requireUp(seat, '名乗っていません。')).rejects.toThrow(/生成した castlist の client を読めません/);
+  });
+
+  test('castlist が答えの頭を返して本文を送らなければ、/healthz は今の curl と同じ 1 秒で切って止まっているとみなす', async () => {
+    const stall = createServer((req, res) => {
+      req.resume();
+      req.on('end', () => {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.write('{"status":');
+      });
+    });
+    await new Promise<void>(resolve => stall.listen(0, '127.0.0.1', resolve));
+    const stalled = `http://127.0.0.1:${(stall.address() as AddressInfo).port}`;
+    try {
+      const w = world({ castlist: stalled, api: { castlist: 'next' } });
+      const started = Date.now();
+      expect(await thrown(() => requireUp(w.tpm, '名乗っていません。'))).toMatch(new RegExp(`^castlist（${stalled}）が応えません。名乗っていません。`));
+      expect(Date.now() - started).toBeLessThan(2500);
+    }
+    finally {
+      stall.closeAllConnections();
+      await new Promise(resolve => stall.close(resolve));
+    }
+  }, 10_000);
 });
