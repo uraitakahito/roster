@@ -2,9 +2,15 @@
 // アクターは Claude Code の session 1 つ（担当・TPM 担当・Auditor）と、人の Product Manager。roster は、登録・出来事・線・model と effort を送る。
 // 設定（config.jsonc の castlist か $ROSTER_CASTLIST_URL）が無ければ、どれも何もしない。
 // 送るのは curl（置き場の pagetray と同じ。spawnSync で打つ。命令の形は非同期で、request が Promise を返す）。castlist を起こすのは Product Manager だけで、止まっていれば打つ 1 行を出す。
+// 設定の api.castlist が next なら、書く物（登録・出来事・線・model と effort）は生成した client で新しい API に送る（registerActor・putRecord。AI-36 の段 6c）。
+// 答えは、どちらの道でも同じ Reply の形にする（呼ぶ側は替えない）。読む物（/healthz と監査の検索）は、まだ curl だけ。
+import type { HttpHandler } from '@smithy/core/protocols';
+import type { DocumentType } from '@smithy/types';
 import { createHash } from 'node:crypto';
 import { closeSync, existsSync, fstatSync, openSync, readSync } from 'node:fs';
 import { basename } from 'node:path';
+import type * as Castlist from '../gen/castlist-client/dist-types/index.js';
+import { castlistApi, clientConfig, nextApi, withoutAwsMiddleware } from './clients.ts';
 import type { Context } from './context.ts';
 import { ROLE_NAMES, type RoleName } from './protocol.ts';
 import { readRole } from './roster.ts';
@@ -142,6 +148,103 @@ export async function request(ctx: Pick<Context, 'exec'>, url: string, method: '
   return { kind: 'refused', code, error };
 }
 
+/**
+ * 生成した castlist の client を作る（castlist の client を作る所は、ここだけ）。送り直さず、時間切れは書く要求の curl と同じ（REQUEST_TIMEOUT）。
+ * Host は URL の名と port（curl と同じ字。castlist は 127.0.0.1・localhost でない Host を断る）で、Origin は付けない。requestHandler は試験が偽の HTTP を差し込む所。
+ */
+export function castlistClient(url: string, requestHandler?: HttpHandler): Castlist.CastlistClient {
+  const { CastlistClient } = castlistApi();
+  return withoutAwsMiddleware(new CastlistClient(clientConfig(url, Number(REQUEST_TIMEOUT) * 1000, requestHandler)));
+}
+
+/**
+ * 生成した client の誤りを、今の答えの形にする。HTTP の答えがあれば（定義の誤りの型も、知らない型も）、503（Unavailable）は busy、ほかは refused（訳は本文の message）。
+ * HTTP の答えが無い（つながらない・時間内に答えない）は down。
+ */
+function replyOf(error: unknown): Reply {
+  const code = (error as { $metadata?: { httpStatusCode?: unknown } } | undefined)?.$metadata?.httpStatusCode;
+  if (typeof code !== 'number') return { kind: 'down' };
+  if (code === 503) return { kind: 'busy' };
+  return { kind: 'refused', code, error: error instanceof Error ? error.message : String(error) };
+}
+
+/** castlist に書く要求の周り（設定・状態の folder の issuer・時計・curl・生成した client）。 */
+export type Sender = Pick<Context, 'config' | 'state' | 'now' | 'exec' | 'clients'>;
+
+/** 生成した client で 1 つ送り、答えを今の形にする。本文は shape で今の道の本文に合わせ、text はその JSON。client は送り終えたら閉じる。 */
+async function viaNext<O extends { status: number | undefined, $metadata: { httpStatusCode?: number } }>(ctx: Sender, url: string, send: (client: Castlist.CastlistClient, api: typeof Castlist) => Promise<O>, shape: (out: O) => unknown): Promise<Reply> {
+  const client = ctx.clients.castlist(url);
+  try {
+    const out = await send(client, castlistApi());
+    const body = shape(out);
+    return { kind: 'ok', code: out.status ?? out.$metadata.httpStatusCode ?? 200, body, text: JSON.stringify(body) };
+  }
+  catch (e) {
+    return replyOf(e);
+  }
+  finally {
+    client.destroy();
+  }
+}
+
+/** 登録するアクター（欄の名は新しい API の名。issuer と送り手の時刻は registerActor が足す）。 */
+export interface ActorInput {
+  kind: 'ai' | 'human'
+  namePrefix: string
+  labels: Record<string, string>
+  /** 付随する id（初めの物が鍵）。 */
+  bindings: { type: string, value: string }[]
+  /** 頼んだ model と effort。 */
+  settings?: { model: string, effort: string }
+}
+
+/**
+ * アクターを登録する。今の道は POST /v1/actors、next は RegisterActor（POST /api/actors）。
+ * ok の本文は、どちらも今の道の形（id・name・kind・created）。
+ */
+export async function registerActor(ctx: Sender, url: string, actor: ActorInput): Promise<Reply> {
+  const issuer = issuerOf(ctx);
+  const sentAt = ctx.now();
+  if (nextApi(ctx, 'castlist')) {
+    return viaNext(ctx, url, (client, api) => client.send(new api.RegisterActorCommand({ issuer, ...actor, sentAt })), out => ({ ...out.actor, created: out.created }));
+  }
+  const { kind, namePrefix, labels, bindings, settings } = actor;
+  return request(ctx, url, 'POST', '/v1/actors', { issuer, kind, name_prefix: namePrefix, labels, bindings, sent_at: sentAt.toISOString(), ...(settings === undefined ? {} : { settings }) });
+}
+
+/** 送り手が id を決めて足す物の本文（issuer と送り手の時刻は putRecord が足す）。欄の名は、今の道と新しい API で同じ。 */
+export interface RecordInput {
+  /** 出来事。 */
+  events: { by: string, type: string, detail: Record<string, unknown> }
+  /** 線。 */
+  links: { type: string, from: string, to: string }
+  /** model と effort。 */
+  settings: { by: string, model: string, effort: string, source: string }
+}
+
+/** 答えの $metadata と status を除いた、足した行。 */
+const rowOf = (out: object): Record<string, unknown> => Object.fromEntries(Object.entries(out).filter(([k]) => k !== '$metadata' && k !== 'status'));
+
+/**
+ * 出来事・線・model と effort を、決めた id で足す。今の道は PUT /v1/<kind>/<id>、next は PutEvent・PutLink・PutSetting（PUT /api/<kind>/<id>）。
+ * 同じ id で本文が違えば、どちらも 409（refused）。
+ */
+export async function putRecord<K extends keyof RecordInput>(ctx: Sender, url: string, kind: K, id: string, body: RecordInput[K]): Promise<Reply> {
+  const issuer = issuerOf(ctx);
+  const sentAt = ctx.now();
+  if (!nextApi(ctx, 'castlist')) return request(ctx, url, 'PUT', `/v1/${kind}/${encodeURIComponent(id)}`, { issuer, ...body, sent_at: sentAt.toISOString() });
+  return viaNext<Castlist.PutEventCommandOutput | Castlist.PutLinkCommandOutput | Castlist.PutSettingCommandOutput>(ctx, url, (client, api) => {
+    switch (kind) {
+      case 'events': {
+        const { detail, ...rest } = body as RecordInput['events'];
+        return client.send(new api.PutEventCommand({ eventId: id, issuer, ...rest, detail: detail as DocumentType, sentAt }));
+      }
+      case 'links': return client.send(new api.PutLinkCommand({ linkId: id, issuer, ...body as RecordInput['links'], sentAt }));
+      default: return client.send(new api.PutSettingCommand({ settingId: id, issuer, ...body as RecordInput['settings'], sentAt }));
+    }
+  }, rowOf);
+}
+
 /** URL の port（書いていなければ http の 80）。 */
 const portOf = (url: string): string => new URL(url).port || '80';
 
@@ -206,14 +309,8 @@ export const sessionRef = (sid: string): string => `claude.session:${sid}`;
 
 /** 人の Product Manager を登録する（roster start。鍵が同じなので何度打っても同じアクター）。 */
 export async function registerPm(ctx: Context, url: string): Promise<Reply> {
-  return request(ctx, url, 'POST', '/v1/actors', {
-    issuer: issuerOf(ctx),
-    kind: 'human',
-    name_prefix: 'product-manager',
-    labels: { 'tpm.project': ctx.project },
-    bindings: [{ type: PM_REF.split(':')[0], value: PM_REF.split(':')[1] }],
-    sent_at: ctx.now().toISOString(),
-  });
+  const [type = '', value = ''] = PM_REF.split(':');
+  return registerActor(ctx, url, { kind: 'human', namePrefix: 'product-manager', labels: { 'tpm.project': ctx.project }, bindings: [{ type, value }] });
 }
 
 /** この session の席: 名の接頭辞・役割・Key。 */

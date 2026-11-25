@@ -1,4 +1,4 @@
-// roster castlist …（hook が呼ぶ）と、ほかの命令（guard・hello・close）が castlist に送る物。送る物の形は castlist の docs/src/api.md。
+// roster castlist …（hook が呼ぶ）と、ほかの命令（guard・hello・close）が castlist に送る物。送る物の形は castlist の docs/src/api.md（設定の api.castlist が next なら docs/src/next.md。どちらで送るかは castlist.ts の registerActor・putRecord が決める）。
 // session 1 つが castlist のアクター 1 つ。登録の答え（id と名）は状態の folder の sessions/<session の id>.jsonc に控え、
 // 起こし 1 回（$ROSTER_LAUNCH）ごとの session の並びを launches/<起こしの id>.jsonc に控える（/clear と fork の継ぐ線を、前の session から引くため）。
 // 出来事・線・model と effort の id は、issuer・session・種類（と、何度も起きる物は番号）で決める。送り直しても同じ id なので、castlist は 2 度足さない
@@ -7,7 +7,7 @@
 // 落ちて終わりを送れなかった session は、hello・roles・assign が cmux の居場所の一覧と突き合わせ、推しの幕引き（detail.inferred）を送る（sweep）。
 import { createHash } from 'node:crypto';
 import type { Context } from '../context.ts';
-import { busyMessage, castlistUrl, downMessage, issuerOf, missingCastlistWarning, modelOf, request, requireUp, seatOf, sessionRef, type Reply } from '../castlist.ts';
+import { busyMessage, castlistUrl, downMessage, issuerOf, missingCastlistWarning, modelOf, putRecord, registerActor, request, requireUp, seatOf, sessionRef, type RecordInput, type Reply } from '../castlist.ts';
 import type { Verdict } from '../guard.ts';
 import type { RoleRecord } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
@@ -83,8 +83,8 @@ function idOf(ctx: Context, head: 'e' | 'l' | 't', sid: string, rest: string): s
 }
 
 /** 出来事・線・model と effort を、決めた id で送る。 */
-async function put(ctx: Context, url: string, kind: 'events' | 'links' | 'settings', id: string, body: Record<string, unknown>): Promise<Sent> {
-  return settle(await request(ctx, url, 'PUT', `/v1/${kind}/${encodeURIComponent(id)}`, { issuer: issuerOf(ctx), ...body, sent_at: ctx.now().toISOString() }), `${kind}/${id}`);
+async function put<K extends keyof RecordInput>(ctx: Context, url: string, kind: K, id: string, body: RecordInput[K]): Promise<Sent> {
+  return settle(await putRecord(ctx, url, kind, id, body), `${kind}/${id}`);
 }
 
 /** 出来事を送る。seq なら、送れた数の次の番号を id に付け、送れたら数を進める。 */
@@ -133,10 +133,9 @@ async function enter(ctx: Context, url: string, sid: string, source: Source, rev
   const seat = seatOf(ctx);
   const ref = workspaceRef(ctx);
   const uuid = text(ctx.env.CMUX_WORKSPACE_ID);
-  const reply = await request(ctx, url, 'POST', '/v1/actors', {
-    issuer: issuerOf(ctx),
+  const reply = await registerActor(ctx, url, {
     kind: 'ai',
-    name_prefix: seat.prefix,
+    namePrefix: seat.prefix,
     labels: {
       'tpm.project': ctx.project,
       ...(launch === undefined ? {} : { 'tpm.launch': launch }),
@@ -150,7 +149,6 @@ async function enter(ctx: Context, url: string, sid: string, source: Source, rev
       ...(ref === undefined ? [] : [{ type: 'cmux.workspace.ref', value: ref }]),
       ...(uuid === undefined ? [] : [{ type: 'cmux.workspace.uuid', value: uuid }]),
     ],
-    sent_at: ctx.now().toISOString(),
     ...(fresh ? { settings: { model, effort } } : {}),
   });
   if (reply.kind === 'down' || reply.kind === 'busy') return reply.kind;

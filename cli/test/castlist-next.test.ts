@@ -45,7 +45,8 @@ function fakeHandler(answer: (seen: Seen) => Answer | undefined = () => undefine
     httpHandlerConfigs: () => ({}),
     destroy: () => undefined,
     handle: (request: HttpRequest) => {
-      const text = typeof request.body === 'string' ? request.body : undefined;
+      const raw: unknown = request.body;
+      const text = typeof raw === 'string' ? raw : raw instanceof Uint8Array ? Buffer.from(raw).toString() : undefined;
       const one: Seen = { method: request.method, path: request.path, headers: { ...request.headers }, body: text === undefined || text === '' ? undefined : JSON.parse(text) as Record<string, unknown> };
       seen.push(one);
       const got = answer(one) ?? success(one);
