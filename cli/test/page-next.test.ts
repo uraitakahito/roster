@@ -110,6 +110,38 @@ describe('pagetray の client を作る所（pagetrayClient）', () => {
   });
 });
 
+describe('pagetray の client の守り', () => {
+  test('置き場が答えの頭を返して本文を送らなければ、送る 1 回の全部を 10 秒で切って 000（置き場が応えません）', async () => {
+    const stall = createServer((req, res) => {
+      req.resume();
+      req.on('end', () => {
+        res.writeHead(201, { 'content-type': 'application/json' });
+        res.write('{"project":');
+      });
+    });
+    await new Promise<void>(resolve => stall.listen(0, '127.0.0.1', resolve));
+    const url = `http://127.0.0.1:${(stall.address() as AddressInfo).port}`;
+    try {
+      const s = setup();
+      const ctx: Context = { ...s.role, env: { ...s.role.env, ROSTER_PAGES_URL: url }, clients: { ...s.role.clients, pagetray: (u: string) => pagetrayClient(u) } };
+      const started = Date.now();
+      expect(await thrown(() => pagePut(ctx, s.html, { kind: 'plan' }))).toMatch(new RegExp(`^置き場（${url}）が応えません。ページは置けていません`));
+      const took = Date.now() - started;
+      expect(took).toBeGreaterThanOrEqual(9500);
+      expect(took).toBeLessThan(11_500);
+    }
+    finally {
+      stall.closeAllConnections();
+      await new Promise(resolve => stall.close(resolve));
+    }
+  }, 20_000);
+
+  test('誤りの型の無い 404（新しい API の道を持たない置き場）は、版が合わないと言う', async () => {
+    const s = setup(() => ({ status: 404, raw: '' }));
+    expect(await thrown(() => pageList(s.tpm, {}))).toMatch(/^置き場が一覧を返しませんでした（404）: 置き場が新しい API を持たない/);
+  });
+});
+
 describe('roster page put（CreatePage）', () => {
   test('道に project・Key・種類、引数に役割と居場所、本文は file のまま（text/html）。答えから控えと URL を今と同じに出す', async () => {
     const s = setup(created);
