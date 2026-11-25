@@ -115,7 +115,7 @@ async function postFile(ctx: Context, file: string, ext: string, query: URLSearc
   if (r.code === '409') return 'taken';
   if (r.code === '404') throw oldStore();
   if (r.code === '000') throw down(ctx, 'file は上げていません（番号は置き場が決めます）。');
-  const refused = senderRefused(ctx, query, r.code, 'file は上げていません');
+  const refused = senderRefused(ctx, query, r, 'file は上げていません');
   if (refused !== undefined) throw refused;
   throw new TpmError(`置き場が file を受け取りませんでした（${r.code}）: ${reason(r.body)}`);
 }

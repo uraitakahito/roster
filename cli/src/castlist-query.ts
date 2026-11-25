@@ -4,7 +4,7 @@
 // 答えは、どちらの道でも今の道の形（欄の名は snake_case・無い値は null・頁の印は next）にする。呼ぶ側（castlist-read.ts など）は替えない。
 import type * as Castlist from '../gen/castlist-client/dist-types/index.js';
 import { request, viaNext, type Reply, type Sender } from './castlist.ts';
-import { nextApi } from './clients.ts';
+import { nextApi, toSnake } from './clients.ts';
 
 /** 引数（今の道の名と値。同じ名を何度でも並べてよい。値が undefined の物は送らない）。 */
 export type Params = [string, string | undefined][];
@@ -116,16 +116,8 @@ function inputOf(fields: Record<string, Field>, params: Params): { input: Record
   return { input };
 }
 
-/** 欄の名（camelCase）を今の道の名（snake_case）にする。 */
-const snakeName = (name: string): string => name.replaceAll(/[A-Z]/g, c => `_${c.toLowerCase()}`);
-
-/** 答えを今の道の形にする: 欄の名を snake_case に、時刻（Date）を字（UTC・ミリ秒まで）にする。labels と detail の中は送られた物なので替えない。 */
-function snake(value: unknown): unknown {
-  if (value instanceof Date) return value.toISOString();
-  if (Array.isArray(value)) return value.map(snake);
-  if (typeof value !== 'object' || value === null) return value;
-  return Object.fromEntries(Object.entries(value).filter(([k]) => k !== '$metadata').map(([k, v]) => [snakeName(k), k === 'labels' || k === 'detail' ? v : snake(v)]));
-}
+/** 答えを今の道の形にする（clients.ts の toSnake）。labels と detail の中は送られた物なので替えない。 */
+const snake = (value: unknown): unknown => toSnake(value, ['labels', 'detail']);
 
 /** 今の道で null の欄（新しい API は欄ごと無い）を null で埋める。 */
 const withNulls = (row: unknown, names: string[]): Record<string, unknown> => ({ ...Object.fromEntries(names.map(n => [n, null])), ...row as Record<string, unknown> });

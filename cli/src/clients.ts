@@ -5,8 +5,10 @@ import { createRequire } from 'node:module';
 import type { HttpHandler, HttpHandlerUserInput } from '@smithy/core/protocols';
 import type { Provider, UserAgent } from '@smithy/types';
 import type * as Castlist from '../gen/castlist-client/dist-types/index.js';
+import type * as Pagetray from '../gen/pagetray-client/dist-types/index.js';
 import type { ApiServer } from './config.ts';
 import type { Context } from './context.ts';
+import { TpmError } from './skill-sets.ts';
 
 /** server に、生成した client で送るか（設定の api の、その server の欄が next）。書いていなければ今の client。 */
 export const nextApi = (ctx: Pick<Context, 'config'>, server: ApiServer): boolean => ctx.config.api?.[server] === 'next';
@@ -15,6 +17,9 @@ const load = createRequire(import.meta.url);
 
 /** 生成した castlist の client の module。初めて呼んだ時に読む（Node が控えるので、2 度目からは読まない）。 */
 export const castlistApi = (): typeof Castlist => load('../gen/castlist-client/dist-cjs/index.js') as typeof Castlist;
+
+/** 生成した pagetray の client の module。初めて呼んだ時に読む。 */
+export const pagetrayApi = (): typeof Pagetray => load('../gen/pagetray-client/dist-cjs/index.js') as typeof Pagetray;
 
 /** 生成した client を作る時に、必ず書く欄（clientConfig）。 */
 export interface ClientConfig {
@@ -63,4 +68,70 @@ export function withoutAwsMiddleware<T extends HasMiddleware>(client: T): T {
   // 外せなければ止める（@aws-sdk/core の更新で名が替わると、黙って環境変数を読む形に戻るため）。
   if (!client.middlewareStack.remove('recursionDetectionMiddleware')) throw new Error('生成した client から recursionDetectionMiddleware を外せない（@aws-sdk/core の名が替わった）');
   return client;
+}
+
+/**
+ * 生成した client で 1 つ送った結果（server を問わない形）。
+ * failed は HTTP の誤りの答え（状態の数・訳・ValidationException の fieldList の path）。down は答えの無い物（つながらない・時間切れ）と、2xx なのに本文を読めない答え。
+ */
+export type Sent<O> = { kind: 'ok', out: O } | { kind: 'failed', code: number, message: string, fields: string[] } | { kind: 'down' };
+
+/** 送り終えたら閉じる物（生成した client はどれも）。 */
+export interface Closable {
+  /** 接続を閉じる。 */
+  destroy: () => void
+}
+
+/** {@link sendOnce} の、server ごとに違う所。 */
+export interface SendHow {
+  /** 訳に入れる server の名（castlist・pagetray）。 */
+  server: string
+  /** 送る 1 回の全部（つなぐ・送る・答えの本文を読み終えるまで）の上限のミリ秒（今の curl の --max-time と同じ）。 */
+  wait: number
+  /** 誤りの型の無い 404（新しい API の道を持たない、今の版の server が答えた物）の訳。 */
+  outdated: string
+}
+
+/**
+ * 生成した client で 1 つ送る（server を問わない送り方。答えの形の直しは server ごとの呼ぶ側）。
+ * make で client を作り（読めなければ install を言う TpmError。lock を替えた後に install していない時。guard は、この誤りを 2 で止める）、
+ * 送る 1 回の全部を abortSignal で how.wait に切る。client は送り終えたら閉じる。
+ */
+export async function sendOnce<C extends Closable, O>(make: () => C, send: (client: C, options: { abortSignal: AbortSignal }) => Promise<O>, how: SendHow): Promise<Sent<O>> {
+  let client: C;
+  try {
+    client = make();
+  }
+  catch (e) {
+    throw new TpmError(`生成した ${how.server} の client を読めません（${e instanceof Error ? e.message : String(e)}）。cli/ で pnpm install --frozen-lockfile を打ってください`);
+  }
+  try {
+    return { kind: 'ok', out: await send(client, { abortSignal: AbortSignal.timeout(how.wait) }) };
+  }
+  catch (e) {
+    const code = (e as { $metadata?: { httpStatusCode?: unknown } } | undefined)?.$metadata?.httpStatusCode;
+    // 答えの無い物と、2xx なのに本文を読めない答えは down（今の curl の道で、読めない答えを使わないのと同じ）。
+    if (typeof code !== 'number' || (code >= 200 && code < 300)) return { kind: 'down' };
+    const type = (e as { name?: unknown } | undefined)?.name;
+    const fields = ((e as { fieldList?: { path?: unknown }[] }).fieldList ?? []).map(f => f.path).filter((p): p is string => typeof p === 'string');
+    const message = code === 404 && type !== 'NotFound' ? how.outdated : e instanceof Error ? e.message : String(e);
+    return { kind: 'failed', code, message, fields };
+  }
+  finally {
+    client.destroy();
+  }
+}
+
+/** 欄の名（camelCase）を今の API の名（snake_case）にする。 */
+const snakeName = (name: string): string => name.replaceAll(/[A-Z]/g, c => `_${c.toLowerCase()}`);
+
+/**
+ * 新しい API の答えを今の API の形にする: 欄の名を snake_case に、時刻（Date）を字（UTC・ミリ秒まで）にし、$metadata を落とす。
+ * keep の名の欄の中（送られた物そのままの labels・detail など）は替えない。
+ */
+export function toSnake(value: unknown, keep: readonly string[] = []): unknown {
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) return value.map(v => toSnake(v, keep));
+  if (typeof value !== 'object' || value === null) return value;
+  return Object.fromEntries(Object.entries(value).filter(([k]) => k !== '$metadata').map(([k, v]) => [snakeName(k), keep.includes(k) ? v : toSnake(v, keep)]));
 }

@@ -12,7 +12,7 @@ import { copyRefs, fileImport, findFiles, removeFiles, type FileRecord } from '.
 import { roleOf } from './infra.ts';
 import { assertRead } from './messages.ts';
 import { inState, isStorePage, PARTY_SINCE, party, REPLY_LABELS, setReply, type Party, type ReplyState } from './reply.ts';
-import { call, compareStored, down, fetchTo, inStore, KEY, localPath, pagesDir, pagesUrl, PROJECT, reason, removeLocal, requireKey, selfAddress, sender, senderRefused, writeCopy } from './store.ts';
+import { compareStored, down, fetchTo, inStore, KEY, localPath, pagesDir, pagesRequest, pagesUrl, PROJECT, reason, removeLocal, requireKey, selfAddress, sender, senderRefused, writeCopy } from './store.ts';
 import { envOf } from '../env.ts';
 
 /** ページの種類。file の名の頭になる（`<種類>-<番号>.html`）。置き場は名の一覧を持たないので、種類を足すのはここだけ。 */
@@ -104,16 +104,11 @@ export async function putPage(ctx: Context, source: { file: string } | { text: s
 
 /** 置き場に 1 枚送る。置けたら記録を、番号を名指して使われていたら 'taken' を返す。ほかは止まる（送り手を付けた要求の 503・422 は senderRefused の文）。 */
 async function post(ctx: Context, source: { file: string } | { text: string }, query: URLSearchParams): Promise<PageRecord | 'taken'> {
-  const data = 'file' in source ? `@${source.file}` : '@-';
-  const r = await call(
-    ctx,
-    ['-X', 'POST', '-H', 'Content-Type: text/html; charset=utf-8', '--data-binary', data, `${pagesUrl(ctx.env)}/api/pages?${query.toString()}`],
-    'file' in source ? undefined : source.text,
-  );
+  const r = await pagesRequest(ctx, { op: 'CreatePage', query, source });
   if (r.code === '201') return JSON.parse(r.body) as PageRecord;
   if (r.code === '409') return 'taken';
   if (r.code === '000') throw down(ctx, 'ページは置けていません（番号は置き場が決めます）。');
-  const refused = senderRefused(ctx, query, r.code, 'ページは置けていません');
+  const refused = senderRefused(ctx, query, r, 'ページは置けていません');
   if (refused !== undefined) throw refused;
   throw new TpmError(`置き場がページを受け取りませんでした（${r.code}）: ${reason(r.body)}`);
 }
@@ -203,7 +198,7 @@ export async function pageList(ctx: Context, options: PageListOptions): Promise<
   const on = partyOption(options.on);
   if (reply !== undefined) query.set('reply', reply);
   if (on !== 'pm') query.set('on', on);
-  const r = await call(ctx, [`${pagesUrl(ctx.env)}/api/pages?${query.toString()}`]);
+  const r = await pagesRequest(ctx, { op: 'ListPages', query });
   if (r.code === '000') throw down(ctx, '');
   if (r.code !== '200') throw new TpmError(`置き場が一覧を返しませんでした（${r.code}）: ${reason(r.body)}`);
   const pages = (JSON.parse(r.body) as { pages: PageRecord[] }).pages
@@ -343,7 +338,7 @@ export async function pageDelete(ctx: Context, urls: string[], options: PageDele
     const query = new URLSearchParams({ project: target.query.get('project') ?? '', limit: '1000' });
     const key = target.query.get('key');
     if (key !== null) query.set('key', key);
-    const r = await call(ctx, [`${pagesUrl(ctx.env)}/api/pages?${query.toString()}`]);
+    const r = await pagesRequest(ctx, { op: 'ListPages', query });
     if (r.code === '000') throw down(ctx, 'ページは消していません。');
     if (r.code !== '200') throw new TpmError(`置き場が一覧を返しませんでした（${r.code}）: ${reason(r.body)}`);
     const pages = (JSON.parse(r.body) as { pages: PageRecord[] }).pages.filter(p => target.covers(p.path));
@@ -370,7 +365,7 @@ export async function pageDelete(ctx: Context, urls: string[], options: PageDele
   }
   const removed: { pages: string[], files: string[] }[] = [];
   for (const { target, files } of found) {
-    const r = await call(ctx, ['-X', 'DELETE', `${pagesUrl(ctx.env)}/api/pages?${target.query.toString()}`]);
+    const r = await pagesRequest(ctx, { op: 'DeletePages', query: target.query });
     if (r.code === '000') throw down(ctx, 'ページは消していません。');
     if (r.code !== '200') throw new TpmError(`置き場がページを消しませんでした（${r.code}）: ${reason(r.body)}`);
     const gone = { pages: (JSON.parse(r.body) as { removed: string[] }).removed, files: files.length > 0 ? await removeFiles(ctx, target.query) : [] };

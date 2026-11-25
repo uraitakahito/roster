@@ -17,7 +17,7 @@ import { castlistGuard, readSession, sessionStart } from '../src/commands/castli
 import type { Context } from '../src/context.ts';
 import { withoutRosterEnv } from '../src/env.ts';
 import { deadUrl } from './castlist-fake.ts';
-import { nextHandler, type NextAnswer as Answer, type NextSeen as Seen } from './castlist-next-fake.ts';
+import { nextHandler, type NextAnswer as Answer, type NextSeen as Seen } from './next-fake.ts';
 import { world } from './helpers.ts';
 
 const SID = 'bbbbbbbb-0000-4000-8000-000000000001';
@@ -25,7 +25,7 @@ const ACTOR = '019abcde-0000-7000-8000-000000000001';
 /** world の時計の時刻。 */
 const NOW = Date.parse('2026-11-20T12:00:00.000Z');
 
-/** 偽の HTTP の handler（castlist-next-fake.ts）。answer が要求ごとの答えを決める（undefined なら、決まりの形の成功）。 */
+/** 偽の HTTP の handler（next-fake.ts）。answer が要求ごとの答えを決める（undefined なら、決まりの形の成功）。 */
 const fakeHandler = (answer: (seen: Seen) => Answer | undefined = () => undefined) => nextHandler(s => answer(s) ?? success(s));
 
 /** 決まりの形の成功（登録は 201 でアクターを返し、足す 3 つは 201 で足した行を返す）。 */
@@ -51,7 +51,7 @@ beforeAll(async () => {
 function nextSeat(answer?: (seen: Seen) => Answer | undefined, env: NodeJS.ProcessEnv = {}): { ctx: Context, seen: Seen[] } {
   const w = world({ castlist: dead, api: { castlist: 'next' } });
   const { handler, seen } = fakeHandler(answer);
-  const ctx: Context = { ...w.tpm, env: { ...w.tpm.env, CLAUDE_CODE_SESSION_ID: SID, ...env }, clients: { castlist: (url: string) => castlistClient(url, handler) } };
+  const ctx: Context = { ...w.tpm, env: { ...w.tpm.env, CLAUDE_CODE_SESSION_ID: SID, ...env }, clients: { ...w.tpm.clients, castlist: (url: string) => castlistClient(url, handler) } };
   return { ctx, seen };
 }
 
@@ -177,7 +177,7 @@ describe('castlist の client の守り（review-33）', () => {
     const unreadable = (): never => {
       throw new Error('Cannot find module \'@smithy/core\'');
     };
-    const seat: Context = { ...ctx, clients: { castlist: unreadable } };
+    const seat: Context = { ...ctx, clients: { ...ctx.clients, castlist: unreadable } };
     await expect(registerPm(seat, dead)).rejects.toThrow(/生成した castlist の client を読めません.*pnpm install --frozen-lockfile/s);
   });
 
@@ -186,7 +186,7 @@ describe('castlist の client の守り（review-33）', () => {
     const unreadable = (): never => {
       throw new Error('Cannot find module \'@smithy/core\'');
     };
-    const seat: Context = { ...ctx, clients: { castlist: unreadable } };
+    const seat: Context = { ...ctx, clients: { ...ctx.clients, castlist: unreadable } };
     const verdict = await castlistGuard(seat, bashInput({ transcript_path: transcript('claude-opus-5-5'), effort: { level: 'high' } })).catch((e: unknown) => ({ allow: false, reason: (e as Error).message }));
     expect(verdict.allow).toBe(false);
     expect('reason' in verdict ? verdict.reason : '').toMatch(/pnpm install --frozen-lockfile/);
@@ -292,7 +292,7 @@ describe('api.castlist が next の時の書く道', () => {
   test('api の欄が無ければ、生成した client を作らない（今の curl の道のまま。止まっている castlist には送れずに止める）', async () => {
     const w = world({ castlist: dead });
     let made = 0;
-    const ctx: Context = { ...w.tpm, clients: { castlist: (url: string) => {
+    const ctx: Context = { ...w.tpm, clients: { ...w.tpm.clients, castlist: (url: string) => {
       made += 1;
       return castlistClient(url);
     } } };
