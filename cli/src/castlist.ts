@@ -3,7 +3,7 @@
 // 設定（config.jsonc の castlist か $ROSTER_CASTLIST_URL）が無ければ、どれも何もしない。
 // 送るのは curl（置き場の pagetray と同じ。spawnSync で打つ。命令の形は非同期で、request が Promise を返す）。castlist を起こすのは Product Manager だけで、止まっていれば打つ 1 行を出す。
 // 設定の api.castlist が next なら、書く物（登録・出来事・線・model と effort）は生成した client で新しい API に送る（registerActor・putRecord。AI-36 の段 6c）。
-// 答えは、どちらの道でも同じ Reply の形にする（呼ぶ側は替えない）。読む物（/healthz と監査の検索）は、まだ curl だけ。
+// 答えは、どちらの道でも同じ Reply の形にする（呼ぶ側は替えない）。読む物（/healthz・アクター・線・監査の検索）も、next なら生成した client で聞く（castlist-query.ts の query）。
 import type { HttpHandler } from '@smithy/core/protocols';
 import type { DocumentType } from '@smithy/types';
 import { createHash } from 'node:crypto';
@@ -176,6 +176,9 @@ function replyOf(error: unknown): Reply {
   // 答えの無い物（つながらない・時間切れ）と、2xx なのに本文を読めない答えは down（今の curl の道で、読めない答えを使わないのと同じ）。
   if (typeof code !== 'number' || (code >= 200 && code < 300)) return { kind: 'down' };
   if (code === 503) return { kind: 'busy' };
+  // 誤りの型の無い 404 は、新しい API の道を持たない castlist（今の 0.x の版）が答えた物（設定の api.castlist と castlist の版が合わない）。
+  const type = (error as { name?: unknown } | undefined)?.name;
+  if (code === 404 && type !== 'NotFound') return { kind: 'refused', code, error: 'castlist が新しい API を持たない（設定の api.castlist は next だが、castlist の版が 1.0.0 より前に見える。castlist の版か、設定の api を見る）' };
   return { kind: 'refused', code, error: error instanceof Error ? error.message : String(error) };
 }
 

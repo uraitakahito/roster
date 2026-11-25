@@ -61,7 +61,25 @@ const FIELDS: Record<Exclude<Query['op'], 'GetActor'>, Record<string, Field>> = 
 };
 
 /** RFC 3339 の時刻（時差は Z か ±hh:mm）。 */
-const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/i;
+const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-](\d{2}):(\d{2}))$/i;
+
+/**
+ * RFC 3339 の時刻として在る字か。Date.parse は在らない日と時刻（2 月 30 日・11 月 31 日・24 時）を次の日に回して読むので、
+ * 字の欄を 1 つずつ見る（今の castlist の RFC 3339 の読みと同じく、在らない物は断る）。
+ */
+export function isTime(value: string): boolean {
+  const m = RFC3339.exec(value);
+  if (m === null) return false;
+  // 時差の欄は Z の時に無い（undefined）ので 0 にする。
+  const [year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0, offsetHour = 0, offsetMinute = 0] = m.slice(1).map(v => Number(v ?? 0));
+  if (month < 1 || month > 12 || day < 1) return false;
+  // その月の日の数（次の月の 0 日は、その月の終わりの日）。
+  if (day > new Date(Date.UTC(year, month, 0)).getUTCDate()) return false;
+  return hour <= 23 && minute <= 59 && second <= 59 && offsetHour <= 23 && offsetMinute <= 59;
+}
+
+/** castlist のアクターの id の形（ai.common#ActorId。小文字の UUID）。新しい API は、この形でない id を 400 で断る。 */
+export const ACTOR_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /** 今の道の引数を、新しい API の入力にする。今の castlist が断る物は、その訳（今の castlist と同じ字）。 */
 function inputOf(fields: Record<string, Field>, params: Params): { input: Record<string, unknown> } | { error: string } {
@@ -80,7 +98,7 @@ function inputOf(fields: Record<string, Field>, params: Params): { input: Record
         input[field.to] = value;
         break;
       case 'time':
-        if (!RFC3339.test(value) || Number.isNaN(Date.parse(value))) return { error: `${name} は RFC 3339 の時刻（例 2026-11-22T13:00:00+09:00）` };
+        if (!isTime(value)) return { error: `${name} は RFC 3339 の時刻（例 2026-11-22T13:00:00+09:00）` };
         input[field.to] = new Date(value);
         break;
       case 'bool':
@@ -115,6 +133,9 @@ const withNulls = (row: unknown, names: string[]): Record<string, unknown> => ({
 /** アクターの一覧の 1 行（ListActors の行と、線の点）。 */
 const actorRow = (row: unknown): Record<string, unknown> => withNulls(snake(row), ['first_entered_at', 'last_exited_at', 'last_exit_type', 'model', 'effort']);
 
+/** 設定の 1 行。送り手の id（登録の時に頼んだ物には無い）は、今の道と同じく null で埋める。 */
+const settingRow = (row: unknown): Record<string, unknown> => withNulls(snake(row), ['id']);
+
 /** 1 つのアクター（GetActor）。 */
 function actorOf(out: Castlist.GetActorCommandOutput): Record<string, unknown> {
   const body = withNulls(snake(out), ['current_settings']);
@@ -134,6 +155,14 @@ export async function query(ctx: Sender, url: string, q: Query): Promise<Reply> 
     const search = new URLSearchParams(params.filter((p): p is [string, string] => p[1] !== undefined)).toString();
     return request(ctx, url, 'GET', search === '' ? pathOf(q) : `${pathOf(q)}?${search}`);
   }
+  // 新しい API は ActorId の形でない id を 400 で断る。今の castlist は、無い id として 404（道の id）か空の答え（絞り）を返すので、それに合わせて送らない。
+  if ('id' in q && !ACTOR_ID.test(q.id)) return { kind: 'refused', code: 404, error: 'そのアクターは無い' };
+  const filter = q.op === 'ListEvents' ? 'actor' : q.op === 'ListActors' ? 'launched_by' : undefined;
+  if (filter !== undefined && params.some(([name, value]) => name === filter && value !== undefined && !ACTOR_ID.test(value))) {
+    const items = q.op === 'ListEvents' ? 'events' : 'actors';
+    const body = pageOf(items, [], new Date(), undefined);
+    return { kind: 'ok', code: 200, body, text: JSON.stringify(body) };
+  }
   if (q.op === 'GetActor') return viaNext(ctx, url, (client, api, options) => client.send(new api.GetActorCommand({ actorId: q.id }), options), actorOf);
   const made = inputOf(FIELDS[q.op], params);
   if ('error' in made) return { kind: 'refused', code: 400, error: made.error };
@@ -146,7 +175,7 @@ export async function query(ctx: Sender, url: string, q: Query): Promise<Reply> 
     case 'ListEvents':
       return viaNext(ctx, url, (client, api, options) => client.send(new api.ListEventsCommand(input), options), out => pageOf('events', snake(out.events ?? []) as unknown[], out.asOf, out.nextToken));
     case 'ListSettings':
-      return viaNext(ctx, url, (client, api, options) => client.send(new api.ListSettingsCommand(input), options), out => pageOf('settings', snake(out.settings ?? []) as unknown[], out.asOf, out.nextToken));
+      return viaNext(ctx, url, (client, api, options) => client.send(new api.ListSettingsCommand(input), options), out => pageOf('settings', (out.settings ?? []).map(settingRow), out.asOf, out.nextToken));
     case 'ListActorSettings':
       return actorSettings(ctx, url, q.id, input.time as Date | undefined);
   }
@@ -159,7 +188,7 @@ export async function query(ctx: Sender, url: string, q: Query): Promise<Reply> 
 async function actorSettings(ctx: Sender, url: string, id: string, at: Date | undefined): Promise<Reply> {
   const actor = await viaNext(ctx, url, (client, api, options) => client.send(new api.GetActorCommand({ actorId: id }), options), out => out.name);
   if (actor.kind !== 'ok') return actor;
-  const named = (row: unknown): Record<string, unknown> => ({ ...snake(row) as Record<string, unknown>, actor_name: actor.body });
+  const named = (row: unknown): Record<string, unknown> => ({ ...settingRow(row), actor_name: actor.body });
   if (at === undefined) {
     return viaNext(ctx, url, (client, api, options) => client.send(new api.ListActorSettingsCommand({ actorId: id }), options), out => ({ as_of: snake(out.asOf), actor_id: out.actorId, settings: (out.settings ?? []).map(named) }));
   }
