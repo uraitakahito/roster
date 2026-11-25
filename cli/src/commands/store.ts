@@ -241,7 +241,8 @@ export async function pagesRequest(ctx: Context, request: PagesRequest): Promise
 export const PAGES_NEXT_SINCE = '1.0.0';
 
 /** 1 つの命令の中で、置き場の版を引いた答え（引くのは 1 度だけ）。 */
-const storeVersions = new WeakMap<Context, string>();
+/** 1 つの命令の中で、置き場の版を引いた答え（引くのは 1 度だけ）。null は応えなかった（覚えて、頼むたびに待ち直さない）。 */
+const storeVersions = new WeakMap<Context, string | null>();
 
 /**
  * 置き場の版の字。版を答えない置き場は ''。応えなければ undefined（覚えない。次にまた聞く）。1 つの命令（Context）の中では、置き場に 1 度だけ聞く。
@@ -250,7 +251,7 @@ const storeVersions = new WeakMap<Context, string>();
  */
 async function storeVersion(ctx: Context): Promise<string | undefined> {
   const known = storeVersions.get(ctx);
-  if (known !== undefined) return known;
+  if (known !== undefined) return known ?? undefined;
   let version: string | undefined;
   if (nextApi(ctx, 'pagetray')) {
     const sent = await sendOnce(() => ctx.clients.pagetray(pagesUrl(ctx.env)), (client, options) => client.send(new (pagetrayApi().GetHealthCommand)({}), options), { server: 'pagetray', wait: Number(TIMEOUT) * 1000, outdated: OUTDATED });
@@ -269,7 +270,7 @@ async function storeVersion(ctx: Context): Promise<string | undefined> {
       version = typeof answered === 'string' ? answered : '';
     }
   }
-  if (version !== undefined) storeVersions.set(ctx, version);
+  storeVersions.set(ctx, version ?? null);
   return version;
 }
 
@@ -283,6 +284,9 @@ export async function storeAtLeast(ctx: Context, since: string): Promise<'yes' |
   return atLeast(version, since) ? 'yes' : 'old';
 }
 
+/** 置き場の版が古く、新しい API（api.pagetray の next）で頼めない（requireNextStore）。頼む物によっては、止めずに見分けて続ける（返事の状態・返事待ちの一覧）。 */
+export class OldStoreError extends TpmError {}
+
 /**
  * 設定の api.pagetray が next の時に、置き場が新しい API を持つかを見る（1 つの命令で 1 度だけ。castlist の requireUp の版の見方と同じ）。
  * 1.0.0 より前の版なら、送らずに止める（今の版の置き場に新しい API の道で頼むと、どれも断られるため）。応えなければ止めない（頼む物の答えで、応えないと出る）。
@@ -290,7 +294,7 @@ export async function storeAtLeast(ctx: Context, since: string): Promise<'yes' |
 async function requireNextStore(ctx: Context): Promise<void> {
   const version = await storeVersion(ctx);
   if (version === undefined || atLeast(version, PAGES_NEXT_SINCE)) return;
-  throw new TpmError(`置き場（${pagesUrl(ctx.env)}）の版は ${version || 'わからない'} で、新しい API（${PAGES_NEXT_SINCE} から）を持ちません。設定の api.pagetray を外すか、置き場を新しい版に替えてください（置き場を替えるのは、roster ask devops で頼む）`);
+  throw new OldStoreError(`置き場（${pagesUrl(ctx.env)}）の版は ${version || 'わからない'} で、新しい API（${PAGES_NEXT_SINCE} から）を持ちません。設定の api.pagetray を外すか、置き場を新しい版に替えてください（置き場を替えるのは、roster ask devops で頼む）`);
 }
 
 /** 版の字（`0.10.1`。後ろの `-dev` などは読まない）が since 以上か。頭が `<数>.<数>.<数>` でなければ false。 */

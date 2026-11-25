@@ -111,10 +111,11 @@ export async function sendOnce<C extends Closable, O>(make: () => C, send: (clie
   }
   catch (e) {
     const code = (e as { $metadata?: { httpStatusCode?: unknown } } | undefined)?.$metadata?.httpStatusCode;
-    // 答えの無い物と、2xx なのに本文を読めない答えは down（今の curl の道で、読めない答えを使わないのと同じ）。
-    if (typeof code !== 'number') return { kind: 'down' };
-    if (code >= 200 && code < 300) return { kind: 'down', status: code };
     const type = (e as { name?: unknown } | undefined)?.name;
+    // 答えの無い物と、時間切れ・中止（頭の後に本文で止まった時も、状態の数を持つことがある）は、状態の数の無い down（応えない）。
+    if (typeof code !== 'number' || type === 'AbortError' || type === 'TimeoutError') return { kind: 'down' };
+    // 2xx なのに本文を読めない答えは、状態の数を持つ down（今の版の置き場の /healthz の字の ok など）。
+    if (code >= 200 && code < 300) return { kind: 'down', status: code };
     const fields = ((e as { fieldList?: { path?: unknown }[] }).fieldList ?? []).map(f => f.path).filter((p): p is string => typeof p === 'string');
     const message = code === 404 && type !== 'NotFound' ? how.outdated : e instanceof Error ? e.message : String(e);
     return { kind: 'failed', code, message, fields };

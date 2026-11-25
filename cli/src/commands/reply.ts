@@ -6,7 +6,7 @@ import { basename } from 'node:path';
 import type { Context } from '../context.ts';
 import { TpmError } from '../skill-sets.ts';
 import type { PageRecord } from './page.ts';
-import { inStore, pagesRequest, pagesUrl, reason, storeAtLeast } from './store.ts';
+import { inStore, OldStoreError, pagesRequest, pagesUrl, reason, storeAtLeast, type Reply } from './store.ts';
 
 /** 返事の状態。置き場の API の `state`・`reply` の値と同じ名。 */
 export type ReplyState = 'waiting' | 'answered';
@@ -72,7 +72,9 @@ export async function setReply(ctx: Context, url: string, state: ReplyState, on:
     if (since !== 'yes') return since;
   }
   const query = new URLSearchParams({ ...parts, state, ...(on === 'pm' ? {} : { on }) });
-  const r = await pagesRequest(ctx, { op: 'SetReplyState', query });
+  // 版の古い置き場（next の道）は止めずに old にする。ask pm・answer は、メッセージを送った後に呼ぶので、ここで止めると送った行が出ない。
+  const r = await unlessOld(() => pagesRequest(ctx, { op: 'SetReplyState', query }));
+  if (r === undefined) return 'old';
   if (r.code === '000') return 'down';
   if (r.code === '200') return 'done';
   if (r.code === '409') return 'conflict';
@@ -81,6 +83,17 @@ export async function setReply(ctx: Context, url: string, state: ReplyState, on:
   // 消したページ（410）と無いページ（404）。0.5.0 からの置き場は、どちらも 404 で返す。
   if (r.code === '404' || r.code === '410') return 'missing';
   throw new TpmError(`置き場が返事の状態を書きませんでした（${r.code}）: ${reason(r.body)}`);
+}
+
+/** 置き場に頼む。版の古い置き場（OldStoreError）なら止めずに undefined。 */
+async function unlessOld(run: () => Promise<Reply>): Promise<Reply | undefined> {
+  try {
+    return await run();
+  }
+  catch (e) {
+    if (e instanceof OldStoreError) return undefined;
+    throw e;
+  }
 }
 
 /** 記録が、その相手の、その状態か。返事を求めていないページは、どちらでもない。 */
@@ -96,8 +109,8 @@ export function inState(page: PageRecord, state: ReplyState, on: Party = 'pm'): 
  */
 export async function waitingUrls(ctx: Context, key: string): Promise<string[] | undefined> {
   const query = new URLSearchParams({ project: basename(ctx.state.dir), key, reply: 'waiting', sort: 'created_at', limit: '1000' });
-  const r = await pagesRequest(ctx, { op: 'ListPages', query });
-  if (r.code !== '200') return undefined;
+  const r = await unlessOld(() => pagesRequest(ctx, { op: 'ListPages', query }));
+  if (r?.code !== '200') return undefined;
   return (JSON.parse(r.body) as { pages: PageRecord[] }).pages.filter(p => inState(p, 'waiting')).map(p => `${pagesUrl(ctx.env)}${p.path}`);
 }
 
@@ -109,8 +122,8 @@ export async function waitingUrls(ctx: Context, key: string): Promise<string[] |
 export async function waitingByParty(ctx: Context, key: string): Promise<Record<Party, string[]> | undefined> {
   const of = async (on: Party): Promise<string[] | undefined> => {
     const query = new URLSearchParams({ project: basename(ctx.state.dir), key, reply: 'waiting', ...(on === 'pm' ? {} : { on }), sort: 'created_at', limit: '1000' });
-    const r = await pagesRequest(ctx, { op: 'ListPages', query });
-    if (r.code !== '200') return undefined;
+    const r = await unlessOld(() => pagesRequest(ctx, { op: 'ListPages', query }));
+    if (r?.code !== '200') return undefined;
     return (JSON.parse(r.body) as { pages: PageRecord[] }).pages.filter(p => inState(p, 'waiting', on)).map(p => `${pagesUrl(ctx.env)}${p.path}`);
   };
   const pm = await of('pm');
