@@ -4,9 +4,9 @@ name: pagetray-e2e
 on:
   push:
     branches: [main]
-    paths: [cli/**, .node-version, .pagetray-version, .github/workflows/pagetray-e2e.yml]
+    paths: [cli/**, .node-version, .pagetray-version, .castlist-next-version, .pagetray-next-version, .github/workflows/pagetray-e2e.yml]
   pull_request:
-    paths: [cli/**, .node-version, .pagetray-version, .github/workflows/pagetray-e2e.yml]
+    paths: [cli/**, .node-version, .pagetray-version, .castlist-next-version, .pagetray-next-version, .github/workflows/pagetray-e2e.yml]
 permissions:
   contents: read
 jobs:
@@ -44,3 +44,50 @@ jobs:
         run: ROSTER_E2E_PAGES_URL=http://127.0.0.1:8801 pnpm exec vitest run test/pagetray-e2e.test.ts
       - if: always()
         run: docker logs e2e-store
+  next:
+    # 新しい API（AI-36 の作り直し）の rc の image に向けて流す。castlist は .castlist-next-version の、pagetray は .pagetray-next-version の版。
+    # pagetray は PAGETRAY_CASTLIST_URL で同じ docker の network の castlist に送り手を聞く（castlist の container の名でつなぐ）。
+    # 設定の api の castlist と pagetray を next にした roster で、pagetray-e2e の試験と castlist-e2e の試験を流す（$ROSTER_E2E_API=next）。
+    # 今の版の image に向ける上の cli の job は、切り替え（AI-36 の段 8）まで残す。image は arm64 だけなので、arm64 の runner で流す。
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+      - name: rc の image を、digest で取って起こす（castlist は 127.0.0.1:8812、pagetray は 127.0.0.1:8811）
+        run: |
+          pin() { pinned=$(cat "$1"); echo "${pinned%%@*} ${pinned#*@}"; }   # v<版> sha256:<digest>
+          read -r castlist_version castlist_digest < <(pin .castlist-next-version)
+          read -r pages_version pages_digest < <(pin .pagetray-next-version)
+          docker network create e2e-next
+          # volume は付けない（新しい server は、空の /data に新しい DB を作る。今の volume では起こさない決まり）。
+          docker run -d --name=e2e-castlist --network=e2e-next -p 127.0.0.1:8812:8080 "ghcr.io/uraitakahito/castlist@$castlist_digest"
+          docker run -d --name=e2e-pages --network=e2e-next -p 127.0.0.1:8811:8080 \
+            -e PAGETRAY_CASTLIST_URL=http://e2e-castlist:8080 "ghcr.io/uraitakahito/pagetray@$pages_digest"
+          # 起きた物の版が、書いた版と同じか（新しい API の版は /healthz の version）。
+          for port in 8812 8811; do
+            for _ in $(seq 1 40); do curl -fsS "http://127.0.0.1:$port/healthz" > "healthz-$port.json" && break; sleep 0.5; done
+            cat "healthz-$port.json"; echo
+          done
+          grep -q "\"version\":\"${castlist_version#v}\"" healthz-8812.json
+          grep -q "\"version\":\"${pages_version#v}\"" healthz-8811.json
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: cli/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: cli/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: cli
+      - name: 新しい API に向けて roster の命令を流す
+        working-directory: cli
+        # $ROSTER_E2E_* が無いと、これらの試験は飛ばされる（ふだんの pnpm test）。ここでは必ず渡す。
+        env:
+          ROSTER_E2E_API: next
+          ROSTER_E2E_PAGES_URL: http://127.0.0.1:8811
+          ROSTER_E2E_CASTLIST_URL: http://127.0.0.1:8812
+        run: pnpm exec vitest run test/pagetray-e2e.test.ts test/castlist-e2e.test.ts
+      - if: always()
+        run: |
+          docker logs e2e-castlist
+          docker logs e2e-pages
