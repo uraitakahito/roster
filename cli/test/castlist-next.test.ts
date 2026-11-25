@@ -17,7 +17,7 @@ import { castlistGuard, readSession, sessionStart } from '../src/commands/castli
 import type { Context } from '../src/context.ts';
 import { withoutRosterEnv } from '../src/env.ts';
 import { deadUrl } from './castlist-fake.ts';
-import { nextHandler, type NextAnswer as Answer, type NextSeen as Seen } from './castlist-next-fake.ts';
+import { nextHandler, type NextAnswer as Answer, type NextSeen as Seen } from './next-fake.ts';
 import { world } from './helpers.ts';
 
 const SID = 'bbbbbbbb-0000-4000-8000-000000000001';
@@ -25,7 +25,7 @@ const ACTOR = '019abcde-0000-7000-8000-000000000001';
 /** world の時計の時刻。 */
 const NOW = Date.parse('2026-11-20T12:00:00.000Z');
 
-/** 偽の HTTP の handler（castlist-next-fake.ts）。answer が要求ごとの答えを決める（undefined なら、決まりの形の成功）。 */
+/** 偽の HTTP の handler（next-fake.ts）。answer が要求ごとの答えを決める（undefined なら、決まりの形の成功）。 */
 const fakeHandler = (answer: (seen: Seen) => Answer | undefined = () => undefined) => nextHandler(s => answer(s) ?? success(s));
 
 /** 決まりの形の成功（登録は 201 でアクターを返し、足す 3 つは 201 で足した行を返す）。 */

@@ -1,5 +1,5 @@
 // 設定の api.castlist が next の時に、castlist を読む物（/healthz・1 つのアクター・監査の検索）を、生成した client で新しい API に送る道（AI-36 の段 6c）。
-// Context の client を作る関数に、偽の HTTP の handler（castlist-next-fake.ts）を持つ client を差し込み、送った道と引数を見て、決まりの形（restJson1）で答える。
+// Context の client を作る関数に、偽の HTTP の handler（next-fake.ts）を持つ client を差し込み、送った道と引数を見て、決まりの形（restJson1）で答える。
 // 出す物（表・--json）は、今の道と同じ形（欄の名は snake_case、無い値は null、頁の印は next）になることを見る。本物の castlist には触らない。
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -9,7 +9,7 @@ import { castlistEvents, castlistFind, castlistLineage, castlistSettings, castli
 import { castlistHello } from '../src/commands/castlist.ts';
 import type { Context } from '../src/context.ts';
 import { deadUrl } from './castlist-fake.ts';
-import { nextHandler, type NextAnswer, type NextSeen } from './castlist-next-fake.ts';
+import { nextHandler, type NextAnswer, type NextSeen } from './next-fake.ts';
 import { world, type World } from './helpers.ts';
 
 const A1 = '019abcde-0000-7000-8000-000000000001';
