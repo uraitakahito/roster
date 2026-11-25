@@ -10,6 +10,12 @@ if [ ! -d "$cli/node_modules" ]; then
   echo "roster: $cli/node_modules がありません。先に cd $cli && pnpm install --frozen-lockfile を打ってください" >&2
   exit 1
 fi
+# lock を替えた（pull した）後に install していなければ、古い依存のまま動かさずに止める。
+# pnpm は install の時に lock の写しを node_modules/.pnpm/lock.yaml に書く（pnpm 11 では中身が同じ）ので、中身を cmp で比べる。
+if ! cmp -s "$cli/pnpm-lock.yaml" "$cli/node_modules/.pnpm/lock.yaml"; then
+  echo "roster: $cli/node_modules が $cli/pnpm-lock.yaml と合いません（lock を替えた後に install していない）。先に cd $cli && pnpm install --frozen-lockfile を打ってください" >&2
+  exit 1
+fi
 # cmux の通知の hook のように、PATH が macOS の既定（/usr/bin:/bin:/usr/sbin:/sbin）だけで呼ばれた時のため、
 # node（nodenv の shim）と cmux（app の中）を自分で見つける。だから hook の命令に Node や cmux の path を書かなくてよい。
 # PATH に node・cmux があれば（shell から打った時）何も足さない。
