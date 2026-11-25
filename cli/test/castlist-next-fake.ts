@@ -12,8 +12,11 @@ export interface NextSeen {
   body: Record<string, unknown> | undefined
 }
 
-/** 偽の handler の答え。type があれば restJson1 の誤り（body は message の字）。throws は、つながらない時のように handler が投げる。 */
-export type NextAnswer = { status: number, body?: unknown, type?: string } | { throws: Error };
+/**
+ * 偽の handler の答え。type があれば restJson1 の誤り（body は message の字）。raw は本文の字をそのまま（JSON でない答え）。
+ * throws は、つながらない時のように handler が投げる。
+ */
+export type NextAnswer = { status: number, body?: unknown, type?: string } | { status: number, raw: string } | { throws: Error };
 
 /** 偽の handler を作る。answer が undefined を返す要求は 404 の UnknownOperationException。 */
 export function nextHandler(answer: (seen: NextSeen) => NextAnswer | undefined) {
@@ -36,9 +39,10 @@ export function nextHandler(answer: (seen: NextSeen) => NextAnswer | undefined) 
       seen.push(one);
       const got = answer(one) ?? { status: 404, type: 'UnknownOperationException', body: '知らない道' };
       if ('throws' in got) return Promise.reject(got.throws);
-      const headers: Record<string, string> = { 'content-type': 'application/json', ...(got.type === undefined ? {} : { 'x-amzn-errortype': got.type }) };
-      const body = got.type === undefined ? got.body : { message: got.body };
-      return Promise.resolve({ response: { statusCode: got.status, reason: '', headers, body: Readable.from([Buffer.from(JSON.stringify(body ?? {}))]) } });
+      const type = 'type' in got ? got.type : undefined;
+      const headers: Record<string, string> = { 'content-type': 'application/json', ...(type === undefined ? {} : { 'x-amzn-errortype': type }) };
+      const payload = 'raw' in got ? got.raw : JSON.stringify((type === undefined ? got.body : { message: got.body }) ?? {});
+      return Promise.resolve({ response: { statusCode: got.status, reason: '', headers, body: Readable.from([Buffer.from(payload)]) } });
     },
   };
   return { handler, seen };

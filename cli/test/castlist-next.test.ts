@@ -9,8 +9,6 @@ import { createRequire } from 'node:module';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Readable } from 'node:stream';
-import type { HttpRequest } from '@smithy/types';
 import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 import type * as Castlist from '../gen/castlist-client/dist-types/index.js';
 import { castlistClient, castlistIssuer, projectPrefix, registerPm } from '../src/castlist.ts';
@@ -19,6 +17,7 @@ import { castlistGuard, readSession, sessionStart } from '../src/commands/castli
 import type { Context } from '../src/context.ts';
 import { withoutRosterEnv } from '../src/env.ts';
 import { deadUrl } from './castlist-fake.ts';
+import { nextHandler, type NextAnswer as Answer, type NextSeen as Seen } from './castlist-next-fake.ts';
 import { world } from './helpers.ts';
 
 const SID = 'bbbbbbbb-0000-4000-8000-000000000001';
@@ -26,39 +25,8 @@ const ACTOR = '019abcde-0000-7000-8000-000000000001';
 /** world の時計の時刻。 */
 const NOW = Date.parse('2026-11-20T12:00:00.000Z');
 
-/** 受けた要求 1 件（偽の handler の記録）。 */
-interface Seen {
-  method: string
-  path: string
-  headers: Record<string, string>
-  body: Record<string, unknown> | undefined
-}
-
-/** 偽の handler の答え。type があれば、restJson1 の誤り（X-Amzn-Errortype と本文の message）。 */
-type Answer = { status: number, body?: unknown, type?: string } | { throws: Error };
-
-/** 偽の HTTP の handler。answer が要求ごとの答えを決める（無ければ、決まりの形の成功）。 */
-function fakeHandler(answer: (seen: Seen) => Answer | undefined = () => undefined) {
-  const seen: Seen[] = [];
-  const handler = {
-    metadata: { handlerProtocol: 'http/1.1' },
-    updateHttpClientConfig: () => undefined,
-    httpHandlerConfigs: () => ({}),
-    destroy: () => undefined,
-    handle: (request: HttpRequest) => {
-      const raw: unknown = request.body;
-      const text = typeof raw === 'string' ? raw : raw instanceof Uint8Array ? Buffer.from(raw).toString() : undefined;
-      const one: Seen = { method: request.method, path: request.path, headers: { ...request.headers }, body: text === undefined || text === '' ? undefined : JSON.parse(text) as Record<string, unknown> };
-      seen.push(one);
-      const got = answer(one) ?? success(one);
-      if ('throws' in got) return Promise.reject(got.throws);
-      const headers: Record<string, string> = { 'content-type': 'application/json', ...(got.type === undefined ? {} : { 'x-amzn-errortype': got.type }) };
-      const body = got.type === undefined ? got.body : { message: got.body };
-      return Promise.resolve({ response: { statusCode: got.status, reason: '', headers, body: Readable.from([Buffer.from(JSON.stringify(body ?? {}))]) } });
-    },
-  };
-  return { handler, seen };
-}
+/** 偽の HTTP の handler（castlist-next-fake.ts）。answer が要求ごとの答えを決める（undefined なら、決まりの形の成功）。 */
+const fakeHandler = (answer: (seen: Seen) => Answer | undefined = () => undefined) => nextHandler(s => answer(s) ?? success(s));
 
 /** 決まりの形の成功（登録は 201 でアクターを返し、足す 3 つは 201 で足した行を返す）。 */
 function success(seen: Seen): Answer {
@@ -200,11 +168,8 @@ describe('castlist の client の守り（review-33）', () => {
   }, 15_000);
 
   test('2xx の答えの本文を読めなければ、断られた（refused）でなく、読めない答えとして down', async () => {
-    const { ctx } = nextSeat();
-    const raw = fakeHandler();
-    raw.handler.handle = () => Promise.resolve({ response: { statusCode: 201, reason: '', headers: { 'content-type': 'application/json' }, body: Readable.from([Buffer.from('not json')]) } });
-    const seat: Context = { ...ctx, clients: { castlist: (url: string) => castlistClient(url, raw.handler) } };
-    expect(await registerPm(seat, dead)).toEqual({ kind: 'down' });
+    const { ctx } = nextSeat(() => ({ status: 201, raw: 'not json' }));
+    expect(await registerPm(ctx, dead)).toEqual({ kind: 'down' });
   });
 
   test('生成した client を読めなければ、pnpm install --frozen-lockfile を打つよう言う誤りで止まる（guard はこれを 2 で止める）', async () => {
