@@ -244,7 +244,7 @@ export const PAGES_NEXT_SINCE = '1.0.0';
 const storeVersions = new WeakMap<Context, string | null>();
 
 /**
- * 置き場の版の字。版を答えない置き場は ''。応えなければ undefined（覚えない。次にまた聞く）。1 つの命令（Context）の中では、置き場に 1 度だけ聞く。
+ * 置き場の版の字。版を答えない置き場は ''。応えなければ undefined（応えなかったことも覚え、同じ命令の中では聞き直さない）。1 つの命令（Context）の中では、置き場に 1 度だけ聞く。
  * 設定の api.pagetray が next なら、新しい API の /healthz（GetHealth）の version で見る（新しい API に /api/version は無い）。
  * 2xx で読めない答え（今の版の置き場の /healthz は字の ok）・version の無い答え・型の無い 404 は、新しい API を持たない置き場として ''。
  */
