@@ -365,3 +365,44 @@ describe('読む道の client の守り（書く道と同じ。review-33）', ()
     }
   }, 10_000);
 });
+
+describe('今の castlist と同じに断る・答える（review-35）', () => {
+  test.each([['2 月 30 日', '2026-02-30T00:00:00Z'], ['11 月 31 日', '2026-11-31T10:00:00+09:00'], ['24 時', '2026-11-22T24:00:00Z'], ['時差の 24 時', '2026-11-22T10:00:00+24:00']])('在らない時刻（%s）は、次の日に回さず、送らずに今と同じ訳で止める', async (_, time) => {
+    const { ctx, seen } = nextWorld();
+    expect(await thrown(() => castlistEvents(ctx, { from: time }))).toBe('from は RFC 3339 の時刻（例 2026-11-22T13:00:00+09:00）');
+    expect(seen).toEqual([]);
+  });
+
+  test('閏年の 2 月 29 日は通る', async () => {
+    const { ctx, seen } = nextWorld();
+    await castlistEvents(ctx, { from: '2028-02-29T00:00:00Z' });
+    expect(seen[0]?.query.from).toBe('2028-02-29T00:00:00Z');
+  });
+
+  test('UUID の形でない id は、新しい API の 400 でなく、今と同じく「無い」で止まる（送らない）', async () => {
+    const { ctx, seen } = nextWorld();
+    const missing = await thrown(() => castlistShow(ctx, 'nobody.1', {}));
+    expect(missing).toMatch(/^そのアクターは無い（nobody\.1）/);
+    expect(seen).toEqual([]);
+  });
+
+  test('UUID の形でない --actor・--launched-by の絞りは、送らずに空の答え（今の castlist と同じ）', async () => {
+    const { ctx, seen } = nextWorld();
+    const [events = ''] = await castlistEvents(ctx, { actor: 'nobody.1', json: true });
+    expect(JSON.parse(events)).toMatchObject({ events: [], next: null });
+    const [actors = ''] = await castlistFind(ctx, { launchedBy: 'some-name', json: true });
+    expect(JSON.parse(actors)).toMatchObject({ actors: [], next: null });
+    expect(seen).toEqual([]);
+  });
+
+  test('設定の行の送り手の id が無ければ、--json でも今と同じく "id": null', async () => {
+    const { ctx } = nextWorld();
+    const [text = ''] = await castlistSettings(ctx, { actor: A1, json: true });
+    expect((JSON.parse(text) as { settings: Record<string, unknown>[] }).settings[0]).toHaveProperty('id', null);
+  });
+
+  test('誤りの型の無い 404（新しい API を持たない castlist）は、アクターが無いでなく、版が合わないと言う', async () => {
+    const { ctx } = nextWorld(() => ({ status: 404, raw: '' }));
+    expect(await thrown(() => castlistFind(ctx, { label: ['a:b'] }))).toMatch(/castlist が新しい API を持たない/);
+  });
+});
