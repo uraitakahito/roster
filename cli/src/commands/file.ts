@@ -8,7 +8,7 @@ import type { Context } from '../context.ts';
 import { TpmError } from '../skill-sets.ts';
 import { roleOf } from './infra.ts';
 import type { PageRecord } from './page.ts';
-import { call, compareStored, down, fetchTo, inStore, KEY, localPath, pagesDir, pagesUrl, PROJECT, reason, removeLocal, requireKey, selfAddress, sender, senderRefused, writeCopy } from './store.ts';
+import { compareStored, down, fetchTo, inStore, KEY, localPath, pagesDir, pagesRequest, pagesUrl, PROJECT, reason, removeLocal, requireKey, selfAddress, sender, senderRefused, writeCopy } from './store.ts';
 
 /** 置き場が返す、file 1 つの記録（中身は入らない）。 */
 export interface FileRecord {
@@ -110,7 +110,7 @@ function hasExif(body: Buffer): boolean {
 
 /** 置き場に file を 1 つ送る。置けたら記録を、番号を名指して使われていたら 'taken' を返す。ほかは止まる（送り手を付けた要求の 503・422 は senderRefused の文）。 */
 async function postFile(ctx: Context, file: string, ext: string, query: URLSearchParams): Promise<FileRecord | 'taken'> {
-  const r = await call(ctx, ['-X', 'POST', '-H', `Content-Type: ${FILE_TYPES[ext] ?? ''}`, '--data-binary', `@${file}`, `${pagesUrl(ctx.env)}/api/files?${query.toString()}`]);
+  const r = await pagesRequest(ctx, { op: 'CreateFile', query, file, contentType: FILE_TYPES[ext] ?? '' });
   if (r.code === '201') return JSON.parse(r.body) as FileRecord;
   if (r.code === '409') return 'taken';
   if (r.code === '404') throw oldStore();
@@ -188,7 +188,7 @@ async function fetchFile(ctx: Context, storePath: string, path: string): Promise
   if (code === '000') throw down(ctx, `控え（${path}）もありません。`);
   if (code === '410') throw new TpmError(`置き場の file は消してあります（410）: ${url}`);
   // 0.4.0 より前の置き場も、file の URL に 404 を返す。探すエンドポイントがあるかで分ける。
-  if (code === '404' && (await call(ctx, [`${pagesUrl(ctx.env)}/api/files?limit=1`])).code === '404') throw oldStore();
+  if (code === '404' && (await pagesRequest(ctx, { op: 'ListFiles', query: new URLSearchParams({ limit: '1' }) })).code === '404') throw oldStore();
   throw new TpmError(`置き場に file がありません（${code}）: ${url}`);
 }
 
@@ -237,7 +237,7 @@ export async function copyRefs(ctx: Context, project: string, key: string, page:
 
 /** 置き場の file を探す。0.4.0 より前の置き場（探すエンドポイントが無い）なら undefined。 */
 export async function findFiles(ctx: Context, query: URLSearchParams): Promise<FileRecord[] | undefined> {
-  const r = await call(ctx, [`${pagesUrl(ctx.env)}/api/files?${query.toString()}`]);
+  const r = await pagesRequest(ctx, { op: 'ListFiles', query });
   if (r.code === '404') return undefined;
   if (r.code === '000') throw down(ctx, '');
   if (r.code !== '200') throw new TpmError(`置き場が file の一覧を返しませんでした（${r.code}）: ${reason(r.body)}`);
@@ -273,7 +273,7 @@ export async function fileList(ctx: Context, options: FileListOptions): Promise<
 
 /** 置き場の file を消す（DELETE /api/files。query は project と、key・name・n）。消した path を返す。 */
 export async function removeFiles(ctx: Context, query: URLSearchParams): Promise<string[]> {
-  const r = await call(ctx, ['-X', 'DELETE', `${pagesUrl(ctx.env)}/api/files?${query.toString()}`]);
+  const r = await pagesRequest(ctx, { op: 'DeleteFiles', query });
   if (r.code === '404') throw oldStore();
   if (r.code === '000') throw down(ctx, 'file は消していません。');
   if (r.code !== '200') throw new TpmError(`置き場が file を消しませんでした（${r.code}）: ${reason(r.body)}`);
@@ -286,7 +286,7 @@ async function referrers(ctx: Context, files: FileRecord[]): Promise<string[]> {
   const targets = new Set(files.map(f => f.path));
   const lines: string[] = [];
   for (const project of projects) {
-    const r = await call(ctx, [`${pagesUrl(ctx.env)}/api/pages?${new URLSearchParams({ project, limit: '1000' }).toString()}`]);
+    const r = await pagesRequest(ctx, { op: 'ListPages', query: new URLSearchParams({ project, limit: '1000' }) });
     if (r.code === '000') throw down(ctx, 'file は消していません。');
     if (r.code !== '200') throw new TpmError(`置き場がページの一覧を返しませんでした（${r.code}）: ${reason(r.body)}`);
     for (const page of (JSON.parse(r.body) as { pages: PageRecord[] }).pages) {

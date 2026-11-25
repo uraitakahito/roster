@@ -1,16 +1,18 @@
-// 設定の api.pagetray が next の時に、置き場のページの道（roster page put・list・delete・import）を、生成した pagetray の client で新しい API に送る道（AI-36 の段 6c）。
+// 設定の api.pagetray が next の時に、置き場の道（ページ・file・返事の状態・レビューの印・版）を、生成した pagetray の client で新しい API に送る道（AI-36 の段 6c）。
 // Context の clients.pagetray に、偽の HTTP の handler（next-fake.ts）を持つ client を差し込み、送った道と引数を見て、決まりの形（restJson1）で答える。
-// 出す物（URL・表・--json）は今と同じ形になることを見る。ページの本文（GET /<project>/<Key>/<種類>-<番号>.html）は新しい API でも同じ URL の手の道なので、今の curl のまま（偽の置き場が答える）。
-// file・返事・レビューの印は次の PR で替えるので、next の時も今の道のままであることも見る。本物の置き場には触らない。
-import { mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+// 出す物（URL・表・--json）は今と同じ形になることを見る。ページの本文と file の中身（GET /<project>/<Key>/…）は新しい API でも同じ URL の手の道なので、今の curl のまま（偽の置き場が答える）。
+// next の時に curl で置き場の API（/api/…）を呼ばないことも見る。本物の置き場には触らない。
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 import { castlistIssuer } from '../src/castlist.ts';
-import { filePut } from '../src/commands/file.ts';
+import { fileDelete, fileList, filePath, filePut } from '../src/commands/file.ts';
 import { pageDelete, pageImport, pageList, pagePath, pagePut, pageReply } from '../src/commands/page.ts';
+import { replyLine, setReply, waitingByParty, waitingUrls } from '../src/commands/reply.ts';
+import { markVerdict } from '../src/commands/review-marks.ts';
 import { pagetrayClient, storeAtLeast } from '../src/commands/store.ts';
 import type { Context } from '../src/context.ts';
 import { writeRole } from '../src/roster.ts';
@@ -26,14 +28,23 @@ function page(project: string, key: string, kind: string, n: string, extra: Reco
   return { project, key, kind, n, title: `${kind} の題`, role: 'software-engineer', workspace: 'file:1', createdAt: `2026-11-20T12:00:0${n}.000Z`, size: 10, path: `/${project}/${key}/${kind}-${n}.html`, ...extra };
 }
 
+/** 新しい API の版の /healthz の答え。 */
+const HEALTHY: NextAnswer = { status: 200, body: { status: 'ok', version: '1.0.0-rc.1' } };
+
 /**
  * api.pagetray が next の世界: 控えを一時の folder にし、t-x7k2 の Software Engineer 担当（居場所 file:1）と TPM 担当の周り。
  * 生成した client を作る関数は、偽の handler を持つ client を作る。made は作った数。
  */
-function setup(answer: (seen: NextSeen) => NextAnswer | undefined = () => undefined, config: Record<string, unknown> = { api: { pagetray: 'next' } }) {
+function setup(answer: (seen: NextSeen) => NextAnswer | undefined = () => undefined, config: Record<string, unknown> = { api: { pagetray: 'next' } }, health: NextAnswer = HEALTHY) {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'roster-pages-next-')));
   const w: World = world(config);
-  const { handler, seen } = nextHandler(answer);
+  // /healthz（版を見る GetHealth）は health で答え、seen に入れずに数える（next の道は、1 つの命令で 1 度だけ版を見てから頼む）。
+  let healths = 0;
+  const { handler, seen } = nextHandler((s) => {
+    if (s.path !== '/healthz') return answer(s);
+    healths += 1;
+    return health;
+  }, s => s.path !== '/healthz');
   let made = 0;
   const wire = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({
     ...ctx,
@@ -55,7 +66,7 @@ function setup(answer: (seen: NextSeen) => NextAnswer | undefined = () => undefi
   writeFileSync(html, HTML);
   /** 偽の置き場（今の道）への curl の引数。 */
   const curls = (): string[][] => w.calls.filter(c => c.cmd === 'curl').map(c => c.args);
-  return { dir, w, role, tpm, project, html, seen, made: () => made, curls, wire };
+  return { dir, w, role, tpm, project, html, seen, made: () => made, healths: () => healths, curls, wire };
 }
 
 /** 投げた誤りの字（投げなければ空）。 */
@@ -104,7 +115,8 @@ describe('pagetray の client を作る所（pagetrayClient）', () => {
     const s = setup(undefined, { api: { pagetray: 'next' } });
     const ctx: Context = { ...s.role, env: { ...s.role.env, ROSTER_PAGES_URL: url }, clients: { ...s.role.clients, pagetray: (u: string) => pagetrayClient(u) } };
     expect(await thrown(() => pagePut(ctx, s.html, { kind: 'brief' }))).toMatch(/^置き場がページを受け取りませんでした（503）: 混んでいる$/);
-    expect(seen.length).toBe(1);
+    // 版を見る /healthz（503 なので応えない扱いで、止めずに頼む）と、置く要求。どちらも 1 度だけ。
+    expect(seen.map(r => (r.url ?? '').split('?')[0])).toEqual(['/healthz', `/api/projects/${s.project}/keys/t-x7k2/kinds/brief/pages`]);
     expect(seen[0]?.headers.host).toBe(new URL(url).host);
     expect(seen[0]?.headers.origin).toBeUndefined();
   });
@@ -115,6 +127,12 @@ describe('pagetray の client の守り', () => {
     const stall = createServer((req, res) => {
       req.resume();
       req.on('end', () => {
+        // 版を見る /healthz には答え、置く要求には頭だけを返す。
+        if (req.url === '/healthz') {
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ status: 'ok', version: '1.0.0-rc.1' }));
+          return;
+        }
         res.writeHead(201, { 'content-type': 'application/json' });
         res.write('{"project":');
       });
@@ -170,6 +188,9 @@ describe('roster page put（CreatePage）', () => {
     // ほかの欄の 400 は、送り手の訳にしない。
     const other = setup(() => ({ status: 400, type: 'ValidationException', body: 'role の形が違う', fieldList: [{ path: '/role', message: '形が違う' }] }), { api: { pagetray: 'next' }, castlist: 'http://127.0.0.1:1' });
     expect(await thrown(() => pagePut(at(other), other.html, { kind: 'plan' }))).toBe('置き場がページを受け取りませんでした（400）: role の形が違う');
+    // actorRef の形の誤り（/actorRef の 400 でも、訳が「castlist に登録の無い送り手」でない）は、打ち直しても通らないので、登録を待つ訳にしない。
+    const shape = setup(() => ({ status: 400, type: 'ValidationException', body: 'actorRef の形が違う', fieldList: [{ path: '/actorRef', message: '形が違う' }] }), { api: { pagetray: 'next' }, castlist: 'http://127.0.0.1:1' });
+    expect(await thrown(() => pagePut(at(shape), shape.html, { kind: 'plan' }))).toBe('置き場がページを受け取りませんでした（400）: actorRef の形が違う');
   });
 
   test('止まっている・答えが読めない（2xx の JSON でない本文）は「置き場が応えません」、client を読めなければ install を言う', async () => {
@@ -232,11 +253,12 @@ describe('roster page delete（ListPages と DeletePages）', () => {
     const s = setup((r) => {
       if (r.method === 'GET' && r.path === '/api/pages') return { status: 200, body: { pages: [page(s.project, 't-x7k2', 'plan', '1')] } };
       if (r.method === 'DELETE' && r.path === '/api/pages') return { status: 200, body: { removed: [`/${s.project}/t-x7k2/plan-1.html`] } };
+      if (r.method === 'GET' && r.path === '/api/files') return { status: 200, body: { files: [] } };
       return undefined;
     });
-    // file の一覧（findFiles）は、次の PR まで今の道（偽の置き場）で聞く。
+    // --key の時は、合う file も ListFiles で探す（無ければ消さない）。
     expect(await pageDelete(s.tpm, [], { key: 't-x7k2' })).toEqual(['消すページ（1 枚。戻せない）:', `${BASE}/${s.project}/t-x7k2/plan-1.html  plan の題`, '消すには、同じ命令に --yes を付けて打ってください']);
-    expect(s.seen.map(r => [r.method, r.query])).toEqual([['GET', { maxResults: '1000', project: s.project, key: 't-x7k2' }]]);
+    expect(s.seen.map(r => [r.method, r.path, r.query])).toEqual([['GET', '/api/pages', { maxResults: '1000', project: s.project, key: 't-x7k2' }], ['GET', '/api/files', { maxResults: '1000', project: s.project, key: 't-x7k2' }]]);
     s.seen.length = 0;
     expect(await pageDelete(s.tpm, [`${BASE}/${s.project}/t-x7k2/plan-1.html`], { yes: true })).toEqual(['消した: 1 枚（控えも消した）', `- ${BASE}/${s.project}/t-x7k2/plan-1.html`]);
     expect(s.seen.map(r => [r.method, r.query])).toEqual([['GET', { maxResults: '1000', project: s.project, key: 't-x7k2' }], ['DELETE', { project: s.project, key: 't-x7k2', kind: 'plan', n: '1' }]]);
@@ -279,29 +301,177 @@ describe('roster page import（CreatePage の n と createdAt）と roster page 
   });
 });
 
-describe('置き場の版（storeAtLeast）と、次の PR まで今の道のままの物', () => {
-  test('新しい API では /healthz（GetHealth）の version で見る。1 つの命令の中で 1 度だけ聞く', async () => {
-    const s = setup(r => r.path === '/healthz' ? { status: 200, body: { status: 'ok', version: '1.0.0-rc.1' } } : undefined);
-    expect(await storeAtLeast(s.tpm, '0.8.0', 'next')).toBe('yes');
-    expect(await storeAtLeast(s.tpm, '1.1.0', 'next')).toBe('old');
-    expect(s.seen.map(r => r.path)).toEqual(['/healthz']);
-    const down = setup(() => ({ throws: new Error('connect ECONNREFUSED') }));
-    expect(await storeAtLeast(down.tpm, '0.8.0', 'next')).toBe('down');
-  });
+/** /healthz に新しい API の版で答える。 */
+const health = (s: NextSeen): NextAnswer | undefined => s.path === '/healthz' ? { status: 200, body: { status: 'ok', version: '1.0.0-rc.1' } } : undefined;
 
-  test('api.pagetray が next でも、返事の状態（roster page reply）と file（roster file put）は今の道（curl）で送り、生成した client を作らない', async () => {
+/** 偽の置き場（今の道）への curl のうち、置き場の API（/api/…）を呼んだ物。next の時は無いはず（本文と file の中身の手の道だけが残る）。 */
+const apiCurls = (s: { curls: () => string[][] }): string[] => s.curls().map(a => a.at(-1) ?? '').filter(u => u.includes('/api/'));
+
+describe('置き場の版（storeAtLeast）', () => {
+  test('api.pagetray が next なら /healthz（GetHealth）の version で見る。1 つの命令の中で 1 度だけ聞く', async () => {
     const s = setup();
-    s.w.store.pages.set(`/${s.project}/t-x7k2/plan-1.html`, { record: { ...page(s.project, 't-x7k2', 'plan', '1'), n: 1, created_at: '2026-11-20T12:00:01.000Z' } as never, body: Buffer.from(HTML) });
-    // --on review は、置き場の版（storeAtLeast）を今の道（/api/version）で見てから書く。
-    expect(await pageReply(s.tpm, [`${BASE}/${s.project}/t-x7k2/plan-1.html`], { waiting: true, on: 'review' })).toEqual([expect.stringContaining(`${BASE}/${s.project}/t-x7k2/plan-1.html`)]);
-    const png = join(s.dir, '..', `${basename(s.dir)}-shot.png`);
-    writeFileSync(png, Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('png')]));
-    await filePut(s.role, png, { reviewed: true });
-    expect(s.made()).toBe(0);
-    expect(s.curls().some(a => (a.at(-1) ?? '').includes('/api/version'))).toBe(true);
-    expect(s.curls().some(a => (a.at(-1) ?? '').includes('/api/files?'))).toBe(true);
+    expect(await storeAtLeast(s.tpm, '0.8.0')).toBe('yes');
+    expect(await storeAtLeast(s.tpm, '1.1.0')).toBe('old');
+    expect(s.healths()).toBe(1);
+    const down = setup(undefined, undefined, { throws: new Error('connect ECONNREFUSED') });
+    expect(await storeAtLeast(down.tpm, '0.8.0')).toBe('down');
   });
 
+  test('今の版の置き場の /healthz（字の ok で読めない 2xx）と version の無い答えは、応えないでなく古い（版を答えない置き場）', async () => {
+    const text = setup(undefined, undefined, { status: 200, raw: 'ok' });
+    expect(await storeAtLeast(text.tpm, '0.8.0')).toBe('old');
+    const bare = setup(undefined, undefined, { status: 200, body: { status: 'ok' } });
+    expect(await storeAtLeast(bare.tpm, '0.8.0')).toBe('old');
+  });
+
+  test('next の道は、1 つの命令で 1 度だけ版を見て、1.0.0 より前なら送らずに止める（api.pagetray を外すか置き場を替える）', async () => {
+    const old = setup(created, undefined, { status: 200, body: { status: 'ok', version: '0.8.0' } });
+    expect(await thrown(() => pagePut(old.role, old.html, { kind: 'plan' }))).toBe('置き場（http://127.0.0.1:8801）の版は 0.8.0 で、新しい API（1.0.0 から）を持ちません。設定の api.pagetray を外すか、置き場を新しい版に替えてください（置き場を替えるのは、roster ask devops で頼む）');
+    expect(old.seen).toEqual([]);
+    const text = setup(created, undefined, { status: 200, raw: 'ok' });
+    expect(await thrown(() => pagePut(text.role, text.html, { kind: 'plan' }))).toMatch(/^置き場（http:\/\/127\.0\.0\.1:8801）の版は わからない で、新しい API（1\.0\.0 から）を持ちません。/);
+    const fresh = setup(r => r.path === '/api/pages' ? { status: 200, body: { pages: [] } } : r.path === '/api/files' ? { status: 200, body: { files: [] } } : undefined);
+    await pageDelete(fresh.tpm, [], { key: 't-x7k2' });
+    expect(fresh.seen.length).toBe(2);
+    expect(fresh.healths()).toBe(1);
+  });
+
+  test('設定が無ければ、今の道（/api/version）で聞く', async () => {
+    const s = setup(undefined, {});
+    expect(await storeAtLeast(s.tpm, '0.8.0')).toBe('yes');
+    expect(apiCurls(s)).toEqual([`${BASE}/api/version`]);
+    expect(s.made()).toBe(0);
+  });
+});
+
+describe('返事の状態（SetReplyState）と返事待ちの一覧（ListPages）', () => {
+  const url = (s: { project: string }): string => `${BASE}/${s.project}/t-x7k2/plan-1.html`;
+  const replied = (s: NextSeen): NextAnswer | undefined => {
+    if (s.method === 'PUT' && s.path.endsWith('/reply')) return { status: 200, body: page(String(/\/api\/projects\/([^/]+)\//.exec(s.path)?.[1]), 't-x7k2', 'plan', '1', { askedAt: '2026-11-20T12:10:00.000Z' }) };
+    return health(s);
+  };
+
+  test('roster page reply --on review は、版を /healthz で見て、PUT …/pages/<番号>/reply に本文 {state, on} で送る。Product Manager の時は on を書かない', async () => {
+    const s = setup(replied);
+    expect(await pageReply(s.tpm, [url(s)], { waiting: true, on: 'review' })).toEqual([`レビュー待ちにした: ${url(s)}`]);
+    expect(s.seen.map(r => [r.method, r.path, r.body])).toEqual([
+      ['PUT', `/api/projects/${s.project}/keys/t-x7k2/kinds/plan/pages/1/reply`, { state: 'waiting', on: 'review' }],
+    ]);
+    s.seen.length = 0;
+    expect(await pageReply(s.tpm, [url(s)], { answered: true })).toEqual([`答えたにした: ${url(s)}`]);
+    expect(s.seen.map(r => r.body)).toEqual([{ state: 'answered' }]);
+    expect(apiCurls(s)).toEqual([]);
+  });
+
+  test('ほかの相手を待っている（409 の Conflict）・無いページ（404 の NotFound）は、今と同じ訳', async () => {
+    const conflict = setup(r => r.path.endsWith('/reply') ? { status: 409, type: 'Conflict', body: 'そのページは、on の相手の返事を待っていない' } : undefined);
+    expect(await thrown(() => pageReply(conflict.tpm, [url(conflict)], { answered: true }))).toMatch(/^そのページは、--on pm の相手の返事を待っていません/);
+    const missing = setup(r => r.path.endsWith('/reply') ? { status: 404, type: 'NotFound', body: 'そのページは無い' } : undefined);
+    expect(await thrown(() => pageReply(missing.tpm, [url(missing)], { answered: true }))).toBe(`そのページは置き場にありません: ${url(missing)}`);
+  });
+
+  test('返事待ちの一覧は ListPages（reply=waiting・sort=createdAt・maxResults 1000）で聞く', async () => {
+    const s = setup(r => r.path === '/api/pages' ? { status: 200, body: { pages: [page(s.project, 't-x7k2', 'confirm', '1', { askedAt: '2026-11-20T12:10:00.000Z' })] } } : undefined);
+    expect(await waitingUrls(s.tpm, 't-x7k2')).toEqual([`${BASE}/${s.project}/t-x7k2/confirm-1.html`]);
+    expect(s.seen[0]?.query).toEqual({ project: s.project, key: 't-x7k2', reply: 'waiting', sort: 'createdAt', maxResults: '1000' });
+  });
+});
+
+describe('レビューの印（AddReviewMarks）', () => {
+  const review = (s: { project: string }): string => `${BASE}/${s.project}/t-x7k2/review-1.html`;
+
+  test('roster report review の判定は、POST …/pages/<番号>/review に本文 {verdict, targets} で書く', async () => {
+    const s = setup(r => r.path.endsWith('/review') ? { status: 200, body: page(s.project, 't-x7k2', 'review', '1', { verdict: 'approve' }) } : health(r));
+    expect(await markVerdict(s.tpm, review(s), 'approve', [])).toEqual([`置き場の印: 判定と見た物を書いた ${review(s)}`]);
+    expect(s.seen.map(r => [r.method, r.path, r.body])).toEqual([
+      ['POST', `/api/projects/${s.project}/keys/t-x7k2/kinds/review/pages/1/review`, { verdict: 'approve', targets: [] }],
+    ]);
+    expect(apiCurls(s)).toEqual([]);
+  });
+
+  test('置き場が断れば（400）、訳を 1 行にして止めない', async () => {
+    const s = setup(r => r.path.endsWith('/review') ? { status: 400, type: 'ValidationException', body: '種類が review のページだけ' } : health(r));
+    expect(await markVerdict(s.tpm, review(s), 'approve', [])).toEqual(['置き場の印: 判定と見た物を書いていない（置き場が断った: 400 種類が review のページだけ）']);
+  });
+});
+
+describe('file（CreateFile・ListFiles・DeleteFiles）', () => {
+  const PNG = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('png')]);
+  /** file の記録（新しい API の形）。 */
+  const fileRecord = (project: string, n = '1'): Record<string, unknown> => ({ project, key: 't-x7k2', name: 'shot', ext: 'png', n, type: 'image/png', size: PNG.length, sha256: 'ab'.repeat(32), role: 'software-engineer', workspace: 'file:1', createdAt: '2026-11-20T12:00:00.000Z', path: `/${project}/t-x7k2/files/shot-${n}.png` });
+  const shot = (s: { dir: string }): string => {
+    const file = join(s.dir, '..', `${basename(s.dir)}-shot.png`);
+    writeFileSync(file, PNG);
+    return file;
+  };
+
+  test('roster file put は、道に project と Key、引数に名・役割・居場所、Content-Type は拡張子の表のまま、本文は file の byte', async () => {
+    const s = setup(r => r.method === 'POST' && r.path.endsWith('/files') ? { status: 201, body: { ...fileRecord(s.project), url: `${BASE}/${s.project}/t-x7k2/files/shot-1.png` } } : undefined);
+    const path = join(s.dir, s.project, 't-x7k2', 'files', 'shot-1.png');
+    expect(await filePut(s.role, shot(s), { reviewed: true, name: 'shot.png' })).toEqual([`置いた: ${path}`, `URL: ${BASE}/${s.project}/t-x7k2/files/shot-1.png`, 'ページからの参照: files/shot-1.png']);
+    expect(s.seen.map(r => [r.method, r.path, r.query, r.headers['content-type']])).toEqual([['POST', `/api/projects/${s.project}/keys/t-x7k2/files`, { name: 'shot.png', role: 'software-engineer', workspace: 'file:1' }, 'image/png']]);
+    expect(Buffer.from(s.seen[0]?.text ?? '', 'binary').length).toBeGreaterThan(0);
+    expect(readFileSync(path).equals(PNG)).toBe(true);
+    expect(apiCurls(s)).toEqual([]);
+  });
+
+  test('送り手が castlist に無い（400 の fieldList に /actorRef）は、今の 422 と同じ訳', async () => {
+    const s = setup(() => ({ status: 400, type: 'ValidationException', body: 'castlist に登録の無い送り手', fieldList: [{ path: '/actorRef', message: '登録の無い送り手' }] }), { api: { pagetray: 'next' }, castlist: 'http://127.0.0.1:1' });
+    const ctx: Context = { ...s.role, env: { ...s.role.env, CLAUDE_CODE_SESSION_ID: SID } };
+    expect(await thrown(() => filePut(ctx, shot(s), { reviewed: true }))).toMatch(/castlist に登録が無いと、置き場が答えました（400）。file は上げていません/);
+  });
+
+  test('roster file list は ListFiles（--limit は maxResults）。表と --json は今と同じ形（n と size は数）', async () => {
+    const s = setup(r => r.path === '/api/files' ? { status: 200, body: { files: [fileRecord(s.project)] } } : undefined);
+    expect(await fileList(s.tpm, { key: 't-x7k2' })).toEqual([['2026-11-20T12:00:00.000Z', 't-x7k2', 'shot-1.png', 'software-engineer', 'file:1', `${BASE}/${s.project}/t-x7k2/files/shot-1.png`, `${PNG.length} byte`].join('  ')]);
+    expect(s.seen[0]?.query).toEqual({ maxResults: '50', project: s.project, key: 't-x7k2' });
+    const [text = ''] = await fileList(s.tpm, { json: true });
+    expect(JSON.parse(text)).toEqual([{ project: s.project, key: 't-x7k2', name: 'shot', ext: 'png', n: 1, type: 'image/png', size: PNG.length, sha256: 'ab'.repeat(32), role: 'software-engineer', workspace: 'file:1', created_at: '2026-11-20T12:00:00.000Z', path: `/${s.project}/t-x7k2/files/shot-1.png`, url: `${BASE}/${s.project}/t-x7k2/files/shot-1.png` }]);
+  });
+
+  test('roster file delete は ListFiles で探し、参照するページを ListPages で見せ、--yes で DeleteFiles（name と n は字）', async () => {
+    const s = setup((r) => {
+      if (r.path === '/api/files' && r.method === 'GET') return { status: 200, body: { files: [fileRecord(s.project)] } };
+      if (r.path === '/api/pages') return { status: 200, body: { pages: [] } };
+      if (r.path === '/api/files' && r.method === 'DELETE') return { status: 200, body: { removed: [`/${s.project}/t-x7k2/files/shot-1.png`] } };
+      return undefined;
+    });
+    const target = `${BASE}/${s.project}/t-x7k2/files/shot-1.png`;
+    expect((await fileDelete(s.tpm, [target], {})).at(-2)).toBe('参照しているページは無い');
+    expect(s.seen.map(r => [r.method, r.path, r.query])).toEqual([
+      ['GET', '/api/files', { project: s.project, key: 't-x7k2', q: 'shot.png', maxResults: '1000' }],
+      ['GET', '/api/pages', { project: s.project, maxResults: '1000' }],
+    ]);
+    s.seen.length = 0;
+    expect(await fileDelete(s.tpm, [target], { yes: true })).toEqual(['消した: 1 個（控えも消した）', `- ${target}`]);
+    expect(s.seen.at(-1)?.query).toEqual({ project: s.project, key: 't-x7k2', name: 'shot.png', n: '1' });
+    expect(apiCurls(s)).toEqual([]);
+  });
+
+  test('roster file path は、中身を今の URL（curl。手の道）で取る。置き場に無ければ（404）、版の古さを ListFiles で見分ける', async () => {
+    const s = setup(r => r.path === '/api/files' ? { status: 200, body: { files: [] } } : undefined);
+    s.w.store.files.set(`/${s.project}/t-x7k2/files/shot-1.png`, { record: { n: 1 } as never, body: PNG });
+    const [path = ''] = await filePath(s.tpm, `${BASE}/${s.project}/t-x7k2/files/shot-1.png`);
+    expect(readFileSync(path).equals(PNG)).toBe(true);
+    expect(s.seen).toEqual([]);
+    expect(await thrown(() => filePath(s.tpm, `${BASE}/${s.project}/t-x7k2/files/gone-1.png`))).toMatch(/^置き場に file がありません（404）/);
+    expect(s.seen.map(r => [r.path, r.query])).toEqual([['/api/files', { maxResults: '1' }]]);
+    expect(apiCurls(s)).toEqual([]);
+  });
+
+  test('roster page import は、控えの file も CreateFile に番号（字）と file の時刻（UTC）で入れる', async () => {
+    const s = setup(r => r.method === 'POST' && r.path.endsWith('/files') ? { status: 201, body: { ...fileRecord(s.project), url: '' } } : undefined);
+    const files = join(s.dir, s.project, 't-x7k2', 'files');
+    mkdirSync(files, { recursive: true });
+    writeFileSync(join(files, 'shot-1.png'), PNG);
+    const out = await pageImport(s.tpm);
+    expect(out).toContain('file: 入れた: 1 個・もう入っていた: 0 個・消した file: 0 個・ぶつかった: 0 個');
+    expect(s.seen[0]?.query).toMatchObject({ name: 'shot.png', role: 'unknown', workspace: '', n: '1' });
+    expect(typeof s.seen[0]?.query.createdAt).toBe('string');
+  });
+});
+
+describe('設定が無い時', () => {
   test('api の欄が無ければ、ページの道も今の道（curl）で、生成した client を作らない', async () => {
     const s = setup(undefined, {});
     await pagePut(s.role, s.html, { kind: 'plan' });
@@ -309,4 +479,53 @@ describe('置き場の版（storeAtLeast）と、次の PR まで今の道のま
     expect(s.made()).toBe(0);
     expect(s.curls().length).toBe(2);
   });
+});
+
+describe('版の古い・応えない置き場の扱い（review-38）', () => {
+  const OLD: NextAnswer = { status: 200, body: { status: 'ok', version: '0.8.0' } };
+  const url = (s: { project: string }): string => `${BASE}/${s.project}/t-x7k2/confirm-1.html`;
+
+  test('版の古い置き場では、返事の状態は止めずに old（ask pm・answer はメッセージを送った後に「付けていない（版が古く…）」の 1 行で続ける）', async () => {
+    const s = setup(undefined, undefined, OLD);
+    expect(await setReply(s.tpm, url(s), 'waiting')).toBe('old');
+    const lines = await replyLine(s.tpm, url(s), 'waiting');
+    expect(lines.join('\n')).toMatch(/^置き場の印: 付けていない（置き場の版が古く/);
+    expect(s.seen).toEqual([]);
+  });
+
+  test('版の古い置き場では、返事待ちの一覧は止めずに undefined（聞けなかった）', async () => {
+    const s = setup(undefined, undefined, OLD);
+    expect(await waitingUrls(s.tpm, 't-x7k2')).toBeUndefined();
+    expect(await waitingByParty(s.tpm, 't-x7k2')).toBeUndefined();
+    expect(s.seen).toEqual([]);
+  });
+
+  test('応えない置き場の版は、1 つの命令の中で覚え、頼むたびに /healthz を待ち直さない', async () => {
+    const s = setup(() => ({ throws: Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }) }), undefined, { throws: Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }) });
+    expect(await storeAtLeast(s.tpm, '0.8.0')).toBe('down');
+    expect(await storeAtLeast(s.tpm, '0.8.0')).toBe('down');
+    await waitingUrls(s.tpm, 't-x7k2');
+    expect(s.healths()).toBe(1);
+  });
+
+  test('新しい置き場が /healthz の頭を返して本文で止まれば、古いでなく応えない（down）', async () => {
+    const stall = createServer((req, res) => {
+      req.resume();
+      req.on('end', () => {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.write('{"status":');
+      });
+    });
+    await new Promise<void>(resolve => stall.listen(0, '127.0.0.1', resolve));
+    const at = `http://127.0.0.1:${(stall.address() as AddressInfo).port}`;
+    try {
+      const s = setup();
+      const ctx: Context = { ...s.tpm, env: { ...s.tpm.env, ROSTER_PAGES_URL: at }, clients: { ...s.tpm.clients, pagetray: (u: string) => pagetrayClient(u) } };
+      expect(await storeAtLeast(ctx, '0.8.0')).toBe('down');
+    }
+    finally {
+      stall.closeAllConnections();
+      await new Promise(resolve => stall.close(resolve));
+    }
+  }, 20_000);
 });
