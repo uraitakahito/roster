@@ -1,6 +1,8 @@
 // 命令が動くときの周り: どの project の設定と状態を使い、どの道具の adapter を使うか。
 import { realpathSync } from 'node:fs';
 import { join } from 'node:path';
+import type { CastlistClient } from '../gen/castlist-client/dist-types/index.js';
+import { castlistClient } from './castlist.ts';
 import { composeRolesConfig, composeSkillSets, type RolesConfig } from './config.ts';
 import { actor } from './evidence.ts';
 import { exec as realExec, type Exec } from './exec.ts';
@@ -12,6 +14,12 @@ import { CmuxTransport } from './transport/cmux.ts';
 import { FileTransport } from './transport/file.ts';
 import type { Transport } from './transport/types.ts';
 import { assertNoLegacySeat, envOf } from './env.ts';
+
+/** 生成した client を作る関数（server ごと。試験は偽の HTTP の handler を持つ client を作る物に替える）。 */
+export interface Clients {
+  /** castlist の URL から、生成した castlist の client を作る（castlist.ts の castlistClient）。 */
+  castlist: (url: string) => CastlistClient
+}
 
 /** 命令が動くときの周り。命令はみなこれを受け取り、試験では偽物の道具を入れて組む。 */
 export interface Context {
@@ -32,6 +40,8 @@ export interface Context {
   sleep: (ms: number) => Promise<void>
   /** 今の時刻（試験で替える）。 */
   now: () => Date
+  /** 生成した client を作る関数（設定の api が next の server だけが使う）。 */
+  clients: Clients
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => {
@@ -52,5 +62,5 @@ export function createContext(env: NodeJS.ProcessEnv = process.env, cwd: string 
   const transport = config.transport === 'file' ? new FileTransport(state, envOf(env, 'ADDRESS') || 'file:tpm') : new CmuxTransport(exec);
   // 課題管理への書き込みは tracker.jsonl に残す。
   const tracker = new RecordedTracker(new RoutedTracker(config.trackers, exec), state, actor(env));
-  return { project, config, state, transport, tracker, env, exec, root, skillSets: composeSkillSets(config.sources, root), sleep, now: () => new Date() };
+  return { project, config, state, transport, tracker, env, exec, root, skillSets: composeSkillSets(config.sources, root), sleep, now: () => new Date(), clients: { castlist: url => castlistClient(url) } };
 }
