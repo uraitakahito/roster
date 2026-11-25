@@ -68,7 +68,7 @@ build は無い。`cli/bin/roster` は `cli/src/cli.ts` を node で直に動か
 
 ## 生成した client（castlist・pagetray の定義から）
 
-castlist と pagetray の API は、それぞれの repo の Smithy の定義（`model/`）に書いてある。roster が呼ぶ TypeScript の client は、その定義から smithy-typescript で生成し、`cli/gen/<repo>-client/` に入れる（AI-36）。今は castlist の client（`cli/gen/castlist-client/`）だけで、roster はまだ使わない。pagetray の client は、pagetray の定義の rc の tag が出たら足す。
+castlist と pagetray の API は、それぞれの repo の Smithy の定義（`model/`）に書いてある。roster が呼ぶ TypeScript の client は、その定義から smithy-typescript で生成し、`cli/gen/<repo>-client/` に入れる（AI-36）。今は castlist の client（`cli/gen/castlist-client/`）と pagetray の client（`cli/gen/pagetray-client/`）で、どちらも `v1.0.0-rc.1` の定義から作る。roster はまだ使わない。
 
 ```sh
 cd cli
@@ -79,8 +79,8 @@ gen/gen.sh --check               # 取った定義の digest と、作り直し�
 
 - **入れる物**: 取った定義（`cli/gen/model/<repo>/`）と、client ごとに生成した TS（`src/`）・tsc で build した JS（`dist-cjs/`）と型（`dist-types/`）・生成した `package.json`。手で直さない。生成した TS は拡張子の無い import なので、Node が型を消して直に動かせない。そこで build した CJS を入れ、ESM の roster からは `createRequire` で読み、型は `dist-types/` から `import type` で取る（`cli/test/gen-clients.test.ts`）。roster は今までどおり build 無しで動く。`cli/gen/` は `pnpm run lint`・`typecheck`・`doccheck` の外に置く。
 - **固める物**: 取る定義の repo・release の tag・SHA-256 は `cli/gen/gen.sh` の `DEFS` の 1 か所に書く。Smithy の CLI の版と digest も `gen.sh` に（pagetray の `ci/gen.sh` と同じ版）、生成器の版は `cli/gen/smithy-build.json` に書く。`smithy-build.json` に名指した Maven の物は、公開から 2 日たっていなければ `gen.sh` が止める（pnpm の `minimumReleaseAge` に合わせた物）。
-- **定義を上げる・pagetray を足す**: `DEFS` の行を替える・足す（pagetray は `pagetray.smithy` の行に、作る client の service（`ai.pagetray#Pagetray`）を 5 つ目の欄に書く。`ai.common` は castlist の `common.smithy` を使う）。`gen/gen.sh` を流し、取った定義と作り直した client を同じ commit に入れる。生成した `package.json` の依存が `cli/package.json` の `dependencies` に無ければ `gen.sh` が止めるので、`pnpm add` で足す。
-- **CI**: `.github/workflows/test.yml` の `gen` の job が `gen/gen.sh --check` を流し、続けて入れた物（build した JS と取った定義）を 1 byte 替えると `--check` が落ちることを見る。
+- **定義を上げる・足す**: `DEFS` の行を替える・足す（1 行に 1 つの file。client を作る file の行には、5 つ目の欄に service の shape id（`ai.pagetray#Pagetray` など）を書く。pagetray の定義が使う `ai.common` は、castlist の `common.smithy` の行の物を使う）。`gen/gen.sh` を流し、取った定義と作り直した client を同じ commit に入れる。生成した `package.json` の依存が `cli/package.json` の `dependencies` に無ければ `gen.sh` が止めるので、`pnpm add` で足す。
+- **CI**: `.github/workflows/test.yml` の `gen` の job が `gen/gen.sh --check` を流し、続けて入れた物（client ごとの build した JS と取った定義）を 1 byte 替えると `--check` が落ちることを見る。
 
 ## 判定の道具
 
