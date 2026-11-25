@@ -9,6 +9,7 @@
 // TPM 担当は大文字なので、もとから当たらない。環境変数の古い名（TPM_KEY など。t-6ydg で ROSTER_* に替えた）は OLD_ENV で別に当てる。
 //
 // 見るのは git が追跡する物と add 前の新しい物（check-wording.mjs と同じ数え方）。lockfile と、この file は見ない。
+// cli/gen/ の取った定義（model/）と生成した client（<repo>-client/）も見ない（castlist・pagetray の release の tag の字で、roster では替えられない。AI-36）。
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
@@ -209,6 +210,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   )
     .split("\n")
     .filter((f) => f !== "" && f !== SELF && !f.endsWith("pnpm-lock.yaml"))
+    .filter((f) => !/^cli\/gen\/(model|[^/]+-client)\//.test(f))
     .filter((f) => !/\.(png|jpe?g|gif|ico|webp|pdf|woff2?)$/i.test(f));
   const errors = files.flatMap((f) => {
     let text;

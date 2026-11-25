@@ -1,1 +1,3 @@
 /node_modules/
+# cli/gen/gen.sh が作る所（Smithy の build と、tsc で build する前の写し）。
+/gen/build/

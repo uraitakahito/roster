@@ -7,8 +7,9 @@ import globals from 'globals';
 import tsdoc from 'eslint-plugin-tsdoc';
 
 export default defineConfig(
+  // gen/ は cli/gen/gen.sh が作った client（生成した TS と build した JS）。手で直さないので見ない。
   {
-    ignores: ['node_modules/**', 'eslint.config.mjs'],
+    ignores: ['node_modules/**', 'eslint.config.mjs', 'gen/**'],
   },
 
   eslint.configs.recommended,

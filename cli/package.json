@@ -25,7 +25,13 @@
     "doccheck": "typedoc"
   },
   "dependencies": {
-    "commander": "^15.1.0"
+    "@aws-sdk/core": "^3.981.1",
+    "@smithy/core": "^3.41.0",
+    "@smithy/fetch-http-handler": "^5.8.1",
+    "@smithy/node-http-handler": "^4.14.2",
+    "@smithy/types": "^4.20.0",
+    "commander": "^15.1.0",
+    "tslib": "^2.9.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
