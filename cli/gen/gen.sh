@@ -30,10 +30,11 @@ sha_for() {
 #   <repo> <release の tag> <repo の中の path> <SHA-256> [<この file の service から作る client の shape id>]
 # 取った file は cli/gen/model/<repo>/ に置く。5 つ目の欄がある行ごとに、client を cli/gen/<repo>-client/ に作る。
 # 上げる・足す時は行を替えて gen.sh を流し、取った定義と作り直した client を同じ commit に入れる。
-# pagetray は rc の tag が出たら、pagetray.smithy の行を 1 つ足す（ai.common は castlist の common.smithy を使う）。
+# pagetray の定義（ai.pagetray）は ai.common を使うが、それは castlist の common.smithy を使う（pagetray の tag の model/castlist/ の写しと同じ digest）。
 DEFS="
 castlist v1.0.0-rc.1 model/model/common.smithy 6425614b79d58d7149f17396cebc3eb30e0e6c511516957d82004eb329fb66d0
 castlist v1.0.0-rc.1 model/model/castlist.smithy 1ecf61ca8243b8bdc1b84a149eb41b8ac0d0570349fccd36f4385482f0ffa53d ai.castlist#Castlist
+pagetray v1.0.0-rc.1 model/model/pagetray.smithy 5f9f6286d320698feb353b812ec4ea1bfb9005c07464fbe33612492760ede841 ai.pagetray#Pagetray
 "
 MIN_AGE_SECONDS=$((2 * 24 * 60 * 60))
 # つなぎの一時の失敗（github.com や Maven Central への時間切れ）は、少し待って送り直す（pagetray の ci/gen.sh と同じ）。

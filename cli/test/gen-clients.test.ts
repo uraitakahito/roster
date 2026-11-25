@@ -87,6 +87,12 @@ describe('pagetray の client', async () => {
     const error: unknown = await client.send(new CreatePageCommand({ project: 'ai', key: 'AI-36', kind: 'plan', role: 'tpm', n: '1', body })).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(Conflict);
     expect((error as Pagetray.Conflict).message).toBe('その番号はもう置いてある');
-    expect(seen.at(-1)).toEqual({ line: 'POST /api/projects/ai/keys/AI-36/kinds/plan/pages?role=tpm&n=1', contentType: 'text/html', body: '<title>計画</title><p>本文</p>' });
+    // 引数の並びは決まりに無いので、名と値だけを比べる。
+    const sent = seen.at(-1);
+    const [line, query] = (sent?.line ?? '').split('?');
+    expect(line).toBe('POST /api/projects/ai/keys/AI-36/kinds/plan/pages');
+    expect(Object.fromEntries(new URLSearchParams(query))).toEqual({ role: 'tpm', n: '1' });
+    expect(sent?.contentType).toBe('text/html');
+    expect(sent?.body).toBe('<title>計画</title><p>本文</p>');
   });
 });
