@@ -1,6 +1,8 @@
 // cli と本物の置き場（pagetray）のつなぎの試験。$ROSTER_E2E_PAGES_URL に動いている pagetray の URL がある時だけ流す
 // （CI の pagetray-e2e.yml。手元では docs-site の開発のページの「pagetray（ページの置き場のサーバー）とのつなぎ」）。
 // ほかの試験は偽の置き場（helpers.ts の FakeStore）で流すので、API の形（URL・引数の名・JSON の欄）のずれはここで見つける。
+// $ROSTER_E2E_API が next なら、設定の api の pagetray を next にした roster で、新しい API の置き場（rc の image）に向けて流す（AI-36 の段 6c）。
+// その置き場は file・返事・レビューの印をみな持つので、版を聞いて試験を選ぶ所（今の API の /api/version など）は聞かない。
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -19,21 +21,24 @@ import { atLeast } from '../src/commands/store.ts';
 import type { Review } from '../src/reviews.ts';
 
 const URL = process.env.ROSTER_E2E_PAGES_URL ?? '';
+/** 新しい API の置き場に向けるか（設定の api の pagetray を next にする）。 */
+const NEXT = URL !== '' && process.env.ROSTER_E2E_API === 'next';
 /**
  * 置き場に file のエンドポイントがあるか（pagetray 0.4.0 から）。.pagetray-version が 0.3 の間は、file の試験を飛ばして CI を緑に保つ。
  * 版の番号でなくエンドポイントで見るのは、0.4.0 の release の前の手元のサーバー（版は 0.3.x のまま）にも向けて流せるように。
  */
-const FILES = URL !== '' && execFileSync('curl', ['-s', '-o', '/dev/null', '-w', '%{http_code}', `${URL}/api/files?limit=1`], { encoding: 'utf8' }) === '200';
+const FILES = NEXT || (URL !== '' && execFileSync('curl', ['-s', '-o', '/dev/null', '-w', '%{http_code}', `${URL}/api/files?limit=1`], { encoding: 'utf8' }) === '200');
 /**
  * 置き場が返事の状態を持てるか（pagetray 0.5.0 から）。引数の無い POST に、持てる置き場は 400、前の置き場は 405（その道が無い）を返す。
  * 持てない置き場には、「印を付けずに通る」方の試験を流す（新しい roster が古い置き場に当たった時の振る舞い）。
  */
-const REPLY = URL !== '' && execFileSync('curl', ['-s', '-o', '/dev/null', '-w', '%{http_code}', '-X', 'POST', `${URL}/api/pages/reply`], { encoding: 'utf8' }) === '400';
+const REPLY = NEXT || (URL !== '' && execFileSync('curl', ['-s', '-o', '/dev/null', '-w', '%{http_code}', '-X', 'POST', `${URL}/api/pages/reply`], { encoding: 'utf8' }) === '400');
 /**
  * 置き場が送り手（actor_issuer・actor_ref）を記録するか（pagetray 0.6.0 から）。/api/version の版で見る（前の版は知らない引数を読まずに置くので、答えでは見分けられない）。
  * CI の置き場は PAGETRAY_CASTLIST_URL を付けずに起こすので、castlist には聞かず、付随する id だけを残す（未確認。`sender.actor` は null）。
+ * 新しい API の置き場は castlist に向けて起こすので、送り手の試験は castlist-e2e.test.ts が流す（ここでは流さない）。
  */
-const SENDER = URL !== '' && ((): boolean => {
+const SENDER = URL !== '' && !NEXT && ((): boolean => {
   const [major = 0, minor = 0] = (JSON.parse(execFileSync('curl', ['-fsS', `${URL}/api/version`], { encoding: 'utf8' })) as { version: string }).version.split('.').map(Number);
   return major > 0 || minor >= 6;
 })();
@@ -42,7 +47,7 @@ const PNG = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('
 
 /** 本物の curl で本物の置き場に向けた周り。project の名（状態の folder の名）は world ごとに違う。 */
 function setup() {
-  const w = world();
+  const w = world(NEXT ? { api: { pagetray: 'next' } } : {});
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'roster-e2e-pages-')));
   const real = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({ ...ctx, exec, env: { ...ctx.env, ROSTER_PAGES_URL: URL, ROSTER_PAGES_DIR: dir, ...env } });
   const html = join(dir, 'src.html');
@@ -140,7 +145,8 @@ describe.skipIf(URL === '')('cli と pagetray のつなぎ', () => {
     const ctx = s.real(s.w.role('K-4', 'file:1'));
     const empty = join(s.dir, 'empty.html');
     writeFileSync(empty, '');
-    await expect(pagePut(ctx, empty, { kind: 'plan' })).rejects.toThrow('（400）: 本文が空');
+    // 新しい API の訳は ValidationException の字（欄の path は /body）。
+    await expect(pagePut(ctx, empty, { kind: 'plan' })).rejects.toThrow(NEXT ? '置き場がページを受け取りませんでした（400）' : '（400）: 本文が空');
     await expect(pagePath(ctx, `${URL}/${s.project}/K-4/plan-1.html`)).rejects.toThrow('置き場にページがありません（404）');
   });
 });
@@ -275,7 +281,7 @@ describe.skipIf(!SENDER)('cli と pagetray のつなぎ（送り手。置き場�
 });
 
 /** 置き場がレビューの印（待ちの相手・判定・見た物）を持てるか（pagetray 0.8.0 から）。/api/version の版で見る（前の版は知らない on を読まずに捨てる）。 */
-const MARKS = URL !== '' && atLeast((JSON.parse(execFileSync('curl', ['-fsS', `${URL}/api/version`], { encoding: 'utf8' })) as { version: string }).version, PARTY_SINCE);
+const MARKS = NEXT || (URL !== '' && atLeast((JSON.parse(execFileSync('curl', ['-fsS', `${URL}/api/version`], { encoding: 'utf8' })) as { version: string }).version, PARTY_SINCE));
 
 describe.skipIf(!MARKS)('cli と pagetray のつなぎ（レビューの印。置き場が 0.8.0 から）', () => {
   test('依頼書にレビュー待ちと見る物、レビューのページに判定と見た物、上げた件の待ち。Product Manager の返事待ちには入らない', async () => {
