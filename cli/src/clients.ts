@@ -33,7 +33,8 @@ export interface ClientConfig {
 /**
  * 生成した client を作る時の設定。生成した runtimeConfig は、書かない欄を AWS の決まり（環境変数 AWS_MAX_ATTEMPTS・AWS_RETRY_MODE と ~/.aws/config の profile）から読み、
  * 3 回まで送り直す（castlist の Unavailable は `@retryable`）。だから、そこから読む欄をみな書き、送り直さない（1 度だけ送る。送り直すかは呼ぶ側が決める。今の curl と同じ）。
- * 時間切れは今の curl の --max-time と同じ wait（ミリ秒。つなぐまでと、答えを読み終えるまで）。接続は使い回さない（命令の process が、送り終えたらすぐ終わるように）。
+ * requestHandler の時間切れ（wait ミリ秒）は、つなぐまでと答えの頭までしか数えない（本文を読む間は数えない）。送る 1 回の全部（今の curl の --max-time と同じ）の上限は、
+ * 呼ぶ側が send に渡す abortSignal（AbortSignal.timeout）で付ける。接続は使い回さない（命令の process が、送り終えたらすぐ終わるように）。
  * requestHandler は試験が偽の HTTP を差し込む所（無ければ node の http）。
  */
 export function clientConfig(url: string, wait: number, requestHandler?: HttpHandler): ClientConfig {
@@ -59,6 +60,7 @@ export interface HasMiddleware {
 
 /** 作った client から、AWS の Lambda のための頭（環境変数 AWS_LAMBDA_FUNCTION_NAME・_X_AMZN_TRACE_ID を読んで X-Amzn-Trace-Id を足す）を外す。 */
 export function withoutAwsMiddleware<T extends HasMiddleware>(client: T): T {
-  client.middlewareStack.remove('recursionDetectionMiddleware');
+  // 外せなければ止める（@aws-sdk/core の更新で名が替わると、黙って環境変数を読む形に戻るため）。
+  if (!client.middlewareStack.remove('recursionDetectionMiddleware')) throw new Error('生成した client から recursionDetectionMiddleware を外せない（@aws-sdk/core の名が替わった）');
   return client;
 }

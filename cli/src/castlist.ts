@@ -163,7 +163,8 @@ export function castlistClient(url: string, requestHandler?: HttpHandler): Castl
  */
 function replyOf(error: unknown): Reply {
   const code = (error as { $metadata?: { httpStatusCode?: unknown } } | undefined)?.$metadata?.httpStatusCode;
-  if (typeof code !== 'number') return { kind: 'down' };
+  // 答えの無い物（つながらない・時間切れ）と、2xx なのに本文を読めない答えは down（今の curl の道で、読めない答えを使わないのと同じ）。
+  if (typeof code !== 'number' || (code >= 200 && code < 300)) return { kind: 'down' };
   if (code === 503) return { kind: 'busy' };
   return { kind: 'refused', code, error: error instanceof Error ? error.message : String(error) };
 }
@@ -172,10 +173,18 @@ function replyOf(error: unknown): Reply {
 export type Sender = Pick<Context, 'config' | 'state' | 'now' | 'exec' | 'clients'>;
 
 /** 生成した client で 1 つ送り、答えを今の形にする。本文は shape で今の道の本文に合わせ、text はその JSON。client は送り終えたら閉じる。 */
-async function viaNext<O extends { status: number | undefined, $metadata: { httpStatusCode?: number } }>(ctx: Sender, url: string, send: (client: Castlist.CastlistClient, api: typeof Castlist) => Promise<O>, shape: (out: O) => unknown): Promise<Reply> {
-  const client = ctx.clients.castlist(url);
+async function viaNext<O extends { status: number | undefined, $metadata: { httpStatusCode?: number } }>(ctx: Sender, url: string, send: (client: Castlist.CastlistClient, api: typeof Castlist, options: { abortSignal: AbortSignal }) => Promise<O>, shape: (out: O) => unknown): Promise<Reply> {
+  let client: Castlist.CastlistClient;
   try {
-    const out = await send(client, castlistApi());
+    client = ctx.clients.castlist(url);
+  }
+  catch (e) {
+    // 生成した client（と依存）を読めない: lock を替えた後に install していない。guard は、この誤りを 2 で止める。
+    throw new TpmError(`生成した castlist の client を読めません（${e instanceof Error ? e.message : String(e)}）。cli/ で pnpm install --frozen-lockfile を打ってください`);
+  }
+  try {
+    // 送る 1 回の全部（つなぐ・送る・答えの本文を読み終えるまで）に、今の curl の --max-time と同じ上限を付ける。
+    const out = await send(client, castlistApi(), { abortSignal: AbortSignal.timeout(Number(REQUEST_TIMEOUT) * 1000) });
     const body = shape(out);
     return { kind: 'ok', code: out.status ?? out.$metadata.httpStatusCode ?? 200, body, text: JSON.stringify(body) };
   }
@@ -206,7 +215,7 @@ export async function registerActor(ctx: Sender, url: string, actor: ActorInput)
   const issuer = issuerOf(ctx);
   const sentAt = ctx.now();
   if (nextApi(ctx, 'castlist')) {
-    return viaNext(ctx, url, (client, api) => client.send(new api.RegisterActorCommand({ issuer, ...actor, sentAt })), out => ({ ...out.actor, created: out.created }));
+    return viaNext(ctx, url, (client, api, options) => client.send(new api.RegisterActorCommand({ issuer, ...actor, sentAt }), options), out => ({ ...out.actor, created: out.created }));
   }
   const { kind, namePrefix, labels, bindings, settings } = actor;
   return request(ctx, url, 'POST', '/v1/actors', { issuer, kind, name_prefix: namePrefix, labels, bindings, sent_at: sentAt.toISOString(), ...(settings === undefined ? {} : { settings }) });
@@ -233,14 +242,14 @@ export async function putRecord<K extends keyof RecordInput>(ctx: Sender, url: s
   const issuer = issuerOf(ctx);
   const sentAt = ctx.now();
   if (!nextApi(ctx, 'castlist')) return request(ctx, url, 'PUT', `/v1/${kind}/${encodeURIComponent(id)}`, { issuer, ...body, sent_at: sentAt.toISOString() });
-  return viaNext<Castlist.PutEventCommandOutput | Castlist.PutLinkCommandOutput | Castlist.PutSettingCommandOutput>(ctx, url, (client, api) => {
+  return viaNext<Castlist.PutEventCommandOutput | Castlist.PutLinkCommandOutput | Castlist.PutSettingCommandOutput>(ctx, url, (client, api, options) => {
     switch (kind) {
       case 'events': {
         const { detail, ...rest } = body as RecordInput['events'];
-        return client.send(new api.PutEventCommand({ eventId: id, issuer, ...rest, detail: detail as DocumentType, sentAt }));
+        return client.send(new api.PutEventCommand({ eventId: id, issuer, ...rest, detail: detail as DocumentType, sentAt }), options);
       }
-      case 'links': return client.send(new api.PutLinkCommand({ linkId: id, issuer, ...body as RecordInput['links'], sentAt }));
-      default: return client.send(new api.PutSettingCommand({ settingId: id, issuer, ...body as RecordInput['settings'], sentAt }));
+      case 'links': return client.send(new api.PutLinkCommand({ linkId: id, issuer, ...body as RecordInput['links'], sentAt }), options);
+      default: return client.send(new api.PutSettingCommand({ settingId: id, issuer, ...body as RecordInput['settings'], sentAt }), options);
     }
   }, rowOf);
 }

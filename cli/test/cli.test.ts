@@ -1,8 +1,8 @@
 // cli/src/cli.ts を cli/bin/roster（sh）経由で動かす。
 import { execFileSync, spawnSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { Command } from 'commander';
 import { beforeAll, describe, expect, test, vi } from 'vitest';
 import { missingCastlistWarning } from '../src/castlist.ts';
@@ -318,49 +318,5 @@ describe('命令の入口（runProgram）は、非同期の誤りも同期の誤
     // hook の失敗を Claude Code の画面に出さないため、どんな誤りでも 0（process.exit を呼ばない）。
     expect(r.status).toBeUndefined();
     expect(r.stderr).toMatch(new RegExp(`^roster castlist ${hook}: [^\\n]+\\n$`));
-  });
-});
-
-describe('bin/roster の守り（node_modules が pnpm-lock.yaml と合うか）', () => {
-  /**
-   * 写した bin/roster と、lock（cli/pnpm-lock.yaml）と、pnpm が install の時に書く写し（cli/node_modules/.pnpm/lock.yaml。null なら置かない）を置いた cli/ を作る。
-   * src/cli.ts は 1 行出すだけの物にする（通ったかを見る）。
-   */
-  const fakeCli = (lock: string, installed: string | null): string => {
-    const dir = mkdirp(join(scratch, `bin-guard-${n++}`, 'cli'));
-    mkdirp(join(dir, 'bin'));
-    copyFileSync(entry, join(dir, 'bin', 'roster'));
-    mkdirp(join(dir, 'src'));
-    writeFileSync(join(dir, 'src', 'cli.ts'), 'console.log(\'動いた\');\n');
-    writeFileSync(join(dir, 'pnpm-lock.yaml'), lock);
-    mkdirp(join(dir, 'node_modules', '.pnpm'));
-    if (installed !== null) writeFileSync(join(dir, 'node_modules', '.pnpm', 'lock.yaml'), installed);
-    return dir;
-  };
-  /** 写した bin/roster を sh で動かす（node は試験を流す node。cmux の在り処は足されるが使わない）。 */
-  const runBin = (dir: string) => spawnSync(join(dir, 'bin', 'roster'), ['roles'], { cwd: scratch, encoding: 'utf8', env: { ...withoutRosterEnv(process.env), PATH: `${dirname(process.execPath)}:/usr/bin:/bin` } });
-  const LOCK = 'lockfileVersion: \'9.0\'\n';
-
-  test('写しが lock と同じなら、通って src/cli.ts を動かす', () => {
-    const r = runBin(fakeCli(LOCK, LOCK));
-    expect(r.stderr).toBe('');
-    expect(r.status).toBe(0);
-    expect(r.stdout).toBe('動いた\n');
-  });
-
-  test.each([
-    ['写しが lock と違う', `${LOCK}# 足した 1 行\n`],
-    ['写しが無い', null],
-  ])('%sなら、pnpm install --frozen-lockfile を打つよう言って止まる（src/cli.ts は動かさない）', (_, installed) => {
-    const dir = fakeCli(LOCK, installed);
-    const r = runBin(dir);
-    expect(r.status).toBe(1);
-    expect(r.stdout).toBe('');
-    expect(r.stderr).toBe(`roster: ${dir}/node_modules が ${dir}/pnpm-lock.yaml と合いません（lock を替えた後に install していない）。先に cd ${dir} && pnpm install --frozen-lockfile を打ってください\n`);
-  });
-
-  test('この repo の node_modules は、lock と合っている（pnpm install の後の写しを中身で比べて足りる）', () => {
-    const r = spawnSync('cmp', ['-s', join(cli, 'pnpm-lock.yaml'), join(cli, 'node_modules', '.pnpm', 'lock.yaml')]);
-    expect(r.status).toBe(0);
   });
 });

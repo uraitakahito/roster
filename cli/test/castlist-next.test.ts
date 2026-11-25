@@ -209,8 +209,22 @@ describe('castlist の client の守り（review-33）', () => {
 
   test('生成した client を読めなければ、pnpm install --frozen-lockfile を打つよう言う誤りで止まる（guard はこれを 2 で止める）', async () => {
     const { ctx } = nextSeat();
-    const seat: Context = { ...ctx, clients: { castlist: () => { throw new Error('Cannot find module \'@smithy/core\''); } } };
+    const unreadable = (): never => {
+      throw new Error('Cannot find module \'@smithy/core\'');
+    };
+    const seat: Context = { ...ctx, clients: { castlist: unreadable } };
     await expect(registerPm(seat, dead)).rejects.toThrow(/生成した castlist の client を読めません.*pnpm install --frozen-lockfile/s);
+  });
+
+  test('送る物のある guard は、生成した client を読めなければ、素通りさせずに止める（install を言う訳で）', async () => {
+    const { ctx } = nextSeat();
+    const unreadable = (): never => {
+      throw new Error('Cannot find module \'@smithy/core\'');
+    };
+    const seat: Context = { ...ctx, clients: { castlist: unreadable } };
+    const verdict = await castlistGuard(seat, bashInput({ transcript_path: transcript('claude-opus-5-5'), effort: { level: 'high' } })).catch((e: unknown) => ({ allow: false, reason: (e as Error).message }));
+    expect(verdict.allow).toBe(false);
+    expect('reason' in verdict ? verdict.reason : '').toMatch(/pnpm install --frozen-lockfile/);
   });
 
   test('AWS の Lambda の頭の middleware を外せなければ止まり、外せば _X_AMZN_TRACE_ID を置いても X-Amzn-Trace-Id を付けない', async () => {
