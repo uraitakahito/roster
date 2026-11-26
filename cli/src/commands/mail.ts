@@ -350,6 +350,8 @@ export function toolUseLine(path: string | undefined, toolUseId: string): number
  * - 同じ返答の中で渡した物がある時は、1 度止める: この命令を書いた返答（会話の記録の中の、この道具の呼び出しの id を持つ行）より後に、
  *   hook が渡した記録（行の数で比べる。同じ session の物だけ）があれば、「渡した物を読んでから打ち直す」と止める。同じ渡した記録では、2 度止めない。
  *   会話の記録にその行が見つからない時は、止めずに、見送った事を GUARD_SKIPS_FILE に残す。
+ *   Claude Code 2.1.332 では、PreToolUse の時に、その返答の行がまだ会話の記録に書かれていないので、この守りは働かない（いつも見送る）。
+ *   並べた送りは、送る前の検査が時刻で止める（commands/messages.ts の assertNotFresh）。行が先に書かれる版になれば、ここも効く。
  */
 export function mailGuard(ctx: Context, stdin: string, command: string): Verdict {
   if (!usesNats(ctx) || !sendsMessage(command)) return { allow: true };

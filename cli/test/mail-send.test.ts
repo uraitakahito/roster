@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest';
 import { answer, askTpm, assertRead, notify, type Sent } from '../src/commands/messages.ts';
 import { assign } from '../src/commands/tpm-side.ts';
 import { hello } from '../src/commands/role-side.ts';
-import { deliveredLines, gateFile, passedIds, type GateMark } from '../src/mail.ts';
+import { deliveredLines, gateFile, passedIds, recordDelivered, type GateMark } from '../src/mail.ts';
 import { MAILROOM_LIMITS } from '../src/mailroom/types.ts';
 import { MemoryMailroom } from '../src/mailroom/memory.ts';
 import { BRIEF } from './helpers.ts';
@@ -228,5 +228,50 @@ describe('送る前の検査（自分が名乗っている session）', () => {
     await expect(askTpm(down(w.se), ask)).rejects.toThrow(/メッセージキューが応えません。送っていません/);
     expect(w.wire.status('file:1')?.wait).toBe('メッセージキューが応えません');
     await expect(assertRead(down(w.se), '相手', undefined, 'put')).rejects.toThrow(/メッセージキューが応えません。ページを置いていません/);
+  });
+
+  describe('hook が渡した直後の送り（1 度の返答で並べた命令）', () => {
+    /** 担当が名乗り、hook が 1 通を渡した所（配りの口には、もう残っていない）。 */
+    const handed = async (when: 'gate' | 'prompt' | 'wake' | 'output', session?: string, to = 't-x7k2') => {
+      const w = await natsWorld();
+      claim(w, w.se, 200);
+      recordDelivered(w.se, 'm-1', to, when, undefined, session);
+      return w;
+    };
+
+    test('渡した記録から 2 秒の内の送りは、1 度止める。本文は出さず、印も書かず、gate.jsonl に fresh と残す。2 秒を過ぎれば通る', async () => {
+      for (const when of ['gate', 'prompt', 'wake'] as const) {
+        const w = await handed(when, 's-200');
+        w.pass(1000);
+        await expect(askTpm(w.se, ask)).rejects.toThrow('直前に、hook がメッセージを渡しました（1 件）。渡された物を読んでから、同じ命令を打ち直してください（送っていません）');
+        expect(w.printed).toEqual([]);
+        expect(w.se.state.read(gateFile('t-x7k2'))).toBeUndefined();
+        expect(w.se.state.lines<{ gate: string, detail: string }>('gate.jsonl').at(-1)).toMatchObject({ gate: 'fresh', detail: 'm-1' });
+        expect(log(w).some(l => l.heading === 'ask-tpm')).toBe(false);
+        // ページを置く命令の検査は、字が替わる。配りの口が応えなくても、この止まりは出る（配りの口に聞かない）。
+        await expect(assertRead(down(w.se), '相手', undefined, 'put')).rejects.toThrow(/直前に、hook がメッセージを渡しました（1 件）。.*（ページを置いていません）/);
+        w.pass(2000);
+        expect(await askTpm(w.se, ask)).toHaveLength(2);
+      }
+    });
+
+    test('命令の結果に出した記録（output）・別の session の記録・別の受け手の記録では、止まらない', async () => {
+      for (const w of [await handed('output', 's-200'), await handed('gate', 's-other'), await handed('gate', 's-200', 'tpm')]) {
+        w.pass(1000);
+        expect(await askTpm(w.se, ask)).toHaveLength(2);
+      }
+      // session の id の分からない記録は、同じ session の物と見る。
+      const w = await handed('gate');
+      w.pass(1000);
+      await expect(askTpm(w.se, ask)).rejects.toThrow(/直前に、hook がメッセージを渡しました/);
+    });
+
+    test('設定が cmux の時は、この検査を通らない', async () => {
+      const w = await natsWorld({});
+      claim(w, w.se, 200);
+      recordDelivered(w.se, 'm-1', 't-x7k2', 'gate', undefined, 's-200');
+      w.pass(1000);
+      expect(await askTpm(w.se, ask)).toHaveLength(2);
+    });
   });
 });

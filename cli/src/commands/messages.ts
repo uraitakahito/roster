@@ -21,7 +21,7 @@ import { markEscalated } from './review-marks.ts';
 import { isPageUrl } from './store.ts';
 import { readShown, returnedIds, seenTimes, shownFile, type SeenAt } from '../seen.ts';
 import { envOf } from '../env.ts';
-import { claimOf, endedLines, gateFile, markPassed, ownClaim, passedIds, recordDelivered, usesNats, type GateMark } from '../mail.ts';
+import { claimOf, deliveredLines, endedLines, gateFile, markPassed, ownClaim, passedIds, recordDelivered, usesNats, type Claim, type GateMark } from '../mail.ts';
 import type { Counts, Recipient, Stored } from '../mailroom/types.ts';
 import { selfParty, TPM_PARTY, type Party } from '../party.ts';
 
@@ -242,7 +242,7 @@ const READ_STOP = {
  */
 export async function assertRead(ctx: Context, who: string, from?: string, action: keyof typeof READ_STOP = 'send'): Promise<void> {
   const claim = ownClaim(ctx);
-  if (claim !== undefined) return assertHandedOver(ctx, claim.name, who, from, action);
+  if (claim !== undefined) return assertHandedOver(ctx, claim, who, from, action);
   const incoming = ctx.messages.pending().filter(m => from === undefined || m.from === from);
   if (incoming.length === 0) return;
   const self = ctx.seats.whoami();
@@ -268,6 +268,30 @@ export async function assertRead(ctx: Context, who: string, from?: string, actio
 const LAG_TRIES = 20;
 const LAG_PAUSE_MS = 100;
 
+/**
+ * hook がメッセージを渡してから、この間（ミリ秒）の内に来た送りは、渡す前に書かれた命令と見なして 1 度止める。
+ * 担当（model）が、渡された本文を受け取って次の命令を書くには、少なくとも 1 回の往復が要る。それより早く来た送りは、
+ * 1 度の返答で並べて書かれた物（前の命令が検査で止まり、hook が本文を渡した直後に、後ろの命令が動いた）。外れても、打ち直しが 1 度増えるだけ。
+ * 会話の記録を見る guard の守り（commands/mail.ts の mailGuard）は、Claude Code 2.1.332 では働かない
+ * （PreToolUse の時に、その返答の行がまだ会話の記録に書かれていない）ので、並べた送りは、ここで時刻で止める。
+ */
+const FRESH_MS = 2000;
+
+/**
+ * hook が、この session の自分宛てを渡した直後（FRESH_MS の内）なら、送らずに 1 度止める。本文は出さない（もう文脈に渡っている）。
+ * 見るのは、手元の渡した記録のうち、自分の受け手の名・今の session（どちらかの id が分からない行は、同じと見る）・hook が渡した行（output は除く）。
+ * 止めた印（mail.ts の GateMark）は書かない（hook に渡させる物が無い）。gate.jsonl には fresh と残す。
+ */
+function assertNotFresh(ctx: Context, claim: Claim, not: string): void {
+  const now = ctx.now().getTime();
+  const fresh = deliveredLines(ctx).filter(l => l.to === claim.name && l.when !== 'output'
+    && (l.session === undefined || claim.session === undefined || l.session === claim.session)
+    && now - Date.parse(l.at) >= 0 && now - Date.parse(l.at) < FRESH_MS);
+  if (fresh.length === 0) return;
+  recordGateStop(ctx, 'fresh', fresh.map(l => l.id).join(' '));
+  throw new TpmError(`直前に、hook がメッセージを渡しました（${fresh.length} 件）。渡された物を読んでから、同じ命令を打ち直してください（${not}）`);
+}
+
 /** メッセージの本文の頭の見出し（`【brief】…` の brief）。無ければ空。 */
 const headingOf = (text: string): string => /^【([^】]+)】/.exec(text)?.[1] ?? '';
 
@@ -285,7 +309,8 @@ async function askQueue(ctx: Context, name: Recipient): Promise<{ lag: number, l
 }
 
 /**
- * 送る前の検査の、NATS の形（設定の messages が nats で、自分の名乗りが効いている時。name は自分の受け手の名）。
+ * 送る前の検査の、NATS の形（設定の messages が nats で、自分の名乗りが効いている時。claim は自分の名乗り）。
+ * 先に、hook が自分宛てを渡した直後でないかを見る（assertNotFresh。配りの口には聞かない）。
  * 自分宛てで、配りの口にまだ残っている物（まだ渡っていない物）があれば止める。**本文は出さない**: 止めた事を印（mail.ts の GateMark）に書き、
  * すぐ後の hook（roster mail gate）が本文を渡す。渡された後の打ち直しは通る。
  * - 写しの遅れ（N4）が、長くて 2 秒待っても残れば止める。配りの口が応えなければ止める。どちらも、居場所の状態に出す。
@@ -296,8 +321,10 @@ async function askQueue(ctx: Context, name: Recipient): Promise<{ lag: number, l
  *       届いたとは記録せず（渡した記録に output と残す）、配りの口にも残す（hook が後で渡せる）。
  * from（相手の題）で絞る決まりは、今までと同じ（TPM 担当が担当に送る時は、その担当からの物だけで止まる）。
  */
-async function assertHandedOver(ctx: Context, name: Recipient, who: string, from: string | undefined, action: keyof typeof READ_STOP): Promise<void> {
+async function assertHandedOver(ctx: Context, claim: Claim, who: string, from: string | undefined, action: keyof typeof READ_STOP): Promise<void> {
+  const name = claim.name;
   const not = READ_STOP[action].not;
+  assertNotFresh(ctx, claim, not);
   const asked = await askQueue(ctx, name).catch((e: unknown) => {
     throw queueDown(ctx, not, e);
   });

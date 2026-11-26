@@ -73,6 +73,8 @@ describe('検査が止めた後に渡す（roster mail gate）', () => {
     expect(deliveredLines(w.se)).toEqual([{ at: '2026-11-20T12:00:00.000Z', id, to: 't-x7k2', when: 'gate', nth: 1, lines: 7, session: 's-200' }]);
     expect(w.office.work).toEqual([]);
     expect(w.se.state.read(gateFile('t-x7k2'))).toBeUndefined();
+    // 渡した本文を読んだ後（次の返答）の打ち直しは通る。
+    w.pass(3000);
     expect(await askTpm(w.se, ask)).toContain('送った: 【ask-tpm】→ file:tpm（相手の手が空いた時に届く。送り直さない）');
     expect(w.printed).toEqual([]);
   });
@@ -86,6 +88,7 @@ describe('検査が止めた後に渡す（roster mail gate）', () => {
     expect(out.hookSpecificOutput.additionalContext).toContain('【notify】pipe で切っても渡る物');
     expect(deliveredLines(w.se).map(l => l.when)).toEqual(['gate']);
     expect(w.se.state.read(gateFile('t-x7k2'))).toBeUndefined();
+    w.pass(3000);
     expect(await askTpm(w.se, ask)).toHaveLength(2);
     expect(w.printed).toEqual([]);
     // 印が無い時（ふつうの Bash の後）は、配りの口に聞かない。

@@ -29,9 +29,9 @@ export function recordGuardStop(ctx: Context, command: string, reason: string): 
 /**
  * 入口の検査の種類: 読んでいないメッセージ・merge していない PR・状態を読めない PR・同じメッセージの 2 度送り・TPM 担当が送って済んでいない物・
  * 前の監査の文脈が残ったまま始めようとした監査・担当の session から打った TPM 担当だけの命令・
- * メッセージキュー（NATS）が応えない・写しが遅れている（設定の messages が nats の時だけ）。
+ * メッセージキュー（NATS）が応えない・写しが遅れている（queue）・hook がメッセージを渡した直後の送り（fresh）（どちらも、設定の messages が nats の時だけ）。
  */
-export type GateKind = 'unread' | 'not-merged' | 'pr-unreadable' | 'repeat' | 'unsettled' | 'stale-context' | 'tpm-only' | 'queue';
+export type GateKind = 'unread' | 'not-merged' | 'pr-unreadable' | 'repeat' | 'unsettled' | 'stale-context' | 'tpm-only' | 'queue' | 'fresh';
 
 /** 入口の検査が送るのを止めた 1 件（gate.jsonl）。 */
 export interface GateStop {
