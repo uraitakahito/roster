@@ -1,11 +1,11 @@
-// castlist（アクターの台帳。127.0.0.1 の別のサーバー）への組み込み。試験は偽の castlist（castlist-fake.ts）と、何も待っていない port を使う。
+// castlist（アクターの台帳。127.0.0.1 の別のサーバー）への組み込み。試験は偽の castlist（fake-castlist.ts。新しい API の決まりで答え、状態を持つ）と、何も待っていない port を使う。
 // 本物の castlist（8802）と container には触らない。担当は file の連携で、本当には起こさない。
 import { spawnSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
-import { castlistIssuer, CASTLIST_VERSION, emphasize, seatPrefix } from '../src/castlist.ts';
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vitest';
+import { castlistIssuer, CASTLIST_VERSION, CASTLIST_VOLUME, emphasize, seatPrefix } from '../src/castlist.ts';
 import { auditStart } from '../src/commands/audit.ts';
 import { readSession, sessionEnd, sessionStart } from '../src/commands/castlist.ts';
 import { guard } from '../src/commands/infra.ts';
@@ -20,7 +20,8 @@ import type { RoleName } from '../src/protocol.ts';
 import { requireRole, readRole, type RoleRecord } from '../src/roster.ts';
 import { roleEnv } from '../src/run-role.ts';
 import { resolveSettings } from '../src/settings.ts';
-import { deadUrl, startFakeCastlist, type CastlistRequest, type FakeCastlist } from './castlist-fake.ts';
+import { startCastlist, type CastlistSeen, type FakeCastlist } from './fake-castlist.ts';
+import { deadUrl } from './next-fake.ts';
 import { BRIEF, staffRoot, world, type World } from './helpers.ts';
 
 const SE = { role: 'software-engineer', title: '計画と実装', brief: BRIEF, wait: 0 } as const;
@@ -30,13 +31,15 @@ const SID2 = 'bbbbbbbb-0000-4000-8000-000000000002';
 const SID3 = 'bbbbbbbb-0000-4000-8000-000000000003';
 /** world の時計の時刻（偽の castlist の既定の now と同じ）。 */
 const NOW = '2026-11-20T12:00:00.000Z';
-const RUN_LINE = /^container run -d --name castlist\.box -p 127\.0\.0\.1:(\d+):8080 -v castlist-data:\/data -m 200M -c 1 ghcr\.io\/uraitakahito\/castlist:(\S+)$/;
+/** 送り手の時刻（sentAt）は world の時計の時刻（UTC の字。ミリ秒は付けても付けなくてもよい）。 */
+const SENT_AT = expect.stringMatching(/^2026-11-20T12:00:00(?:\.000)?Z$/) as unknown;
+const RUN_LINE = /^container run -d --name castlist\.box -p 127\.0\.0\.1:(\d+):8080 -v (\S+):\/data -m 200M -c 1 ghcr\.io\/uraitakahito\/castlist:(\S+)$/;
 
 let fake: FakeCastlist;
 let dead: string;
 
 beforeAll(async () => {
-  fake = await startFakeCastlist(NOW);
+  fake = await startCastlist(NOW);
   dead = await deadUrl();
 });
 
@@ -44,14 +47,21 @@ afterAll(async () => {
   await fake.stop();
 });
 
+afterEach(() => {
+  fake.intercept = undefined;
+});
+
 /** この後に偽の castlist が受けた要求を返す関数。 */
-function mark(): () => CastlistRequest[] {
+function mark(): () => CastlistSeen[] {
   const since = fake.requests().length;
   return () => fake.requests().slice(since);
 }
 
-/** 書く要求だけ（/healthz を除く）。 */
-const writes = (requests: CastlistRequest[]): CastlistRequest[] => requests.filter(r => r.path !== '/healthz');
+/** 書く要求だけ（/healthz と読む要求を除く）。 */
+const writes = (requests: CastlistSeen[]): CastlistSeen[] => requests.filter(r => r.method !== 'GET');
+
+/** 道の初めの 2 段（/api/events など）。 */
+const kindOf = (r: CastlistSeen): string => r.path.split('/').slice(0, 3).join('/');
 
 /** 設定の file を読み直した周り（試験の中で file を消した後）。 */
 const withConfig = (ctx: Context): Context => ({ ...ctx, config: composeRolesConfig(ctx.project) });
@@ -65,7 +75,7 @@ const endInput = (reason: string, sid: string): string => JSON.stringify({ hook_
 const bashInput = (sid: string, extra: Record<string, unknown> = {}): string =>
   JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'ls' }, session_id: sid, transcript_path: '/nonexistent/transcript.jsonl', ...extra });
 
-/** 外の命令のうち、castlist に触る物（container と、置き場でない URL への curl）。 */
+/** 外の命令のうち、castlist に触りうる物（container と、置き場でない URL への curl）。 */
 const castlistCalls = (w: World) => w.calls.filter(c => c.cmd === 'container' || (c.cmd === 'curl' && !/127\.0\.0\.1:880[01]/.test(c.args.at(-1) ?? '')));
 
 /** TPM 担当の周り: roster start の 1 行が付ける環境変数を持つ。 */
@@ -101,15 +111,20 @@ describe('castlist を設定していない時', () => {
   test('roster start・assign・hello・guard・close・session の hook は、castlist に触らない', async () => {
     const before = fake.requests().length;
     const w = world();
-    const tpm = tpmSeat(w);
-    const { line } = await startTpm(w.tpm);
+    let made = 0;
+    const count = (ctx: Context): Context => ({ ...ctx, clients: { ...ctx.clients, castlist: (url) => {
+      made += 1;
+      return ctx.clients.castlist(url);
+    } } });
+    const tpm = count(tpmSeat(w));
+    const { line } = await startTpm(count(w.tpm));
     expect(line).not.toContain('ROSTER_LAUNCH');
     await hello(tpm);
     await sessionStart(tpm, startInput('startup', tpmSid));
     await assign(tpm, 't-x7k2', SE);
     expect(readRole(w.tpm, 't-x7k2')).not.toHaveProperty('launch');
     expect(readRole(w.tpm, 't-x7k2')).not.toHaveProperty('launchedBy');
-    const se = seat(w, 't-x7k2', SID);
+    const se = count(seat(w, 't-x7k2', SID));
     expect(se.env.ROSTER_LAUNCH).toBeUndefined();
     await sessionStart(se, startInput('startup', SID));
     expect(await guard(se, bashInput(SID, { effort: { level: 'high' } }))).toEqual({ allow: true });
@@ -117,6 +132,7 @@ describe('castlist を設定していない時', () => {
     await sessionEnd(se, endInput('other', SID));
     await close(tpm, 't-x7k2');
     expect(castlistCalls(w)).toEqual([]);
+    expect(made).toBe(0);
     expect(w.tpm.state.list('sessions')).toEqual([]);
     expect(fake.requests().length).toBe(before);
   });
@@ -214,7 +230,7 @@ describe('castlist が止まっている時', () => {
     expect(message).toContain('https://uraitakahito.github.io/castlist/run.html');
   });
 
-  test('container が無ければ、container run の 1 行（名は castlist.box、port は設定の URL の port、版と docs の URL つき）', async () => {
+  test('container が無ければ、container run の 1 行だけ（名は castlist.box、port は設定の URL の port、1.0.0 の版と volume。docs の URL つき。移す案内は無い）', async () => {
     const w = world({ castlist: dead });
     w.answers.set('container inspect castlist.box', { status: 1, stdout: '', stderr: 'not found' });
     w.answers.set('container inspect castlist', { status: 1, stdout: '', stderr: 'not found' });
@@ -225,12 +241,18 @@ describe('castlist が止まっている時', () => {
     catch (e) {
       message = (e as Error).message;
     }
-    const run = message.split('\n').find(l => RUN_LINE.test(l)) ?? '';
-    const [, port, version] = RUN_LINE.exec(run) ?? [];
+    const lines = message.split('\n');
+    const at = lines.findIndex(l => RUN_LINE.test(l));
+    const [, port, volume, version] = RUN_LINE.exec(lines[at] ?? '') ?? [];
     expect(port).toBe(new URL(dead).port);
+    expect(volume).toBe(CASTLIST_VOLUME);
     expect(version).toBe(CASTLIST_VERSION);
-    expect(CASTLIST_VERSION).toBe('v0.4.0');
-    expect(message).toContain('https://uraitakahito.github.io/castlist/');
+    expect(CASTLIST_VERSION).toBe('v1.0.0');
+    expect(CASTLIST_VOLUME).toBe('castlist-data-v1');
+    expect(lines[0]).toContain('https://uraitakahito.github.io/castlist/');
+    // 前の volume（castlist-data）から移す案内は、もう出さない。
+    expect(message).not.toContain('release.html');
+    expect(message).not.toMatch(/castlist-data[^-]/);
   });
 
   test('roster assign は担当を起こさず、1 行と roster wait pm "castlist を起こす" --hand を出す', async () => {
@@ -298,10 +320,12 @@ describe('roster start', () => {
     const { line } = await startTpm(w.tpm);
     await startTpm(w.tpm);
     const requests = got();
-    expect(requests[0]).toMatchObject({ method: 'GET', path: '/healthz', host: new URL(fake.url).host, origin: undefined });
-    const posts = requests.filter(r => r.path === '/v1/actors');
+    expect(requests[0]).toMatchObject({ method: 'GET', path: '/healthz' });
+    expect(requests[0]?.headers.host).toBe(new URL(fake.url).host);
+    expect(requests[0]?.headers).not.toHaveProperty('origin');
+    const posts = requests.filter(r => r.path === '/api/actors');
     expect(posts).toHaveLength(2);
-    expect(posts[0]?.body).toMatchObject({ kind: 'human', name_prefix: 'product-manager', bindings: [{ type: 'tpm.person', value: 'product-manager' }], sent_at: NOW });
+    expect(posts[0]?.body).toMatchObject({ kind: 'human', namePrefix: 'product-manager', bindings: [{ type: 'tpm.person', value: 'product-manager' }], sentAt: SENT_AT });
     expect(posts[0]?.body?.issuer).toBe(castlistIssuer(w.tpm.state.dir));
     expect(posts.map(p => p.status)).toEqual([201, 200]);
     for (const part of ['ROSTER_LAUNCH="$(uuidgen)"', 'ROSTER_LAUNCHED_BY=tpm.person:product-manager', 'ROSTER_LAUNCH_MODEL=claude-opus-5-5', 'ROSTER_LAUNCH_EFFORT=medium', 'ROSTER_LAUNCH_FRESH=1']) expect(line).toContain(` ${part} `);
@@ -312,7 +336,7 @@ describe('roster start', () => {
     const w = world({ castlist: dead }, { ROSTER_CASTLIST_URL: fake.url });
     const got = mark();
     await expect(startTpm(w.tpm)).resolves.toBeDefined();
-    expect(got().some(r => r.path === '/v1/actors')).toBe(true);
+    expect(got().some(r => r.path === '/api/actors')).toBe(true);
   });
 
   test('castlist の欄は 127.0.0.1 か localhost の http の URL', () => {
@@ -365,9 +389,9 @@ describe('session-start', () => {
     const { w, record } = await launched();
     expect(record.launch).toMatch(/^[0-9a-f-]{36}$/);
     expect(record.launchedBy).toBe(`claude.session:${tpmSid}`);
-    const tpmPost = got().find(r => r.path === '/v1/actors' && r.body?.kind === 'ai');
-    expect(tpmPost?.body).toMatchObject({ name_prefix: 'project-tpm', labels: { 'tpm.project': w.project, 'tpm.launch': 'launch-tpm', 'tpm.role': 'tpm' }, bindings: [{ type: 'claude.session', value: tpmSid }], settings: { model: 'claude-opus-5-5', effort: 'medium' } });
-    expect(got().find(r => r.path.startsWith('/v1/links/'))?.body).toMatchObject({ type: 'launched', from: 'tpm.person:product-manager', to: `claude.session:${tpmSid}` });
+    const tpmPost = got().find(r => r.path === '/api/actors' && r.body?.kind === 'ai');
+    expect(tpmPost?.body).toMatchObject({ namePrefix: 'project-tpm', labels: { 'tpm.project': w.project, 'tpm.launch': 'launch-tpm', 'tpm.role': 'tpm' }, bindings: [{ type: 'claude.session', value: tpmSid }], settings: { model: 'claude-opus-5-5', effort: 'medium' } });
+    expect(got().find(r => r.path.startsWith('/api/links/'))?.body).toMatchObject({ type: 'launched', from: 'tpm.person:product-manager', to: `claude.session:${tpmSid}` });
 
     const se = seat(w, 't-x7k2', SID, { CMUX_WORKSPACE_ID: 'FF00-UUID' });
     const cmux = { ...se, config: { ...se.config, transport: 'cmux' as const } };
@@ -375,18 +399,18 @@ describe('session-start', () => {
     const after = mark();
     await sessionStart(cmux, startInput('startup', SID));
     const requests = writes(after());
-    expect(requests.map(r => [r.method, r.path.split('/').slice(0, 3).join('/'), r.status])).toEqual([
-      ['POST', '/v1/actors', 201],
-      ['PUT', '/v1/events', 201],
-      ['PUT', '/v1/links', 201],
+    expect(requests.map(r => [r.method, kindOf(r), r.status])).toEqual([
+      ['POST', '/api/actors', 201],
+      ['PUT', '/api/events', 201],
+      ['PUT', '/api/links', 201],
     ]);
     expect(requests[0]?.body).toEqual({
       issuer: castlistIssuer(w.tpm.state.dir),
       kind: 'ai',
-      name_prefix: 't-x7k2-swe',
+      namePrefix: 't-x7k2-swe',
       labels: { 'tpm.project': w.project, 'tpm.launch': record.launch, 'tpm.key': 't-x7k2', 'tpm.role': 'software-engineer' },
       bindings: [{ type: 'claude.session', value: SID }, { type: 'cmux.workspace.ref', value: 'workspace:7' }, { type: 'cmux.workspace.uuid', value: 'FF00-UUID' }],
-      sent_at: NOW,
+      sentAt: SENT_AT,
       settings: { model: record.model, effort: record.effort },
     });
     expect(requests[1]?.body).toMatchObject({ by: `claude.session:${SID}`, type: 'entered', detail: {} });
@@ -414,7 +438,7 @@ describe('session-start', () => {
     await sessionStart(se, startInput('resume', SID));
     const a = writes(first());
     expect(a[0]?.body).toHaveProperty('settings');
-    expect(a.find(r => r.path.startsWith('/v1/events/'))?.body).toMatchObject({ type: 'reentered' });
+    expect(a.find(r => r.path.startsWith('/api/events/'))?.body).toMatchObject({ type: 'reentered' });
     const second = mark();
     await sessionStart(se, startInput('resume', SID));
     const b = writes(second());
@@ -433,11 +457,11 @@ describe('session-start', () => {
     await sessionStart(se2, startInput('clear', SID2));
     const requests = writes(got());
     expect(requests[0]?.body).toMatchObject({ by: `claude.session:${SID}`, type: 'cleared' });
-    const post = requests.find(r => r.path === '/v1/actors');
+    const post = requests.find(r => r.path === '/api/actors');
     expect(post?.body).not.toHaveProperty('settings');
     expect(post?.body?.bindings).toEqual([{ type: 'claude.session', value: SID2 }]);
-    expect(requests.find(r => r.path.startsWith('/v1/events/') && r.body?.by === `claude.session:${SID2}`)?.body).toMatchObject({ type: 'entered', detail: { source: 'clear' } });
-    expect(requests.find(r => r.path.startsWith('/v1/links/'))?.body).toMatchObject({ type: 'continued', from: `claude.session:${SID}`, to: `claude.session:${SID2}` });
+    expect(requests.find(r => r.path.startsWith('/api/events/') && r.body?.by === `claude.session:${SID2}`)?.body).toMatchObject({ type: 'entered', detail: { source: 'clear' } });
+    expect(requests.find(r => r.path.startsWith('/api/links/'))?.body).toMatchObject({ type: 'continued', from: `claude.session:${SID}`, to: `claude.session:${SID2}` });
     expect(requests.every(r => r.status === 201)).toBe(true);
     expect(w.tpm.state.read(`sessions/${SID2}.jsonc`)).toMatchObject({ name: 't-x7k2-swe.2' });
   });
@@ -448,8 +472,8 @@ describe('session-start', () => {
     const got = mark();
     await sessionStart(seat(w, 't-x7k2', SID3), startInput('fork', SID3));
     const requests = writes(got());
-    expect(requests.find(r => r.path.startsWith('/v1/events/'))?.body).toMatchObject({ by: `claude.session:${SID3}`, type: 'forked' });
-    expect(requests.find(r => r.path.startsWith('/v1/links/'))?.body).toMatchObject({ type: 'continued', from: `claude.session:${SID}`, to: `claude.session:${SID3}` });
+    expect(requests.find(r => r.path.startsWith('/api/events/'))?.body).toMatchObject({ by: `claude.session:${SID3}`, type: 'forked' });
+    expect(requests.find(r => r.path.startsWith('/api/links/'))?.body).toMatchObject({ type: 'continued', from: `claude.session:${SID}`, to: `claude.session:${SID3}` });
   });
 
   test('compact: 要約。2 度の compact は別の id', async () => {
@@ -459,10 +483,10 @@ describe('session-start', () => {
     const got = mark();
     await sessionStart(se, startInput('compact', SID));
     await sessionStart(se, startInput('compact', SID));
-    const events = writes(got()).filter(r => r.path.startsWith('/v1/events/'));
+    const events = writes(got()).filter(r => r.path.startsWith('/api/events/'));
     expect(events.map(r => r.body?.type)).toEqual(['compacted', 'compacted']);
     expect(new Set(events.map(r => r.path)).size).toBe(2);
-    expect(writes(got()).filter(r => r.path === '/v1/actors').every(r => !('settings' in (r.body ?? {})))).toBe(true);
+    expect(writes(got()).filter(r => r.path === '/api/actors').every(r => !('settings' in (r.body ?? {})))).toBe(true);
   });
 });
 
@@ -496,8 +520,8 @@ describe('guard と castlist', () => {
     expect(await guard(se, bashInput(SID, { transcript_path: path, effort: { level: 'high' } }))).toEqual({ allow: true });
     expect(await guard(se, bashInput(SID, { transcript_path: path, effort: { level: 'high' } }))).toEqual({ allow: true });
     let puts = writes(got());
-    expect(puts.map(r => [r.method, r.path.split('/').slice(0, 3).join('/')])).toEqual([['PUT', '/v1/settings']]);
-    expect(puts[0]?.body).toMatchObject({ by: `claude.session:${SID}`, model: 'claude-opus-5-5', effort: 'high', source: 'observed', sent_at: NOW });
+    expect(puts.map(r => [r.method, kindOf(r)])).toEqual([['PUT', '/api/settings']]);
+    expect(puts[0]?.body).toMatchObject({ by: `claude.session:${SID}`, model: 'claude-opus-5-5', effort: 'high', source: 'observed', sentAt: SENT_AT });
     // effort を替えた
     expect(await guard(se, bashInput(SID, { transcript_path: path, effort: { level: 'low' } }))).toEqual({ allow: true });
     // model を替えた
@@ -516,7 +540,7 @@ describe('guard と castlist', () => {
     const got = mark();
     expect(await guard(se, bashInput(SID, { transcript_path: path, effort: { level: 'high' } }))).toEqual({ allow: true });
     expect(await guard(se, bashInput(SID, { transcript_path: path, effort: { level: 'high' } }))).toEqual({ allow: true });
-    const events = writes(got()).filter(r => r.path.startsWith('/v1/events/'));
+    const events = writes(got()).filter(r => r.path.startsWith('/api/events/'));
     expect(events.map(r => r.body?.type)).toEqual(['model_unreadable']);
   });
 
@@ -525,7 +549,7 @@ describe('guard と castlist', () => {
     const se = seat(w, 't-x7k2', SID);
     const got = mark();
     expect(await guard(se, bashInput(SID))).toEqual({ allow: true });
-    expect(writes(got()).find(r => r.path === '/v1/actors')?.body?.bindings).toEqual([{ type: 'claude.session', value: SID }]);
+    expect(writes(got()).find(r => r.path === '/api/actors')?.body?.bindings).toEqual([{ type: 'claude.session', value: SID }]);
     expect(w.tpm.state.read(`sessions/${SID}.jsonc`)).toMatchObject({ name: 't-x7k2-swe.1' });
   });
 
@@ -535,7 +559,6 @@ describe('guard と castlist', () => {
     await sessionStart(se, startInput('startup', SID));
     const path = transcript([user, assistant('claude-opus-5-5')]);
     expect(await guard(se, bashInput(SID, { transcript_path: path, effort: { level: 'high' } }))).toEqual({ allow: true });
-    w.castlist.push(dead);
     const down = withEnv(se, { ROSTER_CASTLIST_URL: dead });
     // 送る物が無ければ、castlist に聞かずに通す
     expect(await guard(down, bashInput(SID, { transcript_path: path, effort: { level: 'high' } }))).toEqual({ allow: true });
@@ -553,7 +576,7 @@ describe('hello と castlist', () => {
     const lines = await hello(se);
     expect(lines).toContain('アクター: t-x7k2-swe.1');
     const requests = writes(got());
-    expect(requests[0]?.path).toBe('/v1/actors');
+    expect(requests[0]?.path).toBe('/api/actors');
     expect(requests.find(r => r.body?.type === 'reported_in')?.body).toMatchObject({ by: `claude.session:${SID}` });
   });
 
@@ -685,7 +708,7 @@ describe('落ちた session の突き合わせ（推しの幕引き）', () => {
 
   const tpmAt = { ref: 'workspace:1', uuid: 'U-TPM' };
   const SE_AT = { ref: 'workspace:2', uuid: 'U-SE' };
-  const inferredCloses = (requests: CastlistRequest[]) => writes(requests).filter(r => r.body?.type === 'closed' && (r.body.detail as { inferred?: unknown } | undefined)?.inferred === true);
+  const inferredCloses = (requests: CastlistSeen[]) => writes(requests).filter(r => r.body?.type === 'closed' && (r.body.detail as { inferred?: unknown } | undefined)?.inferred === true);
 
   /** 担当 1 人（SID）が SE_AT で登場した世界。seats は TPM 担当が見る cmux の一覧（試験の中で替える）。 */
   async function world2(): Promise<{ w: World, se: Context, tpmIn: (seats: Record<string, string>, me?: { ref: string, uuid: string }) => Context }> {
@@ -778,6 +801,7 @@ describe('落ちた session の突き合わせ（推しの幕引き）', () => {
     w.tpm.state.write(`sessions/${SID}.jsonc`, record);
     const got = mark();
     await roles(tpmIn({ [tpmAt.uuid]: tpmAt.ref }));
+    expect(got().some(r => r.method === 'GET' && r.path === `/api/actors/${record.id}`)).toBe(true);
     expect(inferredCloses(got()).map(r => r.body)).toEqual([expect.objectContaining({ by: `claude.session:${SID}`, detail: { inferred: true, reason: 'workspace_gone' } })]);
     expect(readSession(w.tpm, SID)?.workspace).toEqual(SE_AT);
   });
@@ -802,7 +826,7 @@ describe('落ちた session の突き合わせ（推しの幕引き）', () => {
     const got = mark();
     expect((await guard(back, bashInput(SID))).allow).toBe(true);
     const sent = writes(got());
-    expect(sent.find(r => r.path === '/v1/actors')?.body?.bindings).toContainEqual({ type: 'cmux.workspace.ref', value: moved.ref });
+    expect(sent.find(r => r.path === '/api/actors')?.body?.bindings).toContainEqual({ type: 'cmux.workspace.ref', value: moved.ref });
     const re = sent.find(r => r.body?.type === 'reentered');
     expect(re?.body).toMatchObject({ by: `claude.session:${SID}`, detail: { source: 'guard' } });
     expect(re?.path).toMatch(new RegExp(`-${SID}-reentered-1$`));
@@ -813,29 +837,22 @@ describe('落ちた session の突き合わせ（推しの幕引き）', () => {
     expect(inferredCloses(after())).toEqual([]);
   });
 
-  /** 外の命令を差し替えた周り（when に当たる curl の時だけ do を呼ぶ）。 */
-  function hooked(ctx: Context, when: RegExp, run: (pass: () => ReturnType<Context['exec']>) => ReturnType<Context['exec']>): Context {
-    const exec: Context['exec'] = (cmd, args, options) => {
-      const pass = () => ctx.exec(cmd, args, options);
-      return cmd === 'curl' && when.test(args.join(' ')) ? run(pass) : pass();
-    };
-    return { ...ctx, exec };
-  }
-
   test('castlist から居場所を引く間に控えが替わっても、替わった所を消さず、居場所だけを足す', async () => {
     const { w, tpmIn } = await world2();
     const record = readSession(w.tpm, SID);
     if (record === undefined) throw new Error('控えが無い');
     delete record.workspace;
     w.tpm.state.write(`sessions/${SID}.jsonc`, record);
-    // 引く間に、その session の SessionEnd が退場を送った（控えは居ないになり、番号が進む）。
-    const racing = hooked(tpmIn({ [tpmAt.uuid]: tpmAt.ref, [SE_AT.uuid]: SE_AT.ref }), /-X GET [\s\S]*\/v1\/actors\//, (pass) => {
-      const now = readSession(w.tpm, SID);
-      if (now !== undefined) w.tpm.state.write(`sessions/${SID}.jsonc`, { ...now, present: false, seq: { ...now.seq, exited: 1 } });
-      return pass();
-    });
+    // 引く間（GetActor を castlist が受けた時）に、その session の SessionEnd が退場を送った（控えは居ないになり、番号が進む）。
+    fake.intercept = (seen) => {
+      if (seen.method === 'GET' && seen.path.startsWith('/api/actors/')) {
+        const now = readSession(w.tpm, SID);
+        if (now !== undefined) w.tpm.state.write(`sessions/${SID}.jsonc`, { ...now, present: false, seq: { ...now.seq, exited: 1 } });
+      }
+      return undefined;
+    };
     const got = mark();
-    await roles(racing);
+    await roles(tpmIn({ [tpmAt.uuid]: tpmAt.ref, [SE_AT.uuid]: SE_AT.ref }));
     expect(readSession(w.tpm, SID)).toMatchObject({ present: false, seq: { exited: 1 }, workspace: SE_AT });
     expect(inferredCloses(got())).toEqual([]);
   });
@@ -854,16 +871,16 @@ describe('落ちた session の突き合わせ（推しの幕引き）', () => {
     if (record === undefined) throw new Error('控えが無い');
     delete record.workspace;
     w.tpm.state.write(`sessions/${SID}.jsonc`, record);
-    const down = hooked(tpmIn({ [tpmAt.uuid]: tpmAt.ref }), /\/v1\/actors\//, () => ({ status: 7, stdout: '', stderr: 'refused' }));
-    const lines = await roles(down);
+    fake.intercept = seen => seen.path.startsWith('/api/actors/') ? 'drop' : undefined;
+    const lines = await roles(tpmIn({ [tpmAt.uuid]: tpmAt.ref }));
     expect(lines.join('\n')).toContain('落ちた session の突き合わせをやめました');
     expect(lines.join('\n')).toContain('名簿');
   });
 
   test('幕引きを送れなければ、送れなかった session を 1 行で出す', async () => {
     const { tpmIn } = await world2();
-    const down = hooked(tpmIn({ [tpmAt.uuid]: tpmAt.ref }), /-X PUT [\s\S]*\/v1\/events\//, () => ({ status: 7, stdout: '', stderr: 'refused' }));
-    const lines = await roles(down);
+    fake.intercept = seen => seen.method === 'PUT' && seen.path.startsWith('/api/events/') ? 'drop' : undefined;
+    const lines = await roles(tpmIn({ [tpmAt.uuid]: tpmAt.ref }));
     expect(lines.join('\n')).toContain('落ちたと推した幕引きを送れませんでした（t-x7k2-swe.1）');
   });
 
@@ -882,7 +899,7 @@ describe('落ちた session の突き合わせ（推しの幕引き）', () => {
     await sessionEnd(se, endInput('other', SID));
     const got = mark();
     await guard(se, bashInput(SID));
-    expect(writes(got()).filter(r => r.body?.type === 'reentered' || r.path === '/v1/actors')).toEqual([]);
+    expect(writes(got()).filter(r => r.body?.type === 'reentered' || r.path === '/api/actors')).toEqual([]);
     expect(readSession(w.tpm, SID)?.present).toBe(false);
   });
 

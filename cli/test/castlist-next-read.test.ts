@@ -1,15 +1,14 @@
-// 設定の api.castlist が next の時に、castlist を読む物（/healthz・1 つのアクター・監査の検索）を、生成した client で新しい API に送る道（AI-36 の段 6c）。
+// castlist を読む物（/healthz・1 つのアクター・監査の検索）を、生成した client で新しい API に送る道（AI-36。設定の api に依らない）。
 // Context の client を作る関数に、偽の HTTP の handler（next-fake.ts）を持つ client を差し込み、送った道と引数を見て、決まりの形（restJson1）で答える。
-// 出す物（表・--json）は、今の道と同じ形（欄の名は snake_case、無い値は null、頁の印は next）になることを見る。本物の castlist には触らない。
+// 出す物（表・--json）は、前の API と同じ形（欄の名は snake_case、無い値は null、頁の印は next）になることを見る。本物の castlist には触らない。
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { castlistClient, requireUp } from '../src/castlist.ts';
+import { castlistClient, registerPm, requireUp } from '../src/castlist.ts';
 import { castlistEvents, castlistFind, castlistLineage, castlistSettings, castlistShow, seatActorsAt } from '../src/commands/castlist-read.ts';
 import { castlistHello } from '../src/commands/castlist.ts';
 import type { Context } from '../src/context.ts';
-import { deadUrl } from './castlist-fake.ts';
-import { nextHandler, type NextAnswer, type NextSeen } from './next-fake.ts';
+import { deadUrl, nextHandler, type NextAnswer, type NextSeen } from './next-fake.ts';
 import { world, type World } from './helpers.ts';
 
 const A1 = '019abcde-0000-7000-8000-000000000001';
@@ -94,9 +93,9 @@ function answer(seen: NextSeen): NextAnswer | undefined {
   }
 }
 
-/** api.castlist が next の世界と、偽の handler を持つ client を作る周り。over は道ごとに答えを替える（undefined なら answer）。 */
+/** castlist を設定した世界と、偽の handler を持つ client を作る周り。over は道ごとに答えを替える（undefined なら answer）。 */
 function nextWorld(over: (seen: NextSeen) => NextAnswer | undefined = () => undefined): { w: World, ctx: Context, seen: NextSeen[] } {
-  const w = world({ castlist: url, api: { castlist: 'next' } });
+  const w = world({ castlist: url });
   const { handler, seen } = nextHandler(s => over(s) ?? answer(s));
   return { w, ctx: { ...w.tpm, clients: { ...w.tpm.clients, castlist: (u: string) => castlistClient(u, handler) } }, seen };
 }
@@ -300,12 +299,15 @@ describe('起きているか（GetHealth）と版', () => {
     expect((await requireUp(skewed.ctx, '何もしていません。'))[0]).toMatch(/^castlist の時計と、roster を動かす機械の時計が 5 秒ずれています/);
   });
 
-  test('新しい API を持たない版（1.0.0 より前）なら、api.castlist を外すか castlist を上げるよう言って止める', async () => {
-    const { ctx } = nextWorld(s => s.path === '/healthz' ? { status: 200, body: { status: 'ok', version: '0.4.0', now: AS_OF } } : undefined);
-    expect(await thrown(() => requireUp(ctx, '名乗っていません。'))).toBe(`castlist（${url}）の版は 0.4.0 で、新しい API（1.0.0 から）を持ちません。名乗っていません。設定の api.castlist を外すか、castlist を新しい版に替えてください（Product Manager に伝える）`);
+  test('0.x の castlist（戻した時。/healthz の形は同じ）は、版で見て止める。書く道に当たっても、型の無い 404 は版が合わないと言う', async () => {
+    const { ctx } = nextWorld(s => s.path === '/healthz' ? { status: 200, body: { status: 'ok', version: '0.4.0', now: AS_OF } } : { status: 404, raw: '{"error":"無い"}' });
+    expect(await thrown(() => requireUp(ctx, '名乗っていません。'))).toBe(`castlist（${url}）の版は 0.4.0 で、この roster が話す API（1.0.0 から）を持ちません。名乗っていません。castlist を 1.0.0 から後の版で起こしてください（Product Manager に伝える）。castlist を 0.x に戻したのなら、roster も切り替えの前の版に戻す（castlist の docs の release.html の「切り替え」）`);
+    const unknown = nextWorld(s => s.path === '/healthz' ? { status: 200, body: { status: 'ok', now: AS_OF } } : { status: 404, raw: '' });
+    expect(await thrown(() => requireUp(unknown.ctx, '名乗っていません。'))).toMatch(/の版は わからない で、/);
+    expect(await registerPm(ctx, url)).toEqual({ kind: 'refused', code: 404, error: expect.stringMatching(/^castlist が新しい API を持たない（castlist の版が 1\.0\.0 より前に見える。/) as unknown });
   });
 
-  test('503 は混んでいる、つながらなければ止まっている（Product Manager が打つ 1 行は、新しい版の image と新しい volume）', async () => {
+  test('503 は混んでいる、つながらなければ止まっている（Product Manager が打つ 1 行は、1.0.0 の image と castlist-data-v1 の volume。移す案内は添えない）', async () => {
     const busy = nextWorld(() => ({ status: 503, type: 'Unavailable', body: '混んでいる' }));
     expect(await thrown(() => requireUp(busy.ctx, '名乗っていません。'))).toMatch(/混んでいます（503）。名乗っていません。/);
     const down = nextWorld(() => ({ throws: new Error('connect ECONNREFUSED') }));
@@ -314,7 +316,6 @@ describe('起きているか（GetHealth）と版', () => {
     const message = await thrown(() => requireUp(down.ctx, '名乗っていません。'));
     expect(message.split('\n').slice(1)).toEqual([
       `container run -d --name castlist.box -p 127.0.0.1:${new URL(url).port}:8080 -v castlist-data-v1:/data -m 200M -c 1 ghcr.io/uraitakahito/castlist:v1.0.0`,
-      '（新しい API の castlist は、新しい volume（castlist-data-v1）で起こす。castlist-data-v1 がまだ無い時だけ、前の volume（castlist-data）の記録を先に移す: https://uraitakahito.github.io/castlist/release.html の「rc を動かす時と切り替え」）',
     ]);
   });
 
@@ -354,7 +355,7 @@ describe('読む道の client の守り（書く道と同じ。review-33）', ()
     await new Promise<void>(resolve => stall.listen(0, '127.0.0.1', resolve));
     const stalled = `http://127.0.0.1:${(stall.address() as AddressInfo).port}`;
     try {
-      const w = world({ castlist: stalled, api: { castlist: 'next' } });
+      const w = world({ castlist: stalled });
       const started = Date.now();
       expect(await thrown(() => requireUp(w.tpm, '名乗っていません。'))).toMatch(new RegExp(`^castlist（${stalled}）が応えません。名乗っていません。`));
       expect(Date.now() - started).toBeLessThan(2500);
@@ -366,7 +367,7 @@ describe('読む道の client の守り（書く道と同じ。review-33）', ()
   }, 10_000);
 });
 
-describe('今の castlist と同じに断る・答える（review-35）', () => {
+describe('前の castlist と同じに断る・答える（review-35）', () => {
   test.each([['2 月 30 日', '2026-02-30T00:00:00Z'], ['11 月 31 日', '2026-11-31T10:00:00+09:00'], ['24 時', '2026-11-22T24:00:00Z'], ['時差の 24 時', '2026-11-22T10:00:00+24:00']])('在らない時刻（%s）は、次の日に回さず、送らずに今と同じ訳で止める', async (_, time) => {
     const { ctx, seen } = nextWorld();
     expect(await thrown(() => castlistEvents(ctx, { from: time }))).toBe('from は RFC 3339 の時刻（例 2026-11-22T13:00:00+09:00）');

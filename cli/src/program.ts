@@ -230,7 +230,7 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
     });
   // 監査の検索を読む命令（GET だけ）。旗は castlist の引数にそのまま写す（時刻は RFC 3339。値を確かめて断るのは castlist）。
   const repeat = (value: string, previous: string[] | undefined): string[] => [...previous ?? [], value];
-  castlist.command('find').description('アクターを探す（GET /v1/actors。条件は AND。行ごとにプロフィールの画面の URL を出す）')
+  castlist.command('find').description('アクターを探す（GET /api/actors。条件は AND。行ごとにプロフィールの画面の URL を出す）')
     .option('--label <鍵:値>', 'そのラベルを持つ（何度でも。tpm.key:<Key>・tpm.role:<役割>・tpm.project:<folder> など）', repeat)
     .option('--binding <種類:値>', 'その付随する id を、--at の時（無ければ今）に最後に受けた者（cmux.workspace.ref:workspace:3 など）')
     .option('--at <時刻>', '--binding の時刻')
@@ -249,15 +249,15 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
     .option('--json', 'castlist の答えをそのまま出す')
     .action(async (options: FindOptions) => print(await castlistFind(createContext(), options)));
   castlist.command('show <名か-id>').description('1 つのアクター: ラベル・付随する id・今の状態・最新の model と effort・線の要約（名は、この project の roster が登録して控えた物だけ引ける）')
-    .option('--json', 'castlist の答え（GET /v1/actors/{id}）をそのまま出す')
+    .option('--json', 'castlist の答え（GET /api/actors/{id}）を、前の API の形（欄の名は snake_case）で出す')
     .action(async (target: string, options: JsonOption) => print(await castlistShow(createContext(), target, options)));
-  castlist.command('lineage <名か-id>').description('誰が起こしたか・誰を起こしたか（GET /v1/actors/{id}/lineage。上は人まで、下は既定で 1 段）')
+  castlist.command('lineage <名か-id>').description('誰が起こしたか・誰を起こしたか（GET /api/actors/{id}/lineage。上は人まで、下は既定で 1 段）')
     .option('--direction <up|down|both>', '辿る向き（既定は both）')
     .option('--depth <段>', '辿る段（1〜20）')
     .option('--type <launched|continued>', 'その線だけを辿る')
     .option('--json', 'castlist の答えをそのまま出す')
     .action(async (target: string, options: LineageOptions) => print(await castlistLineage(createContext(), target, options)));
-  castlist.command('events').description('出来事を、アクターをまたいで探す（GET /v1/events。受けた順）')
+  castlist.command('events').description('出来事を、アクターをまたいで探す（GET /api/events。受けた順）')
     .option('--type <種類>', '出来事の種類（何度でも。どれか）', repeat)
     .option('--actor <名か id>', 'そのアクターの物')
     .option('--from <時刻>', 'castlist が受けた時刻の窓の始め')
@@ -269,7 +269,7 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
     .option('--after <next>', '前の答えの next（続きの頁）')
     .option('--json', 'castlist の答えをそのまま出す')
     .action(async (options: EventsOptions) => print(await castlistEvents(createContext(), options)));
-  castlist.command('settings').description('model と effort の行（--actor が無ければ GET /v1/settings、あれば GET /v1/actors/{id}/settings）')
+  castlist.command('settings').description('model と effort の行（--actor が無ければ GET /api/settings、あれば GET /api/actors/{id}/settings。--at も付ければ GET /api/actors/{id}/settings/at）')
     .option('--actor <名か id>', 'そのアクターの行（--at でその時に効いていた 1 行）')
     .option('--at <時刻>', '--actor の時刻')
     .option('--model <model>', 'その model の行')

@@ -1,6 +1,7 @@
 // castlist の監査の検索を読む命令（roster castlist find・show・lineage・events・settings）と、roster incident timeline のアクターの欄。
-// 試験は偽の castlist（castlist-fake.ts）に直に書いて下ごしらえし、roster の命令が送る GET と、出す字を見る。本物の castlist（8802）には触らない。
-import { spawnSync } from 'node:child_process';
+// 試験は偽の castlist（fake-castlist.ts。新しい API の決まりで答え、状態を持つ）に直に書いて下ごしらえし、roster の命令が送る要求と、出す字を見る。本物の castlist（8802）には触らない。
+// 引数の写し方と --json の形は castlist-next-read.test.ts（決まった答えを返す偽の handler）が見る。ここは、状態のある castlist に通しで聞いた時の出し方を見る。
+import { spawn } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
@@ -12,7 +13,8 @@ import { startTpm } from '../src/command.ts';
 import type { Context } from '../src/context.ts';
 import { buildProgram, commandPaths } from '../src/program.ts';
 import { COMMANDS } from '../src/protocol.ts';
-import { deadUrl, startFakeCastlist, type CastlistRequest, type FakeCastlist } from './castlist-fake.ts';
+import { startCastlist, type CastlistSeen, type FakeCastlist } from './fake-castlist.ts';
+import { deadUrl } from './next-fake.ts';
 import { world, type World } from './helpers.ts';
 import { withoutRosterEnv } from '../src/env.ts';
 
@@ -23,7 +25,7 @@ let fake: FakeCastlist;
 let dead: string;
 
 beforeAll(async () => {
-  fake = await startFakeCastlist();
+  fake = await startCastlist();
   dead = await deadUrl();
 });
 
@@ -32,14 +34,10 @@ afterAll(async () => {
 });
 
 /** この後に偽の castlist が受けた要求を返す関数。 */
-function mark(): () => CastlistRequest[] {
+function mark(): () => CastlistSeen[] {
   const since = fake.requests().length;
   return () => fake.requests().slice(since);
 }
-
-/** 要求の path の引数（名と値の並び）。 */
-const query = (r: CastlistRequest | undefined): [string, string][] => [...new URL(r?.path ?? '/', 'http://x').searchParams.entries()];
-const pathname = (r: CastlistRequest | undefined): string => new URL(r?.path ?? '/', 'http://x').pathname;
 
 /** 投げた誤りの字（投げなければ空）。 */
 async function thrown(run: () => Promise<unknown>): Promise<string> {
@@ -69,27 +67,27 @@ async function seed(w: World, prefix: string, labels: Record<string, string>, en
   const issuer = castlistIssuer(w.tpm.state.dir);
   const sid = `seed-${String(sids += 1).padStart(4, '0')}`;
   fake.setNow(entered ?? '2026-11-20T11:00:00.000Z');
-  const a = await fake.send('POST', '/v1/actors', {
+  const a = await fake.send('POST', '/api/actors', {
     issuer,
     kind: options.kind ?? 'ai',
-    name_prefix: prefix,
+    namePrefix: prefix,
     labels,
     bindings: [{ type: 'claude.session', value: sid }, ...(options.workspace === undefined ? [] : [{ type: 'cmux.workspace.ref', value: options.workspace }])],
-    sent_at: entered ?? '2026-11-20T11:00:00.000Z',
+    sentAt: entered ?? '2026-11-20T11:00:00.000Z',
     settings: { model: options.model ?? 'claude-opus-5-5', effort: options.effort ?? 'high' },
-  }) as { id: string, name: string };
-  if (entered !== undefined) await fake.send('PUT', `/v1/events/${sid}-in`, { issuer, by: `claude.session:${sid}`, type: 'entered', detail: {}, sent_at: entered });
+  }) as { actor: { id: string, name: string } };
+  if (entered !== undefined) await fake.send('PUT', `/api/events/${sid}-in`, { issuer, by: `claude.session:${sid}`, type: 'entered', detail: {}, sentAt: entered });
   if (exited !== undefined) {
     fake.setNow(exited);
-    await fake.send('PUT', `/v1/events/${sid}-out`, { issuer, by: `claude.session:${sid}`, type: 'exited', detail: { reason: 'other' }, sent_at: exited });
+    await fake.send('PUT', `/api/events/${sid}-out`, { issuer, by: `claude.session:${sid}`, type: 'exited', detail: { reason: 'other' }, sentAt: exited });
   }
   fake.setNow('2026-11-20T12:00:00.000Z');
-  return { id: a.id, name: a.name, sid };
+  return { id: a.actor.id, name: a.actor.name, sid };
 }
 
 /** a が b を起こした線（launched）か、継いだ線（continued）を送る。 */
 async function link(w: World, type: 'launched' | 'continued', from: Seeded, to: Seeded): Promise<void> {
-  await fake.send('PUT', `/v1/links/${from.sid}-${to.sid}`, { issuer: castlistIssuer(w.tpm.state.dir), type, from: `claude.session:${from.sid}`, to: `claude.session:${to.sid}`, sent_at: '2026-11-20T11:00:00.000Z' });
+  await fake.send('PUT', `/api/links/${from.sid}-${to.sid}`, { issuer: castlistIssuer(w.tpm.state.dir), type, from: `claude.session:${from.sid}`, to: `claude.session:${to.sid}`, sentAt: '2026-11-20T11:00:00.000Z' });
 }
 
 /** castlist を設定した世界と、Auditor の席の周り（$ROSTER_ROLE=auditor）。 */
@@ -112,7 +110,7 @@ describe('命令の一覧', () => {
 });
 
 describe('roster castlist find', () => {
-  test('旗を GET /v1/actors の引数にする（--label は何度でも）。行ごとにプロフィールの画面の URL を出す', async () => {
+  test('ListActors で聞き、行ごとにプロフィールの画面の URL を出す（状態・退き方・model と effort も 1 行に）', async () => {
     const { w, auditor } = auditorWorld();
     const p = w.project;
     const a = await seed(w, 't-f1nd-swe', { 'tpm.project': p, 'tpm.key': 't-f1nd', 'tpm.role': 'software-engineer' }, '2026-11-20T11:10:00.000Z', '2026-11-20T11:40:00.000Z');
@@ -121,8 +119,8 @@ describe('roster castlist find', () => {
     const since = mark();
     const out = await castlistFind(auditor, { label: ['tpm.key:t-f1nd', 'tpm.role:software-engineer'] });
     const sent = since();
-    expect(sent.map(r => [r.method, pathname(r)])).toEqual([['GET', '/v1/actors']]);
-    expect(query(sent[0])).toEqual([['label', 'tpm.key:t-f1nd'], ['label', 'tpm.role:software-engineer']]);
+    expect(sent.map(r => [r.method, r.path])).toEqual([['GET', '/api/actors']]);
+    expect(sent[0]?.query).toEqual({ label: ['tpm.key:t-f1nd', 'tpm.role:software-engineer'] });
     const rows = out.filter(l => l.includes('/actors/'));
     expect(rows).toHaveLength(2);
     expect(rows[0]).toMatch(new RegExp(`^${a.name.replaceAll('.', '\\.')}\\b`));
@@ -134,43 +132,6 @@ describe('roster castlist find', () => {
     expect(rows[1]).toContain('稼働中');
     expect(rows[1]).toContain('claude-opus-5-5');
     expect(rows[1]).toContain('high');
-  });
-
-  test('ほかの旗も、castlist の引数の名にそのまま写す', async () => {
-    const { auditor } = auditorWorld();
-    const since = mark();
-    await castlistFind(auditor, {
-      label: ['tpm.key:t-zz01'],
-      binding: 'cmux.workspace.ref:workspace:3',
-      at: '2026-11-20T11:30:00+09:00',
-      activeFrom: '2026-11-20T11:00:00+09:00',
-      activeTo: '2026-11-20T12:00:00+09:00',
-      active: 'false',
-      model: 'claude-sonnet-5',
-      effort: 'max',
-      launchedBy: 'act-1',
-      skewed: true,
-      kind: 'ai',
-      sort: 'exited',
-      order: 'desc',
-      limit: '5',
-    });
-    expect(query(since()[0])).toEqual([
-      ['label', 'tpm.key:t-zz01'],
-      ['binding', 'cmux.workspace.ref:workspace:3'],
-      ['at', '2026-11-20T11:30:00+09:00'],
-      ['active_from', '2026-11-20T11:00:00+09:00'],
-      ['active_to', '2026-11-20T12:00:00+09:00'],
-      ['active', 'false'],
-      ['model', 'claude-sonnet-5'],
-      ['effort', 'max'],
-      ['launched_by', 'act-1'],
-      ['skewed', 'true'],
-      ['kind', 'ai'],
-      ['sort', 'exited'],
-      ['order', 'desc'],
-      ['limit', '5'],
-    ]);
   });
 
   test('続きがあれば next を出し、--after に渡すと次の頁を読む。当たらなければそう言う', async () => {
@@ -190,22 +151,6 @@ describe('roster castlist find', () => {
     expect(none.join('\n')).toContain('当たるアクターは無い');
   });
 
-  test('--json は castlist の答えをそのまま出す', async () => {
-    const { w, auditor } = auditorWorld();
-    const a = await seed(w, 't-js01-swe', { 'tpm.project': w.project, 'tpm.key': 't-js01' }, '2026-11-20T11:00:00.000Z');
-    const out = await castlistFind(auditor, { label: ['tpm.key:t-js01'], json: true });
-    expect(out).toHaveLength(1);
-    const asIs = await (await fetch(`${fake.url}/v1/actors?label=tpm.key%3At-js01`)).text();
-    expect(out[0]).toBe(asIs);
-    expect((JSON.parse(out[0] ?? '{}') as { actors: { id: string }[] }).actors.map(x => x.id)).toEqual([a.id]);
-  });
-
-  test('castlist が断った（400）ら、castlist の訳をそのまま出して止まる', async () => {
-    const { auditor } = auditorWorld();
-    expect(await thrown(() => castlistFind(auditor, {}))).toBe('絞る条件を 1 つ以上付ける（label・binding・active_from・active_to・active=true・model・effort・launched_by・skewed のどれか）');
-    expect(await thrown(() => castlistFind(auditor, { label: ['tpm.key:t-x'], activeFrom: 'きのう' }))).toBe('active_from は RFC 3339 の時刻（例 2026-11-22T13:00:00+09:00）');
-  });
-
   test('castlist が止まっていれば「castlist に聞けない」の 1 行で止まり、何も書かない', async () => {
     const { w, auditor } = auditorWorld(dead);
     const message = await thrown(() => castlistFind(auditor, { label: ['tpm.key:t-x'] }));
@@ -216,15 +161,20 @@ describe('roster castlist find', () => {
 
   test('castlist を設定していなければ、そう言う 1 行で止まる（castlist に聞かない）', async () => {
     const w = world();
-    const message = await thrown(() => castlistFind(w.tpm, { label: ['tpm.key:t-x'] }));
+    let made = 0;
+    const ctx: Context = { ...w.tpm, clients: { ...w.tpm.clients, castlist: (url) => {
+      made += 1;
+      return w.tpm.clients.castlist(url);
+    } } };
+    const message = await thrown(() => castlistFind(ctx, { label: ['tpm.key:t-x'] }));
     expect(message).toMatch(/^castlist を設定していない/);
     expect(message).not.toContain('\n');
-    expect(w.calls.filter(c => c.cmd === 'curl')).toEqual([]);
+    expect(made).toBe(0);
   });
 });
 
 describe('roster castlist show', () => {
-  test('id で 1 つのアクター: ラベル・付随する id・今の状態・最新の model と effort・線の要約・プロフィールの URL', async () => {
+  test('id で 1 つのアクター: ラベル・付随する id・今の状態・最新の model と effort・線の要約（人まで上る）・プロフィールの URL', async () => {
     const { w, auditor } = auditorWorld();
     const pm = await seed(w, 'product-manager', { 'tpm.project': w.project }, undefined, undefined, { kind: 'human' });
     const tpm = await seed(w, 'project-tpm', { 'tpm.project': w.project, 'tpm.role': 'tpm' }, '2026-11-20T11:00:00.000Z');
@@ -260,7 +210,7 @@ describe('roster castlist show', () => {
     expect(record?.name).toBe('project-tpm.1');
     const since = mark();
     const out = await castlistShow(w.tpm, 'project-tpm.1', {});
-    expect(pathname(since()[0])).toBe(`/v1/actors/${record?.id ?? ''}`);
+    expect(since()[0]?.path).toBe(`/api/actors/${record?.id ?? ''}`);
     const text = out.join('\n');
     expect(text).toContain(page(`/actors/${record?.id ?? ''}`));
     expect(text).toContain('product-manager.1 → project-tpm.1（launched');
@@ -269,17 +219,10 @@ describe('roster castlist show', () => {
     expect(missing).toMatch(/^そのアクターは無い/);
     expect(missing).toContain('roster castlist find');
   });
-
-  test('--json は GET /v1/actors/{id} の答えをそのまま出す', async () => {
-    const { w, auditor } = auditorWorld();
-    const a = await seed(w, 't-sj01-swe', { 'tpm.project': w.project }, '2026-11-20T11:00:00.000Z');
-    const out = await castlistShow(auditor, a.id, { json: true });
-    expect(out).toEqual([await (await fetch(`${fake.url}/v1/actors/${a.id}`)).text()]);
-  });
 });
 
 describe('roster castlist lineage', () => {
-  test('GET /v1/actors/{id}/lineage の旗を写し、点（名と URL）と線を出す', async () => {
+  test('GetLineage で聞き、点（名と URL）と線を出す。範囲の外の --depth は送らずに断る', async () => {
     const { w, auditor } = auditorWorld();
     const pm = await seed(w, 'product-manager', { 'tpm.project': w.project }, undefined, undefined, { kind: 'human' });
     const tpm = await seed(w, 'project-tpm', { 'tpm.project': w.project }, '2026-11-20T11:00:00.000Z');
@@ -288,27 +231,24 @@ describe('roster castlist lineage', () => {
     await link(w, 'launched', tpm, se);
     const since = mark();
     const out = await castlistLineage(auditor, se.id, { direction: 'up', depth: '5', type: 'launched' });
-    const sent = since();
-    expect(sent.map(r => [r.method, pathname(r)])).toEqual([['GET', `/v1/actors/${se.id}/lineage`]]);
-    expect(query(sent[0])).toEqual([['direction', 'up'], ['depth', '5'], ['type', 'launched']]);
+    expect(since().map(r => [r.method, r.path])).toEqual([['GET', `/api/actors/${se.id}/lineage`]]);
     const text = out.join('\n');
     for (const a of [pm, tpm, se]) expect(text).toContain(page(`/actors/${a.id}`));
     expect(text).toContain(`${pm.name} → ${tpm.name}（launched`);
     expect(text).toContain(`${tpm.name} → ${se.name}（launched`);
+    const refused = mark();
     expect(await thrown(() => castlistLineage(auditor, se.id, { depth: '99' }))).toBe('depth は 1 から 20 までの数');
-    expect((await castlistLineage(auditor, se.id, { json: true }))[0]).toBe(await (await fetch(`${fake.url}/v1/actors/${se.id}/lineage`)).text());
+    expect(refused()).toEqual([]);
   });
 });
 
 describe('roster castlist events', () => {
-  test('旗を GET /v1/events の引数にし（--type は何度でも）、行ごとに出来事とアクターの名と URL を出す', async () => {
+  test('ListEvents で聞き、行ごとに出来事とアクターの名と URL を出す。castlist が断った訳はそのまま出す', async () => {
     const { w, auditor } = auditorWorld();
     const a = await seed(w, 't-ev01-swe', { 'tpm.project': w.project }, '2026-11-20T11:00:00.000Z', '2026-11-20T11:30:00.000Z');
     const since = mark();
     const out = await castlistEvents(auditor, { type: ['exited', 'cleared'], actor: a.id, from: '2026-11-20T11:00:00Z', to: '2026-11-20T12:00:00Z', limit: '10' });
-    const sent = since();
-    expect(sent.map(r => [r.method, pathname(r)])).toEqual([['GET', '/v1/events']]);
-    expect(query(sent[0])).toEqual([['type', 'exited'], ['type', 'cleared'], ['actor', a.id], ['from', '2026-11-20T11:00:00Z'], ['to', '2026-11-20T12:00:00Z'], ['limit', '10']]);
+    expect(since().map(r => [r.method, r.path])).toEqual([['GET', '/api/events']]);
     const rows = out.filter(l => l.includes('/actors/'));
     expect(rows).toHaveLength(1);
     expect(rows[0]).toContain('2026-11-20T11:30:00.000Z');
@@ -320,17 +260,15 @@ describe('roster castlist events', () => {
 });
 
 describe('roster castlist settings', () => {
-  test('--mismatch などは GET /v1/settings に、--actor は GET /v1/actors/{id}/settings（--at）にする', async () => {
+  test('--mismatch などは ListSettings に、--actor は ListActorSettings（--at なら GetActorSettingAt）にし、その時に効いていた行を出す', async () => {
     const { w, auditor } = auditorWorld();
     const a = await seed(w, 't-st01-swe', { 'tpm.project': w.project }, '2026-11-20T11:00:00.000Z', undefined, { model: 'claude-opus-5-5', effort: 'high' });
     fake.setNow('2026-11-20T11:20:00.000Z');
-    await fake.send('PUT', `/v1/settings/${a.sid}-seen`, { issuer: castlistIssuer(w.tpm.state.dir), by: `claude.session:${a.sid}`, model: 'claude-sonnet-5', effort: 'high', source: 'observed', sent_at: '2026-11-20T11:20:00.000Z' });
+    await fake.send('PUT', `/api/settings/${a.sid}-seen`, { issuer: castlistIssuer(w.tpm.state.dir), by: `claude.session:${a.sid}`, model: 'claude-sonnet-5', effort: 'high', source: 'observed', sentAt: '2026-11-20T11:20:00.000Z' });
     fake.setNow('2026-11-20T12:00:00.000Z');
     const since = mark();
     const out = await castlistSettings(auditor, { mismatch: true, source: 'observed' });
-    const sent = since();
-    expect(sent.map(r => [r.method, pathname(r)])).toEqual([['GET', '/v1/settings']]);
-    expect(query(sent[0])).toEqual([['source', 'observed'], ['mismatch', 'true']]);
+    expect(since().map(r => [r.method, r.path])).toEqual([['GET', '/api/settings']]);
     const row = out.find(l => l.includes(a.name)) ?? '';
     expect(row).toContain('claude-sonnet-5');
     expect(row).toContain('observed');
@@ -338,12 +276,29 @@ describe('roster castlist settings', () => {
 
     const at = mark();
     const then = await castlistSettings(auditor, { actor: a.id, at: '2026-11-20T11:10:00Z' });
-    expect(at().map(r => [r.method, pathname(r), query(r)])).toEqual([['GET', `/v1/actors/${a.id}/settings`, [['at', '2026-11-20T11:10:00Z']]]]);
+    expect(at().map(r => [r.method, r.path])).toEqual([['GET', `/api/actors/${a.id}`], ['GET', `/api/actors/${a.id}/settings/at`]]);
     expect(then.join('\n')).toContain('claude-opus-5-5');
     expect(then.join('\n')).not.toContain('claude-sonnet-5');
     expect((await castlistSettings(auditor, { actor: a.id, at: '2026-11-20T10:00:00Z' })).join('\n')).toContain('まだ無い');
   });
 });
+
+/** roster を別の process で動かす（偽の castlist は同じ process で待つので、spawnSync で待つと答えられない）。 */
+function runAsync(args: string[], options: { cwd: string, env: NodeJS.ProcessEnv }): Promise<{ status: number | null, stdout: string, stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(tpmBin, args, { ...options, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8').on('data', (c: string) => {
+      stdout += c;
+    });
+    child.stderr.setEncoding('utf8').on('data', (c: string) => {
+      stderr += c;
+    });
+    child.on('error', reject);
+    child.on('close', status => resolve({ status, stdout, stderr }));
+  });
+}
 
 describe('読むだけ', () => {
   test('どの命令も GET だけを送り、状態の folder に書かない', async () => {
@@ -362,7 +317,7 @@ describe('読むだけ', () => {
     expect(w.tpm.state.list('sessions')).toEqual([]);
   });
 
-  test('roster の命令として打つ: 止まっていれば exit 1 で 1 行、断られれば castlist の訳、--json は答えのまま', async () => {
+  test('roster の命令として打つ: 止まっていれば exit 1 で 1 行、断られれば castlist の訳、--json は答え', async () => {
     const w = world({ castlist: fake.url });
     await seed(w, 't-cl01-swe', { 'tpm.project': w.project, 'tpm.key': 't-cl01' }, '2026-11-20T11:00:00.000Z');
     const env = (url: string): NodeJS.ProcessEnv => ({
@@ -373,20 +328,20 @@ describe('読むだけ', () => {
       ROSTER_CASTLIST_URL: url,
       XDG_STATE_HOME: join(w.project, '..', 'state'),
     });
-    const run = (args: string[], url = fake.url) => spawnSync(tpmBin, ['castlist', ...args], { cwd: w.project, encoding: 'utf8', env: env(url) });
-    const down = run(['find', '--label', 'tpm.key:t-cl01'], dead);
+    const run = (args: string[], url = fake.url) => runAsync(['castlist', ...args], { cwd: w.project, env: env(url) });
+    const down = await run(['find', '--label', 'tpm.key:t-cl01'], dead);
     expect(down.status).toBe(1);
     expect(down.stderr).toBe(`roster: castlist に聞けない（${dead} が応えない）\n`);
-    const refused = run(['find']);
+    const refused = await run(['find']);
     expect(refused.status).toBe(1);
-    expect(refused.stderr).toBe('roster: 絞る条件を 1 つ以上付ける（label・binding・active_from・active_to・active=true・model・effort・launched_by・skewed のどれか）\n');
-    const json = run(['find', '--label', 'tpm.key:t-cl01', '--label', `tpm.project:${w.project}`, '--json']);
+    expect(refused.stderr).toBe('roster: 絞る条件を 1 つ以上付ける（label・binding・activeFrom・activeTo・active=true・model・effort・launchedBy・skewed のどれか）\n');
+    const json = await run(['find', '--label', 'tpm.key:t-cl01', '--label', `tpm.project:${w.project}`, '--json']);
     expect(json.status).toBe(0);
     expect((JSON.parse(json.stdout) as { actors: unknown[] }).actors).toHaveLength(1);
-    const events = run(['events', '--type', 'entered', '--type', 'exited', '--limit', '1']);
+    const events = await run(['events', '--type', 'entered', '--type', 'exited', '--limit', '1']);
     expect(events.status).toBe(0);
     expect(events.stdout).toContain('/actors/');
-  });
+  }, 30_000);
 });
 
 describe('roster incident timeline のアクターの欄', () => {

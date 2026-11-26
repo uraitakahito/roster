@@ -1,4 +1,4 @@
-// 設定の api.castlist が next の時に、castlist へ書く物を生成した client（cli/gen/castlist-client/）で送る道（AI-36 の段 6c）。
+// castlist へ書く物を生成した client（cli/gen/castlist-client/）で送る道（AI-36。設定の api に依らない）。
 // client を作る所（castlistClient）は、127.0.0.1 の空いた port の node の http サーバーで、送り直さないことと Host の形を見る。
 // 書く道は、Context の client を作る関数に、偽の HTTP の handler を持つ client を差し込み、受けた要求を見て、決まりの形（restJson1）で答える。
 // 本物の castlist（8802）には触らない。
@@ -16,8 +16,7 @@ import { withoutAwsMiddleware } from '../src/clients.ts';
 import { castlistGuard, readSession, sessionStart } from '../src/commands/castlist.ts';
 import type { Context } from '../src/context.ts';
 import { withoutRosterEnv } from '../src/env.ts';
-import { deadUrl } from './castlist-fake.ts';
-import { nextHandler, type NextAnswer as Answer, type NextSeen as Seen } from './next-fake.ts';
+import { deadUrl, nextHandler, type NextAnswer as Answer, type NextSeen as Seen } from './next-fake.ts';
 import { world } from './helpers.ts';
 
 const SID = 'bbbbbbbb-0000-4000-8000-000000000001';
@@ -47,9 +46,9 @@ beforeAll(async () => {
   dead = await deadUrl();
 });
 
-/** castlist の URL（何も待っていない port）と api.castlist: next を設定した TPM 担当の周り。client を作る関数は、偽の handler を持つ client を作る。 */
+/** castlist の URL（何も待っていない port）を設定した TPM 担当の周り。client を作る関数は、偽の handler を持つ client を作る。 */
 function nextSeat(answer?: (seen: Seen) => Answer | undefined, env: NodeJS.ProcessEnv = {}): { ctx: Context, seen: Seen[] } {
-  const w = world({ castlist: dead, api: { castlist: 'next' } });
+  const w = world({ castlist: dead });
   const { handler, seen } = fakeHandler(answer);
   const ctx: Context = { ...w.tpm, env: { ...w.tpm.env, CLAUDE_CODE_SESSION_ID: SID, ...env }, clients: { ...w.tpm.clients, castlist: (url: string) => castlistClient(url, handler) } };
   return { ctx, seen };
@@ -122,7 +121,7 @@ describe('castlist の client を作る所（castlistClient）', () => {
   });
 
   test('castlist が止まっていれば（つながらない）、登録の答えは down', async () => {
-    const w = world({ castlist: dead, api: { castlist: 'next' } });
+    const w = world({ castlist: dead });
     expect(await registerPm(w.tpm, dead)).toEqual({ kind: 'down' });
   });
 
@@ -156,7 +155,7 @@ describe('castlist の client の守り（review-33）', () => {
     await new Promise<void>(resolve => stall.listen(0, '127.0.0.1', resolve));
     const url = `http://127.0.0.1:${(stall.address() as AddressInfo).port}`;
     try {
-      const w = world({ castlist: url, api: { castlist: 'next' } });
+      const w = world({ castlist: url });
       const started = Date.now();
       expect(await registerPm(w.tpm, url)).toEqual({ kind: 'down' });
       expect(Date.now() - started).toBeLessThan(7500);
@@ -203,7 +202,7 @@ describe('castlist の client の守り（review-33）', () => {
   });
 });
 
-describe('api.castlist が next の時の書く道', () => {
+describe('書く道', () => {
   test('SessionStart は RegisterActor（POST /api/actors）で登録し、PutEvent と PutLink で送る。欄は camelCase、時刻は UTC', async () => {
     const { ctx, seen } = nextSeat(undefined, LAUNCH);
     await sessionStart(ctx, startInput('startup'));
@@ -232,7 +231,7 @@ describe('api.castlist が next の時の書く道', () => {
       expect(s.headers.host).toBe(new URL(dead).host);
       expect(s.headers).not.toHaveProperty('origin');
     }
-    // 控えには、登録の答えの id と名を書く（今の道と同じ）。
+    // 控えには、登録の答えの id と名を書く。
     expect(readSession(ctx, SID)).toMatchObject({ session: SID, id: ACTOR, name: `${projectPrefix(ctx.project, 'tpm')}.1`, present: true });
   });
 
@@ -247,7 +246,7 @@ describe('api.castlist が next の時の書く道', () => {
     expect(readSession(ctx, SID)?.observed).toEqual({ model: 'claude-opus-5-5', effort: 'high' });
   });
 
-  test('Product Manager の登録（roster start）も RegisterActor で送り、答えは今の道と同じ形（id・名・種類・created）', async () => {
+  test('Product Manager の登録（roster start）も RegisterActor で送り、答えは id・名・種類・created', async () => {
     const { ctx, seen } = nextSeat();
     expect(await registerPm(ctx, dead)).toEqual({
       kind: 'ok',
@@ -289,7 +288,7 @@ describe('api.castlist が next の時の書く道', () => {
     }
   });
 
-  test('api の欄が無ければ、生成した client を作らない（今の curl の道のまま。止まっている castlist には送れずに止める）', async () => {
+  test('設定に api の欄が無くても、生成した client で送る（curl の道は無い。止まっている castlist には送れずに止める）', async () => {
     const w = world({ castlist: dead });
     let made = 0;
     const ctx: Context = { ...w.tpm, clients: { ...w.tpm.clients, castlist: (url: string) => {
@@ -298,6 +297,7 @@ describe('api.castlist が next の時の書く道', () => {
     } } };
     const verdict = await castlistGuard(ctx, bashInput());
     expect(verdict.allow).toBe(false);
-    expect(made).toBe(0);
+    expect(made).toBeGreaterThan(0);
+    expect(w.calls.filter(c => c.cmd === 'curl')).toEqual([]);
   });
 });
