@@ -2,7 +2,8 @@
 // どれも hook の入力（stdin の JSON）を読み、Claude Code の作業を誤りで止めない（program.ts が、どの誤りでも exit 0 にする）。
 // 担当が中で起こした手伝い（subagent。入力に agent_id がある）の中では、何もしない。
 import type { Context } from '../context.ts';
-import { claudePid, ownName, readClaim, removeClaim, stopWaiter, usesNats, waiterFile, writeClaim } from '../mail.ts';
+import { claimNamed, claudePid, deliveredLines, effective, gateFile, lineCount, ownName, readClaim, recordDelivered, removeClaim, stopWaiter, usesNats, waiterFile, writeClaim, type DeliveredWhen, type GateMark, type WaiterMark } from '../mail.ts';
+import type { Mailroom, Recipient, TakeLimit, Taken } from '../mailroom/types.ts';
 import { selfParty } from '../party.ts';
 
 /** hook の入力（stdin の JSON）のうち、読む欄。 */
@@ -57,4 +58,226 @@ export function mailRelease(ctx: Context, stdin: string): void {
   if (claim !== undefined && input.session_id !== undefined && claim.session !== undefined && claim.session !== input.session_id) return;
   removeClaim(ctx, name);
   if (stopWaiter(ctx, name)) ctx.state.remove(waiterFile(name));
+}
+
+// ---- 渡す ----
+
+/** hook が 1 度に取り置く量（20 通・本文を合わせて 9,000 字まで）。 */
+const TAKE: TakeLimit = { max: 20, chars: 9000 };
+/** 頭の 1 通だけを取り置く量（渡し直しの物かを見てから、後ろを取る）。 */
+const TOP: TakeLimit = { max: 1, chars: TAKE.chars };
+
+/**
+ * hook が 1 度に渡す字の上限。Claude Code は、hook の additionalContext が 1 万字を超えると頭の 2KB だけにするので、
+ * 見出しの行を合わせても超えないように、束の後ろを返して収める（頭の 1 通は、超えていても渡す）。
+ */
+const CONTEXT_MAX = 9800;
+
+/** この受け手に、hook がその id の本文を渡すのは何度目になるか（手元の渡した記録から数える。道具の数える回数ではない）。 */
+const nthOf = (ctx: Context, name: Recipient, id: string): number => deliveredLines(ctx).filter(l => l.id === id && l.to === name && l.when !== 'output').length + 1;
+
+/** 渡す字を作る: 頭の行と、メッセージごとに送り手・id・本文。前にも渡した物には「渡し直し n 度目」と付ける。 */
+function compose(ctx: Context, name: Recipient, head: string[], batch: Taken[]): string {
+  return [
+    ...head,
+    ...batch.flatMap((m) => {
+      const nth = nthOf(ctx, name, m.id);
+      const again = nth >= 2 ? `・渡し直し ${nth} 度目（前にも渡したかもしれない）` : '';
+      return [`--- ${m.from}（id ${m.id}${m.replyTo === undefined ? '' : `・返事の先 ${m.replyTo}`}${again}）`, m.text];
+    }),
+    '--- ここまで',
+  ].join('\n');
+}
+
+/**
+ * 今回渡す束を決める。first は、先に取り置いた頭の 1 通（無ければ空）。
+ * 頭が渡し直しの物（道具の数える回数が 2 以上）なら、その 1 通だけを渡す（1 通が渡せないせいで、束ごと渡し直しの上限に近づかないように）。
+ * 後ろを取ってから返すと、返した回も道具が渡した 1 度に数えるので、頭を見てから後ろを取る。
+ * 渡す字が CONTEXT_MAX を超える間は、後ろから 1 通ずつ返す（すぐ取り直せる）。
+ */
+async function batchOf(ctx: Context, room: Mailroom, name: Recipient, head: string[], first: Taken[]): Promise<Taken[]> {
+  const [top] = first;
+  if (top === undefined) return [];
+  const left = TAKE.chars - top.text.length;
+  const taken = top.deliveries >= 2 || left <= 0 ? [top] : [top, ...await room.take(name, { max: TAKE.max - 1, chars: left })];
+  let batch = taken;
+  while (batch.length > 1 && compose(ctx, name, head, batch).length > CONTEXT_MAX) batch = batch.slice(0, -1);
+  const rest = taken.slice(batch.length);
+  if (rest.length > 0) await room.giveBack(rest);
+  return batch;
+}
+
+/**
+ * 束を渡す字を作り、手元の渡した記録を書いてから、「渡せた」（done）を返す。作った字を返す（呼ぶ側が、hook の出力に出す）。
+ * 記録を書いた後に done が誤りでも、字は返す（本文は出すので、記録は正しい。配りの口が後でもう 1 度渡し、その時は「渡し直し」と付く）。
+ */
+async function handOver(ctx: Context, room: Mailroom, name: Recipient, when: DeliveredWhen, head: string[], batch: Taken[], input: HookInput): Promise<string> {
+  const text = compose(ctx, name, head, batch);
+  const lines = lineCount(input.transcript_path);
+  for (const m of batch) recordDelivered(ctx, m.id, name, when, lines);
+  await room.done(batch).catch(() => undefined);
+  return text;
+}
+
+/** hook の出力（stdout の JSON）: 字を Claude Code の文脈に足す。 */
+const contextOutput = (event: 'PostToolUseFailure' | 'UserPromptSubmit', text: string): string => JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext: text } });
+
+/**
+ * 検査が止めた後に渡す（PostToolUseFailure の hook。Bash の命令が 0 でない結果で終わるたびに動く）。出力の JSON を返す。出す物が無ければ undefined。
+ * 送る前の検査が止めた印（mail.ts の GateMark）が無ければ、配りの口に聞かずに終わる（file を見るだけ）。
+ * 印があれば、自分宛てを取り置き、止まった訳（印の字）と本文を渡して、印を消す。取り置ける物が無ければ、印を残して何も出さない
+ * （打ち直しの検査が、取り置き中かどうかで決める。T8）。
+ */
+export async function mailGate(ctx: Context, stdin: string): Promise<string | undefined> {
+  const input = hookInput(stdin);
+  if (input.agent_id !== undefined) return undefined;
+  const name = ownName(ctx);
+  const mark = name === undefined ? undefined : ctx.state.read<GateMark>(gateFile(name));
+  if (name === undefined || mark === undefined) return undefined;
+  const room = await ctx.mailroom();
+  const head = [mark.reason, '次が、まだ渡っていなかったメッセージです。読んだうえで、止まった命令を打ち直してください（事情が変わっていたら、中身を変えて打つ）。'];
+  const batch = await batchOf(ctx, room, name, head, await room.take(name, TOP));
+  if (batch.length === 0) return undefined;
+  const text = await handOver(ctx, room, name, 'gate', head, batch, input);
+  ctx.state.remove(gateFile(name));
+  return contextOutput('PostToolUseFailure', text);
+}
+
+/**
+ * 人が入力した時に渡す（UserPromptSubmit の hook）。出力の JSON を返す。出す物が無ければ undefined。
+ * 先に、待つ命令を止める（担当が作業を始めた後に、前の待つ命令が担当を起こさないように）。自分の名乗りが効いていて、自分宛てがあれば、取り置いて渡す。
+ * この hook は、決して exit 2 で終わらせない（人の入力が消える。program.ts が、どの誤りでも exit 0 にする）。
+ */
+export async function mailPrompt(ctx: Context, stdin: string): Promise<string | undefined> {
+  const input = hookInput(stdin);
+  if (input.agent_id !== undefined) return undefined;
+  const name = ownName(ctx);
+  if (name === undefined) return undefined;
+  stopWaiter(ctx, name);
+  ctx.state.remove(waiterFile(name));
+  if (claimNamed(ctx, name) === undefined) return undefined;
+  const room = await ctx.mailroom();
+  const head = ['roster: 人の入力の前に届いていたメッセージです（メッセージキューから渡した）。人の入力と合わせて扱ってください。'];
+  const batch = await batchOf(ctx, room, name, head, await room.take(name, TOP));
+  if (batch.length === 0) return undefined;
+  return contextOutput('UserPromptSubmit', await handOver(ctx, room, name, 'prompt', head, batch, input));
+}
+
+// ---- 待つ ----
+
+/** 待つ命令の終わり方。code が 2 の時だけ、stderr の字を持って Claude Code が session を起こす。 */
+export interface WaitResult {
+  code: 0 | 2
+  stderr?: string
+}
+
+const QUIET: WaitResult = { code: 0 };
+
+/** 配りの口の「来るまで待つ」1 回の長さ（ミリ秒。T5・T6）。 */
+const WAIT_MS = 30_000;
+/** 待つ間に、Claude Code が居るか・止められていないかを見る間（T7）。 */
+const TICK_MS = 2000;
+/** 何も来なかった回の後に空ける間。 */
+const IDLE_MS = 200;
+/** 配りの口が応えない間の、試し直しの間（1 秒から倍々、長くて 30 秒）。 */
+const BACKOFF_MIN_MS = 1000;
+const BACKOFF_MAX_MS = 30_000;
+/** 名乗り（同じ SessionStart の hook が書く）を待つ回数と間。 */
+const CLAIM_TRIES = 10;
+const CLAIM_PAUSE_MS = 500;
+
+/** ms 待つ。止める合図が来たら、待たずに返る。 */
+function pause(ctx: Context, ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return Promise.race([ctx.sleep(ms), new Promise<void>((resolve) => {
+    signal.addEventListener('abort', () => resolve(), { once: true });
+  })]);
+}
+
+/**
+ * 手を止めている間に待つ（Stop と SessionStart の hook。背景で動く）。自分宛てが来たら、stderr に出す本文を持って code 2 で返る（Claude Code が起きる）。
+ * code 2 で返るのは、取り置いた本文が 1 通以上ある時だけ（空で起こさない）。ほかは、みな code 0。
+ * - 待つ者は、session につき 1 つ（T4）: 動き出す時に、前の待つ命令（印の pid）を止めてから、自分を印に書く。印が自分でなくなったら終わる。
+ * - 止められたら（signal。SIGTERM）、取り置いていた物を返して終わる。
+ * - 自分の名乗りが効かなくなったら（Claude Code が居ない。T7）終わる。TICK_MS ごとに見る。
+ * - 配りの口が応えない間は、間を空けて試し続ける（起こさない）。
+ */
+export async function mailWait(ctx: Context, stdin: string, signal: AbortSignal): Promise<WaitResult> {
+  const input = hookInput(stdin);
+  if (input.agent_id !== undefined) return QUIET;
+  const name = ownName(ctx);
+  if (name === undefined) return QUIET;
+  // session の始めは、名乗る hook と並んで動くので、名乗りが書かれるのを少し待つ。
+  let claim = claimNamed(ctx, name);
+  for (let i = 0; claim === undefined && i < CLAIM_TRIES && !signal.aborted; i++) {
+    await pause(ctx, CLAIM_PAUSE_MS, signal);
+    claim = claimNamed(ctx, name);
+  }
+  if (claim === undefined || signal.aborted) return QUIET;
+  const own = claim;
+  stopWaiter(ctx, name);
+  const self: WaiterMark = { pid: ctx.procs.self, started: ctx.procs.startedAt(ctx.procs.self) ?? '' };
+  ctx.state.write(waiterFile(name), self);
+  const mine = (): boolean => ctx.state.read<WaiterMark>(waiterFile(name))?.pid === self.pid;
+  const leaving = (): boolean => signal.aborted || !effective(ctx, own) || !mine();
+  let backoff = BACKOFF_MIN_MS;
+  try {
+    for (;;) {
+      if (leaving()) return QUIET;
+      let room: Mailroom;
+      let taken: Taken[] | undefined;
+      try {
+        room = await ctx.mailroom();
+        taken = await pulled(ctx, room, room.wait(name, TOP, WAIT_MS), leaving, signal);
+      }
+      catch {
+        // 配りの口が応えない: 繋ぎを閉じて（次の問いで繋ぎ直す）、間を空けて試し直す。
+        await ctx.mailroom().then(r => r.close()).catch(() => undefined);
+        await pause(ctx, backoff, signal);
+        backoff = Math.min(backoff * 2, BACKOFF_MAX_MS);
+        continue;
+      }
+      backoff = BACKOFF_MIN_MS;
+      if (taken === undefined) return QUIET;
+      if (taken.length === 0) {
+        await pause(ctx, IDLE_MS, signal);
+        continue;
+      }
+      // 取った所で止められていたら、渡さずに返す（T4。次の hook が取り直す）。
+      if (leaving()) {
+        await room.giveBack(taken).catch(() => undefined);
+        return QUIET;
+      }
+      const head = ['roster: 手を止めている間に届いたメッセージです（メッセージキューから渡した）。'];
+      const batch = await batchOf(ctx, room, name, head, taken);
+      return { code: 2, stderr: await handOver(ctx, room, name, 'wake', head, batch, input) };
+    }
+  }
+  finally {
+    if (mine()) ctx.state.remove(waiterFile(name));
+  }
+}
+
+/**
+ * 「来るまで待つ」1 回が済むのを待つ。待つ間、TICK_MS ごとに leaving を見て、終わるべき時は undefined を返す
+ * （その後に来た物は、取り置かずに返す）。
+ */
+async function pulled(ctx: Context, room: Mailroom, pulling: Promise<Taken[]>, leaving: () => boolean, signal: AbortSignal): Promise<Taken[] | undefined> {
+  const got: { taken?: Taken[], error?: unknown, settled: boolean } = { settled: false };
+  const watched = pulling.then((taken) => {
+    got.taken = taken;
+    got.settled = true;
+  }, (error: unknown) => {
+    got.error = error;
+    got.settled = true;
+  });
+  while (!got.settled) {
+    await Promise.race([watched, pause(ctx, TICK_MS, signal)]);
+    if (!got.settled && leaving()) {
+      void pulling.then(taken => room.giveBack(taken)).catch(() => undefined);
+      return undefined;
+    }
+  }
+  if (got.taken === undefined) throw got.error;
+  return got.taken;
 }

@@ -15,7 +15,7 @@ import { issueView } from './commands/issue.ts';
 import { messageRecordsSettled } from './commands/message-record.ts';
 import { fileDelete, fileList, filePath, filePut, type FileListOptions, type FilePutOptions } from './commands/file.ts';
 import { PAGE_KINDS, pageDelete, pageImport, pageList, pagePath, pagePut, pageReply, type PageDeleteOptions, type PageListOptions } from './commands/page.ts';
-import { mailClaim, mailRelease } from './commands/mail.ts';
+import { mailClaim, mailGate, mailPrompt, mailRelease, mailWait, type WaitResult } from './commands/mail.ts';
 import { registerMessages } from './commands/register.ts';
 import { registerReview } from './commands/review.ts';
 import { hello, inbox } from './commands/role-side.ts';
@@ -226,6 +226,35 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
     .action(quiet('claim', () => mailClaim(createContext(), readStdin())));
   mail.command('release').description('（SessionEnd の hook が呼ぶ）名乗りを外し、待つ命令を止める')
     .action(quiet('release', () => mailRelease(createContext(), readStdin())));
+  mail.command('gate').description('（PostToolUseFailure の hook が呼ぶ）送る前の検査が止めた後に、自分宛ての本文を文脈に渡す（止めた印が無ければ、何もしない）')
+    .action(quiet('gate', async () => {
+      const out = await mailGate(createContext(), readStdin());
+      if (out !== undefined) console.log(out);
+    }));
+  mail.command('prompt').description('（UserPromptSubmit の hook が呼ぶ）待つ命令を止め、自分宛てがあれば本文を文脈に渡す（決して exit 2 にしない）')
+    .action(quiet('prompt', async () => {
+      const out = await mailPrompt(createContext(), readStdin());
+      if (out !== undefined) console.log(out);
+    }));
+  mail.command('wait').description('（Stop・SessionStart の hook が背景で呼ぶ）自分宛てが来るまで待ち、来たら本文を stderr に出して exit 2 で終わる（Claude Code が session を起こす）')
+    .action(async () => {
+      // 止める合図（次の待つ命令・人の入力の時の hook が送る SIGTERM）で、取り置いた物を返して終わる。
+      const stop = new AbortController();
+      for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) process.once(sig, () => stop.abort());
+      let result: WaitResult = { code: 0 };
+      try {
+        result = await mailWait(createContext(), readStdin(), stop.signal);
+      }
+      catch (e) {
+        process.stderr.write(`roster mail wait: ${(e as Error).message}\n`);
+      }
+      await messageRecordsSettled();
+      await mailroomsClosed();
+      // exit 2 は、渡す本文がある時だけ。本文を書き終えてから終わる（待ちの timer が残るので、自分で終わる）。
+      const text = result.code === 2 ? result.stderr : undefined;
+      if (text !== undefined) await new Promise<void>(resolve => void process.stderr.write(`${text}\n`, () => resolve()));
+      process.exit(text === undefined ? 0 : 2);
+    });
   const castlist = program.command('castlist').description('アクターの台帳（castlist）: session の始まりと終わりを送る（hook が呼ぶ。castlist を設定していなければ何もしない）・監査の検索を読む（find・show・lineage・events・settings。読むだけ）');
   castlist.command('session-start').description('（SessionStart の hook が呼ぶ）session を登録し、登場・再登場・要約・分身と、起こした・継いだ線を送る')
     .action(async () => {
