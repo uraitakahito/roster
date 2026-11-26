@@ -229,7 +229,7 @@ async function healthVersion(ctx: Context): Promise<string | undefined> {
  * 置き場が、この roster の話す API（1.0.0 から）を持つかを見る（1 つの命令で 1 度だけ。castlist の requireUp の版の見方と同じ）。
  * 古い版（切り替えの前の 0.x に戻した置き場）なら、送らずに止める（送ると、答えの形が違って黙って崩れるため）。応えなければ止めない（頼む物の答えで、応えないと出る）。
  */
-async function requireStore(ctx: Context): Promise<void> {
+export async function requireStore(ctx: Context): Promise<void> {
   const version = await healthVersion(ctx);
   if (version === undefined || atLeast(version, STORE_API_SINCE)) return;
   throw new TpmError(`置き場（${pagesUrl(ctx.env)}）の版は ${version || 'わからない'} で、この roster が話す API（${STORE_API_SINCE} から）を持ちません。何も頼んでいません。置き場を ${STORE_API_SINCE} から後の版で起こしてください（roster ask devops）。置き場を 0.8.x に戻したのなら、roster も切り替えの前の版に戻す（pagetray の docs の release.html の「切り替え」）`);
