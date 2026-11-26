@@ -15,6 +15,8 @@ export const COMMANDS = [
   'key',
   'assign',
   'close',
+  'seat add',
+  'seat close',
   'hello',
   'inbox',
   'wait',

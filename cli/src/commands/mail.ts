@@ -487,7 +487,7 @@ export function mailGuard(ctx: Context, stdin: string, command: string): Verdict
   if (!sendsMessage(command)) return { allow: true };
   const input = hookInput(stdin);
   if (input.agent_id !== undefined) {
-    return { allow: false, reason: '送る命令（roster ask・report・notify・answer・dismiss・assign・page put）は、手伝い（subagent）でなく担当が打ちます。手伝いは、送る中身を担当に返してください（担当が、届いたメッセージを読んだうえで打つ）。' };
+    return { allow: false, reason: '送る命令（roster ask・report・notify・answer・dismiss・assign・seat・page put）は、手伝い（subagent）でなく担当が打ちます。手伝いは、送る中身を担当に返してください（担当が、届いたメッセージを読んだうえで打つ）。' };
   }
   const name = ownName(ctx);
   if (name === undefined || input.tool_use_id === undefined) return { allow: true };

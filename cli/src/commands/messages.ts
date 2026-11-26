@@ -9,7 +9,7 @@ import type { Context } from '../context.ts';
 import { recordGateStop, recordWait } from '../evidence.ts';
 import { addIncident, foldIntoIncident, incidentLine, incidentType, INCIDENT_TYPES, readIncidents, tagLines } from '../incidents.ts';
 import { message, ROLES, TPM_TITLE, WAIT, WAIT_CLOSE, WAIT_NEXT_BRIEF, type HeadingId, type WaitKind } from '../protocol.ts';
-import { readRole, requireRole, requireSelf, requireTpm, requireTpmSide, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
+import { isRepoSeat, readRole, requireRole, requireSelf, requireTpm, requireTpmSide, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
 import { patchReview, readReviews, VERDICTS } from '../reviews.ts';
 import { TpmError } from '../skill-sets.ts';
 import { MAX_POINTS, type Note, type NoteKind, type NoteLink } from '../tracker/types.ts';
@@ -1146,6 +1146,8 @@ export async function dismiss(ctx: Context, key: string, options: { handover: bo
   if (readRole(ctx, key)?.role === 'auditor') throw new TpmError('Auditor の席に【dismiss】は送れません（Auditor の席は、Product Manager が起こし、閉じる）');
   // Staff Engineer 担当は worktree も PR も持たないので、片付けのやりとり（【dismiss】と【end】）は要らない。
   if (readRole(ctx, key)?.role === 'staff-engineer') throw new TpmError(`Staff Engineer 担当の席に【dismiss】は送りません。roster close ${key} で閉じます（課題の席を roster close で閉じる時にも、一緒に閉じる）`);
+  const seat = readRole(ctx, key);
+  if (seat !== undefined && isRepoSeat(seat)) throw new TpmError(`${key} は、${seat.subject ?? ''} の Tech Lead 担当が起こした repo の席です。片付けの指示は Tech Lead 担当が送ります。残った席は、roster close ${seat.subject ?? ''} が一緒に閉じます`);
   const role = await receiver(ctx, key);
   const settled = assertSettled(ctx, role, 'dismiss', options.supersede === true ? 'supersede' : undefined);
   const body = [options.handover
