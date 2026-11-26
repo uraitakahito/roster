@@ -21,7 +21,7 @@ const HELLO_INTERVAL_MS = 2000;
  */
 export function paint(ctx: Context, address: string, color: string): string[] {
   try {
-    ctx.transport.setColor(address, color);
+    ctx.seats.setColor(address, color);
   }
   catch (e) {
     return [`居場所の色（${color}）を付けられなかった: ${e instanceof Error ? e.message : String(e)}`];
@@ -46,7 +46,7 @@ export async function launch(ctx: Context, record: RoleRecord, again: boolean, w
   }
   writeRole(ctx, record);
   const command = [join(ctx.root, 'cli', 'bin', 'roster'), 'run-role', record.key, '--project', ctx.project, '--state', realpathSync(ctx.state.dir)].map(shellQuote).join(' ');
-  record.address = ctx.transport.spawn({ title: record.title, cwd: record.cwd, command, ...(description === undefined ? {} : { description }) });
+  record.address = ctx.seats.spawn({ title: record.title, cwd: record.cwd, command, ...(description === undefined ? {} : { description }) });
   writeRole(ctx, record);
   const head = [`${again ? '起こし直した' : '起こした'}: ${record.title}（${record.address}・${modelStatus(record.model, record.effort)}）`, `folder: ${record.cwd}`, ...more, ...paint(ctx, record.address, ROLES[record.role].color)];
   if (wait === 0) return [...head, '名乗り（roster hello）は待っていない'];
@@ -84,10 +84,10 @@ export async function issueCopy(ctx: Context, issueKey: string, roleKey: string,
 /** 名乗らなかった訳を画面から読む。信頼のダイアログと命令の誤りは、居場所を閉じてから知らせる。 */
 function notStarted(ctx: Context, record: RoleRecord, waited: number): string {
   const address = record.address ?? '';
-  const screen = ctx.transport.screen(address);
+  const screen = ctx.seats.screen(address);
   const head = `${record.title}（${address}）が ${waited} 秒たっても名乗りません。`;
   const closeSeat = (): void => {
-    ctx.transport.close(address);
+    ctx.seats.close(address);
     delete record.address;
     writeRole(ctx, record);
   };

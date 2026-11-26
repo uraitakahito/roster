@@ -120,7 +120,7 @@ describe('Auditor の roster hello', () => {
 
   test('Product Manager が手で起こした席でも、名乗る時に題と色を付ける', async () => {
     const w = await seated();
-    w.auditor.transport.setColor('file:1', 'Red');
+    w.auditor.seats.setColor('file:1', 'Red');
     await hello(w.auditor);
     expect(w.wire.look('file:1')).toEqual({ title: 'Audit', color: 'Olive' });
   });

@@ -45,7 +45,7 @@ export async function auditStart(ctx: Context, options: StartOptions): Promise<s
   const skill = coreSkill(ctx, 'audit', 'SKILL.md');
   if (!existsSync(skill)) throw new TpmError(`skill /audit がまだありません（${skill}）。roster の repo を新しくしてから打ってください`);
   const existing = readRole(ctx, AUDIT_KEY);
-  if (existing?.address !== undefined && ctx.transport.seats().some(s => s.address === existing.address)) {
+  if (existing?.address !== undefined && ctx.seats.seats().some(s => s.address === existing.address)) {
     throw new TpmError(`Audit の席はもうあります（${existing.address}）。その席で /clear を打ってから、/audit を呼んでください`);
   }
   const record: RoleRecord = {
@@ -85,13 +85,13 @@ function materials(ctx: Context, events: AuditEvent[]): string[] {
  * TPM 担当が起きていなくても名乗れる（Auditor の席は TPM 担当に頼らない）。
  */
 export function auditorHello(ctx: Context, record: RoleRecord): string[] {
-  record.address = ctx.transport.whoami();
+  record.address = ctx.seats.whoami();
   record.helloAt = ctx.now().toISOString();
   // Product Manager が手で起こした居場所でも、バナーの hook が名簿と突き合わせられるように、題をここで付ける（色も同じく付け直す）。
-  ctx.transport.setTitle(record.title);
+  ctx.seats.setTitle(record.title);
   const painted = paint(ctx, record.address, ROLES[record.role].color);
-  ctx.transport.setStatus('model', modelStatus(record.model, record.effort));
-  ctx.transport.setStatus('wait', WAIT.pm('/audit'));
+  ctx.seats.setStatus('model', modelStatus(record.model, record.effort));
+  ctx.seats.setStatus('wait', WAIT.pm('/audit'));
   writeRole(ctx, record);
   return [
     `役割: ${ROLES[record.role].label}`,

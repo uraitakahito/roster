@@ -85,7 +85,7 @@ describe('roster ask review（席が無い時: 命令が席を起こす）', () 
 
   test('席が落ちていたら起こし直し、返っていない前の頼みも新しい依頼書で渡し直す', async () => {
     const w = await asked();
-    w.tpm.transport.close('file:2');
+    w.tpm.seats.close('file:2');
     w.se.now = () => new Date('2026-11-20T12:10:00.000Z');
     expect((await askReview(w.se, { url: PR, wait: 0 }))[0]).toBe('起こし直した: レビュー AI-8: PR #7 +1（file:3・Opus 5.5 · high）');
     const [one, two] = readReviews(w.tpm);
@@ -101,13 +101,13 @@ describe('roster ask review（席が無い時: 命令が席を起こす）', () 
 
   test('席を起こす前に止まった回は、頼みを書かない（打ち直せる）', async () => {
     const w = await started();
-    const spawn = w.se.transport.spawn.bind(w.se.transport);
-    w.se.transport.spawn = () => {
+    const spawn = w.se.seats.spawn.bind(w.se.seats);
+    w.se.seats.spawn = () => {
       throw new Error('居場所を作れない');
     };
     await expect(askReview(w.se, { url: w.plan, wait: 0 })).rejects.toThrow('居場所を作れない');
     expect(readReviews(w.tpm)).toEqual([]);
-    w.se.transport.spawn = spawn;
+    w.se.seats.spawn = spawn;
     expect((await askReview(w.se, { url: w.plan, wait: 0 }))[0]).toMatch(/^起こし(直し)?た: レビュー AI-8: 計画 plan-1/);
     expect(readReviews(w.tpm).map(r => r.n)).toEqual([1]);
   });
@@ -181,13 +181,13 @@ describe('roster ask review（席が居る時: じかに届ける）', () => {
     const w = await asked();
     await reportReview(w.staff, { url: await w.put(w.staff, 'review'), verdict: 'approve', summary: 'よい' });
     w.se.now = () => new Date('2026-11-20T12:10:00.000Z');
-    const send = w.se.transport.send.bind(w.se.transport);
-    w.se.transport.send = () => {
+    const send = w.se.messages.send.bind(w.se.messages);
+    w.se.messages.send = () => {
       throw new Error('送れない');
     };
     await expect(askReview(w.se, { url: PR })).rejects.toThrow('送れない');
     expect(readReviews(w.tpm).map(r => r.n)).toEqual([1]);
-    w.se.transport.send = send;
+    w.se.messages.send = send;
     expect((await askReview(w.se, { url: PR }))[0]).toBe('送った: 【ask-review】→ file:2（相手の手が空いた時に届く。送り直さない）');
   });
 
@@ -226,7 +226,7 @@ describe('roster ask review（席が居る時: じかに届ける）', () => {
     const relabel = (): never => {
       throw new Error('Workspace ref not found');
     };
-    const se = { ...w.se, transport: Object.assign(Object.create(w.se.transport) as Context['transport'], { relabel }) };
+    const se = { ...w.se, seats: Object.assign(Object.create(w.se.seats) as Context['seats'], { relabel }) };
     expect(await askReview(se, { url: PR })).toEqual(['送った: 【ask-review】→ file:2（相手の手が空いた時に届く。送り直さない）', '居場所の題を替えられなかった（名簿の題は レビュー AI-8: 計画 plan-1 のまま）: Workspace ref not found', expect.stringMatching(/^置き場の印: レビュー待ちにした http:\/\/127\.0\.0\.1:8801\/.+\/AI-8\/brief-2\.html$/) as string, '状態: 回答待ち(レビュー): PR #7']);
     expect(requireRole(w.tpm, 'AI-8.staff').title).toBe('レビュー AI-8: 計画 plan-1');
     expect(readReviews(w.tpm)[1]?.brief).toMatch(/brief-2\.html$/);
@@ -255,7 +255,7 @@ describe('roster assign --role staff-engineer（TPM 担当の起こし直し）'
 
   test('返っていない頼みがあるのに席が落ちたら、TPM 担当が起こし直せる（旗で model も変えられる）', async () => {
     const w = await asked();
-    w.tpm.transport.close('file:2');
+    w.tpm.seats.close('file:2');
     expect((await assign(w.tpm, 'AI-8', { ...STAFF, model: 'claude-fable-5-2' }))[0]).toBe('起こし直した: レビュー AI-8: 計画 plan-1（file:3・Fable 5.2 · high）');
     expect(readReviews(w.tpm)[0]?.brief).toMatch(/brief-2\.html$/);
   });
@@ -314,7 +314,7 @@ describe('roster report review', () => {
 
   test('課題の担当の居場所が無ければ、送らず・記録も判定も書かずに止まる', async () => {
     const w = await asked({ tracker: 'jira' }, 'AI-8');
-    w.tpm.transport.close('file:1');
+    w.tpm.seats.close('file:1');
     const comments = (): number => w.tpm.state.lines<{ kind?: string }>('tracker.jsonl').filter(l => l.kind === 'レビュー').length;
     await expect(reportReview(w.staff, { url: await w.put(w.staff, 'review'), verdict: 'approve', summary: 'よい' })).rejects.toThrow('AI-8 の居場所がありません。送っていません・記録も書いていません。roster ask tpm で TPM 担当に知らせてください');
     expect(comments()).toBe(0);
@@ -520,7 +520,7 @@ describe('置き場のレビューの印', () => {
 
   test('頼みが 2 つの依頼書は、見た物を 2 つ書く。起こし直しでは、新しい依頼書を待ちにし、前の依頼書の待ちを外す', async () => {
     const w = await asked();
-    w.tpm.transport.close('file:2');
+    w.tpm.seats.close('file:2');
     w.se.now = () => new Date('2026-11-20T12:10:00.000Z');
     const out = await askReview(w.se, { url: PR, wait: 0 });
     expect(out).toContainEqual(expect.stringMatching(/^置き場の印: 置き換えたので、前の依頼書のレビュー待ちを外した .+\/brief-1\.html$/));
@@ -535,7 +535,7 @@ describe('置き場のレビューの印', () => {
 
   test('TPM 担当の起こし直し（roster assign --role staff-engineer）でも、新しい依頼書を待ちにし、前の依頼書の待ちを外す', async () => {
     const w = await asked();
-    w.tpm.transport.close('file:2');
+    w.tpm.seats.close('file:2');
     const out = await assign(w.tpm, 'AI-8', STAFF);
     expect(out).toContainEqual(expect.stringMatching(/^置き場の印: レビュー待ちにした .+\/brief-2\.html$/));
     expect(record(w, 'brief-2')).toMatchObject({ waits_on: 'review', targets: [path(w, w.plan)] });
@@ -579,7 +579,7 @@ describe('置き場の印を付けられない時（review-3 の指摘）', () =
 
   test('席を起こす前に止まった回は、依頼書をレビュー待ちにしない（頼みも消えるので、待ちが残り続けないように）', async () => {
     const w = await started();
-    w.se.transport.spawn = () => {
+    w.se.seats.spawn = () => {
       throw new Error('居場所を作れない');
     };
     await expect(askReview(w.se, { url: w.plan, wait: 0 })).rejects.toThrow('居場所を作れない');

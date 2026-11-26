@@ -51,7 +51,7 @@ describe('hello（TPM 担当）', () => {
 
 /** setColor を差し替えた TPM 担当（自分の居場所は一覧に載らないので、file の連携では色を読めない）。 */
 function painting(tpm: Context, setColor: (address: string, color: string) => void): Context {
-  return { ...tpm, transport: Object.assign(Object.create(tpm.transport) as Context['transport'], { setColor }) };
+  return { ...tpm, seats: Object.assign(Object.create(tpm.seats) as Context['seats'], { setColor }) };
 }
 
 describe('居場所の色', () => {
@@ -173,7 +173,7 @@ describe('assign', () => {
 
   test('名乗らなければ、画面の終わりを添えて止まり、居場所は残す', async () => {
     const w = world();
-    const tpm = { ...w.tpm, transport: Object.assign(w.wire, { screen: () => 'line 1\nError: something\n' }) };
+    const tpm = { ...w.tpm, seats: Object.assign(w.wire, { screen: () => 'line 1\nError: something\n' }) };
     await expect(assign(tpm, 't-x7k2', { ...SE, wait: 4 })).rejects.toThrow(/4 秒たっても名乗りません。居場所は残してあります。画面の終わり:\nline 1\nError: something/);
     expect(w.slept()).toBe(2);
     expect(w.wire.seats()).toHaveLength(1);
@@ -184,7 +184,7 @@ describe('assign', () => {
     ['命令の誤り', 'Unknown command: /software-engineer', /Unknown command でした/],
   ])('%sなら居場所を閉じてから止まる', async (_, screen, message) => {
     const w = world();
-    const tpm = { ...w.tpm, transport: Object.assign(w.wire, { screen: () => screen }) };
+    const tpm = { ...w.tpm, seats: Object.assign(w.wire, { screen: () => screen }) };
     await expect(assign(tpm, 't-x7k2', { ...SE, wait: 2 })).rejects.toThrow(message);
     expect(w.wire.seats()).toEqual([]);
     expect(readRole(w.tpm, 't-x7k2')?.address).toBeUndefined();
@@ -366,7 +366,7 @@ describe('inbox', () => {
   test('まだ届いていないメッセージを、差出人と id を添えて出す', () => {
     const w = world();
     expect(inbox(w.tpm)).toEqual(['まだ届いていないメッセージは無い']);
-    const tpm = { ...w.tpm, transport: Object.assign(w.wire, { pending: () => [{ id: 'm1', from: 'Technical Program Manager', text: '【brief】u' }] }) };
+    const tpm = { ...w.tpm, messages: Object.assign(w.wire, { pending: () => [{ id: 'm1', from: 'Technical Program Manager', text: '【brief】u' }] }) };
     expect(inbox(tpm)).toEqual(['--- Technical Program Manager（id m1）', '【brief】u']);
   });
 });

@@ -31,12 +31,12 @@ import { launchStaff, markBriefed, putStaffBrief, relabelStaff, STAFF, staffSubj
 export async function tpmHello(ctx: Context, options: { model?: string, effort?: string } = {}): Promise<string[]> {
   const settings = resolveSettings('tpm', { flags: { model: options.model, effort: options.effort ?? ctx.env.CLAUDE_EFFORT }, env: ctx.env });
   const actor = await castlistHello(ctx);
-  const address = ctx.transport.whoami();
-  ctx.transport.setTitle(TPM_TITLE);
+  const address = ctx.seats.whoami();
+  ctx.seats.setTitle(TPM_TITLE);
   // TPM 担当の居場所は利用者が作るので、色は名乗る時に自分で付ける。
   const painted = paint(ctx, address, TPM_COLOR);
-  ctx.transport.setStatus('model', modelStatus(settings.model, settings.effort));
-  ctx.transport.setStatus('wait', WAIT.work('起動'));
+  ctx.seats.setStatus('model', modelStatus(settings.model, settings.effort));
+  ctx.seats.setStatus('wait', WAIT.work('起動'));
   ctx.state.write('tpm.jsonc', { address } satisfies TpmRecord);
   // 連携の道具が古いメッセージを捨てる前に、届いた時刻を写す。
   syncDeliveries(ctx);
@@ -119,13 +119,13 @@ function hookHint(ctx: Context, cmuxFile?: string): string[] {
 export async function roles(ctx: Context): Promise<string[]> {
   // 落ちた session の推しの幕引き（castlist と cmux があれば）。
   const swept = await sweep(ctx);
-  const seats = ctx.transport.seats();
+  const seats = ctx.seats.seats();
   const records = allRoles(ctx);
   // 台帳に未決の件があれば、名簿の終わりに 1 行出す（見直しを忘れないため）。
   if (records.length === 0) return ['名簿: 担当はいない', ...swept, ...lastAuditLine(ctx), ...openLine(ctx)];
   return ['名簿:', ...records.map((r) => {
     const alive = r.address !== undefined && seats.some(s => s.address === r.address);
-    const wait = alive && r.address !== undefined ? ctx.transport.status(r.address)?.wait : undefined;
+    const wait = alive && r.address !== undefined ? ctx.seats.status(r.address)?.wait : undefined;
     const gone = r.role === 'auditor' ? '消えた（居場所が無い。起こし直すのは Product Manager: roster audit start）' : '消えた（居場所が無い。roster assign で起こし直すか、roster close で名簿から消す）';
     const where = alive ? `${r.address}（${wait ?? '状態なし'}）` : gone;
     return `- ${r.key}  ${r.title}  ${where}${r.dismissed ? `  dismiss 済み（${r.dismissed === 'handover' ? '交代' : '終わり'}）` : ''}${r.brief ? `  依頼書: ${r.brief}` : ''}${r.issuePage ? `  課題の写し: ${r.issuePage}` : ''}`;
@@ -197,7 +197,7 @@ async function assignSeat(ctx: Context, subjectKey: string, options: AssignOptio
   // 名簿の Key。Staff Engineer 担当の席だけ、課題の Key と違う。
   const key = subject === undefined ? subjectKey : staffKey(subjectKey);
   const existing = readRole(ctx, key);
-  const alive = existing?.address !== undefined && ctx.transport.seats().some(s => s.address === existing.address);
+  const alive = existing?.address !== undefined && ctx.seats.seats().some(s => s.address === existing.address);
   // Staff に渡す頼み: まだ依頼書にしていない物。席が無い時（消えたら、起こし直して渡し直す）と、前の依頼書を取り消す時（--supersede）は、依頼書にしたが返っていない物も。
   const asks = subject === undefined ? [] : openReviews(ctx, subjectKey).filter(r => r.brief === undefined || !alive || options.supersede === true);
   if (subject !== undefined) {
@@ -274,12 +274,12 @@ export async function close(ctx: Context, key: string): Promise<string[]> {
   const record = readRole(ctx, key);
   if (record === undefined) throw new TpmError(`名簿に担当がいません: ${key}`);
   if (record.role === 'auditor') throw new TpmError('Auditor の席は、Product Manager が起こし、閉じます。roster close では閉じられません（居場所が消えていたら、Product Manager が roster audit start で起こし直す）');
-  const alive = record.address !== undefined && ctx.transport.seats().some(s => s.address === record.address);
+  const alive = record.address !== undefined && ctx.seats.seats().some(s => s.address === record.address);
   // 閉じる前に、この担当とのメッセージの届いた時刻を写す。
   syncDeliveries(ctx);
   // 居場所を閉じる前に、castlist に幕引きを送る（閉じた後の SessionEnd の hook が届くかは、閉じ方による）。
   const castlist = await closeLaunch(ctx, record);
-  if (alive && record.address !== undefined) ctx.transport.close(record.address);
+  if (alive && record.address !== undefined) ctx.seats.close(record.address);
   removeRole(ctx, key);
   const staff = isStaffKey(key) || readRole(ctx, staffKey(key)) === undefined ? [] : await close(ctx, staffKey(key));
   return [`閉じた: ${record.title}${alive ? `（${record.address}）` : '（居場所はもう無かった）'}`, ...castlist, ...staff];

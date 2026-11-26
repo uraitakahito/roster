@@ -170,7 +170,7 @@ function age(from: string, now: Date): string {
 /** 振り先の今: 名簿に居るか・居場所が動いているかと、その Key が最後に返した【done】【end】【merged】。 */
 function whereabouts(ctx: Context, to: string, log: Sent[]): string {
   const record = readRole(ctx, to);
-  const alive = record?.address !== undefined && ctx.transport.seats().some(s => s.address === record.address);
+  const alive = record?.address !== undefined && ctx.seats.seats().some(s => s.address === record.address);
   const seat = record === undefined ? '名簿に居ない' : alive ? '動いている' : '名簿にあるが、居場所が無い';
   const last = log.findLast(l => l.key === to && l.from !== TPM_TITLE && ['done', 'end', 'merged'].includes(l.heading));
   return `${seat}・${last === undefined ? '【done】【end】【merged】は無い' : `最後の【${last.heading}】 ${stamp(last.at)}`}`;

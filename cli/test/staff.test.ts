@@ -73,7 +73,7 @@ describe('roster assign --role staff-engineer', () => {
     const setColor = (): never => {
       throw new Error('unknown color');
     };
-    const tpm = { ...w.tpm, transport: Object.assign(Object.create(w.tpm.transport) as Context['transport'], { setColor }) };
+    const tpm = { ...w.tpm, seats: Object.assign(Object.create(w.tpm.seats) as Context['seats'], { setColor }) };
     const out = await assign(tpm, 'AI-8', STAFF);
     expect(out[0]).toBe('起こした: レビュー AI-8: 計画 plan-1（file:2・Opus 5.5 · high）');
     expect(out).toContain('居場所の色（Purple）を付けられなかった: unknown color');

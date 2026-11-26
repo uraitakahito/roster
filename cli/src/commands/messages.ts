@@ -102,7 +102,7 @@ function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: str
   assertNotRepeat(ctx, id, from, to, body, replyTo);
   const text = message(id, body);
   const receiving = replyTo === undefined ? recipient : ctx.state.lines<Sent>('log.jsonl').findLast(l => l.id === replyTo)?.sender;
-  const d = ctx.transport.send(to, from, text, replyTo);
+  const d = ctx.messages.send(to, from, text, replyTo);
   ctx.state.append('log.jsonl', {
     at: ctx.now().toISOString(),
     key,
@@ -136,7 +136,7 @@ export function returnToTpm(ctx: Context, self: RoleRecord, body: string): strin
 /** 担当の居場所が今あるかを見て、宛先を返す。無ければ止まる。 */
 function seatOf(ctx: Context, role: RoleRecord): string {
   const address = role.address;
-  if (address === undefined || !ctx.transport.seats().some(s => s.address === address)) {
+  if (address === undefined || !ctx.seats.seats().some(s => s.address === address)) {
     throw new TpmError(`${role.key} の担当の居場所がありません（roster roles で名簿を見る）`);
   }
   return address;
@@ -150,7 +150,7 @@ function toRole(ctx: Context, role: RoleRecord, id: HeadingId, body: string, rep
 /** 担当の相手（課題の担当から見た Staff Engineer 担当の席・その逆）の宛先。居場所が無ければ止まる（送っていない・記録も書いていない）。 */
 function peerSeat(ctx: Context, peer: RoleRecord): string {
   const address = peer.address;
-  if (address === undefined || !ctx.transport.seats().some(s => s.address === address)) {
+  if (address === undefined || !ctx.seats.seats().some(s => s.address === address)) {
     throw new TpmError(`${peer.key} の居場所がありません。送っていません・記録も書いていません。roster ask tpm で TPM 担当に知らせてください`);
   }
   return address;
@@ -177,9 +177,9 @@ export function record(ctx: Context, role: RoleRecord, note: Note): string[] {
 /** 見せたメッセージの id を覚える数（居場所ごと）。 */
 const SHOWN_KEEP = 200;
 
-/** メッセージを「見せた」と、初めて見せた時刻とともに覚える（`roster inbox`・`roster hello` と、送る前の検査が呼ぶ）。覚えた物では、送る前の検査は止まらない。 */
+/** メッセージを「見せた」と、初めて見せた時刻とともに覚える（`roster inbox` と、送る前の検査が呼ぶ。`roster hello` は未読を出さないので、覚えない）。覚えた物では、送る前の検査は止まらない。 */
 export function markShown(ctx: Context, messages: Incoming[]): void {
-  const address = ctx.transport.whoami();
+  const address = ctx.seats.whoami();
   const shown = readShown(ctx, address);
   const known = new Set(shown.map(e => e.id));
   const at = ctx.now().toISOString();
@@ -204,9 +204,9 @@ const READ_STOP = {
  * 記録の宛先と本当の受け手がずれることがある。題でも見ない。居場所の題は替わることがある）。
  */
 export function assertRead(ctx: Context, who: string, from?: string, action: keyof typeof READ_STOP = 'send'): void {
-  const incoming = ctx.transport.pending().filter(m => from === undefined || m.from === from);
+  const incoming = ctx.messages.pending().filter(m => from === undefined || m.from === from);
   if (incoming.length === 0) return;
-  const self = ctx.transport.whoami();
+  const self = ctx.seats.whoami();
   const key = envOf(ctx.env, 'KEY');
   const mine = (l: Sent): boolean => key ? l.key === key && l.from !== TPM_TITLE : l.from === TPM_TITLE;
   const sent = new Set(ctx.state.lines<Sent>('log.jsonl').filter(mine).map(l => l.id));
@@ -258,7 +258,7 @@ function auditor(ctx: Context, command: string): RoleRecord {
  */
 function tpmSeat(ctx: Context): string | undefined {
   const address = ctx.state.read<TpmRecord>('tpm.jsonc')?.address;
-  return address !== undefined && ctx.transport.status(address) !== undefined ? address : undefined;
+  return address !== undefined && ctx.seats.status(address) !== undefined ? address : undefined;
 }
 
 /** TPM 担当がメッセージを送る先の、名簿の行。送る前の検査（assertRead）を通す。 */
@@ -288,7 +288,7 @@ interface OpenBrief {
  * - Staff Engineer 担当の席には、課題の担当がじかに送った【ask-review】（頭が依頼書の URL）も積む。
  * - 【done】は、その時刻までに担当が見ていた依頼書のうち、いちばん古い物を 1 つ済ませる（担当は積まれた順にこなす）。まだ見ていない依頼書の分には数えない（行き違いで出た、前の依頼書の分）。【end】は全部を済ませる。
  * - 担当が --briefs で名指した【done】は、名指した依頼書をみな済ませる（見た時刻は問わない。名指したことが見た証し。1 通で依頼書いくつかを済ませた時。台帳 #110）。
- * 見た時刻は、見た時刻の口（seen.ts の seenTimes）が決める: 画面に届いた時刻と、roster inbox・roster hello・送る前の検査が見せた時刻（shown/）の早い方。
+ * 見た時刻は、見た時刻の口（seen.ts の seenTimes）が決める: 画面に届いた時刻と、roster inbox・送る前の検査が見せた時刻（shown/）の早い方。
  * 担当は画面に届く前に roster inbox で読んで済ませることがあるので、届いた時刻だけでは【done】が依頼書より前に見える（台帳 #36）。
  * 前の版が時刻を書かずに覚えた物（shown/ の id だけの項目）は、送った時刻に見せた物とする。見せたのは確かで、担当の送る命令は未読をすべて見せてからでないと送れないので、
  * その後の【done】は見た後に出た物（時刻を使わないと、画面に届くのが【done】より後なら済まないまま残る。台帳 #58）。
@@ -497,8 +497,8 @@ export function reportIncident(ctx: Context, options: IncidentOptions): string[]
 
 /** 状態 wait の字を出し、移りを waits.jsonl に残す。自分の宛先を返す。 */
 export function showWait(ctx: Context, text: string): string {
-  const address = ctx.transport.whoami();
-  ctx.transport.setStatus('wait', text);
+  const address = ctx.seats.whoami();
+  ctx.seats.setStatus('wait', text);
   recordWait(ctx, address, text);
   return address;
 }
@@ -642,7 +642,7 @@ function quietly<T>(f: () => T): T | undefined {
 
 /** 担当（自分）に渡されていて、【done】が返っていない依頼書。見たかは、TPM 担当の検査（unsettled）と同じ見た時刻の口で決める。 */
 function ownOpenBriefs(ctx: Context, self: RoleRecord): OpenBrief[] {
-  const address = self.address ?? ctx.transport.whoami();
+  const address = self.address ?? ctx.seats.whoami();
   return openBriefs(self, address, ctx.state.lines<Sent>('log.jsonl'), seenTimes(ctx, { live: true }));
 }
 
@@ -745,7 +745,7 @@ export function reportDependabot(ctx: Context, id: 'merge-request' | 'not-yet' |
   const self = sender(ctx);
   const out: string[] = [];
   if (id === 'recreated' && options.title !== undefined) {
-    ctx.transport.setTitle(options.title);
+    ctx.seats.setTitle(options.title);
     self.title = options.title;
     writeRole(ctx, self);
     out.push(`題を替えた: ${options.title}`);
@@ -908,6 +908,6 @@ export async function dismiss(ctx: Context, key: string, options: { handover: bo
 
 /** URL を自分の居場所で開いて、人に見せる。 */
 export function show(ctx: Context, url: string): string[] {
-  ctx.transport.show(url);
+  ctx.seats.show(url);
   return [`開いた: ${url}`];
 }

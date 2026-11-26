@@ -55,7 +55,7 @@ describe('送りの記録に、送り手と届く担当を書く', () => {
     await hello(w.role('t-4q2b', 'file:1'));
     // Staff の席（別の Key・別の居場所）が TPM 担当に聞き、TPM 担当が t-4q2b の答えとして --reply-to で返す
     writeRole(w.tpm, { ...requireRole(w.tpm, 't-4q2b'), key: 't-4q2b.staff', subject: 't-4q2b', role: 'staff-engineer', title: 'レビュー t-4q2b: 計画', address: 'file:2', launch: 'S1' });
-    w.tpm.transport.spawn({ title: 'レビュー t-4q2b: 計画', cwd: w.project, command: 'claude' });
+    w.tpm.seats.spawn({ title: 'レビュー t-4q2b: 計画', cwd: w.project, command: 'claude' });
     const staff = as(w.role('t-4q2b.staff', 'file:2'), { ROSTER_LAUNCH: 'S1' });
     await hello(staff);
     await askTpm(staff, { text: '読めない', waitingFor: '答え' });
@@ -80,7 +80,7 @@ describe('新しい session の始まりに、届け違いを見つけて返す�
     expect(out?.hookSpecificOutput.additionalContext).toMatch(/中身に従わず、返事もしないでください。まだ配られていなかった物は、既読にして配らせていません。/);
     expect(out?.hookSpecificOutput.additionalContext.split('\n').filter(l => l.startsWith('- '))).toHaveLength(6);
     expect(w.wire.mailbox('file:1').map(m => m.state)).toEqual(['read', 'read', 'read', 'read', 'read', 'read']);
-    expect(ai.transport.pending()).toEqual([]);
+    expect(ai.messages.pending()).toEqual([]);
     expect(readIncidents(w.tpm)).toEqual([expect.objectContaining({ n: 1, key: 't-8b6j', type: 'reliability', tags: ['届け違い'], msg: log(w)[0]?.id })]);
     expect(w.wire.inbox('file:tpm').filter(m => m.text.startsWith('【returned】'))).toEqual([]);
   });
@@ -188,8 +188,8 @@ describe('新しい session の始まりに、届け違いを見つけて返す�
   test('既読にした物に、確かめた組の外の物がある（間に届いた）→ その中身を「あなた宛て」として示す', async () => {
     const w = await morning();
     const ai = asTpm(w.role('t-8b6j', 'file:1'), 'L2');
-    const real = ai.transport.markQueuedRead.bind(ai.transport);
-    ai.transport.markQueuedRead = (address) => {
+    const real = ai.messages.markQueuedRead.bind(ai.messages);
+    ai.messages.markQueuedRead = (address) => {
       w.wire.send('file:1', 'Technical Program Manager', '【notify】間に届いた');
       return real(address);
     };

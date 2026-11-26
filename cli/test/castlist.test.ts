@@ -697,13 +697,13 @@ describe('担当を起こす環境変数', () => {
 describe('落ちた session の突き合わせ（推しの幕引き）', () => {
   /** cmux の中の周り: 自分の居場所（ref と uuid）と、cmux の居場所の一覧（uuid → ref）。一覧が誤りなら seats は throw する。 */
   function inCmux(ctx: Context, me: { ref: string, uuid: string }, seats: () => Record<string, string>): Context {
-    const transport = Object.create(ctx.transport) as Context['transport'];
-    transport.seatsById = () => new Map(Object.entries(seats()).map(([uuid, ref]) => [uuid, { address: ref, title: '' }]));
+    const seatPort = Object.create(ctx.seats) as Context['seats'];
+    seatPort.seatsById = () => new Map(Object.entries(seats()).map(([uuid, ref]) => [uuid, { address: ref, title: '' }]));
     const exec: Context['exec'] = (cmd, args, options) =>
       cmd === 'cmux' && args.join(' ') === '--json identify'
         ? { status: 0, stdout: JSON.stringify({ caller: { workspace_ref: me.ref } }), stderr: '' }
         : ctx.exec(cmd, args, options);
-    return { ...ctx, exec, transport, config: { ...ctx.config, transport: 'cmux' }, env: { ...ctx.env, CMUX_WORKSPACE_ID: me.uuid } };
+    return { ...ctx, exec, seats: seatPort, config: { ...ctx.config, transport: 'cmux' }, env: { ...ctx.env, CMUX_WORKSPACE_ID: me.uuid } };
   }
 
   const tpmAt = { ref: 'workspace:1', uuid: 'U-TPM' };

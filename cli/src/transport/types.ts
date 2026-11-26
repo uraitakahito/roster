@@ -1,4 +1,5 @@
 // 連携の口。担当どうしがメッセージを送り、担当を起こし、状態を見せるための道具（cmux など）を、この形で包む。
+// 口は 2 つ: メッセージの口（MessagePort）と居場所の口（SeatPort）。上の層は、どちらの口かを名指して呼ぶ（別々の道具に替えられる）。
 // 決まり（見出し・順番・名簿）はこの上の層が持ち、ここは道具の言葉を知らない。
 
 /** 動いている担当の居場所。address はメッセージの宛先で、道具ごとの形の字（cmux なら workspace:12）。 */
@@ -59,10 +60,8 @@ export interface SeatLabel {
 /** サイドバーなどに出す状態の鍵。この 2 つだけを使う。 */
 export type StatusKey = 'model' | 'wait';
 
-/** 連携の口。道具ごとの adapter（`cmux.ts`・`file.ts`）がこの形を持つ。 */
-export interface Transport {
-  /** 自分の宛先。 */
-  whoami(): string
+/** メッセージの口。担当どうしのメッセージを運ぶ道具を、この形で包む（居場所の口と別の道具にできる）。 */
+export interface MessagePort {
   /** メッセージを送り、id を返す（届いたかは見ない）。replyTo は、返事の先のメッセージの id。 */
   send(to: string, from: string, text: string, replyTo?: string): Delivery
   /** 自分宛てで、まだ届いていないメッセージ（手を動かしている間は届かない道具がある）。 */
@@ -75,6 +74,12 @@ export interface Transport {
   markQueuedRead(address: string): MailboxEntry[]
   /** 道具が覚えているメッセージの時刻（宛先を問わない。閉じた居場所の分も）。道具が持たない・読めないなら空。 */
   history(): MessageTrace[]
+}
+
+/** 居場所の口。担当の居場所を作り、題と状態を見せ、閉じる道具を、この形で包む。 */
+export interface SeatPort {
+  /** 自分の宛先。 */
+  whoami(): string
   /** 担当の居場所を作って命令を動かし、宛先を返す。 */
   spawn(options: SpawnOptions): string
   /** 今ある居場所の一覧。 */
@@ -98,3 +103,6 @@ export interface Transport {
   /** 居場所を閉じる。 */
   close(address: string): void
 }
+
+/** 連携の口（メッセージの口と居場所の口の両方）。1 つの道具で両方を持つ adapter（`cmux.ts`・`file.ts`）がこの形を持つ。 */
+export interface Transport extends MessagePort, SeatPort {}

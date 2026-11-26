@@ -104,7 +104,7 @@ describe('届いた時刻（deliveries.jsonl）', () => {
       { id: 'm1-file-tpm', sentAt: '2026-11-20T12:00:01.000Z' },
       { id: 'ほかの project のメッセージ', sentAt: '2026-11-20T12:00:02.000Z', deliveredAt: '2026-11-20T12:00:03.000Z' },
     ];
-    w.tpm.transport.history = () => history;
+    w.tpm.messages.history = () => history;
     expect(syncDeliveries(w.tpm)).toBe(1);
     expect(syncDeliveries(w.tpm)).toBe(0);
     history = [{ id: 'm1-file-tpm', sentAt: '2026-11-20T12:00:01.000Z', deliveredAt: '2026-11-20T12:04:00.000Z' }];

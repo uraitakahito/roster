@@ -360,11 +360,11 @@ async function placeOf(ctx: Context, url: string, record: SessionRecord): Promis
  */
 export async function sweep(ctx: Context): Promise<string[]> {
   const url = castlistUrl(ctx);
-  if (url === undefined || ctx.config.transport !== 'cmux' || ctx.transport.seatsById === undefined || swept.has(ctx)) return [];
+  if (url === undefined || ctx.config.transport !== 'cmux' || ctx.seats.seatsById === undefined || swept.has(ctx)) return [];
   swept.add(ctx);
   let seats: Map<string, { address: string }>;
   try {
-    seats = ctx.transport.seatsById();
+    seats = ctx.seats.seatsById();
   }
   catch {
     return [];
