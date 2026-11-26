@@ -36,6 +36,7 @@ build は無い。`cli/bin/roster` は `cli/src/cli.ts` を node で直に動か
 | `cli/src/commands/` | 決まりの命令（`tpm-side.ts`・`role-side.ts`・`messages.ts`・`launch.ts`・`staff.ts`・`infra.ts`・`page.ts`・`issue.ts`・`review.ts`） |
 | `cli/src/roster.ts`・`cli/src/state.ts`・`cli/src/reviews.ts` | 名簿と、状態の folder と、レビューの頼みの記録 |
 | `cli/src/transport/` | 連携の口（`types.ts`。メッセージの口 `MessagePort` と居場所の口 `SeatPort` の 2 つ）と adapter（`cmux.ts`・`file.ts`。どちらも両方の口を持つ） |
+| `cli/src/mailroom/` | 配りの口（`types.ts`。預ける・数える・取り置く・渡せたと返す、など）と adapter（`nats.ts`。試験用は `memory.ts`）。今は、まだ命令からは使っていない |
 | `cli/src/tracker/` | 課題管理の口（`types.ts`）と adapter（`jira.ts`・`github.ts`）、課題の Key の形で adapter を選ぶ `routed.ts` |
 | `cli/src/guard.ts` | guard |
 | `cli/src/run-role.ts` | 連携の道具が担当の居場所で動かす `roster run-role`（名簿を読んで claude を起こす） |
@@ -63,6 +64,21 @@ build は無い。`cli/bin/roster` は `cli/src/cli.ts` を node で直に動か
 
 - **合わせる版**: 版は 3 か所にある。つなぎの試験が起こす image は `.castlist-version`（`.pagetray-version` と同じ `v<版>@<image の digest>` の形）、castlist が止まっていて container も無い時に Product Manager へ出す `container run` の 1 行は `cli/src/castlist.ts` の `CASTLIST_VERSION`（image の版）と `CASTLIST_VOLUME`（volume。今は `castlist-data-v1`）、client を作る定義は `cli/gen/gen.sh` の `DEFS` の castlist の行の tag（今はどれも `v1.0.0`）。`CASTLIST_VERSION` が古いままだと、古い image を起こす 1 行を出してしまう。
 - **castlist を上げる時**: castlist で release を出す（castlist の docs の「[release を出す](https://uraitakahito.github.io/castlist/release.html)」）→ この repo で `.castlist-version`・`CASTLIST_VERSION` と、それを名指す試験（`cli/test/castlist.test.ts` の `expect(CASTLIST_VERSION).toBe(…)`）を新しい版にする PR を出す。定義が替わった版なら、同じ PR で `DEFS` の castlist の行（tag と SHA-256）を替えて client を作り直し、偽の castlist（`/healthz` の `version` も）と `cli/src/castlist.ts`・`cli/src/castlist-query.ts` を合わせる。
+## NATS JetStream（メッセージキュー）とのつなぎ
+
+担当どうしのメッセージを預かって配る段取り（取り置き・渡せたの確かめ・渡し直し・上限・期限）は、自前で作らず、[NATS](https://nats.io/) の JetStream に任せる。roster が持つのは、それを包む「配りの口」（`cli/src/mailroom/types.ts` の `Mailroom`）と、NATS の言葉（stream・consumer）に写す adapter（`cli/src/mailroom/nats.ts`。公式の client `@nats-io/transport-node`・`@nats-io/jetstream` を使う）。**今は、まだ命令からは使っていない**（メッセージは `ctx.messages` の cmux が運ぶ）。
+
+- **NATS の中の作り**: 箱（stream）が 3 つと、受け手ごとの取り口（consumer）。箱の名は `roster-<状態の folder の名>-log`・`-work`・`-adv`。
+  - 記録の箱（`-log`）: 置かれた物をみな残す（30 日）。同じ id の置き直しを 1 通にする窓（2 分）を持つ。
+  - 配る箱（`-work`）: 記録の箱から写しを受ける。渡せたと返った物は消える。届かないまま残った物は 72 時間で消える。**写しを受け始める位置を、箱を作った時刻からにしてある**（書かないと、配る箱を作り直した時に、記録の箱の中身をみな写し直し、届いた物まで渡り直す）。
+  - 知らせの箱（`-adv`）: 渡し直しの上限を超えた時に NATS が出す知らせを溜める（30 日）。
+  - 取り口: 自分の宛名だけを取る。取り置き 30 秒・渡すのは 5 度まで・1 度に取り置けるのは 20 通まで。
+- **段取りの値**は `cli/src/mailroom/types.ts` の `MAILROOM_LIMITS` の 1 か所に書く。箱と取り口は、adapter が要る時に作る（あれば作らない）。値を変えても、もうある箱と取り口は変わらない（変える時は、箱を作り直す手順を足す）。
+- **合わせる版**: `.nats-version` に、合わせる NATS の版を `v<版>@<image の digest>` の形で書く。[運用](/operations/#メッセージキューnats)で起こす image も、この版。設定は `nats/nats-server.conf`。
+- **試験用の口**: `cli/src/mailroom/memory.ts`。NATS と同じ振る舞いを、memory の上で、渡された時計で動かす。
+- **つなぎの試験**: 配りの口が守る振る舞いの試験は `cli/test/mailroom-contract.ts` に 1 つだけ書き、試験用の口（`cli/test/mailroom-memory.test.ts`。ふだんの `pnpm test`）と本物の NATS（`cli/test/mailroom-nats-e2e.test.ts`）の両方に流す。本物に向けた試験は、`$ROSTER_E2E_NATS_URL` に動いている NATS の URL がある時だけ流れる（CI の `nats-e2e.yml` が、`.nats-version` の image を起こして流す）。振る舞いを足す・変える時は、この試験に足して、両方が通ることを見る。
+- **手元で流す**: NATS を手元で起こして（[運用](/operations/#メッセージキューnats)の起こし方か、release の binary を `-c nats/nats-server.conf` に倣った設定で）、`cd cli && ROSTER_E2E_NATS_URL=nats://127.0.0.1:<port> pnpm exec vitest run test/mailroom-nats-e2e.test.ts`。試験は、回ごとに違う名の箱を作る（消さない。試しの NATS は、済んだら data ごと消す）。
+
 ## 生成した client（castlist・pagetray の定義から）
 
 castlist と pagetray の API は、それぞれの repo の Smithy の定義（`model/`）に書いてある。roster が呼ぶ TypeScript の client は、その定義から smithy-typescript で生成し、`cli/gen/<repo>-client/` に入れる（AI-36）。今は castlist の client（`cli/gen/castlist-client/`）と pagetray の client（`cli/gen/pagetray-client/`）で、どちらも `v1.0.0` の定義から作る。roster は、castlist と置き場に送る物をみな、これで送る（置き場の本文を取る curl だけが外）。

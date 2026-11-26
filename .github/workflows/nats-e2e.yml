@@ -1,0 +1,41 @@
+name: nats-e2e
+# cli と本物のメッセージキュー（NATS JetStream）のつなぎ。配りの口の振る舞い（取り置き・渡し直し・上限・期限）を、本物に向けて確かめる。
+on:
+  push:
+    branches: [main]
+    paths: [cli/**, nats/**, .node-version, .nats-version, .github/workflows/nats-e2e.yml]
+  pull_request:
+    paths: [cli/**, nats/**, .node-version, .nats-version, .github/workflows/nats-e2e.yml]
+permissions:
+  contents: read
+jobs:
+  e2e:
+    # .nats-version の版（運用で起こす版）の image に、運用と同じ設定（nats/nats-server.conf）を付けて流す。
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+      - name: image を、digest で取って起こす（127.0.0.1:4232）
+        run: |
+          pinned=$(cat .nats-version); version=${pinned%%@*}; digest=${pinned#*@}
+          docker run -d --name=e2e-nats -p 127.0.0.1:4232:4222 -v "$PWD/nats:/etc/nats:ro" "nats@$digest" -c /etc/nats/nats-server.conf
+          # 起きた物の版が、書いた版と同じか（起動の記録の Version の行。字のまま比べる）。
+          for _ in $(seq 1 40); do docker logs e2e-nats 2>&1 | grep -q 'Server is ready' && break; sleep 0.5; done
+          docker logs e2e-nats 2>&1 | grep -F "Version:  ${version#v}"
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: cli/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: cli/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: cli
+      - name: 本物の NATS に向けて、配りの口の試験を流す
+        working-directory: cli
+        # $ROSTER_E2E_NATS_URL が無いと、この試験は飛ばされる（ふだんの pnpm test）。ここでは必ず渡す。
+        env:
+          ROSTER_E2E_NATS_URL: nats://127.0.0.1:4232
+        run: pnpm exec vitest run test/mailroom-nats-e2e.test.ts
+      - if: always()
+        run: docker logs e2e-nats

@@ -23,6 +23,24 @@
         "-v pagetray-data",
       ],
     },
+    // メッセージキュー（NATS JetStream の container と、預かった物を置く volume）。担当どうしのメッセージを預かって配る
+    // （今は、まだ命令からは使っていない。使い始めるのは、hook と検査を替える段から）。
+    // 止めると担当はメッセージを送れず、volume を消すと、届いていないメッセージと記録が消える。
+    // 起こし方は docs-site の運用のページの「メッセージキュー（NATS）」。volume は roster-nats-data。
+    "nats": {
+      "guard": "tpm",
+      "match": [
+        "--name roster-nats",
+        "container start roster-nats",
+        "container stop roster-nats",
+        "container kill roster-nats",
+        "container delete roster-nats",
+        "container rm roster-nats",
+        "container volume delete roster-nats-data",
+        "container volume rm roster-nats-data",
+        "-v roster-nats-data",
+      ],
+    },
     // 手元で image を build する builder（Apple Container の container build が使う container。名は buildkit）。
     // roster を動かす機械に 1 つで、並べて動く担当がみな使う。止める・消す・作り直すと、ほかの担当の build が途中で落ちる。
     // container build は builder が止まっていれば自分で起こすので、担当は builder start を打たない（CPU・メモリなどの旗を付けた start は、
