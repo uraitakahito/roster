@@ -19,6 +19,7 @@ import { mailArm, mailCheck, mailClaim, mailGate, mailLeft, mailPrompt, mailRele
 import { registerMessages } from './commands/register.ts';
 import { registerReview } from './commands/review.ts';
 import { hello, inboxNow } from './commands/role-side.ts';
+import { seatAdd, seatClose } from './commands/seat.ts';
 import { assign, close, newKey, roles, type AssignOptions } from './commands/tpm-side.ts';
 import { composeSkillSets, readConfigSources } from './config.ts';
 import { createContext, mailroomsClosed } from './context.ts';
@@ -91,14 +92,24 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
     .option('--supersede', '続きの【brief】で、済んでいない前の依頼書を取り消す（本文に「取り消す: …」と載る）')
     .option('--after', '続きの【brief】で、済んでいない前の依頼書を済ませてから、これをさせる（本文に載る）')
     .option('--no-issue-copy <訳>', '課題（Jira・GitHub の Issue の Key）の写しのページを作らずに振る。訳は担当に届く')
+    .option('--seats <数>', 'Tech Lead 担当が起こしてよい repo の席の数の上限（--role tech-lead だけ。Product Manager が計画で通した数）')
     .option('--wait <秒>', '起こした担当の roster hello を待つ秒（0 なら待たない）', '90')
-    .action(async (key: string, { issueCopy, ...options }: Omit<AssignOptions, 'wait' | 'role' | 'noIssueCopy'> & { wait: string, role: string, issueCopy: true | string }) => {
+    .action(async (key: string, { issueCopy, seats, ...options }: Omit<AssignOptions, 'wait' | 'role' | 'noIssueCopy' | 'seats'> & { wait: string, role: string, issueCopy: true | string, seats?: string }) => {
       if (!(ROLE_NAMES as string[]).includes(options.role)) throw new TpmError(`--role は ${ROLE_NAMES.join('・')} のどれかにしてください`);
       // commander は --no-issue-copy <訳> を issueCopy（既定 true・付けたら訳の字）にする。
       const skip = issueCopy === true ? {} : { noIssueCopy: issueCopy };
-      print(await assign(createContext(), key, { ...options, ...skip, role: options.role as RoleName, wait: Number(options.wait) }));
+      print(await assign(createContext(), key, { ...options, ...skip, ...(seats === undefined ? {} : { seats: Number(seats) }), role: options.role as RoleName, wait: Number(options.wait) }));
     });
   program.command('close <key>').description('担当の居場所を閉じ、名簿から消す').action(async (key: string) => print(await close(createContext(), key)));
+  const seat = program.command('seat').description('Tech Lead 担当が、自分の課題の repo の席を起こす・閉じる');
+  seat.command('add <name>').description('repo の席（Software Engineer 担当）を起こし、依頼書を渡す（名簿の Key は <課題の Key>.<名>）')
+    .requiredOption('--brief <URL>', '依頼書の URL（課題の概要の節が要る）')
+    .option('--cwd <folder>', '席を起こす folder（受け持つ repo。既定は Tech Lead 担当の folder）')
+    .option('--title <短い題>', '居場所の題に付ける短い題')
+    .option('--wait <秒>', '起こした席の roster hello を待つ秒（0 なら待たない）', '90')
+    .action(async (name: string, options: { brief: string, cwd?: string, title?: string, wait: string }) => print(await seatAdd(createContext(), name, { ...options, wait: Number(options.wait) })));
+  seat.command('close <name>').description('片付けの終わった（か、居場所の無い）repo の席を閉じ、名簿から消す')
+    .action(async (name: string) => print(await seatClose(createContext(), name)));
   program.command('hello').description('名乗る（TPM 担当は宛先を状態に書いて名簿を出す。担当は受け持ちを返す）')
     .option('--model <model>', 'TPM 担当の model（既定は roster start が起こす model。$ROSTER_MODEL があればそれ）')
     .option('--effort <effort>', 'TPM 担当の effort（既定は $CLAUDE_EFFORT、無ければ roster start が起こす effort）')

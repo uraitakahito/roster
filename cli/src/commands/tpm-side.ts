@@ -11,7 +11,7 @@ import { lastAuditLine } from '../audits.ts';
 import { openLine } from '../incidents.ts';
 import { openReviews } from '../reviews.ts';
 import { resolveSettings } from '../settings.ts';
-import { allRoles, assertKey, isStaffKey, LOCAL_KEY, readRole, removeRole, requireTpmSide, staffKey, type RoleRecord, type TpmRecord } from '../roster.ts';
+import { allRoles, assertKey, isRepoSeat, isStaffKey, LOCAL_KEY, readRole, removeRole, repoSeats, requireTpmSide, staffKey, type RoleRecord, type TpmRecord } from '../roster.ts';
 import { readSkillSets, skillSetDir, TpmError } from '../skill-sets.ts';
 import { route } from '../tracker/routed.ts';
 import { findHook, oldBannerConfigNotice, staleHook } from './banner.ts';
@@ -126,7 +126,11 @@ export async function roles(ctx: Context): Promise<string[]> {
   return ['名簿:', ...records.map((r) => {
     const alive = r.address !== undefined && seats.some(s => s.address === r.address);
     const wait = alive && r.address !== undefined ? ctx.seats.status(r.address)?.wait : undefined;
-    const gone = r.role === 'auditor' ? '消えた（居場所が無い。起こし直すのは Product Manager: roster audit start）' : '消えた（居場所が無い。roster assign で起こし直すか、roster close で名簿から消す）';
+    const gone = r.role === 'auditor'
+      ? '消えた（居場所が無い。起こし直すのは Product Manager: roster audit start）'
+      : isRepoSeat(r)
+        ? `消えた（居場所が無い。${r.subject ?? ''} の Tech Lead 担当が roster seat add で起こし直すか、roster seat close で名簿から消す）`
+        : '消えた（居場所が無い。roster assign で起こし直すか、roster close で名簿から消す）';
     const where = alive ? `${r.address}（${wait ?? '状態なし'}）` : gone;
     return `- ${r.key}  ${r.title}  ${where}${r.dismissed ? `  dismiss 済み（${r.dismissed === 'handover' ? '交代' : '終わり'}）` : ''}${r.brief ? `  依頼書: ${r.brief}` : ''}${r.issuePage ? `  課題の写し: ${r.issuePage}` : ''}`;
   }), ...swept, ...lastAuditLine(ctx), ...openLine(ctx)];
@@ -168,6 +172,8 @@ export interface AssignOptions {
   after?: boolean
   /** 課題の写しを作らずに振る訳（--no-issue-copy の訳）。 */
   noIssueCopy?: string
+  /** Tech Lead 担当が起こしてよい repo の席の数の上限（--role tech-lead だけ）。 */
+  seats?: number
   /** 起こした担当の roster hello を待つ秒。0 なら待たない。 */
   wait: number
 }
@@ -193,6 +199,13 @@ async function assignSeat(ctx: Context, subjectKey: string, options: AssignOptio
   // Auditor は TPM 担当の回し方も見るので、TPM 担当の手では起こさない・依頼書も送らない。
   if (options.role === 'auditor' || subjectKey === AUDIT_KEY) throw new TpmError('Auditor の席（Key audit）は、Product Manager が roster audit start で起こします。roster assign では起こせません・依頼書も送れません');
   if (isStaffKey(subjectKey)) throw new TpmError(`${subjectKey} は Staff Engineer 担当の席の Key です。席を起こす・依頼書を送るのは roster assign <課題の Key> --role staff-engineer`);
+  // repo の席（Tech Lead 担当が起こした席）は、名簿の行で見分ける（Key の形では見ない。点を含む課題の Key を断らないため）。
+  const row = readRole(ctx, subjectKey);
+  if (row !== undefined && isRepoSeat(row)) throw new TpmError(`${subjectKey} は、${row.subject ?? ''} の Tech Lead 担当が起こした repo の席です。席を起こす・依頼書を渡すのは Tech Lead 担当（roster seat）。Tech Lead 担当に伝えることは roster notify ${row.subject ?? ''}`);
+  if (options.seats !== undefined) {
+    if (options.role !== 'tech-lead') throw new TpmError('--seats は --role tech-lead だけに付ける（Tech Lead 担当が起こしてよい repo の席の数の上限）');
+    if (!Number.isInteger(options.seats) || options.seats < 1) throw new TpmError('--seats は 1 以上の整数にしてください（Product Manager が計画で通した repo の席の数）');
+  }
   const subject = options.role === STAFF ? staffSubject(ctx, subjectKey) : undefined;
   // 名簿の Key。Staff Engineer 担当の席だけ、課題の Key と違う。
   const key = subject === undefined ? subjectKey : staffKey(subjectKey);
@@ -211,6 +224,8 @@ async function assignSeat(ctx: Context, subjectKey: string, options: AssignOptio
   }
   if (existing !== undefined && alive) {
     if (options.brief === undefined && subject === undefined) throw new TpmError(`${key} の担当はもう動いています（${existing.address}）。新しい依頼書を --brief で渡してください`);
+    // 動いている席と違う役割で振っても、名簿は Key 1 つに 1 行なので、依頼書は今の席に届く。役割を替えるつもりの取り違えを止める。
+    if (existing.role !== options.role) throw new TpmError(`${key} には、${ROLES[existing.role].label} 担当がもう動いています（${existing.address}）。--role ${options.role} では起こせません・依頼書も送っていません。役割を替えるなら、roster dismiss ${key} --handover で今の担当を外し、【end】を受けて roster close ${key} で閉じてから振る。今の担当に依頼書を送るなら、--role ${existing.role}`);
     if (options.supersede === true && options.after === true) throw new TpmError('--supersede と --after は、どちらか 1 つにしてください');
     // 写しを置く前に、送る前の検査を通す（止まった回に写しだけが増えないように）。
     await assertRead(ctx, `${existing.key} の担当`, existing.title);
@@ -218,6 +233,8 @@ async function assignSeat(ctx: Context, subjectKey: string, options: AssignOptio
     const settled = assertSettled(ctx, existing, 'assign', choice);
     // 続きのときも写しを作り直す（コメントが増えているため）。
     Object.assign(existing, await issueCopy(ctx, existing.issue ?? subjectKey, subjectKey, options.noIssueCopy));
+    // 席の数の上限は、続きの依頼書でも替えられる（計画が通って数が決まった時）。名簿には、下の brief が書く。
+    if (options.seats !== undefined) existing.seats = options.seats;
     // 送る前の検査を通ってから、頼みを依頼書にする（止まった回に、渡した事にしない）。
     const url = subject === undefined ? options.brief ?? '' : await putStaffBrief(ctx, subject, asks);
     const sent = await brief(ctx, existing, url, options.note, settled === undefined || choice === undefined ? undefined : { text: settled, choice });
@@ -251,6 +268,8 @@ async function assignSeat(ctx: Context, subjectKey: string, options: AssignOptio
   // 居場所を作る前に読む（読めなければ、担当を起こさずに止まる）。
   const copy = await issueCopy(ctx, issue ?? subjectKey, subjectKey, options.noIssueCopy);
   const briefUrl = options.brief;
+  // Tech Lead 担当の起こし直しで --seats が無ければ、前の行の上限を受け継ぐ（Product Manager が計画で通した数を、起こし直しで失わない）。
+  const seats = options.seats ?? (options.role === 'tech-lead' && existing?.role === 'tech-lead' ? existing.seats : undefined);
   const record: RoleRecord = {
     key,
     role: options.role,
@@ -260,6 +279,7 @@ async function assignSeat(ctx: Context, subjectKey: string, options: AssignOptio
     ...settings,
     ...(briefUrl === undefined ? {} : { brief: briefUrl, firstBrief: briefUrl }),
     ...(issue === undefined ? {} : { issue }),
+    ...(seats === undefined ? {} : { seats }),
     ...copy,
   };
   // 担当を起こした folder と、記録の先を出す（上の folder から振ると、どちらも 1 つに決まっていないため）。
@@ -268,19 +288,40 @@ async function assignSeat(ctx: Context, subjectKey: string, options: AssignOptio
   return await launch(ctx, record, existing !== undefined, options.wait, more, sid ? sessionRef(sid) : undefined);
 }
 
-/** 担当の居場所を閉じ、名簿から消す。課題の担当を閉じる時は、その課題の Staff Engineer 担当の席が残っていれば、一緒に閉じる。 */
-export async function close(ctx: Context, key: string): Promise<string[]> {
-  requireTpmSide(ctx, 'roster close');
-  const record = readRole(ctx, key);
-  if (record === undefined) throw new TpmError(`名簿に担当がいません: ${key}`);
-  if (record.role === 'auditor') throw new TpmError('Auditor の席は、Product Manager が起こし、閉じます。roster close では閉じられません（居場所が消えていたら、Product Manager が roster audit start で起こし直す）');
+/**
+ * 名簿の行の席を 1 つ閉じる: castlist に幕引きを送り、居場所を閉じ、その受け手の取り口と残りを消して、名簿から消す。
+ * 子の席も閉じる closeWithChildren が使う。
+ */
+export async function closeSeat(ctx: Context, record: RoleRecord): Promise<string[]> {
   const alive = record.address !== undefined && ctx.seats.seats().some(s => s.address === record.address);
   // 居場所を閉じる前に、castlist に幕引きを送る（閉じた後の SessionEnd の hook が届くかは、閉じ方による）。
   const castlist = await closeLaunch(ctx, record);
   if (alive && record.address !== undefined) ctx.seats.close(record.address);
   // この受け手の取り口と残りを消し、残っていた物を記録する。
   const mail = await clearSeat(ctx, record);
-  removeRole(ctx, key);
-  const staff = isStaffKey(key) || readRole(ctx, staffKey(key)) === undefined ? [] : await close(ctx, staffKey(key));
-  return [`閉じた: ${record.title}${alive ? `（${record.address}）` : '（居場所はもう無かった）'}`, ...castlist, ...mail, ...staff];
+  removeRole(ctx, record.key);
+  return [`閉じた: ${record.title}${alive ? `（${record.address}）` : '（居場所はもう無かった）'}`, ...castlist, ...mail];
+}
+
+/**
+ * 担当の居場所を閉じ、名簿から消す。課題の担当を閉じる時は、その課題の Staff Engineer 担当の席と、
+ * Tech Lead 担当が起こした repo の席が残っていれば、一緒に閉じる。
+ */
+export async function close(ctx: Context, key: string): Promise<string[]> {
+  requireTpmSide(ctx, 'roster close');
+  const record = readRole(ctx, key);
+  if (record === undefined) throw new TpmError(`名簿に担当がいません: ${key}`);
+  if (record.role === 'auditor') throw new TpmError('Auditor の席は、Product Manager が起こし、閉じます。roster close では閉じられません（居場所が消えていたら、Product Manager が roster audit start で起こし直す）');
+  return await closeWithChildren(ctx, record);
+}
+
+/**
+ * 席を閉じ、その子の席（その席の Staff Engineer 担当の席・Tech Lead 担当が起こした repo の席。repo の席の Staff の席も）が
+ * 名簿に残っていれば、一緒に閉じる。roster close と roster seat close が使う。
+ */
+export async function closeWithChildren(ctx: Context, record: RoleRecord): Promise<string[]> {
+  const out = await closeSeat(ctx, record);
+  const staff = isStaffKey(record.key) ? undefined : readRole(ctx, staffKey(record.key));
+  for (const child of [...(staff === undefined ? [] : [staff]), ...repoSeats(ctx, record.key)]) out.push(...await closeWithChildren(ctx, child));
+  return out;
 }

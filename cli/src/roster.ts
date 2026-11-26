@@ -9,7 +9,10 @@ import { envOf } from './env.ts';
 /** 名簿の 1 行（`roles/` の 1 ファイル）。担当 1 人の役割・居場所・受けている依頼書。 */
 export interface RoleRecord extends RoleSettings {
   key: string
-  /** 見ている課題の Key（Staff Engineer 担当の席だけ。名簿の Key は `<課題の Key>.staff`）。ほかの担当は、名簿の Key が課題の Key。 */
+  /**
+   * 親の課題の Key。Staff Engineer 担当の席（名簿の Key は `<課題の Key>.staff`。見ている課題）と、
+   * Tech Lead 担当が起こした repo の席（名簿の Key は `<課題の Key>.<名>`。Tech Lead 担当の課題）だけが持つ。ほかの担当は、名簿の Key が課題の Key。
+   */
   subject?: string
   role: RoleName
   title: string
@@ -36,6 +39,8 @@ export interface RoleRecord extends RoleSettings {
   launchedBy?: string
   /** 【dismiss】を送ったか。handover は担当の交代（課題は閉じない）。 */
   dismissed?: 'done' | 'handover'
+  /** Tech Lead 担当だけ: 起こしてよい repo の席の数の上限（roster assign --role tech-lead --seats。Product Manager が計画で通した数）。 */
+  seats?: number
 }
 
 /** TPM 担当の宛先（tpm.jsonc）。担当はメッセージを送るたびにここを読むので、TPM 担当を起こし直しても知らせ直さなくてよい。 */
@@ -63,7 +68,13 @@ export const isStaffKey = (key: string): boolean => key.endsWith(STAFF_SUFFIX);
 /** Staff Engineer 担当の席の名簿の Key から、見ている課題の Key（staffKey の逆）。 */
 export const subjectOfStaffKey = (key: string): string => key.slice(0, -STAFF_SUFFIX.length);
 
-/** 名簿の行の、課題の Key（Staff Engineer 担当の席は見ている課題、ほかは名簿の Key）。ページの folder と、名乗りに出す Key に使う。 */
+/** Tech Lead 担当の課題の Key と席の名から、repo の席の名簿の Key（`AI-36.pagetray`）。 */
+export const repoSeatKey = (lead: string, name: string): string => `${lead}.${name}`;
+
+/** 名簿の行が、Tech Lead 担当の起こした repo の席か（親の課題を持つ席のうち、Staff Engineer 担当の席でない物。Key の形では見ない）。 */
+export const isRepoSeat = (record: Pick<RoleRecord, 'subject' | 'role'>): boolean => record.subject !== undefined && record.role !== 'staff-engineer';
+
+/** 名簿の行の、課題の Key（Staff Engineer 担当の席と repo の席は親の課題、ほかは名簿の Key）。ページの folder と、名乗りに出す Key に使う。 */
 export const subjectOf = (record: Pick<RoleRecord, 'key' | 'subject'>): string => record.subject ?? record.key;
 
 /** 課題の Key が、使ってよい字（英数字と # . _ / -）だけかを見る。違えば止める。 */
@@ -90,6 +101,25 @@ export const removeRole = (ctx: Context, key: string): void => ctx.state.remove(
 export function allRoles(ctx: Context): RoleRecord[] {
   return ctx.state.list('roles').map(name => ctx.state.read<RoleRecord>(`roles/${name}.jsonc`)).filter(r => r !== undefined);
 }
+
+/** その課題の Tech Lead 担当が起こした repo の席（名簿に居る物）。 */
+export const repoSeats = (ctx: Context, lead: string): RoleRecord[] => allRoles(ctx).filter(r => r.subject === lead && isRepoSeat(r));
+
+/** 起こした repo の席の控えの 1 行（状態の folder の `repo-seats.jsonl`。roster seat add が足し、席を閉じても消さない）。 */
+interface RepoSeatLine {
+  at: string
+  /** Tech Lead 担当の課題の Key。 */
+  lead: string
+  /** repo の席の名簿の Key。 */
+  key: string
+}
+
+/** repo の席を起こしたことを控える（閉じた後も、その席の記録を親の課題にまとめて読めるように）。 */
+export const noteRepoSeat = (ctx: Context, lead: string, key: string): void => ctx.state.append('repo-seats.jsonl', { at: ctx.now().toISOString(), lead, key } satisfies RepoSeatLine);
+
+/** その課題の Tech Lead 担当が起こした repo の席の Key（閉じた席も。控えと、今の名簿から）。Key の形では見ない（点を含む別の課題の Key と取り違えない）。 */
+export const repoSeatKeys = (ctx: Context, lead: string): string[] =>
+  [...new Set([...ctx.state.lines<RepoSeatLine>('repo-seats.jsonl').filter(l => l.lead === lead).map(l => l.key), ...repoSeats(ctx, lead).map(r => r.key)])];
 
 /** TPM 担当の宛先を読む。`roster hello` の前なら止める。 */
 export function requireTpm(ctx: Context): TpmRecord {

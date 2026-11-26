@@ -9,7 +9,7 @@ import type { Context } from '../context.ts';
 import { recordGateStop, recordWait } from '../evidence.ts';
 import { addIncident, foldIntoIncident, incidentLine, incidentType, INCIDENT_TYPES, readIncidents, tagLines } from '../incidents.ts';
 import { message, ROLES, TPM_TITLE, WAIT, WAIT_CLOSE, WAIT_NEXT_BRIEF, type HeadingId, type WaitKind } from '../protocol.ts';
-import { readRole, requireRole, requireSelf, requireTpm, requireTpmSide, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
+import { isRepoSeat, readRole, requireRole, requireSelf, requireTpm, requireTpmSide, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
 import { patchReview, readReviews, VERDICTS } from '../reviews.ts';
 import { TpmError } from '../skill-sets.ts';
 import { MAX_POINTS, type Note, type NoteKind, type NoteLink } from '../tracker/types.ts';
@@ -232,6 +232,14 @@ export async function notRepeatToPeer(ctx: Context, self: RoleRecord, peer: Role
   await assertNotRepeat(ctx, id, self.title, peerSeat(ctx, peer), body);
   await assertReachable(ctx, partyOf(peer));
 }
+
+/**
+ * 課題の記録の 1 行目に書く担当の名。repo の席（Tech Lead 担当が起こした席）は、同じ課題に同じ役割の席がいくつも書くので、
+ * 席の名を添える（`Software Engineer（pagetray）`）。ほかの担当は、役割の名だけ（今までどおり）。
+ */
+export const noteRole = (role: RoleRecord): string => isRepoSeat(role) && role.subject !== undefined
+  ? `${ROLES[role.role].label}（${role.key.slice(role.subject.length + 1)}）`
+  : ROLES[role.role].label;
 
 /** 課題に記録を書く。課題が無い・課題管理を使わない project なら書かない。 */
 export function record(ctx: Context, role: RoleRecord, note: Note): string[] {
@@ -812,6 +820,8 @@ async function assertSupersede(ctx: Context, self: RoleRecord, url: string, supe
 export async function askPm(ctx: Context, options: { url: string, items: string[], waitingFor: string, supersede?: string[] }): Promise<string[]> {
   const self = await sender(ctx);
   notAuditor(self, 'roster ask pm');
+  // repo の席の確認は、Tech Lead 担当がまとめて送る（Product Manager への確認が、席ごとにばらばらに届かないように）。
+  if (isRepoSeat(self)) throw new TpmError(`repo の席（${self.key}）は roster ask pm を打ちません。Product Manager に決めてほしいことは、Tech Lead 担当（${self.subject ?? ''}）に伝えてください（Tech Lead 担当が、まとめて確認にする）。送っていません`);
   if (options.items.length === 0) throw new TpmError('--item で、決めてほしい項目の題を 1 つ以上書いてください');
   const supersede = options.supersede ?? [];
   const body = [
@@ -822,7 +832,7 @@ export async function askPm(ctx: Context, options: { url: string, items: string[
   await assertSupersede(ctx, self, options.url, supersede);
   const recorded = record(ctx, self, {
     kind: '確認',
-    role: ROLES[self.role].label,
+    role: noteRole(self),
     summary: `Product Manager に確かめる（${options.items.length} 項）`,
     links: [{ label: '確認', url: options.url }, ...supersede.map(url => ({ label: '置き換えた確認', url }))],
     points: options.items,
@@ -856,7 +866,7 @@ export async function reportDocFix(ctx: Context, options: { pr: string, note: st
   const checked = assertMerged(ctx, [options.pr], options.unchecked);
   const body = `${options.pr}（merge 済み）${options.note}${checked}`;
   await notRepeatToTpm(ctx, self, 'doc-fix', body);
-  const recorded = record(ctx, self, { kind: '文書の修正', role: ROLES[self.role].label, summary: options.note, links: [{ label: 'PR（merge 済み）', url: options.pr }], points: [] });
+  const recorded = record(ctx, self, { kind: '文書の修正', role: noteRole(self), summary: options.note, links: [{ label: 'PR（merge 済み）', url: options.pr }], points: [] });
   return [...recorded, await toTpm(ctx, self, 'doc-fix', body)];
 }
 
@@ -944,7 +954,7 @@ export async function reportDone(ctx: Context, options: DoneOptions): Promise<st
   await notRepeatToTpm(ctx, self, 'done', body);
   const recorded = record(ctx, self, {
     kind,
-    role: ROLES[self.role].label,
+    role: noteRole(self),
     summary: oneLine(options.summary),
     links: options.url === undefined ? [] : [{ label: kind, url: options.url }],
     points: options.points,
@@ -983,10 +993,14 @@ export async function reportEnd(ctx: Context, options: EndOptions): Promise<stri
     ...(options.url === undefined ? [] : [{ label: '成果', url: options.url }]),
     ...options.prs.map(pr => ({ label: 'PR（merge 済み）', url: pr })),
   ];
-  const out = record(ctx, self, { kind: '結果', role: ROLES[self.role].label, summary: `片付けた（残っている物: ${oneLine(left)}）`, links, points: [] });
+  const out = record(ctx, self, { kind: '結果', role: noteRole(self), summary: `片付けた（残っている物: ${oneLine(left)}）`, links, points: [] });
   if (self.issue !== undefined && ctx.tracker.owns(self.issue)) {
     if (self.dismissed === 'handover') {
       out.push(`課題は閉じない: ${self.issue}（担当の交代。次の担当が引き継ぐ）`);
+    }
+    else if (isRepoSeat(self)) {
+      // 分けた課題は、repo の席が先に片付けを終える。課題を済みにするのは、Tech Lead 担当の片付けの時。
+      out.push(`課題は閉じない: ${self.issue}（repo の席。課題を済みにするのは、Tech Lead 担当の片付けの時）`);
     }
     else {
       ctx.tracker.close(self.issue);
@@ -1146,6 +1160,8 @@ export async function dismiss(ctx: Context, key: string, options: { handover: bo
   if (readRole(ctx, key)?.role === 'auditor') throw new TpmError('Auditor の席に【dismiss】は送れません（Auditor の席は、Product Manager が起こし、閉じる）');
   // Staff Engineer 担当は worktree も PR も持たないので、片付けのやりとり（【dismiss】と【end】）は要らない。
   if (readRole(ctx, key)?.role === 'staff-engineer') throw new TpmError(`Staff Engineer 担当の席に【dismiss】は送りません。roster close ${key} で閉じます（課題の席を roster close で閉じる時にも、一緒に閉じる）`);
+  const seat = readRole(ctx, key);
+  if (seat !== undefined && isRepoSeat(seat)) throw new TpmError(`${key} は、${seat.subject ?? ''} の Tech Lead 担当が起こした repo の席です。片付けの指示は Tech Lead 担当が送ります。残った席は、roster close ${seat.subject ?? ''} が一緒に閉じます`);
   const role = await receiver(ctx, key);
   const settled = assertSettled(ctx, role, 'dismiss', options.supersede === true ? 'supersede' : undefined);
   const body = [options.handover

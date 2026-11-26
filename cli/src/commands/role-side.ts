@@ -1,7 +1,7 @@
 // 担当（TPM 担当に起こされた Claude Code）が打つ命令。hello と inbox は TPM 担当も打つ。
 import type { Context } from '../context.ts';
 import { modelStatus, ROLES, WAIT } from '../protocol.ts';
-import { requireSelf, requireTpm, subjectOf, writeRole } from '../roster.ts';
+import { isRepoSeat, readRole, requireSelf, requireTpm, subjectOf, writeRole } from '../roster.ts';
 import { auditorHello } from './audit.ts';
 import { castlistHello, sweep } from './castlist.ts';
 import { TpmError } from '../skill-sets.ts';
@@ -42,8 +42,9 @@ export async function hello(ctx: Context, options: { model?: string, effort?: st
     `役割: ${ROLES[record.role].label}`,
     `課題の Key: ${subject}`,
     ...painted,
-    // Staff Engineer 担当の席は、課題の担当と並ぶ別の名簿の行（TPM 担当は、この Key で名指す）。
+    // Staff Engineer 担当の席と repo の席は、課題の担当と並ぶ別の名簿の行（この Key で名指される）。
     ...(record.subject === undefined ? [] : [`名簿の Key: ${record.key}`]),
+    ...(isRepoSeat(record) ? [`Tech Lead 担当の席: ${readRole(ctx, subject)?.title ?? `${subject}（名簿に居ない）`}（この席を起こし、依頼書を渡した担当）`] : []),
     `依頼書: ${record.brief ?? '無し（【brief】を待つ）'}`,
     `課題管理の課題: ${record.issue === undefined ? '無し（記録しない）' : `${record.issue}（道具: ${recordingTo(ctx, record.issue)}）`}`,
     ...[issueCopyLine(record)].filter(v => v !== undefined),

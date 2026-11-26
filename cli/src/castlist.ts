@@ -13,7 +13,7 @@ import type * as Castlist from '../gen/castlist-client/dist-types/index.js';
 import { castlistApi, clientConfig, sendOnce, withoutAwsMiddleware } from './clients.ts';
 import type { Context } from './context.ts';
 import { ROLE_NAMES, type RoleName } from './protocol.ts';
-import { readRole } from './roster.ts';
+import { isRepoSeat, readRole } from './roster.ts';
 import { TpmError } from './skill-sets.ts';
 import { envOf } from './env.ts';
 
@@ -282,13 +282,14 @@ export interface Seat {
   role: string
   /** 名簿の Key（席を 1 つに決める。Staff Engineer 担当の席は `<課題の Key>.staff`）。 */
   key?: string
-  /** 見ている課題の Key（Staff Engineer 担当の席だけ）。 */
+  /** 親の課題の Key（Staff Engineer 担当の席と、Tech Lead 担当が起こした repo の席だけ）。 */
   subject?: string
 }
 
 /**
  * 今の周りの席。$ROSTER_KEY があれば名簿の行（無ければ $ROSTER_ROLE）の役割の担当、Auditor は project に 1 つの席。
  * Staff Engineer 担当の席は、名の接頭辞を課題の Key から作り（`ai-33-staff`）、見ている課題の Key を subject に持つ。
+ * Tech Lead 担当が起こした repo の席は、名の接頭辞を名簿の Key から作り（`ai-36-pagetray-swe`）、Tech Lead 担当の課題の Key を subject に持つ。
  * $ROSTER_KEY が無ければ TPM 担当（castlist の hook と guard は、roster が起こした session にしか付かない）。
  */
 export function seatOf(ctx: Context): Seat {
@@ -300,7 +301,9 @@ export function seatOf(ctx: Context): Seat {
   if (role === 'auditor') return { prefix: projectPrefix(ctx.project, 'audit'), role, ...(key === undefined ? {} : { key }) };
   if (key !== undefined && role !== undefined) {
     const subject = record?.subject;
-    return { prefix: seatPrefix(subject ?? key, role), role, key, ...(subject === undefined ? {} : { subject }) };
+    // repo の席は、名簿の Key（<課題の Key>.<名>）から作る（課題の Key から作ると、同じ課題の repo の席がみな同じ名になる）。
+    const from = record !== undefined && isRepoSeat(record) ? key : subject ?? key;
+    return { prefix: seatPrefix(from, role), role, key, ...(subject === undefined ? {} : { subject }) };
   }
   return { prefix: projectPrefix(ctx.project, 'tpm'), role: 'tpm' };
 }
