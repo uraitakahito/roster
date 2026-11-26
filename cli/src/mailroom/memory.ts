@@ -6,9 +6,12 @@ import { MAILROOM_LIMITS, type Counts, type Letter, type Mailroom, type Mailroom
 /** 受け手の名に使える形（NATS の adapter と同じ決まり）。 */
 const RECIPIENT = /^[A-Za-z0-9_-]{1,64}$/;
 
+/** 受け手の名が使えない時の誤り。 */
+const badName = (to: Recipient): TpmError => new TpmError(`受け手の名に使えない字があります（英数字と _ と - を 64 字まで）: ${to}`);
+
 /** 受け手の名を確かめる。 */
 function check(to: Recipient): void {
-  if (!RECIPIENT.test(to)) throw new TpmError(`受け手の名に使えない字があります（英数字と _ と - を 64 字まで）: ${to}`);
+  if (!RECIPIENT.test(to)) throw badName(to);
 }
 
 /** 配る箱の 1 通。deliveries は渡した回数、heldUntil は取り置きの期限（ミリ秒の時刻）。 */
@@ -63,12 +66,7 @@ export class MemoryMailroom implements Mailroom {
   }
 
   put(letter: Letter): Promise<{ duplicate: boolean }> {
-    try {
-      check(letter.to);
-    }
-    catch (e) {
-      return Promise.reject(e);
-    }
+    if (!RECIPIENT.test(letter.to)) return Promise.reject(badName(letter.to));
     const now = this.office.sweep();
     if (this.office.recent.has(letter.id)) return Promise.resolve({ duplicate: true });
     this.office.recent.set(letter.id, now);
@@ -87,13 +85,8 @@ export class MemoryMailroom implements Mailroom {
   }
 
   counts(to: Recipient): Promise<Counts> {
-    let items: Item[];
-    try {
-      items = this.live(to);
-    }
-    catch (e) {
-      return Promise.reject(e);
-    }
+    if (!RECIPIENT.test(to)) return Promise.reject(badName(to));
+    const items = this.live(to);
     return Promise.resolve({ waiting: items.filter(i => i.deliveries === 0).length, held: items.filter(i => i.deliveries > 0).length });
   }
 
