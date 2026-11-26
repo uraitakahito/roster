@@ -6,7 +6,9 @@ import { type DeleteFilesCommandInput, type DeleteFilesCommandOutput } from "./c
 import { type DeletePagesCommandInput, type DeletePagesCommandOutput } from "./commands/DeletePagesCommand";
 import { type GetHealthCommandInput, type GetHealthCommandOutput } from "./commands/GetHealthCommand";
 import { type ListFilesCommandInput, type ListFilesCommandOutput } from "./commands/ListFilesCommand";
+import { type ListMessagesCommandInput, type ListMessagesCommandOutput } from "./commands/ListMessagesCommand";
 import { type ListPagesCommandInput, type ListPagesCommandOutput } from "./commands/ListPagesCommand";
+import { type PutMessageCommandInput, type PutMessageCommandOutput } from "./commands/PutMessageCommand";
 import { type SetReplyStateCommandInput, type SetReplyStateCommandOutput } from "./commands/SetReplyStateCommand";
 import { PagetrayClient } from "./PagetrayClient";
 /**
@@ -61,12 +63,25 @@ export interface Pagetray {
     listFiles(args: ListFilesCommandInput, cb: (err: any, data?: ListFilesCommandOutput) => void): void;
     listFiles(args: ListFilesCommandInput, options: PagetrayRequestOptions, cb: (err: any, data?: ListFilesCommandOutput) => void): void;
     /**
+     * @see {@link ListMessagesCommand}
+     */
+    listMessages(): Promise<ListMessagesCommandOutput>;
+    listMessages(args: ListMessagesCommandInput, options?: PagetrayRequestOptions): Promise<ListMessagesCommandOutput>;
+    listMessages(args: ListMessagesCommandInput, cb: (err: any, data?: ListMessagesCommandOutput) => void): void;
+    listMessages(args: ListMessagesCommandInput, options: PagetrayRequestOptions, cb: (err: any, data?: ListMessagesCommandOutput) => void): void;
+    /**
      * @see {@link ListPagesCommand}
      */
     listPages(): Promise<ListPagesCommandOutput>;
     listPages(args: ListPagesCommandInput, options?: PagetrayRequestOptions): Promise<ListPagesCommandOutput>;
     listPages(args: ListPagesCommandInput, cb: (err: any, data?: ListPagesCommandOutput) => void): void;
     listPages(args: ListPagesCommandInput, options: PagetrayRequestOptions, cb: (err: any, data?: ListPagesCommandOutput) => void): void;
+    /**
+     * @see {@link PutMessageCommand}
+     */
+    putMessage(args: PutMessageCommandInput, options?: PagetrayRequestOptions): Promise<PutMessageCommandOutput>;
+    putMessage(args: PutMessageCommandInput, cb: (err: any, data?: PutMessageCommandOutput) => void): void;
+    putMessage(args: PutMessageCommandInput, options: PagetrayRequestOptions, cb: (err: any, data?: PutMessageCommandOutput) => void): void;
     /**
      * @see {@link SetReplyStateCommand}
      */
@@ -80,6 +95,13 @@ export interface Pagetray {
      * @returns AsyncIterable of {@link ListFilesCommandOutput}.
      */
     paginateListFiles(args?: ListFilesCommandInput, paginationConfig?: Omit<PaginationConfiguration, "client">): Paginator<ListFilesCommandOutput>;
+    /**
+     * @see {@link ListMessagesCommand}
+     * @param args - command input.
+     * @param paginationConfig - optional pagination config.
+     * @returns AsyncIterable of {@link ListMessagesCommandOutput}.
+     */
+    paginateListMessages(args?: ListMessagesCommandInput, paginationConfig?: Omit<PaginationConfiguration, "client">): Paginator<ListMessagesCommandOutput>;
     /**
      * @see {@link ListPagesCommand}
      * @param args - command input.

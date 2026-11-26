@@ -28,11 +28,19 @@ const _L = "Location";
 const _LF = "ListFiles";
 const _LFI = "ListFilesInput";
 const _LFO = "ListFilesOutput";
+const _LM = "ListMessages";
+const _LMI = "ListMessagesInput";
+const _LMO = "ListMessagesOutput";
 const _LP = "ListPages";
 const _LPI = "ListPagesInput";
 const _LPO = "ListPagesOutput";
+const _M = "Message";
+const _Me = "Messages";
 const _NF = "NotFound";
 const _P = "Page";
+const _PM = "PutMessage";
+const _PMI = "PutMessageInput";
+const _PMO = "PutMessageOutput";
 const _PTL = "PayloadTooLarge";
 const _Pa = "Pages";
 const _S = "Sender";
@@ -53,14 +61,18 @@ const _b = "body";
 const _c = "client";
 const _cA = "createdAt";
 const _cT = "contentType";
+const _d = "deliveries";
+const _dA = "deliveredAt";
 const _e = "error";
 const _ex = "ext";
 const _f = "files";
 const _fL = "fieldList";
-const _h = "http";
+const _fr = "from";
+const _h = "heading";
 const _hE = "httpError";
 const _hH = "httpHeader";
 const _hQ = "httpQuery";
+const _ht = "http";
 const _i = "id";
 const _is = "issuer";
 const _k = "kind";
@@ -69,6 +81,7 @@ const _l = "location";
 const _m = "message";
 const _mR = "maxResults";
 const _mT = "mediaType";
+const _me = "messages";
 const _n = "name";
 const _nT = "nextToken";
 const _n_ = "n";
@@ -79,10 +92,12 @@ const _pag = "pages";
 const _q = "q";
 const _r = "role";
 const _rA = "resolvedAt";
+const _rT = "replyTo";
 const _re = "removed";
 const _ref = "ref";
 const _rep = "reply";
 const _s = "smithy.ts.sdk.synthetic.ai.pagetray";
+const _sA = "sentAt";
 const _se = "server";
 const _sen = "sender";
 const _sh = "sha256";
@@ -92,11 +107,15 @@ const _st = "status";
 const _sta = "state";
 const _t = "text/html";
 const _ta = "targets";
+const _te = "text";
 const _ti = "title";
+const _to = "to";
 const _ty = "type";
 const _u = "url";
+const _uA = "updatedAt";
 const _v = "verdict";
 const _ve = "version";
+const _vi = "via";
 const _w = "workspace";
 const _wO = "waitsOn";
 const n0 = "ai.common";
@@ -272,6 +291,16 @@ export var ListFilesOutput$: StaticStructureSchema = [3, n1, _LFO,
   [_f, _nT],
   [() => Files, 0], 1
 ];
+export var ListMessagesInput$: StaticStructureSchema = [3, n1, _LMI,
+  0,
+  [_p, _ke, _to, _fr, _sta, _h, _q, _so, _mR, _nT],
+  [[0, { [_hQ]: _p }], [0, { [_hQ]: _ke }], [0, { [_hQ]: _to }], [0, { [_hQ]: _fr }], [0, { [_hQ]: _sta }], [0, { [_hQ]: _h }], [0, { [_hQ]: _q }], [0, { [_hQ]: _so }], [1, { [_hQ]: _mR }], [0, { [_hQ]: _nT }]]
+];
+export var ListMessagesOutput$: StaticStructureSchema = [3, n1, _LMO,
+  0,
+  [_me, _nT],
+  [() => Messages, 0], 1
+];
 export var ListPagesInput$: StaticStructureSchema = [3, n1, _LPI,
   0,
   [_p, _ke, _k, _r, _w, _q, _rep, _o, _v, _a, _so, _mR, _nT],
@@ -282,10 +311,25 @@ export var ListPagesOutput$: StaticStructureSchema = [3, n1, _LPO,
   [_pag, _nT],
   [() => Pages, 0], 1
 ];
+export var Message$: StaticStructureSchema = [3, n1, _M,
+  0,
+  [_p, _i, _h, _fr, _to, _te, _sA, _sta, _cA, _uA, _ke, _dA, _vi, _d, _rT, _sen],
+  [0, 0, 0, 0, 0, 0, 5, 0, 5, 5, 0, 5, 0, 1, 0, () => Sender$], 10
+];
 export var Page$: StaticStructureSchema = [3, n1, _P,
   0,
   [_p, _ke, _k, _n_, _ti, _r, _w, _cA, _si, _pa, _sen, _aA, _aAn, _wO, _v, _ta],
   [0, 0, 0, 0, 0, 0, 0, 5, 1, 0, () => Sender$, 5, 5, 0, 0, 64 | 0], 10
+];
+export var PutMessageInput$: StaticStructureSchema = [3, n1, _PMI,
+  0,
+  [_p, _i, _h, _fr, _to, _te, _sA, _sta, _aI, _aR, _ke, _dA, _vi, _d, _rT],
+  [[0, 1], [0, 1], 0, 0, 0, 0, 5, 0, [0, { [_hQ]: _aI }], [0, { [_hQ]: _aR }], 0, 5, 0, 1, 0], 8
+];
+export var PutMessageOutput$: StaticStructureSchema = [3, n1, _PMO,
+  0,
+  [_p, _i, _h, _fr, _to, _te, _sA, _sta, _cA, _uA, _st, _ke, _dA, _vi, _d, _rT, _sen],
+  [0, 0, 0, 0, 0, 0, 5, 0, 5, 5, [1, 32], 0, 5, 0, 1, 0, () => Sender$], 11
 ];
 export var Sender$: StaticStructureSchema = [3, n1, _S,
   0,
@@ -310,6 +354,9 @@ export var ValidationExceptionField$: StaticStructureSchema = [3, n2, _VEF,
 var Files: StaticListSchema = [1, n1, _Fil,
   0, () => File$
 ];
+var Messages: StaticListSchema = [1, n1, _Me,
+  0, () => Message$
+];
 var Pages: StaticListSchema = [1, n1, _Pa,
   0, () => Page$
 ];
@@ -319,29 +366,35 @@ var ValidationExceptionFieldList: StaticListSchema = [1, n2, _VEFL,
   0, () => ValidationExceptionField$
 ];
 export var AddReviewMarks$: StaticOperationSchema = [9, n1, _ARM,
-  { [_h]: ["POST", "/api/projects/{project}/keys/{key}/kinds/{kind}/pages/{n}/review", 200] }, () => AddReviewMarksInput$, () => AddReviewMarksOutput$
+  { [_ht]: ["POST", "/api/projects/{project}/keys/{key}/kinds/{kind}/pages/{n}/review", 200] }, () => AddReviewMarksInput$, () => AddReviewMarksOutput$
 ];
 export var CreateFile$: StaticOperationSchema = [9, n1, _CF,
-  { [_h]: ["POST", "/api/projects/{project}/keys/{key}/files", 201] }, () => CreateFileInput$, () => CreateFileOutput$
+  { [_ht]: ["POST", "/api/projects/{project}/keys/{key}/files", 201] }, () => CreateFileInput$, () => CreateFileOutput$
 ];
 export var CreatePage$: StaticOperationSchema = [9, n1, _CP,
-  { [_h]: ["POST", "/api/projects/{project}/keys/{key}/kinds/{kind}/pages", 201] }, () => CreatePageInput$, () => CreatePageOutput$
+  { [_ht]: ["POST", "/api/projects/{project}/keys/{key}/kinds/{kind}/pages", 201] }, () => CreatePageInput$, () => CreatePageOutput$
 ];
 export var DeleteFiles$: StaticOperationSchema = [9, n1, _DF,
-  { [_h]: ["DELETE", "/api/files", 200] }, () => DeleteFilesInput$, () => DeleteFilesOutput$
+  { [_ht]: ["DELETE", "/api/files", 200] }, () => DeleteFilesInput$, () => DeleteFilesOutput$
 ];
 export var DeletePages$: StaticOperationSchema = [9, n1, _DP,
-  { [_h]: ["DELETE", "/api/pages", 200] }, () => DeletePagesInput$, () => DeletePagesOutput$
+  { [_ht]: ["DELETE", "/api/pages", 200] }, () => DeletePagesInput$, () => DeletePagesOutput$
 ];
 export var GetHealth$: StaticOperationSchema = [9, n1, _GH,
-  { [_h]: ["GET", "/healthz", 200] }, () => GetHealthInput$, () => GetHealthOutput$
+  { [_ht]: ["GET", "/healthz", 200] }, () => GetHealthInput$, () => GetHealthOutput$
 ];
 export var ListFiles$: StaticOperationSchema = [9, n1, _LF,
-  { [_h]: ["GET", "/api/files", 200] }, () => ListFilesInput$, () => ListFilesOutput$
+  { [_ht]: ["GET", "/api/files", 200] }, () => ListFilesInput$, () => ListFilesOutput$
+];
+export var ListMessages$: StaticOperationSchema = [9, n1, _LM,
+  { [_ht]: ["GET", "/api/messages", 200] }, () => ListMessagesInput$, () => ListMessagesOutput$
 ];
 export var ListPages$: StaticOperationSchema = [9, n1, _LP,
-  { [_h]: ["GET", "/api/pages", 200] }, () => ListPagesInput$, () => ListPagesOutput$
+  { [_ht]: ["GET", "/api/pages", 200] }, () => ListPagesInput$, () => ListPagesOutput$
+];
+export var PutMessage$: StaticOperationSchema = [9, n1, _PM,
+  { [_ht]: ["PUT", "/api/projects/{project}/messages/{id}", 200] }, () => PutMessageInput$, () => PutMessageOutput$
 ];
 export var SetReplyState$: StaticOperationSchema = [9, n1, _SRS,
-  { [_h]: ["PUT", "/api/projects/{project}/keys/{key}/kinds/{kind}/pages/{n}/reply", 200] }, () => SetReplyStateInput$, () => SetReplyStateOutput$
+  { [_ht]: ["PUT", "/api/projects/{project}/keys/{key}/kinds/{kind}/pages/{n}/reply", 200] }, () => SetReplyStateInput$, () => SetReplyStateOutput$
 ];

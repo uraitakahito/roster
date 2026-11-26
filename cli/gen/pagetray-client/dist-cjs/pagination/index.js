@@ -17,4 +17,5 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // smithy-typescript generated code
 __exportStar(require("./Interfaces"), exports);
 __exportStar(require("./ListFilesPaginator"), exports);
+__exportStar(require("./ListMessagesPaginator"), exports);
 __exportStar(require("./ListPagesPaginator"), exports);

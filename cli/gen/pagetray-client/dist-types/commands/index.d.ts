@@ -5,5 +5,7 @@ export * from "./DeleteFilesCommand";
 export * from "./DeletePagesCommand";
 export * from "./GetHealthCommand";
 export * from "./ListFilesCommand";
+export * from "./ListMessagesCommand";
 export * from "./ListPagesCommand";
+export * from "./PutMessageCommand";
 export * from "./SetReplyStateCommand";

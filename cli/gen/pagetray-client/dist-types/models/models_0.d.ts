@@ -677,6 +677,160 @@ export interface ListFilesOutput {
 /**
  * @public
  */
+export interface ListMessagesInput {
+    /**
+     * URL の 1 段になる字（project・key）: 英数字と `.`・`_`・`-` で 255 字まで。
+     * @public
+     */
+    project?: string | undefined;
+    /**
+     * URL の 1 段になる字（project・key）: 英数字と `.`・`_`・`-` で 255 字まで。
+     * @public
+     */
+    key?: string | undefined;
+    /**
+     * 受け手の名（同じ値の物）。
+     * @public
+     */
+    to?: string | undefined;
+    /**
+     * 送り手の名（同じ値の物）。
+     * @public
+     */
+    from?: string | undefined;
+    /**
+     * メッセージの状態: `waiting`（まだ届いていない）・`delivered`（届いた）・`undeliverable`（渡せない）・`expired`（期限切れ）・
+     * `carried`（ほかの道具で運んだ）。
+     * @public
+     */
+    state?: string | undefined;
+    /**
+     * メッセージの見出しの名: 英小文字で始まり、英小文字・数字・`-` で 32 字まで（名の一覧は持たない）。
+     * @public
+     */
+    heading?: string | undefined;
+    /**
+     * 本文と `from`・`to` に含まれる字。
+     * @public
+     */
+    q?: string | undefined;
+    /**
+     * `-sentAt`（新しい順。既定）か `sentAt`（古い順）。同じ時刻は置いた順（新しい順なら後に置いた物が先）。
+     * @public
+     */
+    sort?: string | undefined;
+    /**
+     * 1 頁の数（既定 100）。
+     * @public
+     */
+    maxResults?: number | undefined;
+    /**
+     * 前の答えの `nextToken`。
+     * @public
+     */
+    nextToken?: string | undefined;
+}
+/**
+ * 一覧のメッセージの記録。
+ * @public
+ */
+export interface Message {
+    /**
+     * URL の 1 段になる字（project・key）: 英数字と `.`・`_`・`-` で 255 字まで。
+     * @public
+     */
+    project: string | undefined;
+    /**
+     * メッセージの id: 英数字と `.`・`_`・`-` で 128 字まで。
+     * @public
+     */
+    id: string | undefined;
+    /**
+     * Key（課題の名）。書いて置いた時だけ。
+     * @public
+     */
+    key?: string | undefined;
+    /**
+     * メッセージの見出しの名。
+     * @public
+     */
+    heading: string | undefined;
+    /**
+     * 送り手の名。
+     * @public
+     */
+    from: string | undefined;
+    /**
+     * 受け手の名。
+     * @public
+     */
+    to: string | undefined;
+    /**
+     * 本文（字のまま）。
+     * @public
+     */
+    text: string | undefined;
+    /**
+     * 送った時刻。
+     * @public
+     */
+    sentAt: Date | undefined;
+    /**
+     * メッセージの状態: `waiting`（まだ届いていない）・`delivered`（届いた）・`undeliverable`（渡せない）・`expired`（期限切れ）・
+     * `carried`（ほかの道具で運んだ）。
+     * @public
+     */
+    state: string | undefined;
+    /**
+     * 届いた時刻（初めに書かれた物）。まだ無ければ無い。
+     * @public
+     */
+    deliveredAt?: Date | undefined;
+    /**
+     * どの時に渡したかの名。書いていなければ無い。
+     * @public
+     */
+    via?: string | undefined;
+    /**
+     * 受け手に本文を出した回数（呼ぶ側が数えて書く）。書いていなければ無い。
+     * @public
+     */
+    deliveries?: number | undefined;
+    /**
+     * 返事の先のメッセージの id。書いて置いた時だけ。
+     * @public
+     */
+    replyTo?: string | undefined;
+    /**
+     * pagetray が初めて受けた時刻。
+     * @public
+     */
+    createdAt: Date | undefined;
+    /**
+     * 最後に書き足された時刻（置いただけなら `createdAt` と同じ）。
+     * @public
+     */
+    updatedAt: Date | undefined;
+    /**
+     * 送り手（castlist で確かめた物）。「送った側」の書き込み（`waiting`・`carried`）に、付随する id を書いた時だけ。
+     * @public
+     */
+    sender?: Sender | undefined;
+}
+/**
+ * @public
+ */
+export interface ListMessagesOutput {
+    messages: Message[] | undefined;
+    /**
+     * 次の頁の印。終わりなら無い。
+     * @public
+     */
+    nextToken?: string | undefined;
+}
+/**
+ * @public
+ */
 export interface ListPagesInput {
     /**
      * URL の 1 段になる字（project・key）: 英数字と `.`・`_`・`-` で 255 字まで。
@@ -840,6 +994,178 @@ export interface ListPagesOutput {
      * @public
      */
     nextToken?: string | undefined;
+}
+/**
+ * @public
+ */
+export interface PutMessageInput {
+    /**
+     * 状態の folder の名（ページの project と同じ）。`api`・`.`・`..` は置けない（server が 400）。
+     * @public
+     */
+    project: string | undefined;
+    /**
+     * メッセージの id（呼ぶ側が付ける。project の中で 1 つ）。`.`・`..` は置けない（server が 400）。
+     * @public
+     */
+    id: string | undefined;
+    /**
+     * 付随する id を出した物（`actorRef` と組。片方だけは 400）。
+     * @public
+     */
+    actorIssuer?: string | undefined;
+    /**
+     * 付随する id（`種類:値`。`actorIssuer` と組。片方だけは 400）。
+     * @public
+     */
+    actorRef?: string | undefined;
+    /**
+     * Key（課題の名）。`.`・`..` は置けない（server が 400）。
+     * @public
+     */
+    key?: string | undefined;
+    /**
+     * メッセージの見出しの名。
+     * @public
+     */
+    heading: string | undefined;
+    /**
+     * 送り手の名。
+     * @public
+     */
+    from: string | undefined;
+    /**
+     * 受け手の名。
+     * @public
+     */
+    to: string | undefined;
+    /**
+     * 本文。字のまま持つ（HTML として解釈しない）。
+     * @public
+     */
+    text: string | undefined;
+    /**
+     * 送った時刻（UTC・ミリ秒まで）。
+     * @public
+     */
+    sentAt: Date | undefined;
+    /**
+     * 状態。書き足す時は、今の状態より強い時だけ替わる。
+     * @public
+     */
+    state: string | undefined;
+    /**
+     * 届いた時刻（UTC・ミリ秒まで）。まだ無い時だけ入る。
+     * @public
+     */
+    deliveredAt?: Date | undefined;
+    /**
+     * どの時に渡したかの名。
+     * @public
+     */
+    via?: string | undefined;
+    /**
+     * 受け手に本文を出した回数（呼ぶ側が数えて書く）。書き足す時は、大きい方を保つ。
+     * @public
+     */
+    deliveries?: number | undefined;
+    /**
+     * 返事の先のメッセージの id。
+     * @public
+     */
+    replyTo?: string | undefined;
+}
+/**
+ * メッセージの記録の欄。
+ * @public
+ */
+export interface PutMessageOutput {
+    /**
+     * URL の 1 段になる字（project・key）: 英数字と `.`・`_`・`-` で 255 字まで。
+     * @public
+     */
+    project: string | undefined;
+    /**
+     * メッセージの id: 英数字と `.`・`_`・`-` で 128 字まで。
+     * @public
+     */
+    id: string | undefined;
+    /**
+     * Key（課題の名）。書いて置いた時だけ。
+     * @public
+     */
+    key?: string | undefined;
+    /**
+     * メッセージの見出しの名。
+     * @public
+     */
+    heading: string | undefined;
+    /**
+     * 送り手の名。
+     * @public
+     */
+    from: string | undefined;
+    /**
+     * 受け手の名。
+     * @public
+     */
+    to: string | undefined;
+    /**
+     * 本文（字のまま）。
+     * @public
+     */
+    text: string | undefined;
+    /**
+     * 送った時刻。
+     * @public
+     */
+    sentAt: Date | undefined;
+    /**
+     * メッセージの状態: `waiting`（まだ届いていない）・`delivered`（届いた）・`undeliverable`（渡せない）・`expired`（期限切れ）・
+     * `carried`（ほかの道具で運んだ）。
+     * @public
+     */
+    state: string | undefined;
+    /**
+     * 届いた時刻（初めに書かれた物）。まだ無ければ無い。
+     * @public
+     */
+    deliveredAt?: Date | undefined;
+    /**
+     * どの時に渡したかの名。書いていなければ無い。
+     * @public
+     */
+    via?: string | undefined;
+    /**
+     * 受け手に本文を出した回数（呼ぶ側が数えて書く）。書いていなければ無い。
+     * @public
+     */
+    deliveries?: number | undefined;
+    /**
+     * 返事の先のメッセージの id。書いて置いた時だけ。
+     * @public
+     */
+    replyTo?: string | undefined;
+    /**
+     * pagetray が初めて受けた時刻。
+     * @public
+     */
+    createdAt: Date | undefined;
+    /**
+     * 最後に書き足された時刻（置いただけなら `createdAt` と同じ）。
+     * @public
+     */
+    updatedAt: Date | undefined;
+    /**
+     * 送り手（castlist で確かめた物）。「送った側」の書き込み（`waiting`・`carried`）に、付随する id を書いた時だけ。
+     * @public
+     */
+    sender?: Sender | undefined;
+    /**
+     * 新しく作れば 201、もうある id に書き足せば 200。
+     * @public
+     */
+    status: number | undefined;
 }
 /**
  * @public
