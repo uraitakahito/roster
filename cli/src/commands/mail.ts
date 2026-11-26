@@ -11,7 +11,7 @@ import { allRoles, requireTpmSide, type RoleRecord } from '../roster.ts';
 import { envOf } from '../env.ts';
 import { selfParty } from '../party.ts';
 import { copyMessageRecord } from './message-record.ts';
-import type { Sent } from './messages.ts';
+import { SENT_LABEL, type Sent } from './messages.ts';
 
 /** hook の入力（stdin の JSON）のうち、読む欄。 */
 export interface HookInput {
@@ -543,11 +543,32 @@ function nameOfRole(role: Pick<RoleRecord, 'key' | 'launch'>): Recipient | undef
   }
 }
 
+/** 置かれてから、送った記録に無いのを「抜け」と見るまでの間（ミリ秒。送る命令は、置いたすぐ後に記録を書く）。 */
+const UNLOGGED_AFTER_MS = 60_000;
+
+/**
+ * 配りの口の 1 通から、送った記録の行を作り直す（置く時に持たせた行。messages.ts の deliver の SENT_LABEL）。
+ * 行を持たない物（前の版が置いた物）・読めない物は undefined（足さない）。
+ */
+function unlogged(m: Stored): Sent | undefined {
+  const raw = m.labels?.[SENT_LABEL];
+  if (raw === undefined) return undefined;
+  try {
+    const line = JSON.parse(raw) as Omit<Sent, 'text' | 'id'>;
+    return typeof line.at === 'string' && typeof line.key === 'string' && typeof line.heading === 'string' ? { ...line, text: m.text, id: m.id, recovered: true } : undefined;
+  }
+  catch {
+    return undefined;
+  }
+}
+
 /**
  * TPM 担当の側の片付け（TPM 担当が名乗る時と、送る命令を打つ時に呼ぶ）。命令の結果に出す行を返す。
  * - 渡し直しの上限を超えた物を引いて「渡せない」と記録し、置き場に写す（T2）。
  * - 届かないまま期限で消えた物（記録の箱にあって・配る箱に無く・渡した記録が無く・置いてから期限を過ぎた物）を「期限切れ」と記録し、写す（T3）。
  *   判じるのは、写しの遅れが 0 の時だけ。名乗る時（sweep）はいつも、送る命令の時は EXPIRED_CHECK_EVERY_MS に 1 度。
+ * - 同じ時に、置かれたのに送った記録（log.jsonl）に無い物（置いた直後に送る命令が落ちた）を、置いた物が持つ行から足し、置き場にも写す。
+ *   置かれてから UNLOGGED_AFTER_MS の内の物は、まだ書いている途中かもしれないので足さない。
  * - sweep（名乗る時）: 名簿に無く、名乗りも効いていない受け手の取り口を掃き、残っていた物を「期限切れ（席を閉じた）」と記録する（N1）。
  * どの行も、1 通につき 1 度だけ出る。配りの口が誤りの時は、何も出さずに終わる（呼んだ命令を止めない）。
  */
@@ -574,8 +595,17 @@ export async function tidyMail(ctx: Context, options: { sweep: boolean }): Promi
       // 命令の結果に見せた物（output。渡す hook を持たない session に、検査か roster inbox が出した）も、受け手は読んでいるので、期限切れに数えない
       // （「要る中身なら、送り直す」と勧めると、読んで扱った物を 2 度送ることになる）。
       const handed = new Set(deliveredLines(ctx).map(l => l.id));
+      const logged = new Set(ctx.state.lines<Sent>('log.jsonl').map(l => l.id));
       for (const m of await room.record(since)) {
         if (Date.parse(m.at) + MAILROOM_LIMITS.undeliveredTtlMs <= now && !outstanding.has(m.id) && !handed.has(m.id)) keep('expired', m);
+        // 置かれたのに、送った記録（log.jsonl）に無い物: 置いた直後に送る命令が落ちた。置いた物が持つ行から足す。
+        const lost = logged.has(m.id) || Date.parse(m.at) + UNLOGGED_AFTER_MS > now ? undefined : unlogged(m);
+        if (lost !== undefined) {
+          ctx.state.append('log.jsonl', lost);
+          logged.add(m.id);
+          copyMessageRecord(ctx, lost);
+          out.push(`送った記録の抜けを足した: 【${lost.heading}】${lost.from} → ${lost.recipient?.key ?? m.to}（${lost.at} に送った。id ${m.id}。送る命令が、置いた後に記録を書けずに終わっていた: 落ちたか、置けたと分からずに止まった）`);
+        }
       }
       ctx.state.write(EXPIRED_CHECK_FILE, { at: new Date(now).toISOString() });
     }

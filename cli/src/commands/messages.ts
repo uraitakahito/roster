@@ -65,9 +65,14 @@ export interface Sent {
   carrier?: 'nats'
   /** NATS で運んだ行: 配りの受け手の名（受け手の担当の組から作った字）。 */
   box?: Recipient
+  /** 置いた直後に送る命令が落ちて書けなかった行を、TPM 担当の側の片付けが、置いた物から足した行（commands/mail.ts の tidyMail）。 */
+  recovered?: true
   /** 【done】の行だけ: 担当が --briefs で名指して済ませた依頼書の URL（渡された時の字のまま）。無ければ、見ていた依頼書のいちばん古い 1 つを済ませる。 */
   briefs?: string[]
 }
+
+/** 置く物に持たせる、送った記録の行（本文と id のほか。JSON の字）の欄の名。 */
+export const SENT_LABEL = 'sent';
 
 /** 同じメッセージの 2 度送りとみなす間（秒）。 */
 const REPEAT_SECONDS = 30;
@@ -163,16 +168,12 @@ async function deliver(ctx: Context, id: HeadingId, key: string, from: string, t
   // 置く物に、置き場の記録に要る欄を持たせる（受け手の側が、この session の log.jsonl を読まずに、同じ値の記録を書き足せるように。
   // 受け手が待っていると、こちらが log.jsonl に書く前に、受け手の書き足しが置き場に先に着くことがある）。
   const at = ctx.now().toISOString();
-  const labels = { key, heading: id, from: selfParty(ctx.env).key, at, to: recipient.key };
-  const sentId = await post(ctx, box, from, text, replyTo, labels);
-  const sent: Sent = {
+  const line: Omit<Sent, 'text' | 'id'> = {
     at,
     key,
     heading: id,
     from,
     to,
-    text,
-    id: sentId,
     ...(replyTo === undefined ? {} : { replyTo }),
     ...extra,
     sender: selfParty(ctx.env),
@@ -180,6 +181,11 @@ async function deliver(ctx: Context, id: HeadingId, key: string, from: string, t
     carrier: 'nats',
     box,
   };
+  // 送った記録の行（本文と id のほか）も持たせる: 置いた直後にこの命令が落ちて log.jsonl に書けなかった時に、
+  // TPM 担当の側の片付け（commands/mail.ts の tidyMail）が、同じ行を足せるように。
+  const labels = { key, heading: id, from: selfParty(ctx.env).key, at, to: recipient.key, [SENT_LABEL]: JSON.stringify(line) };
+  const sentId = await post(ctx, box, from, text, replyTo, labels);
+  const sent: Sent = { ...line, text, id: sentId };
   ctx.state.append('log.jsonl', sent);
   copyMessageRecord(ctx, sent);
   return `送った: 【${id}】→ ${to}（${SENT_NOTE}）`;
@@ -511,7 +517,9 @@ function openBriefs(role: RoleRecord, address: string, log: Sent[], seenAt: Seen
   // 前の版で起こした担当（名簿に firstBrief の欄が無い）の最初の依頼書は数えない（止めすぎるより、見逃す側に倒す）。
   const first = role.firstBrief;
   let open: OpenBrief[] = first === undefined ? [] : [{ url: first, ...(role.helloAt === undefined ? {} : { seen: role.helloAt }) }];
-  for (const l of log) {
+  // 送った時刻の順に読む（同じ時刻は、file の順のまま）。後から足した行（置いた直後に落ちた送る命令の行。commands/mail.ts の tidyMail）は
+  // file の末尾に入るので、file の順に読むと、足した【dismiss】・【brief】が、時刻と違う所で効く。
+  for (const l of [...log].sort((a, b) => a.at.localeCompare(b.at))) {
     // 課題の担当がじかに送ったレビューの頼み（【ask-review】。記録の Key は送った課題の担当）も、Staff Engineer 担当の席の依頼書に積む。
     if (l.peer === true && l.heading === 'ask-review' && l.to === address) {
       const at = seen(l);

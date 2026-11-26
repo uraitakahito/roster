@@ -23,7 +23,9 @@ describe('送る所（いつも配りの口に置く）', () => {
     const sent = log(w).at(-1);
     expect(sent).toMatchObject({ heading: 'notify', from: FROM_TPM, to: 'file:1', text: '【notify】A で進める', carrier: 'nats', box: 't-x7k2', sender: { key: 'tpm' }, recipient: { key: 't-x7k2' } });
     expect(sent?.id).toMatch(UUID);
-    expect(left(w, 't-x7k2')).toEqual([{ id: sent?.id, from: FROM_TPM, to: 't-x7k2', text: '【notify】A で進める', at: '2026-11-20T12:00:00.000Z', labels: { key: 't-x7k2', heading: 'notify', from: 'tpm', to: 't-x7k2', at: '2026-11-20T12:00:00.000Z' } }]);
+    expect(left(w, 't-x7k2')).toEqual([{ id: sent?.id, from: FROM_TPM, to: 't-x7k2', text: '【notify】A で進める', at: '2026-11-20T12:00:00.000Z', labels: { key: 't-x7k2', heading: 'notify', from: 'tpm', to: 't-x7k2', at: '2026-11-20T12:00:00.000Z', sent: expect.any(String) as string } }]);
+    // 置く物は、送った記録の行（本文と id のほか）も持つ（置いた直後に落ちた時に、TPM 担当の側の片付けが足す）。
+    expect({ ...JSON.parse(left(w, 't-x7k2')[0]?.labels?.sent ?? '{}') as object, text: sent?.text, id: sent?.id }).toEqual(sent);
     await new Promise(resolve => setTimeout(resolve, 0));
     expect([...w.store.messages.values()].at(-1)).toMatchObject({ id: sent?.id, state: 'waiting', from: 'tpm', to: 't-x7k2' });
   });
