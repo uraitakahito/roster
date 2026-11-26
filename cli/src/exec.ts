@@ -18,7 +18,7 @@ export interface ExecOptions {
 /** 外の命令を打つ関数の形。 */
 export type Exec = (cmd: string, args: string[], options?: ExecOptions) => ExecResult;
 
-/** 出力の上限（バイト）。Node の既定の 1 MiB では、cmux の受信箱の 1,000 件（本文つきで 1 MiB を超える）が読めない。 */
+/** 出力の上限（バイト）。Node の既定の 1 MiB より大きくしてある（前の版で、cmux の受信箱の 1,000 件（本文つきで 1 MiB を超える）が読めなかった。今は、cmux の受信箱を読まない）。 */
 const MAX_OUTPUT = 64 * 1024 * 1024;
 
 /** 命令を打ち、終わるまで待つ。命令が無いなど、起こせなかったときは status 127。 */

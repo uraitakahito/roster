@@ -18,7 +18,8 @@ TPM 担当が書く依頼書には、その課題だけのことを書く（ひ�
 |---|---|---|
 | 役割 | 誰が何を受け持つか | `skill-sets/` の `SKILL.md` |
 | 決まり | 見出し・順番・記録・名簿 | `protocol.md` の文と、`cli/src/protocol.ts`・`cli/src/roster.ts`・`cli/src/commands/` |
-| 連携の道具 | メッセージを送る・担当を起こす・状態を出す | `cli/src/transport/`（`cmux`・試験用の `file`） |
+| 連携の道具 | 担当を起こす・居場所の題と状態を出す（メッセージは運ばない） | `cli/src/transport/`（`cmux`・試験用の `file`） |
+| メッセージキュー | 担当どうしのメッセージを預かり、受け手ごとに配る | `cli/src/mailroom/`（`nats`・試験用の `memory`） |
 | 課題管理の道具 | 課題を読む・課題に記録を書く・課題を閉じる | `cli/src/tracker/`（`jira`・`github`・`none`） |
 | guard | 共有の環境と、道具の直打ちと、担当が置き場のページを消す要求と、読むだけの担当（Auditor・Staff Engineer 担当）が repo・設定・記録を変えることと、Audit の席を起こす命令と、pattern で process に合図を送る命令を止める | `cli/src/guard.ts`（Claude Code の hook から呼ばれる） |
 | バナー | 通知のバナーを、居場所の役割 × きっかけで出すか消すか（[設定](/configuration/#通知のバナー任意)） | `cli/src/banner.ts`・`cli/src/commands/banner.ts`（cmux の通知の hook から呼ばれる） |
@@ -27,6 +28,7 @@ TPM 担当が書く依頼書には、その課題だけのことを書く（ひ�
 flowchart TB
   R["役割（SKILL.md）"] -->|"roster report done …"| P["決まり（roster の命令）"]
   P --> T["連携の道具<br/>cmux"]
+  P --> M["メッセージキュー<br/>NATS JetStream"]
   P --> K["課題管理の道具<br/>Jira・GitHub の Issue・なし"]
   R -.->|"shell の命令"| G["guard（roster guard）"]
   G -.->|"通す／止める"| E["環境（container・サーバー）"]
@@ -42,14 +44,14 @@ flowchart TB
 | `roles/<Key>.jsonc` | 名簿。課題の Key → 役割・居場所の宛先・依頼書・課題管理の課題。Staff Engineer 担当の席は、課題の担当と並べるために名簿の Key を `<課題の Key>.staff` にし、見ている課題の Key を `subject` に持つ |
 | `reviews/<番号>.jsonc` | レビューの頼み 1 件（下の「Staff Engineer 担当の席」）。課題の Key・見る物・頼んだ担当と時刻・渡した依頼書・判定・レビューのページ・返った時刻・TPM 担当に上げた時刻。レビューを 1 度も頼んでいない project には無い |
 | `approvals/<環境>.jsonc` | Product Manager の承認と期限 |
-| `log.jsonl`・`infra.jsonl` | 送ったメッセージ（時刻・Key・見出し・本文・返事の先・送り手と届く担当。前の版の行には、送った後 2 秒の内に届いたかの `delivered` もある。今の版は書かず、見た時刻は `cli/src/seen.ts` の口が `deliveries.jsonl`・`shown/`・`returned.jsonl` から引く）と、`roster infra run` で打った命令の記録 |
+| `log.jsonl`・`infra.jsonl` | 送ったメッセージ（時刻・Key・見出し・本文・返事の先・送り手と届く担当。前の版の行には、送った後 2 秒の内に届いたかの `delivered` もある。今の版は書かず、運んだ道 `carrier: "nats"` と受け手の名を書く。見た時刻は `cli/src/seen.ts` の口が、手元の渡した記録 `delivered.jsonl` から引く。運んだ道の無い古い行は、`deliveries.jsonl`・`shown/`・`returned.jsonl` から引く）と、`roster infra run` で打った命令の記録 |
 | `message-records.jsonl` | 送った記録を置き場に写せなかった回と、送り手を付けずに置いた回（時刻・メッセージの id・訳の短い字。後の回には `placed` の欄が付く。下の「[ページの置き場](#ページの置き場)」の「送った記録の写し」）。写せた時は書かない。1 度も写しそこねていない project には無い |
-| `deliveries.jsonl` | メッセージの送った・届いた・読んだ時刻（連携の道具が覚えている物の写し）。cmux は新しい 1,000 件より古い物を捨てるので、`roster close` で居場所を閉じる前と、TPM 担当が `roster hello` を打った時に写す。変わった時だけ 1 行足すので、同じ id の行は後ろが新しい |
+| `deliveries.jsonl` | 前の版の記録（もう増えない。読むだけ）。前の版で cmux が運んだメッセージの、送った・届いた・読んだ時刻の写し。見た時刻の口が、古い行（運んだ道の無い行）の届いた時刻に使う。同じ id の行は後ろが新しい。前の版を使っていない project には無い |
 | `tracker.jsonl` | `roster` が課題管理に書いた物（コメント・済み）。時刻・打った担当・課題・記録の種類・通ったか。課題管理の履歴は人も担当も同じ account なので、`roster` の手かどうかはここで見分ける |
 | `guard.jsonl`・`gate.jsonl` | guard が止めた命令（頭の 300 字と訳）と、入口の検査が送る・置くのを止めた回（読んでいないメッセージ・merge していない PR・読めない PR・同じメッセージの 2 度送り・TPM 担当が送って済んでいない物・前の監査の文脈が残ったまま始めようとした監査） |
 | `audits.jsonl` | 監査線の記録（下の「Auditor の席」）。Auditor の席を起こした・新しい文脈になった（席を起こした時と `/clear` の時）・監査を始めた・報告した・決定を渡した・Auditor の置いたページを消した、を 1 行ずつ。Auditor の席を 1 度も起こしていない project には無い |
 | `waits.jsonl` | 状態 `wait` の移り変わり（`waits/<宛先>.jsonc` は最後の 1 つだけ） |
-| `shown/<宛先>.jsonc` | 居場所に見せたメッセージの id と、初めて見せた時刻（`roster inbox` と、送る前の検査が見せた物。`roster hello` は未読を出さないので、入らない。新しい 200 件）。送る前の検査は、ここに無いメッセージがあれば 1 度止まる。TPM 担当が送って済んでいない物の検査と時系列のページは、この時刻を「担当がメッセージを見た時」に使う（見た時刻の口 `cli/src/seen.ts`） |
+| `shown/<宛先>.jsonc` | 前の版の記録（もう書かない。読むだけ）。前の版で、`roster inbox` と送る前の検査が居場所に見せたメッセージの id と、初めて見せた時刻。見た時刻の口（`cli/src/seen.ts`）が、古い行（運んだ道の無い行）の「担当がメッセージを見た時」に使う。今の版が見せた物は、`delivered.jsonl` の `output` の行と `mail/passed/` に残る（下の「[メッセージを NATS で配る道](#メッセージを-nats-で配る道)」） |
 | `incidents/<番号>.jsonc` | 台帳。思わぬ出来事（信頼性・安全性・効率性が落ちた時）の 1 件 1 ファイル。書いた担当・種類・起きた事実・tag・扱い（未決・振った・調べない・済み）と、結んだ振り先・PR |
 | `waits/<宛先>.jsonc` | 居場所が最後に打った `roster wait` の種類と時刻。バナーの hook が「この回に `roster wait pm` を打ったか」を見る |
 | `sessions/<session の id>.jsonc`・`launches/<起こしの id>.jsonc` | castlist に登録した session の本当の id と名・稼働中か・送った出来事の番号・最後に送った見た model と effort（[アクターの台帳](#アクターの台帳castlist)）と、起こし 1 回の session の並び。castlist を設定した project にだけある |
@@ -80,11 +82,11 @@ flowchart TB
   - 置き場が `.pagetray-version` より古い版で、呼ぶ操作を持たない時は、置き場に頼む命令はどれも「置き場が、この roster の呼ぶ操作を持たない」で止まる（[運用](/operations/#版を上げる)の 4）。
   - `roster ask pm` で送っていないページは、状態を持たない（印は付かない）。
 - **送った記録の写し**: `roster` は、メッセージを送るたびに、送った記録（`log.jsonl` の 1 行）を置き場にも 1 件置く（pagetray 1.1.0 から）。Product Manager は、一覧の画面 `http://127.0.0.1:8801/messages` で、誰が誰に何を送ったかを見る。写すのは、Key・見出し・送り手の名と受け手の名（下）・本文（8,000 字を超える時は、頭の 7,990 字に「…（長いので切った）」を付ける）・送った時刻・返事の先の id。castlist の設定と session の id があれば、ページを置く時と同じ送り手の付随する id も付ける。
-  - 置き場の記録の送り手・受け手の名（`from`・`to`）は、担当の Key（人が読む名。TPM 担当は `tpm`）。配りの受け手の名（Key と起こした回の組。NATS に替える段で使う）とは別。置き場は初めの値から替えないので、替わる居場所の題では書かない（送り手の組の無い前の版の行だけ居場所の題、届く担当の分からない行は宛先の字。200 字を超える名は切る）。
-  - 状態は、今は `carried`（ほかの道具で運んだ）だけ。メッセージを運ぶのが cmux の間は、届いたかを置き場に書かない（届いた時刻は、今までどおり `deliveries.jsonl`）。
+  - 置き場の記録の送り手・受け手の名（`from`・`to`）は、担当の Key（人が読む名。TPM 担当は `tpm`）。配りの受け手の名（Key と起こした回の組。下の「[メッセージを NATS で配る道](#メッセージを-nats-で配る道)」）とは別。置き場は初めの値から替えないので、替わる居場所の題では書かない（送り手の組の無い前の版の行だけ居場所の題、届く担当の分からない行は宛先の字。200 字を超える名は切る）。
+  - 状態は、送った時は `waiting`（届くのを待っている）。受け手の hook が渡すと `delivered`、届かないまま終わると `undeliverable`・`expired` になる（下の「[メッセージを NATS で配る道](#メッセージを-nats-で配る道)」）。`carried`（ほかの道具で運んだ）は、前の版で cmux が運んだ行の状態で、届いたかは置き場に書いていない。
   - **写せなくても、送りは止めない**。置き場が応えない・古い版・形の誤りのどれでも、送った事と `log.jsonl` は変わらず、命令の出力にも何も出ない。写せなかった事だけが、状態の folder の `message-records.jsonl` に 1 行残る。後から写し直す命令は無い。
   - 置き場が送り手を castlist に聞けない（503）・castlist に登録が無いと断った時は、送り手の付随する id を外して 1 度だけ置き直す（送り手が空の記録になる）。置けたら、その事を `message-records.jsonl` に `placed` の欄を付けて残す。
-  - 置き場が答えない時は、送る命令の終わりが 2 秒（置き直しが入ると長くて 4 秒）遅れる。session の始めの hook の命令（`roster returned check`）も、届け違いを返した時だけ、同じだけ遅れる。
+  - 置き場が答えない時は、送る命令の終わりが 2 秒（置き直しが入ると長くて 4 秒）遅れる。
 - **レビューの印**: 置き場は、返事待ちの相手（Product Manager・レビューの席・TPM 担当）と、レビューの判定・見た物も持つ。TPM 担当を通らないレビューのやりとりを、Product Manager と TPM 担当が一覧の UI で追うための物。書くのは `roster` の命令で、担当は手で書かない。置き場に写すのは、判定の語・見た物の URL・時刻だけ。
   - `roster ask review` と、Staff Engineer 担当の席の起こし直し（`roster ask review`・`roster assign --role staff-engineer`）が、依頼書に見る物（置き場のページは path、PR は URL）を書いて「レビュー待ち」にする。起こし直しで置き換えた前の依頼書は、返っていない頼みがほかに無ければ待ちを外す。
   - `roster report review` が、レビューのページに判定と、済ませた頼みの見る物をみな書き、依頼書を「レビュー済み」にする。一覧の UI は、レビューの行に判定の印と「見た物:」の link、見られたページの行に「レビュー: review-N 判定」を出す。
@@ -214,25 +216,25 @@ sequenceDiagram
 
 メッセージを送る命令は、送る前に次を見る（`cli/src/commands/messages.ts` の `assertRead`・`assertMerged`・`assertNotRepeat`・`assertSettled`）。どれも、課題への記録や課題の写しを書く前に見るので、止まった回は何も残さない。
 
-- **読んでいないメッセージ**: 自分宛てでまだ届いていないメッセージ（相手が送った時、こちらが手を動かしていた物）のうち、まだ見せていない物があれば、それを出して 1 度止まる。同じ命令を打ち直すと送る。相手のメッセージを読む前に次を送る行き違い（同じ問いを 2 度送る・答えを待たずに【done】を送る）を減らすため。自分が送ってまだ相手に届いていない物は数えない（cmux は、自分の受信箱の「まだ届いていない物」に、それも返す。送った記録の送り手で見分ける）。TPM 担当は、送る相手の担当から来た物だけを見る（ほかの担当のメッセージでは止まらない）。`roster inbox` で見た物では止まらない。送った後で相手が動いた行き違いは防げない。`roster page put` も、確認・提案・計画・結果・レビューのページ（`--kind confirm|proposal|plan|result|review`）を置く前に同じ検査をする（相手の答えを読む前に、古い前提のページを置かないため。`cli/src/commands/page.ts` の `assertReadBeforePut`）。担当は TPM 担当から来た物を、TPM 担当は `--key` の担当から来た物を見る。依頼書・課題の写し・時系列・監査のページは止めない。
+- **読んでいないメッセージ**: 自分宛てで、メッセージキュー（NATS）にまだ残っているメッセージ（相手が送った時、こちらが手を動かしていて、まだ渡っていない物）があれば、1 度止まる。本文は、止めた直後に hook が渡す（渡す hook を持たない session では、命令の結果に出る）。読んでから同じ命令を打ち直すと送る（細かい決まりは、下の「[メッセージを NATS で配る道](#メッセージを-nats-で配る道)」の「送る前の検査」）。相手のメッセージを読む前に次を送る行き違い（同じ問いを 2 度送る・答えを待たずに【done】を送る）を減らすため。TPM 担当は、送る相手の担当から来た物だけを見る（ほかの担当のメッセージでは止まらない）。送った後で相手が動いた行き違いは防げない。`roster page put` も、確認・提案・計画・結果・レビューのページ（`--kind confirm|proposal|plan|result|review`）を置く前に同じ検査をする（相手の答えを読む前に、古い前提のページを置かないため。`cli/src/commands/page.ts` の `assertReadBeforePut`）。担当は TPM 担当から来た物を、TPM 担当は `--key` の担当から来た物を見る。依頼書・課題の写し・時系列・監査のページは止めない。
 - **PR が merge 済みか**: `roster report merged`・`roster report doc-fix`・`roster report end --pr` は、`gh pr view <URL> --json state` が `MERGED` を返さなければ送らない（merge が断られたのに【merged】を送らないため）。`gh` で読めない PR は、`--unchecked "<訳>"` で確かめずに送れる（訳はメッセージに載る）。
 - **同じメッセージの 2 度送り**: 同じ差出人が、同じ宛先に、同じ見出し・本文・返事の先のメッセージを 30 秒の内に送っていたら、2 度目を送らない。止まった命令の打ち直しを `;` や `||` で 1 行に続けて書くと、止まらなかった時にも 2 度目が動き、課題の記録も 2 件になるため（実際に起きた）。
-- **TPM 担当が送って済んでいない物**: `roster dismiss` と続きの `roster assign` は、その担当に送って、担当がまだ見ていないメッセージ（届いておらず、`roster inbox`・送る前の検査でも見せていない物。assign は【brief】だけ）か、【done】が返っていない依頼書があれば、出して止まる（自分の送った物どうしの行き違いを減らすため）。依頼書は、起こしたときに渡した物と【brief】で送った物を積み（`--after` で送った物も）、【done】（Staff Engineer 担当の席は【review】）が 1 つ返るごとに、そのとき担当が見ていた依頼書のうちいちばん古い物を 1 つ済ませる（担当が `roster report done --briefs` で名指した【done】は、名指した依頼書をみな済ませる。名指しは、渡されていて済んでいない依頼書に、URL か、当たるのが 1 つの名で当たらなければ送らずに止まる）。担当が見た時は、見た時刻の口（`cli/src/seen.ts`）が決める: 画面に届いた時刻と、`roster inbox`・送る前の検査が見せた時刻の早い方（時系列のページも同じ口を使う。まだ見ていない依頼書の分に、行き違いの【done】を数えない）。`--supersede` で送った【brief】と【dismiss】は前の依頼書を取り消し、【end】は全部を済ませる。`--supersede`（取り消す）か `--after`（済ませてから。assign だけ）を付けると送り、本文に一言が載る。`roster answer`・`roster notify` は止めない。
+- **TPM 担当が送って済んでいない物**: `roster dismiss` と続きの `roster assign` は、その担当に送って、担当がまだ見ていないメッセージ（届いておらず、`roster inbox`・送る前の検査でも見せていない物。assign は【brief】だけ）か、【done】が返っていない依頼書があれば、出して止まる（自分の送った物どうしの行き違いを減らすため）。依頼書は、起こしたときに渡した物と【brief】で送った物を積み（`--after` で送った物も）、【done】（Staff Engineer 担当の席は【review】）が 1 つ返るごとに、そのとき担当が見ていた依頼書のうちいちばん古い物を 1 つ済ませる（担当が `roster report done --briefs` で名指した【done】は、名指した依頼書をみな済ませる。名指しは、渡されていて済んでいない依頼書に、URL か、当たるのが 1 つの名で当たらなければ送らずに止まる）。担当が見た時は、見た時刻の口（`cli/src/seen.ts`）が決める: hook が本文を渡した時刻と、`roster inbox`・送る前の検査が命令の結果に本文を出した時刻の早い方（時系列のページも同じ口を使う。まだ見ていない依頼書の分に、行き違いの【done】を数えない）。`--supersede` で送った【brief】と【dismiss】は前の依頼書を取り消し、【end】は全部を済ませる。`--supersede`（取り消す）か `--after`（済ませてから。assign だけ）を付けると送り、本文に一言が載る。`roster answer`・`roster notify` は止めない。
 - **TPM 担当だけの命令**: `roster assign`・`roster close`・`roster notify`・`roster answer`・`roster dismiss` は、担当の session（`$ROSTER_KEY` がある）から打つと、何も送らず・書かずに止まる（`cli/src/roster.ts` の `requireTpmSide`。`gate.jsonl` に `tpm-only`。`roster infra approve`・`roster infra revoke`・`roster incident add` も、同じ検査で断って残す）。送り手の名は命令が付けるので、担当が打つと TPM 担当の名で相手に届いてしまうため。
 - **前の監査の文脈**: `roster audit begin` は、前の報告の後に新しい文脈（席を起こした・`/clear` した）になっていなければ、監査を始めずに止まる（下の「Auditor の席」）。
 
-## メッセージを NATS で配る道（設定で入れた時）
+## メッセージを NATS で配る道
 
-project の設定に `"messages": "nats"` と書いた時だけの決まり（[設定](/configuration/#メッセージを配る道任意)）。書かなければ、この節の物は何も動かず、上の「[入口の検査](#入口の検査)」と下の「[届け違い](#届け違い)」のとおりに動く。
+担当どうしのメッセージは、いつも NATS JetStream（メッセージキュー）で配る。連携の道具（cmux）は運ばない。project ごとに選ぶ所は無い（[設定](/configuration/#メッセージを配る道)）。
 
 **受け手の名と名乗り**
 
 - 配りの受け手の名は、担当の組（名簿の Key と、起こした回）から作る（`cli/src/mail.ts` の `recipientName`）。Key の英数字と `-` はそのまま、ほかの字は UTF-8 の byte ごとに `_` と 16 進 2 桁にし、起こした回があれば `__` と続ける（64 字まで）。違う組は同じ名にならない。TPM 担当だけは、起こした回を付けず、Key だけから作る（Key に当たる所は、TPM 担当は `tpm`）。TPM 担当の席は project に 1 つなので、起こし直した TPM 担当が、前の TPM 担当宛てで届いていなかった物を受け取る（前の session と今の session は、名乗りの process の番号と始まった時刻で見分ける）。置き場の記録の `from`・`to`（担当の Key）とは別の物。
-- 席を起こす時に付く hook が、session の始めに「渡す hook を持つ」と名乗る（`roster mail claim`）。名乗りは、状態の folder に、Claude Code の process の番号と、その process が始まった時刻を書いた物。**効いているのは、その番号の process が居て、始まった時刻が合う間だけ**（時刻には頼らない）。session の終わりに消す（`roster mail release`）。Claude Code の process の番号が分からない時は名乗らず、その席には今までどおり cmux で届く。
+- 席を起こす時に付く hook が、session の始めに「渡す hook を持つ」と名乗る（`roster mail claim`）。名乗りは、状態の folder に、Claude Code の process の番号と、その process が始まった時刻を書いた物。**効いているのは、その番号の process が居て、始まった時刻が合う間だけ**（時刻には頼らない）。session の終わりに消す（`roster mail release`）。Claude Code の process の番号が分からない時は名乗らない。名乗りが効いていない session（渡す hook を持たない。前の版で起こした席も）宛ての物も NATS に置かれ、その session の送る前の検査と `roster inbox` が、命令の結果に本文を出す（下）。
 
 **届き方**
 
-- 送る命令は、届く担当の名乗りが効いていれば、メッセージを NATS に置く（cmux では送らない）。送った記録（`log.jsonl`）に、運んだ道（`carrier: "nats"`）と受け手の名が残り、置き場の記録は `waiting` になる。名乗りが効いていなければ、今までどおり cmux で送る（置き場の記録は `carried`）。
+- 送る命令は、受け手の名乗りが効いているかを見ずに、メッセージを NATS の、受け手の名の箱に置く（名乗る前の席宛ても置く。席の hook が後で渡す）。返事の形（`--reply-to`）でも、届くのは名指した担当。送った記録（`log.jsonl`）に、運んだ道（`carrier: "nats"`）と受け手の名が残り、置き場の記録は `waiting` になる。受け手の名が作れない組（64 字を超える）宛ては、送らずに止まる。
 - NATS で送る本文は 8,000 字まで（見出しを合わせ、JavaScript の字の長さ＝UTF-16 で数える。絵文字は 2 字に数える。hook が 1 度に渡す字の上限と同じ数え方）。超える時は、送らずに止まる（長い本文はページに書いて、URL を送る）。
 - NATS に置く物には、置き場の記録に要る欄（Key・見出し・送り手と受け手の Key・送った時刻）を持たせる。受け手の側は、そこから置き場の記録を書き足すので、送り手の写しと受け手の書き足しの、どちらが先に置き場に着いても、同じ値の記録になる。
 - 受け手の session には、hook が本文を渡す。渡す時は 3 つ: **手を止めている間**（`roster mail wait`。背景で待ち、来たら session を起こす）・**人が入力した時**（`roster mail prompt`）・**送る前の検査が止めた直後**（`roster mail gate`。道具（Bash）を使い終えた後の hook で、成功の後・失敗の後の両方に付ける。結果を pipe で切る書き方（`… | tail -1`）では、検査が止めても命令は「成功」になるため。止めた印が無ければ、file を見るだけで終わる）。どれも、手元の渡した記録（`delivered.jsonl`）を書いてから、NATS に「渡せた」を返す。これが「届いた時刻」になる（`cli/src/seen.ts`）。置き場の記録も `delivered` になる。
@@ -240,18 +242,20 @@ project の設定に `"messages": "nats"` と書いた時だけの決まり（[�
 - 待つ命令は、担当が作業を始めたら止める（作業の途中に、担当を起こさない）: 人が入力した時の hook（`roster mail prompt`）と、担当が道具（Bash）を使う前の guard（`roster guard`。手伝い（subagent）の Bash では止めない）が止める。
 - 1 度に渡すのは 20 通・本文を合わせて 9,000 字まで。前に渡して「渡せた」が返らなかった物は、その 1 通だけを「渡し直し n 度目（前にも渡したかもしれない）」と付けて渡す。
 - 担当が中で起こした手伝い（subagent）の中では、hook は何もしない。
-- NATS が応えない時は、送る命令は「メッセージキューが応えません。送っていません」で止まり、居場所の状態にそう出る（名乗っている席は、送る前の検査が NATS に聞くので、どこへも送れない。課題に記録を書く命令は、記録を書く前に確かめて止まる）。**直してと頼む `roster ask devops` と `roster report incident` だけは、止まらずに cmux の形に落として送る**（メッセージキューが止まった事を知らせる道が、メッセージキューに頼らないように。`gate.jsonl` に `queue` の `fallback` と残る）。hook は何も渡さずに終わる（待つ命令は、間を空けて試し続ける）。止まった回は `gate.jsonl` に `queue` と残る。
+- NATS が応えない時は、どの送る命令も「メッセージキューが応えません。送っていません」で止まり、居場所の状態にそう出る（直してと頼む `roster ask devops` も同じ。課題に記録を書く命令は、記録を書く前に確かめて止まる）。cmux に落として送る道は無い。**`roster report incident` だけは、止まらずに台帳に書き**、「メッセージキューが応えないので、TPM 担当には送っていない（台帳には書いた…）」と出して、誤りにせず終わる（メッセージキューが止まった事を、メッセージキューに頼らずに台帳に残すため。誤りで終わると、打ち直しで台帳に 2 件書かれる）。止まっている事は、台帳と、居場所の状態で気づく。hook は何も渡さずに終わる（待つ命令は、間を空けて試し続ける）。応えなかった回は `gate.jsonl` に `queue` と残る。
 
-**送る前の検査（名乗っている session が、送る命令・ページを置く命令を打った時）**
+**送る前の検査（送る命令・ページを置く命令を打った時）**
 
-- 先に、今までの形の検査（上の「[入口の検査](#入口の検査)」の「読んでいないメッセージ」。cmux の受信箱と `shown/`）を通す。名乗っている席にも、cmux で届く時があるため（席を起こしてから名乗るまでに送られた【brief】・`/clear` の間・名乗りが一時に効かない間）。その後に、次の NATS の形の検査を通す。
+検査が聞くのは NATS だけ。自分（この session）の名乗りが効いているかで、形が 2 つある。初めの 3 つは、名乗りが効いている session の形。
+
 - 自分宛てで、まだ渡っていない物が NATS に残っていれば、止まる。**本文は出さない**（見出しと送り手だけを並べる）。止めた直後に hook（`roster mail gate`）が本文を渡すので、読んでから同じ命令を打ち直す。
 - 止めた後の打ち直しで、hook が渡していない時: 止めてから 35 秒（取り置きの長さ 30 秒＋5 秒）の内で、取り置き中の物（渡している途中）があれば、もう 1 度止まる（長くて 30 秒待つ）。そうでなければ（取り置き中が無い・35 秒を過ぎた）、hook が働いていないと見て、本文を命令の結果に出して通す。この時は「届いた」とは記録せず、NATS にも残す（hook が後で渡せる）。出した物では、次の送りは止まらない。
 - **hook が渡した直後の送り**: hook が、この session の自分宛てを渡してから 2 秒の内に来た送りは、1 度止まる（「直前に、hook がメッセージを渡しました。渡された物を読んでから、同じ命令を打ち直してください」。本文は出さない。`gate.jsonl` に `fresh`）。1 度の返答で送る命令を並べて書くと、前の命令が検査で止まって hook が本文を渡した直後に、後ろの命令が、本文を読む前に書かれたまま動くため。渡された本文を読んで次の命令を書くには 1 回の往復が要るので、2 秒を過ぎた打ち直しは通る。
 - NATS が預かった物を配る箱へ写し終えていない時（ふだんは一瞬）は、長くて 2 秒待ち、残っていれば「メッセージキューの写しが遅れています。送っていません」で止まる。
-- TPM 担当が担当に送る時は、今までどおり、その担当からの物だけで止まる。
-- `roster inbox` は、名乗っている session では、今までの物（cmux の未読。見せたと覚える）に続けて、NATS に残っている自分宛ても出す（NATS の分は、出すだけ。取り置かない・届いたにしない。送る前の検査は、その後も止まる）。
-- `roster mail left`（TPM 担当だけ。設定に依らず動く）は、NATS に残っている物を、受け手ごとに数と、1 通ごとの見出し・送り手・置いた時刻で出す（読むだけ。設定を戻す前後に見る。[運用](/operations/#メッセージを-nats-で配る道を入れる戻す)）。
+- **名乗りが効いていない session**（渡す hook を持たない: Claude Code の process の番号が分からなかった session・前の版で起こした席）: 自分宛てで NATS に残っている物のうち、まだ見せていない物があれば、本文を命令の結果に出して 1 度止まる（「まだ読んでいないメッセージが N 件あります」）。見せた物は、「検査では止めない」の印と、渡した記録（`delivered.jsonl`）の `output` で覚えるので、読んだうえでの打ち直しは通る。届いたには数えず、NATS の物も消さない（期限で消える）。NATS が応えない時・写しが遅れている時は、名乗っている時と同じく止まる。
+- TPM 担当が担当に送る時は、どちらの形でも、その担当からの物だけで止まる。
+- `roster inbox` は、NATS に残っている自分宛てを出す。名乗りが効いている session では、出すだけ（取り置かない・届いたにしない。hook が後で渡し、送る前の検査は、その後も止まる）。名乗りが効いていない session では、まだ見せていない物を出して、見せたと覚える（`output`。ここで見せた物では、送る前の検査は止まらない）。
+- `roster mail left`（TPM 担当だけ）は、NATS に残っている物を、受け手ごとに数と、1 通ごとの見出し・送り手・置いた時刻で出す（読むだけ。渡す hook を持たない席宛ての物は、見せた後も、期限で消えるまで残る。[運用](/operations/#届くことを確かめる戻す)）。
 
 **届かないまま終わった物**（TPM 担当が `roster hello` を打った時と、担当に送る命令を打った時に見る。1 通につき 1 度だけ、命令の結果に 1 行出る）
 
@@ -260,14 +264,14 @@ project の設定に `"messages": "nats"` と書いた時だけの決まり（[�
 - **期限切れ（席を閉じた）**: `roster close` が、その受け手の取り口と残りを消した時に、残っていた物（担当の交代の後の close では消さない）。TPM 担当が名乗る時には、名簿に無い受け手の取り口も掃く。
 - どれも `mail-ended.jsonl` に残り、置き場の記録は `undeliverable`・`expired` になる。要る中身なら、TPM 担当が送り直す。`roster dismiss` と続きの `roster assign` の検査は、これを「届かないまま終わった」と分けて挙げる。
 
-**状態の folder の file**（設定で入れた時にだけ出来る）
+**状態の folder の file**
 
 | ファイル | 中身 |
 |---|---|
 | `mail/claims/<受け手の名>.jsonc` | 「渡す hook を持つ」の名乗り（担当の組・session の id・Claude Code の process の番号と始まった時刻・番号をどこから知ったか） |
-| `delivered.jsonl` | 手元の渡した記録。hook が本文を渡すたびに 1 行（メッセージの id・受け手の名・時刻・どの時か（`gate`・`wake`・`prompt`。`output` は命令の結果に出した回で、届いたには数えない）・何度目か・その時の会話の記録の行の数と session の id） |
+| `delivered.jsonl` | 手元の渡した記録。hook が本文を渡すたびに 1 行（メッセージの id・受け手の名・時刻・どの時か（`gate`・`wake`・`prompt`。`output` は、送る前の検査・`roster inbox` が命令の結果に出した回で、届いたには数えない）・何度目か・その時の会話の記録の行の数と session の id） |
 | `mail/gate/<受け手の名>.jsonc` | 送る前の検査が止めた印（止めた時刻・止めた id・止めた訳）。止めた後の hook が、これを見て本文を渡し、消す |
-| `mail/passed/<受け手の名>.jsonc` | 「検査では止めない」の印を付けた id（命令の結果に本文を出して通した物。新しい 200 件） |
+| `mail/passed/<受け手の名>.jsonc` | 「検査では止めない」の印を付けた id（命令の結果に本文を出した物。新しい 200 件） |
 | `mail/waiters/<受け手の名>.jsonc` | 待つ命令の process の番号と始まった時刻（待つ者を、session につき 1 つに保つ。軽い待ち方では `roster-mail-wait` の sh の番号） |
 | `mail-ended.jsonl` | 届かないまま終わった物（id・受け手の名・渡せない・期限切れ・席を閉じた） |
 | `mail/expired-check.jsonc` | 期限切れを最後に判じた時刻（送る命令の時は、1 時間に 1 度だけ判じ直す） |
@@ -275,18 +279,11 @@ project の設定に `"messages": "nats"` と書いた時だけの決まり（[�
 
 ## 届け違い
 
-待っているメッセージは連携の道具（cmux）が持ち、居場所の中の面で次に起きた Claude に、Claude の hook から配る。cmux は宛先を面の id で覚え、居場所を復元してもその id は残るので、前の session 宛てで待っていた物が、同じ居場所で起きた別の担当の session に配られることがある（2026-11-23、台帳 #84）。`roster` は配る道に入っていないので、届いた所で見分ける（`cli/src/commands/returned.ts`）。
+今は起きない。前の版では、待っているメッセージを連携の道具（cmux）が持ち、居場所の中の面で次に起きた Claude に配ったので、前の session 宛てで待っていた物が、同じ居場所で起きた別の担当の session に配られることがあった（2026-11-23、台帳 #84）。session の始まりの hook（`roster returned check`）が、それを見分けて配らせず、台帳に書き（tag「届け違い」）、TPM 担当へ【returned】で返していた。
 
-- **送る時**: 送った記録（`log.jsonl`）の行に、送り手（`sender`）と届く担当（`recipient`）を書く。担当は名簿の Key（TPM 担当は `tpm`）と起こしの id（`$ROSTER_LAUNCH`・名簿の `launch`。castlist を設定した時だけある）。返事の形（`--reply-to`）では、cmux が元のメッセージの送り手の居場所へ届けるので、届く担当は元の行の送り手にする（元の行が無ければ書かない）。
-- **始まりに比べる**: どの席の SessionStart にも `roster returned check` の hook が付く（castlist の設定に依らない）。自分の居場所宛ての物（cmux の `--surface` の一覧は、その居場所が送ってまだ相手に届いていない物も並べるので、`recipient_workspace_id` で宛先が自分の物に絞る）のうち、まだ待ちの物と、Claude の hook で配られた物（`delivered_via` が `claude.wake`。Claude が起きた時と、手が空いた時の Stop の両方で付く）で配った時刻が hook の始まりの前後 10 秒の内の物（この session の始まりの物とみなす）を、記録の届く担当と比べる。それより前に前の session に配られた物は拾わない（前の session の Stop で、落ちる 10 秒の内に配られた物は拾う）。記録の無い物・届く担当の無い前の版の行は比べない。
-- **違うとみなす**: Key が違う。または Key が同じ担当で、起こしの id が両方あって違う（同じ Key で起こし直した）。TPM 担当は役割で比べる（起こし直した TPM 担当が前の TPM 担当宛てを受けるのは決まりどおり）。/clear の後は同じ起こしなので違わない。
-- **違う物があれば**、順に:
-  1. 待ちの物がみな違う宛てなら、`cmux agent inbox --mark-read` で既読にして配らせない。`--mark-read` は並べた物をみな既読にし、1 通ずつはできないので、正しい宛ての物が混じる時と、その居場所が送ってまだ相手に届いていない物（自分や前の session が送った【brief】【done】など）がある時は既読にしない（相手に届かなくなるため）。既読にした物に、確かめた組の外の物（間に届いた物）があれば、その中身を「あなた宛てかもしれない」として示す。
-  2. 台帳に 1 件書く（reliability、tag「届け違い」）。【incident】は送らない。
-  3. TPM 担当へ【returned】を送る（宛先の担当ごとの数と、1 通ずつの id・見出し・送った時刻・宛先・本文の先頭 80 字。全文は TPM 担当が `roster returned show <id>` で読む）。自分が TPM 担当なら送らない。TPM 担当の居場所が無ければ送らず、そう示す。
-  4. 返した id を `returned.jsonl` に控える（resume・compact で hook がもう 1 度走っても 2 度返さない。返せなかった物は控えず、次の始まりでもう 1 度試す）。見た時刻の口（`cli/src/seen.ts`）も読み、返した物を、cmux の上で既読でも「宛先の担当はまだ見ていない」とする（`roster dismiss`・続きの `roster assign` の検査が止まり、時系列のページは「届け違いで返した」と出す）。
-  5. 画面（`systemMessage`）と Claude の文脈（`additionalContext`）に「前の session 宛て。扱わない」と一覧を出す。
-- **見ない物**: session が起きた後に届く届け違い（次の始まりまで見ない）。roster の hook を付けずに起きた Claude（比べる自分が分からない）。
+- 今は、メッセージを NATS が運び、受け手の名に名簿の Key と起こした回が入るので、前の session 宛ての物を、別の担当の session が受け取ることは無い（上の「[メッセージを NATS で配る道](#メッセージを-nats-で配る道)」の「受け手の名と名乗り」）。TPM 担当の名は Key だけで、起こし直した TPM 担当が前の TPM 担当宛てを受けるのは決まりどおり。起こした回は castlist を設定した時だけあるので、設定していない project では、同じ Key で起こし直した担当が、前の担当宛てで残っていた物を受け取る。
+- 届け違いの検査と【returned】は外した（今は、どの命令も hook も【returned】を送らない）。`roster returned check` は、前の版が起こした席の hook がまだ呼ぶので、何もしない命令として残してある（新しく起こす席には付けない）。
+- 前の版の記録は残り、読める。`roster returned show <id>`（TPM 担当。読むだけ）が、返った物の宛先と全文を、送った記録から出す。返した id の控え（`returned.jsonl`）は、もう増えないが、見た時刻の口（`cli/src/seen.ts`）が読み、返した物を「宛先の担当はまだ見ていない」とする（`roster dismiss`・続きの `roster assign` の検査と、時系列のページは「届け違いで返した」と出す）。
 
 ## Staff Engineer 担当の席
 
@@ -316,7 +313,7 @@ sequenceDiagram
 | `roster assign <課題の Key> --role staff-engineer` | TPM 担当 | 席の起こし直し（返っていない頼みがあるのに席が落ちた・名乗らない時。居場所が残っていれば、先に `roster close <課題の Key>.staff` で閉じる）。返っていない頼みから依頼書を作って置き、席を起こす。席が居て、まだ依頼書にしていない頼みがあれば【brief】で送る。`--brief`・`--title` は受けない。頼みが無い・課題の担当が名簿に居ない・skill が無ければ止まる。`--supersede` は、じかに届いた頼みも含めて取り消し、新しい依頼書に入れ直す |
 | `roster review list [--key <Key>]` | 誰でも（読むだけ） | 頼みごとの行と、判定ごとの数・TPM 担当に上げた数。初めての頼みより後に結果の【done】を出した課題のうち、レビューを頼んでいない課題の数 |
 
-- **守り**: じかの 2 通も、送る前の検査（読んでいないメッセージ・同じメッセージの 2 度送り）を通る（2 度送りは、相手の宛先で数える）。届いた時刻は、`roster ask review` と `roster report review` が `deliveries.jsonl` に写す（TPM 担当の命令を通らないため）。じかに送った行は、送った記録（`log.jsonl`）に `peer` の印が付く。時系列のページの行き違いの印は、この印のある行では、課題の担当と席の間の逆向きのじかの物だけを相手に数える（`cli/src/commands/timeline.ts`。印の無い、前の流れの【ask-review】【review】は、今までどおり「同じ Key で向きが逆」で数える）。席の「済んでいない依頼書」には、じかに届いた【ask-review】も数える（`openBriefs`）。
+- **守り**: じかの 2 通も、送る前の検査（読んでいないメッセージ・同じメッセージの 2 度送り）を通る（2 度送りは、相手の宛先で数える）。じかに送った行は、送った記録（`log.jsonl`）に `peer` の印が付く。時系列のページの行き違いの印は、この印のある行では、課題の担当と席の間の逆向きのじかの物だけを相手に数える（`cli/src/commands/timeline.ts`。印の無い、前の流れの【ask-review】【review】は、今までどおり「同じ Key で向きが逆」で数える）。席の「済んでいない依頼書」には、じかに届いた【ask-review】も数える（`openBriefs`）。
 - **見え方**: TPM 担当は【ask-review】【review】を受け取らない。課題の「レビュー」の記録・置き場のレビューのページ・`roster review list`・名簿（`roster roles`）・成果のページの「レビュー」の行で見える。席を起こした者（castlist の起こした線）は、課題の担当の session になる。
 - 席に掛かる守りは Auditor と同じ（下の「guard」）: project・状態・ページの控えの folder への書き込みと、`git`・`gh` の変える命令（`gh pr review`・`gh pr comment` も）を止める。レビューは、PR のコメントでなく、置き場のページで返す。
 - Staff Engineer 担当からの `roster report done`・`end`・`merged`・`doc-fix`・`roster ask pm`・`roster ask review` は断る（【end】を打てると、レビューが済んだだけで課題が済みになる）。`roster ask tpm`・`roster report incident` は打てる。
@@ -358,7 +355,7 @@ Auditor（役割 `auditor`。題は `Audit`、課題の Key は `audit`。skill 
 - 見直す（`roster incident review`）・tag を足す（`roster incident tag`）・扱いを決める（`roster incident assign`・`roster incident drop`・`roster incident close`）のは、TPM 担当と Auditor（役割 `auditor`）。ほかの担当の居場所からは止まる。扱いを決めると、件に誰が決めたか（`decidedBy`。課題の Key と役割）が残る。
 - **種類のある件（出来事）を「調べない」「済み」にできるのは Auditor だけ**（`roster incident drop`・`roster incident close`。TPM 担当の誤りの件を、TPM 担当が自分で決めないため。tag で分けると、付けなければすり抜けるので、役割で分ける）。種類の無い件（「残り」と「PM の手」）は TPM 担当も決められる。名指した件に出来事が 1 つでも混じっていれば、どれも書き替えない。tag を足す・振り先を結ぶのは、TPM 担当もできる。
 - `roster incident follow` は、追いかけの一覧を出す（読むだけ。TPM 担当と Auditor）。振ったまま（振った件と、振り先が名簿に居るか・最後に返した【done】【end】【merged】）、済みの後の再発（tag ごとに、いちばん新しい済みの後に起きた件）、古い残り（未決の「残り」と「PM の手」を古い順に）、TPM 担当の決め（TPM 担当が調べない・済みにした件。`--since <日付>` で、前の監査より後に絞る）。`--json` もある。
-- `roster incident timeline <番号|Key>` が、時系列のページ（種類は `timeline`）を置く（`cli/src/commands/timeline.ts`）。番号なら、引き金のメッセージ（`--msg`）の前後 30 分（`--minutes`）の、その Key の記録を拾い、件に URL を結ぶ。引き金の無い件は、出来事がいつかが分からない（件は出来事のしばらく後に書かれる）ので、その Key の初めから、件を書いた 30 分後までを拾う。Key なら、その Key の記録をみな拾う。並べるのは `log.jsonl`（`deliveries.jsonl` の届いた時刻を添える）・`tracker.jsonl`・`guard.jsonl`・`gate.jsonl`・`waits.jsonl`・`infra.jsonl`・台帳。あるメッセージが届く前に、相手（向きが逆）が送ったメッセージがあれば「行き違い」の印を付ける。作る前に、届いた時刻を連携の道具から写す。castlist を設定した project では「アクター」の欄を足し、行ごとに、その時刻にその席（担当は課題の Key、TPM 担当は `tpm`）に居たアクターを castlist に聞いて（`ListActors`。`GET /api/actors?label=tpm.project:<project>&label=tpm.key:<Key>&activeFrom=<時刻>&activeTo=<時刻>`。TPM 担当の席は `tpm.key` の代わりに `tpm.role:tpm`）、プロフィールの画面への link で出す。castlist が止まっていれば欄に「castlist に聞けない」と書き、ページは置く。
+- `roster incident timeline <番号|Key>` が、時系列のページ（種類は `timeline`）を置く（`cli/src/commands/timeline.ts`）。番号なら、引き金のメッセージ（`--msg`）の前後 30 分（`--minutes`）の、その Key の記録を拾い、件に URL を結ぶ。引き金の無い件は、出来事がいつかが分からない（件は出来事のしばらく後に書かれる）ので、その Key の初めから、件を書いた 30 分後までを拾う。Key なら、その Key の記録をみな拾う。並べるのは `log.jsonl`（見た時刻の口 `cli/src/seen.ts` の、届いた・見せた時刻を添える）・`tracker.jsonl`・`guard.jsonl`・`gate.jsonl`・`waits.jsonl`・`infra.jsonl`・台帳。あるメッセージが届く前に、相手（向きが逆）が送ったメッセージがあれば「行き違い」の印を付ける。castlist を設定した project では「アクター」の欄を足し、行ごとに、その時刻にその席（担当は課題の Key、TPM 担当は `tpm`）に居たアクターを castlist に聞いて（`ListActors`。`GET /api/actors?label=tpm.project:<project>&label=tpm.key:<Key>&activeFrom=<時刻>&activeTo=<時刻>`。TPM 担当の席は `tpm.key` の代わりに `tpm.role:tpm`）、プロフィールの画面への link で出す。castlist が止まっていれば欄に「castlist に聞けない」と書き、ページは置く。
 - 原因の調べは、Auditor がする（上の「Auditor の席」。Product Manager が `Audit` の席で `/audit` を呼ぶ）。Auditor は監査のページ（種類は `audit`）を置き、`roster report audit` で報告する。Product Manager が「する」とした改善は、TPM 担当が課題にして振り、`roster incident assign` で件に振り先を結ぶ。入ったと確かめて `roster incident close` で済みにするのは、次の監査の Auditor。
 - 【incident】は課題管理に記録を書かない。台帳の中身と時系列のページは、roster を動かす機械の外に写さない。
 
@@ -368,10 +365,10 @@ Auditor（役割 `auditor`。題は `Audit`、課題の Key は `audit`。skill 
 
 同じ `--settings` で、session の始まりと終わりに `roster castlist session-start`・`roster castlist session-end` を呼ぶ hook も付ける（[アクターの台帳](#アクターの台帳castlist)。castlist を設定していなければ何もしない）。
 
-設定に `"messages": "nats"` と書いた project では、同じ `--settings` で、メッセージを渡す hook（`roster mail claim`・`roster mail release`・`roster mail gate`・`roster mail wait`・`roster mail prompt`）も、今ある hook の後ろに付ける（[メッセージを NATS で配る道](#メッセージを-nats-で配る道設定で入れた時)）。その席では、guard が次の 2 つも止める（どちらも、`roster ask`・`roster report`・`roster notify`・`roster answer`・`roster dismiss`・`roster assign`・`roster page put` を打つ時）。
+同じ `--settings` で、メッセージを渡す hook（`roster mail claim`・`roster mail release`・`roster mail gate`・`roster mail wait`・`roster mail prompt`）も、どの席にも、その後ろに付ける（[メッセージを NATS で配る道](#メッセージを-nats-で配る道)）。前の版が付けた `roster returned check` の hook は付けない。guard は、次の 2 つも止める（どちらも、`roster ask`・`roster report`・`roster notify`・`roster answer`・`roster dismiss`・`roster assign`・`roster page put` を打つ時）。
 
 - **手伝いの中からの送る命令**: 担当が中で起こした手伝い（subagent）が打った送る命令は止める（送る前の検査と、止めた後に本文を渡す hook は、担当の物）。手伝いは、送る中身を担当に返す。
-- **同じ返答の中で渡した物がある時**: 送る命令を書いた返答より後に、hook が渡した物があれば、1 度止める（渡された物を読んでから、同じ命令を打ち直す）。返答の位置は、会話の記録（transcript）の中の、その道具の呼び出しの行で見る。行が見つからない時は止めず、`mail-guard.jsonl` に残す。**Claude Code 2.1.332 では、guard が動く時（PreToolUse）に、その返答の行がまだ会話の記録に書かれていないので、この守りは働かない**（いつも見送る）。並べた送りは、送る前の検査が時刻で止める（上の「[メッセージを NATS で配る道](#メッセージを-nats-で配る道設定で入れた時)」の「hook が渡した直後の送り」）。
+- **同じ返答の中で渡した物がある時**: 送る命令を書いた返答より後に、hook が渡した物があれば、1 度止める（渡された物を読んでから、同じ命令を打ち直す）。返答の位置は、会話の記録（transcript）の中の、その道具の呼び出しの行で見る。行が見つからない時は止めず、`mail-guard.jsonl` に残す。**Claude Code 2.1.332 では、guard が動く時（PreToolUse）に、その返答の行がまだ会話の記録に書かれていないので、この守りは働かない**（いつも見送る）。並べた送りは、送る前の検査が時刻で止める（上の「[メッセージを NATS で配る道](#メッセージを-nats-で配る道)」の「hook が渡した直後の送り」）。
 
 止めるのは 6 つ（castlist を設定した project では、castlist に送れない時の Bash も止める。[アクターの台帳](#アクターの台帳castlist)）。
 
