@@ -26,8 +26,7 @@ const PREFIXES = (Object.keys(WAIT) as WaitKind[]).map(kind => [kind, WAIT[kind]
 
 /**
  * 状態の字から、種類の名を引く。決まった頭（`作業中: ` など）はその名。Staff Engineer 担当の席の `回答待ち(レビュー)` は、次の頼み待ち。
- * どれにも当たらない字（メッセージキューが応えません・後から足された状態の字）は、`:` の前の字をそのまま名にする
- * （新しい状態の字が足されても、命令を変えずに、その名で数えられる）。
+ * どれにも当たらない字（メッセージキューが応えません・メッセージキューの写しが遅れています）は、`:` の前の字をそのまま名にする。
  */
 function nameOf(text: string, role: string): string {
   const kind = PREFIXES.find(([, prefix]) => text.startsWith(prefix))?.[0];
