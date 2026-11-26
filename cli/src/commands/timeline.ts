@@ -87,8 +87,9 @@ export function collect(ctx: Context, key: string, window?: { from: string, to: 
   // 見た時刻は口から引く（送る前の検査と同じ決め方。時刻が無ければ、送った時刻に倒さず「分からない」にする）。
   const seenAt = seenTimes(ctx, { live: false });
   const returned = returnedIds(ctx);
-  // 課題の Key で集めると、その課題の Staff Engineer 担当の席（名簿の Key は <課題の Key>.staff）の行も入る。
-  const mine = (k: string | undefined): boolean => k === key || k === staffKey(key);
+  // 課題の Key で集めると、その課題の Staff Engineer 担当の席（名簿の Key は <課題の Key>.staff）と、Tech Lead 担当が起こした
+  // repo の席（<課題の Key>.<名>。その席の Staff の席も）の行も入る。閉じた席は名簿に無いので、Key の頭で見る。
+  const mine = (k: string | undefined): boolean => k === key || k === staffKey(key) || (k?.startsWith(`${key}.`) ?? false);
   const messages = ctx.state.lines<Sent>('log.jsonl').filter(l => mine(l.key));
   const events: TimelineEvent[] = messages.map((m) => {
     const seen = seenAt(m);

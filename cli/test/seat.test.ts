@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'vitest';
-import { dismiss, reportEnd } from '../src/commands/messages.ts';
+import { seatOf } from '../src/castlist.ts';
+import { askPm, dismiss, reportDone, reportEnd } from '../src/commands/messages.ts';
 import { hello } from '../src/commands/role-side.ts';
 import { seatAdd, seatClose } from '../src/commands/seat.ts';
+import { collect } from '../src/commands/timeline.ts';
 import { assign, close } from '../src/commands/tpm-side.ts';
 import { sendsMessage } from '../src/guard.ts';
 import { allRoles, readRole, repoSeats, writeRole } from '../src/roster.ts';
@@ -137,5 +139,58 @@ describe('roster seat close（Tech Lead 担当が repo の席を閉じる）', (
     await seatAdd(w.lead, 'pagetray', SEAT);
     await expect(seatClose(w.lead, 'castlist')).rejects.toThrow(/^AI-36\.castlist の席が名簿にいません/);
     await expect(seatClose(w.role('AI-36.pagetray', 'file:2'), 'pagetray')).rejects.toThrow(/^roster seat close は Tech Lead 担当が打ちます/);
+  });
+});
+
+describe('repo の席の後始末', () => {
+  /** github の課題 gh-12 を受け持つ Tech Lead 担当（file:1）と、repo の席 pagetray（file:2）。どちらも【dismiss】を受けた事にしてある。 */
+  async function tracked(): Promise<World & { lead: World['tpm'], seat: World['tpm'] }> {
+    const w = world({ tracker: 'github' });
+    await hello(w.tpm);
+    await assign(w.tpm, 'gh-12', { role: 'tech-lead', brief: BRIEF, issue: 'gh-12', noIssueCopy: '試験', wait: 0, seats: 1 });
+    const lead = w.role('gh-12', 'file:1');
+    await hello(lead);
+    await seatAdd(lead, 'pagetray', SEAT);
+    const seat = w.role('gh-12.pagetray', 'file:2');
+    await hello(seat);
+    for (const key of ['gh-12', 'gh-12.pagetray']) writeRole(w.tpm, { ...readRole(w.tpm, key)!, dismissed: 'done' });
+    return { ...w, lead, seat };
+  }
+  const bodies = (w: World): string[] => w.calls.filter(c => c.args[1] === 'comment').map(c => c.options?.input ?? '');
+  const closes = (w: World): number => w.calls.filter(c => c.args[1] === 'close').length;
+
+  test('repo の席の【end】は課題を済みにしない。Tech Lead 担当の【end】で済みになる。repo の席の記録の 1 行目には席の名が入る', async () => {
+    const w = await tracked();
+    await reportDone(w.seat, { kind: 'result', summary: 'server を入れた', remaining: 'なし', decisions: 'なし', points: [] });
+    const ended = await reportEnd(w.seat, { prs: [], removed: [], left: 'なし' });
+    expect(ended).toContain('課題は閉じない: gh-12（repo の席。課題を済みにするのは、Tech Lead 担当の片付けの時）');
+    expect(closes(w)).toBe(0);
+    expect(await reportEnd(w.lead, { prs: [], removed: [], left: 'なし' })).toContain('課題を閉じた: gh-12');
+    expect(closes(w)).toBe(1);
+    expect(bodies(w)).toEqual([
+      '【結果】Software Engineer（pagetray）: server を入れた',
+      '【結果】Software Engineer（pagetray）: 片付けた（残っている物: なし）',
+      '【結果】Tech Lead: 片付けた（残っている物: なし）',
+    ]);
+  });
+
+  test('repo の席は roster ask pm を打てない（確認は Tech Lead 担当がまとめる）', async () => {
+    const w = await tracked();
+    await expect(askPm(w.seat, { url: 'https://claude.ai/artifact/c1', items: ['案'], waitingFor: '案' })).rejects.toThrow(/^repo の席（gh-12\.pagetray）は roster ask pm を打ちません.*Tech Lead 担当（gh-12）に伝えてください/);
+    expect(bodies(w)).toEqual([]);
+    expect(w.posted('file:tpm')).toEqual([]);
+  });
+
+  test('出来事の時系列は、課題の Key で集めると repo の席の行も入る（別の課題は入らない）', async () => {
+    const w = await tracked();
+    await reportDone(w.seat, { kind: 'result', summary: 'server を入れた', remaining: 'なし', decisions: 'なし', points: [] });
+    expect(collect(w.tpm, 'gh-12').some(e => e.what.includes('【done】') && e.what.includes('server を入れた'))).toBe(true);
+    expect(collect(w.tpm, 'gh-1').some(e => e.what.includes('【done】'))).toBe(false);
+  });
+
+  test('台帳での名は席ごと（<課題の Key>-<名>-swe）。親の課題の Key を subject に持つ', async () => {
+    const w = await tracked();
+    expect(seatOf(w.seat)).toEqual({ prefix: 'gh-12-pagetray-swe', role: 'software-engineer', key: 'gh-12.pagetray', subject: 'gh-12' });
+    expect(seatOf(w.lead)).toEqual({ prefix: 'gh-12-lead', role: 'tech-lead', key: 'gh-12' });
   });
 });
