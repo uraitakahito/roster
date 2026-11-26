@@ -5,12 +5,12 @@ import { assertSummary } from '../brief.ts';
 import { requireUp, sessionRef } from '../castlist.ts';
 import type { Context } from '../context.ts';
 import { ROLES, type RoleName } from '../protocol.ts';
-import { isRepoSeat, readRole, repoSeatKey, repoSeats, requireSelf, type RoleRecord } from '../roster.ts';
+import { isRepoSeat, noteRepoSeat, readRole, repoSeatKey, repoSeats, requireSelf, type RoleRecord } from '../roster.ts';
 import { resolveSettings } from '../settings.ts';
 import { skillSetDir, TpmError } from '../skill-sets.ts';
-import { issueCopy, launch, roleDefaults } from './launch.ts';
+import { launch, roleDefaults } from './launch.ts';
 import { assertRead, type Sent } from './messages.ts';
-import { closeSeat } from './tpm-side.ts';
+import { closeWithChildren } from './tpm-side.ts';
 
 /** repo の席の役割。 */
 const SEAT_ROLE: RoleName = 'software-engineer';
@@ -64,8 +64,12 @@ export async function seatAdd(ctx: Context, name: string, options: SeatAddOption
   const settings = resolveSettings(SEAT_ROLE, { config: roleDefaults(ctx, SEAT_ROLE, cwd), env: ctx.env });
   // castlist を設定していれば、起きているかを、写しを置く前に見る（止まっていれば、席を起こさずに止まる）。
   const skew = await requireUp(ctx, '席は起こしていません。', ['この 1 行は自分で打たない。roster ask tpm で、castlist が止まっていることを TPM 担当に知らせ、起きた後にもう 1 度 roster seat add を打ってください。']);
-  // 課題の写しは、親の課題の folder に置く（repo の席のページも、親の課題の folder にまとまる）。
-  const copy = await issueCopy(ctx, self.issue ?? self.key, self.key, undefined);
+  // 課題の写しは、Tech Lead 担当が受けた物（か、作らなかった訳）をそのまま渡す。席ごとに写し直さない
+  // （課題を読めない時にも席を起こせる。親の folder に、同じ写しが席の数だけ増えない）。
+  const copy: Pick<RoleRecord, 'issuePage' | 'issueCopySkipped'> = {
+    ...(self.issuePage === undefined ? {} : { issuePage: self.issuePage }),
+    ...(self.issueCopySkipped === undefined ? {} : { issueCopySkipped: self.issueCopySkipped }),
+  };
   const record: RoleRecord = {
     key,
     subject: self.key,
@@ -80,16 +84,23 @@ export async function seatAdd(ctx: Context, name: string, options: SeatAddOption
     ...copy,
   };
   const sid = ctx.env.CLAUDE_CODE_SESSION_ID;
+  noteRepoSeat(ctx, self.key, key);
   return await launch(ctx, record, existing !== undefined, options.wait, [`名簿の Key: ${key}`, ...skew], sid ? sessionRef(sid) : undefined);
 }
 
-/** その席（今の居場所）が、片付けの終わり（【end】）を送ったか。 */
-const hasEnded = (ctx: Context, seat: RoleRecord): boolean =>
-  ctx.state.lines<Sent>('log.jsonl').some(l => l.key === seat.key && l.heading === 'end' && (seat.helloAt === undefined || l.at >= seat.helloAt));
+/**
+ * その席（今の居場所）が、片付けの終わり（【end】）を送ったか。名乗っていない席（起こし直したばかり）は、まだ送っていないとする
+ * （同じ Key の前の席の【end】を、今の席の物に数えない）。
+ */
+const hasEnded = (ctx: Context, seat: RoleRecord): boolean => {
+  const since = seat.helloAt;
+  return since !== undefined && ctx.state.lines<Sent>('log.jsonl').some(l => l.key === seat.key && l.heading === 'end' && l.at >= since);
+};
 
 /**
  * Tech Lead 担当が、自分の課題の repo の席を閉じ、名簿から消す。閉じられるのは、居場所の無い席（落ちた・名乗らなかった）か、
  * 片付けの終わり（【end】）を送った席だけ（片付けの前に閉じると、worktree や開いた PR が残る）。
+ * その席の Staff Engineer 担当の席が残っていれば、一緒に閉じる（roster close と同じ）。
  */
 export async function seatClose(ctx: Context, name: string): Promise<string[]> {
   const self = requireLead(ctx, 'roster seat close');
@@ -98,5 +109,5 @@ export async function seatClose(ctx: Context, name: string): Promise<string[]> {
   if (seat === undefined || !isRepoSeat(seat) || seat.subject !== self.key) throw new TpmError(`${key} の席が名簿にいません（自分の課題の repo の席だけを閉じられる）`);
   const alive = seat.address !== undefined && ctx.seats.seats().some(s => s.address === seat.address);
   if (alive && !hasEnded(ctx, seat)) throw new TpmError(`${key} の席は、まだ片付けの終わり（【end】）を送っていません。閉じていません。片付けの指示を送り、【end】を受けてから閉じてください`);
-  return await closeSeat(ctx, seat);
+  return await closeWithChildren(ctx, seat);
 }

@@ -6,7 +6,7 @@ import type { Context } from '../context.ts';
 import type { GateStop, GuardStop, WaitChange } from '../evidence.ts';
 import { incidentLine, readIncidents, requireIncident, writeIncident, type Incident } from '../incidents.ts';
 import { HEADINGS, type HeadingId } from '../protocol.ts';
-import { isStaffKey, staffKey, subjectOfStaffKey } from '../roster.ts';
+import { isStaffKey, repoSeatKeys, staffKey, subjectOfStaffKey } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
 import type { TrackerWrite } from '../tracker/recorded.ts';
 import { returnedIds, seenTimes, type Seen } from '../seen.ts';
@@ -88,8 +88,10 @@ export function collect(ctx: Context, key: string, window?: { from: string, to: 
   const seenAt = seenTimes(ctx, { live: false });
   const returned = returnedIds(ctx);
   // 課題の Key で集めると、その課題の Staff Engineer 担当の席（名簿の Key は <課題の Key>.staff）と、Tech Lead 担当が起こした
-  // repo の席（<課題の Key>.<名>。その席の Staff の席も）の行も入る。閉じた席は名簿に無いので、Key の頭で見る。
-  const mine = (k: string | undefined): boolean => k === key || k === staffKey(key) || (k?.startsWith(`${key}.`) ?? false);
+  // repo の席（<課題の Key>.<名>。その席の Staff の席も）の行も入る。repo の席は、起こした時の控えで見分ける（閉じた席は名簿に無い。
+  // Key の頭では見ない: 点を含む別の課題の Key（web と web.app）を混ぜない）。
+  const keys = new Set([key, ...repoSeatKeys(ctx, key)].flatMap(k => [k, staffKey(k)]));
+  const mine = (k: string | undefined): boolean => k !== undefined && keys.has(k);
   const messages = ctx.state.lines<Sent>('log.jsonl').filter(l => mine(l.key));
   const events: TimelineEvent[] = messages.map((m) => {
     const seen = seenAt(m);

@@ -126,7 +126,11 @@ export async function roles(ctx: Context): Promise<string[]> {
   return ['名簿:', ...records.map((r) => {
     const alive = r.address !== undefined && seats.some(s => s.address === r.address);
     const wait = alive && r.address !== undefined ? ctx.seats.status(r.address)?.wait : undefined;
-    const gone = r.role === 'auditor' ? '消えた（居場所が無い。起こし直すのは Product Manager: roster audit start）' : '消えた（居場所が無い。roster assign で起こし直すか、roster close で名簿から消す）';
+    const gone = r.role === 'auditor'
+      ? '消えた（居場所が無い。起こし直すのは Product Manager: roster audit start）'
+      : isRepoSeat(r)
+        ? `消えた（居場所が無い。${r.subject ?? ''} の Tech Lead 担当が roster seat add で起こし直すか、roster seat close で名簿から消す）`
+        : '消えた（居場所が無い。roster assign で起こし直すか、roster close で名簿から消す）';
     const where = alive ? `${r.address}（${wait ?? '状態なし'}）` : gone;
     return `- ${r.key}  ${r.title}  ${where}${r.dismissed ? `  dismiss 済み（${r.dismissed === 'handover' ? '交代' : '終わり'}）` : ''}${r.brief ? `  依頼書: ${r.brief}` : ''}${r.issuePage ? `  課題の写し: ${r.issuePage}` : ''}`;
   }), ...swept, ...lastAuditLine(ctx), ...openLine(ctx)];
@@ -264,6 +268,8 @@ async function assignSeat(ctx: Context, subjectKey: string, options: AssignOptio
   // 居場所を作る前に読む（読めなければ、担当を起こさずに止まる）。
   const copy = await issueCopy(ctx, issue ?? subjectKey, subjectKey, options.noIssueCopy);
   const briefUrl = options.brief;
+  // Tech Lead 担当の起こし直しで --seats が無ければ、前の行の上限を受け継ぐ（Product Manager が計画で通した数を、起こし直しで失わない）。
+  const seats = options.seats ?? (options.role === 'tech-lead' && existing?.role === 'tech-lead' ? existing.seats : undefined);
   const record: RoleRecord = {
     key,
     role: options.role,
@@ -273,7 +279,7 @@ async function assignSeat(ctx: Context, subjectKey: string, options: AssignOptio
     ...settings,
     ...(briefUrl === undefined ? {} : { brief: briefUrl, firstBrief: briefUrl }),
     ...(issue === undefined ? {} : { issue }),
-    ...(options.seats === undefined ? {} : { seats: options.seats }),
+    ...(seats === undefined ? {} : { seats }),
     ...copy,
   };
   // 担当を起こした folder と、記録の先を出す（上の folder から振ると、どちらも 1 つに決まっていないため）。
@@ -284,7 +290,7 @@ async function assignSeat(ctx: Context, subjectKey: string, options: AssignOptio
 
 /**
  * 名簿の行の席を 1 つ閉じる: castlist に幕引きを送り、居場所を閉じ、その受け手の取り口と残りを消して、名簿から消す。
- * roster close（TPM 担当）と roster seat close（Tech Lead 担当。seat.ts）が使う。
+ * 子の席も閉じる closeWithChildren が使う。
  */
 export async function closeSeat(ctx: Context, record: RoleRecord): Promise<string[]> {
   const alive = record.address !== undefined && ctx.seats.seats().some(s => s.address === record.address);
@@ -306,8 +312,16 @@ export async function close(ctx: Context, key: string): Promise<string[]> {
   const record = readRole(ctx, key);
   if (record === undefined) throw new TpmError(`名簿に担当がいません: ${key}`);
   if (record.role === 'auditor') throw new TpmError('Auditor の席は、Product Manager が起こし、閉じます。roster close では閉じられません（居場所が消えていたら、Product Manager が roster audit start で起こし直す）');
+  return await closeWithChildren(ctx, record);
+}
+
+/**
+ * 席を閉じ、その子の席（その席の Staff Engineer 担当の席・Tech Lead 担当が起こした repo の席。repo の席の Staff の席も）が
+ * 名簿に残っていれば、一緒に閉じる。roster close と roster seat close が使う。
+ */
+export async function closeWithChildren(ctx: Context, record: RoleRecord): Promise<string[]> {
   const out = await closeSeat(ctx, record);
-  const children = [...(isStaffKey(key) || readRole(ctx, staffKey(key)) === undefined ? [] : [staffKey(key)]), ...repoSeats(ctx, key).map(r => r.key)];
-  for (const child of children) out.push(...await close(ctx, child));
+  const staff = isStaffKey(record.key) ? undefined : readRole(ctx, staffKey(record.key));
+  for (const child of [...(staff === undefined ? [] : [staff]), ...repoSeats(ctx, record.key)]) out.push(...await closeWithChildren(ctx, child));
   return out;
 }

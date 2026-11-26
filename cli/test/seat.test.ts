@@ -4,7 +4,7 @@ import { askPm, dismiss, reportDone, reportEnd } from '../src/commands/messages.
 import { hello } from '../src/commands/role-side.ts';
 import { seatAdd, seatClose } from '../src/commands/seat.ts';
 import { collect } from '../src/commands/timeline.ts';
-import { assign, close } from '../src/commands/tpm-side.ts';
+import { assign, close, roles } from '../src/commands/tpm-side.ts';
 import { sendsMessage } from '../src/guard.ts';
 import { allRoles, readRole, repoSeats, writeRole } from '../src/roster.ts';
 import { BRIEF, world, type World } from './helpers.ts';
@@ -48,6 +48,25 @@ describe('roster seat add（Tech Lead 担当が repo の席を起こす）', () 
     expect(readRole(w.tpm, 'AI-36.roster')).toMatchObject({ issue: 'AI-36', cwd: '/tmp' });
   });
 
+  test('課題の写しは、Tech Lead 担当が受けた物（か、作らなかった訳）をそのまま渡す。席ごとに写し直さない', async () => {
+    const w = await led(2);
+    const page = readRole(w.tpm, 'AI-36')?.issuePage;
+    expect(page).toMatch(/\/AI-36\/issue-1\.html$/);
+    const before = w.asked().length;
+    await seatAdd(w.lead, 'pagetray', SEAT);
+    expect(readRole(w.tpm, 'AI-36.pagetray')?.issuePage).toBe(page);
+    // 置き場には、依頼書の概要の節を読む 1 度しか頼まない（写しを置き直さない）。
+    expect(w.asked().slice(before).filter(a => a.startsWith('PUT') || a.startsWith('POST'))).toEqual([]);
+    const skipped = world({ tracker: 'jira' });
+    await hello(skipped.tpm);
+    await assign(skipped.tpm, 'AI-36', { role: 'tech-lead', brief: BRIEF, issue: 'AI-36', noIssueCopy: 'Jira の認証が切れている', wait: 0, seats: 1 });
+    const lead = skipped.role('AI-36', 'file:1');
+    await hello(lead);
+    await seatAdd(lead, 'pagetray', SEAT);
+    expect(readRole(skipped.tpm, 'AI-36.pagetray')).toMatchObject({ issueCopySkipped: 'Jira の認証が切れている' });
+    expect(await hello(skipped.role('AI-36.pagetray', 'file:2'))).toContain('課題の写し: 無し（Jira の認証が切れている）');
+  });
+
   test('上限を超える分は断る。数えるのは今の名簿に居る repo の席で、落ちた席を同じ名で起こし直すのは数えない', async () => {
     const w = await led(1);
     await seatAdd(w.lead, 'pagetray', SEAT);
@@ -55,6 +74,15 @@ describe('roster seat add（Tech Lead 担当が repo の席を起こす）', () 
     expect(repoSeats(w.tpm, 'AI-36').map(r => r.key)).toEqual(['AI-36.pagetray']);
     w.wire.close('file:2');
     expect((await seatAdd(w.lead, 'pagetray', SEAT))[0]).toMatch(/^起こし直した: SWE AI-36 pagetray: 課題（file:3/);
+  });
+
+  test('Tech Lead 担当を起こし直す時、--seats が無ければ前の上限を受け継ぐ', async () => {
+    const w = await led(2);
+    w.wire.close('file:1');
+    await assign(w.tpm, 'AI-36', { role: 'tech-lead', brief: BRIEF, wait: 0 });
+    expect(readRole(w.tpm, 'AI-36')?.seats).toBe(2);
+    await assign(w.tpm, 'AI-36', { role: 'tech-lead', brief: BRIEF, wait: 0, seats: 3, supersede: true });
+    expect(readRole(w.tpm, 'AI-36')?.seats).toBe(3);
   });
 
   test('上限は、続きの依頼書でも替えられる', async () => {
@@ -106,6 +134,13 @@ describe('repo の席と、TPM 担当の命令', () => {
     expect(w.posted('file:1')).toEqual([]);
   });
 
+  test('roster roles は、居場所の無い repo の席に、Tech Lead 担当の命令を案内する', async () => {
+    const w = await led(1);
+    await seatAdd(w.lead, 'pagetray', SEAT);
+    w.wire.close('file:2');
+    expect((await roles(w.tpm)).find(l => l.startsWith('- AI-36.pagetray'))).toContain('消えた（居場所が無い。AI-36 の Tech Lead 担当が roster seat add で起こし直すか、roster seat close で名簿から消す）');
+  });
+
   test('roster close <課題の Key> は、残った repo の席も一緒に閉じる', async () => {
     const w = await led(2);
     await seatAdd(w.lead, 'pagetray', SEAT);
@@ -126,6 +161,28 @@ describe('roster seat close（Tech Lead 担当が repo の席を閉じる）', (
     w.wire.close('file:2');
     expect(await seatClose(w.lead, 'pagetray')).toEqual(['閉じた: SWE AI-36 pagetray: 課題（居場所はもう無かった）']);
     expect(readRole(w.tpm, 'AI-36.pagetray')).toBeUndefined();
+  });
+
+  test('起こし直して、まだ名乗っていない席は、前の席の【end】では閉じない', async () => {
+    const w = await led(2);
+    await seatAdd(w.lead, 'pagetray', SEAT);
+    const old = w.role('AI-36.pagetray', 'file:2');
+    await hello(old);
+    writeRole(w.tpm, { ...readRole(w.tpm, 'AI-36.pagetray')!, dismissed: 'done' });
+    await reportEnd(old, { prs: [], removed: [], left: 'なし' });
+    w.wire.close('file:2');
+    await seatAdd(w.lead, 'pagetray', SEAT);
+    await expect(seatClose(w.lead, 'pagetray')).rejects.toThrow(/まだ片付けの終わり（【end】）を送っていません/);
+  });
+
+  test('その席の Staff Engineer 担当の席が残っていれば、一緒に閉じる', async () => {
+    const w = await led(2);
+    await seatAdd(w.lead, 'pagetray', SEAT);
+    const seat = readRole(w.tpm, 'AI-36.pagetray')!;
+    writeRole(w.tpm, { ...seat, key: 'AI-36.pagetray.staff', subject: 'AI-36.pagetray', role: 'staff-engineer', title: 'レビュー AI-36.pagetray: PR #1', address: 'file:9' });
+    w.wire.close('file:2');
+    expect(await seatClose(w.lead, 'pagetray')).toEqual(['閉じた: SWE AI-36 pagetray: 課題（居場所はもう無かった）', '閉じた: レビュー AI-36.pagetray: PR #1（居場所はもう無かった）']);
+    expect(allRoles(w.tpm).map(r => r.key)).toEqual(['AI-36']);
   });
 
   test('【end】を送った席は閉じる', async () => {
@@ -192,6 +249,16 @@ describe('repo の席の後始末', () => {
     await reportDone(w.seat, { kind: 'result', summary: 'server を入れた', remaining: 'なし', decisions: 'なし', points: [] });
     expect(collect(w.tpm, 'gh-12').some(e => e.what.includes('【done】') && e.what.includes('server を入れた'))).toBe(true);
     expect(collect(w.tpm, 'gh-1').some(e => e.what.includes('【done】'))).toBe(false);
+    // 点を含む別の課題（Key の頭が同じ）は混ぜない。閉じた repo の席の記録は、控えで集め続ける。
+    await assign(w.tpm, 'gh-12.other', { role: 'software-engineer', brief: BRIEF, noIssueCopy: '試験', wait: 0 });
+    const other = w.role('gh-12.other', 'file:3');
+    await hello(other);
+    await reportDone(other, { kind: 'result', summary: '別の課題の成果', remaining: 'なし', decisions: 'なし', points: [] });
+    w.wire.close('file:2');
+    await seatClose(w.lead, 'pagetray');
+    const whats = collect(w.tpm, 'gh-12').map(e => e.what);
+    expect(whats.some(t => t.includes('別の課題の成果'))).toBe(false);
+    expect(whats.some(t => t.includes('server を入れた'))).toBe(true);
   });
 
   test('台帳での名は席ごと（<課題の Key>-<名>-swe）。親の課題の Key を subject に持つ', async () => {

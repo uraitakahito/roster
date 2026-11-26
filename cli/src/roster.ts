@@ -105,6 +105,22 @@ export function allRoles(ctx: Context): RoleRecord[] {
 /** その課題の Tech Lead 担当が起こした repo の席（名簿に居る物）。 */
 export const repoSeats = (ctx: Context, lead: string): RoleRecord[] => allRoles(ctx).filter(r => r.subject === lead && isRepoSeat(r));
 
+/** 起こした repo の席の控えの 1 行（状態の folder の `repo-seats.jsonl`。roster seat add が足し、席を閉じても消さない）。 */
+interface RepoSeatLine {
+  at: string
+  /** Tech Lead 担当の課題の Key。 */
+  lead: string
+  /** repo の席の名簿の Key。 */
+  key: string
+}
+
+/** repo の席を起こしたことを控える（閉じた後も、その席の記録を親の課題にまとめて読めるように）。 */
+export const noteRepoSeat = (ctx: Context, lead: string, key: string): void => ctx.state.append('repo-seats.jsonl', { at: ctx.now().toISOString(), lead, key } satisfies RepoSeatLine);
+
+/** その課題の Tech Lead 担当が起こした repo の席の Key（閉じた席も。控えと、今の名簿から）。Key の形では見ない（点を含む別の課題の Key と取り違えない）。 */
+export const repoSeatKeys = (ctx: Context, lead: string): string[] =>
+  [...new Set([...ctx.state.lines<RepoSeatLine>('repo-seats.jsonl').filter(l => l.lead === lead).map(l => l.key), ...repoSeats(ctx, lead).map(r => r.key)])];
+
 /** TPM 担当の宛先を読む。`roster hello` の前なら止める。 */
 export function requireTpm(ctx: Context): TpmRecord {
   const tpm = ctx.state.read<TpmRecord>('tpm.jsonc');
