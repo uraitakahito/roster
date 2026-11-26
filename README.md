@@ -2,7 +2,7 @@
 
 Product Manager（人）を、TPM・Software Engineer・DevOps Engineer・Staff Engineer・Sustaining Engineer・Auditor の
 各担当（Claude Code）が助けるための skill の一式と、担当のあいだの決まりを受け持つ `roster` の CLI。
-課題管理（Jira・GitHub の Issue）と担当どうしの連携（cmux）は、project ごとに設定で選ぶ。
+課題管理（Jira・GitHub の Issue）は、project ごとに設定で選ぶ。担当の居場所は cmux が並べ、担当どうしのメッセージは、メッセージキュー（NATS JetStream）で配る。
 
 ## ドキュメント
 
