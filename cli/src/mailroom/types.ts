@@ -85,6 +85,11 @@ export interface Mailroom {
   counts(to: Recipient): Promise<Counts>
   /** 今ある物を、古い順に取り置いて返す（待たない）。無ければ空。 */
   take(to: Recipient, limit: TakeLimit): Promise<Taken[]>
+  /**
+   * 受け手の箱に残っている物を、古い順に読む（取り置かない。渡した回数にも数えない）。取り置き中の物も、
+   * 渡し直しの上限を超えて undeliverable() がまだ片付けていない物も入る（数は counts() が持つ）。
+   */
+  peek(to: Recipient): Promise<Stored[]>
   /** 来るまで ms 待ち、来たら取り置いて返す。来なければ空。 */
   wait(to: Recipient, limit: TakeLimit, ms: number): Promise<Taken[]>
   /** 取り置いた物を「渡せた」と返す（箱から外れる）。同じ口（同じ process）で取った物だけを受ける。 */

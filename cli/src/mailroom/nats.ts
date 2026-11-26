@@ -204,6 +204,10 @@ export class NatsMailroom implements Mailroom {
     return { waiting: info.num_pending, held: info.num_ack_pending };
   }
 
+  async peek(to: Recipient): Promise<Stored[]> {
+    return (await this.scan(this.subject(to))).map(m => this.fromStored(to, m));
+  }
+
   take(to: Recipient, limit: TakeLimit): Promise<Taken[]> {
     return this.pull(to, limit, 0);
   }
@@ -322,7 +326,7 @@ export class NatsMailroom implements Mailroom {
   }
 
   /** 配る箱の中の物を、古い順に読む（取り置かない。渡した回数にも数えない）。filter は宛名。 */
-  private async peek(filter: string): Promise<StoredMsg[]> {
+  private async scan(filter: string): Promise<StoredMsg[]> {
     const { jsm } = await this.open();
     const out: StoredMsg[] = [];
     for (let seq = 1; ;) {
@@ -343,7 +347,7 @@ export class NatsMailroom implements Mailroom {
 
   async clear(to: Recipient): Promise<Stored[]> {
     const { jsm } = await this.open();
-    const kept = await this.peek(this.subject(to));
+    const kept = await this.scan(this.subject(to));
     try {
       await jsm.consumers.delete(this.work, recipientName(to));
     }
@@ -384,7 +388,7 @@ export class NatsMailroom implements Mailroom {
   }
 
   async outstanding(): Promise<Set<string>> {
-    return new Set((await this.peek(`roster.${this.space}.msg.>`)).map(m => m.header.get('Nats-Msg-Id')));
+    return new Set((await this.scan(`roster.${this.space}.msg.>`)).map(m => m.header.get('Nats-Msg-Id')));
   }
 
   async lag(): Promise<number> {

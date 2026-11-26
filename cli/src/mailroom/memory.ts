@@ -90,6 +90,12 @@ export class MemoryMailroom implements Mailroom {
     return Promise.resolve({ waiting: items.filter(i => i.deliveries === 0).length, held: items.filter(i => i.deliveries > 0).length });
   }
 
+  peek(to: Recipient): Promise<Stored[]> {
+    if (!RECIPIENT.test(to)) return Promise.reject(badName(to));
+    this.office.sweep();
+    return Promise.resolve(this.office.work.filter(i => i.stored.to === to).map(i => i.stored));
+  }
+
   take(to: Recipient, limit: TakeLimit): Promise<Taken[]> {
     const now = this.office.now().getTime();
     const { holdMs, maxDeliveries, maxHeld } = this.office.limits;
