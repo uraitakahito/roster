@@ -132,6 +132,16 @@ export const ROLES = {
     color: 'Green',
     endsWithoutDismiss: false,
   },
+  'tech-lead': {
+    label: 'Tech Lead',
+    prompt: '/tech-lead',
+    /** Software Engineer 担当と同じ（合わせの PR を書き、repo の席の計画と PR を見る）。 */
+    defaults: { model: 'claude-opus-5-5', effort: 'medium', permissionMode: 'bypassPermissions' },
+    /** 居場所の題（`Lead <Key>: <短い題>`）。分けた課題の全体をまとめる席で、課題に 1 人。 */
+    title: (key, short) => `Lead ${key}: ${short}`,
+    color: 'Red',
+    endsWithoutDismiss: false,
+  },
   'devops-engineer': {
     label: 'DevOps Engineer',
     prompt: '/devops-engineer',

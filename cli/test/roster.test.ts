@@ -63,7 +63,7 @@ function painting(tpm: Context, setColor: (address: string, color: string) => vo
 describe('居場所の色', () => {
   test('どの役割も色を持ち、TPM 担当とも互いとも違う。選んだ居場所の地の青と紛れる色は使わない', () => {
     const colors = [TPM_COLOR, ...Object.values(ROLES).map(r => r.color)];
-    expect(colors).toEqual(['Amber', 'Green', 'Orange', 'Magenta', 'Purple', 'Olive']);
+    expect(colors).toEqual(['Amber', 'Green', 'Red', 'Orange', 'Magenta', 'Purple', 'Olive']);
     expect(new Set(colors).size).toBe(colors.length);
     for (const blue of ['Blue', 'Navy', 'Indigo', 'Aqua', 'Teal', 'Charcoal']) expect(colors).not.toContain(blue);
   });
@@ -74,6 +74,18 @@ describe('居場所の色', () => {
     await assign(w.tpm, 'devops', { role: 'devops-engineer', wait: 0 });
     await assign(w.tpm, 'gh#1', { role: 'sustaining-engineer', wait: 0 });
     expect(['file:1', 'file:2', 'file:3'].map(a => w.wire.look(a)?.color)).toEqual(['Green', 'Orange', 'Magenta']);
+  });
+
+  test('roster assign --role tech-lead は、題 Lead <Key>: <短い題> の席を起こし、名乗りは依頼書を返す', async () => {
+    const w = world();
+    await hello(w.tpm);
+    const out = await assign(w.tpm, 'AI-36', { role: 'tech-lead', title: '3 つの repo', brief: BRIEF, wait: 0 });
+    expect(out[0]).toBe('起こした: Lead AI-36: 3 つの repo（file:1・Opus 5.5 · medium）');
+    expect(w.wire.look('file:1')?.color).toBe('Red');
+    const said = await hello(w.role('AI-36', 'file:1'));
+    expect(said).toContain('役割: Tech Lead');
+    expect(said).toContain('課題の Key: AI-36');
+    expect(said).toContain(`依頼書: ${BRIEF}`);
   });
 
   test('担当も、名乗る時に自分の居場所に役割の色を付け直す（起こす時に付けられなかった席・前から居る席）', async () => {

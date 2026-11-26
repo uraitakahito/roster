@@ -117,7 +117,7 @@ flowchart TB
 | `roster close` | その担当の起こしのアクターのうち、まだ居る物に幕引き（`closed`） |
 | `roster hello`（Auditor を除く）・`roster roles`・`roster assign` | 落ちた session の突き合わせ（下の「推しの幕引き」） |
 
-- **名**: castlist が `<接頭辞>.<番号>` で出す（番号は issuer と接頭辞ごと）。接頭辞は、担当が `<Key>-<役割の略>`（`swe`・`devops`・`sus`・`staff`。Staff Engineer 担当の席は、名簿の Key でなく、見ている課題の Key から作る: `ai-33-staff`）、TPM 担当が `<project の folder の名>-tpm`、Auditor が `<project の folder の名>-audit`。castlist の接頭辞は英小文字・数字・`-` だけなので、`.` でなく `-` でつなぎ、Key の大文字は小文字に、ほかの字は `-` に替える。issuer は `tpm.` と状態の folder の名（英小文字に替える。64 字を超える名は、頭を残して hash を足す）。
+- **名**: castlist が `<接頭辞>.<番号>` で出す（番号は issuer と接頭辞ごと）。接頭辞は、担当が `<Key>-<役割の略>`（`swe`・`lead`・`devops`・`sus`・`staff`。Staff Engineer 担当の席は、名簿の Key でなく、見ている課題の Key から作る: `ai-33-staff`）、TPM 担当が `<project の folder の名>-tpm`、Auditor が `<project の folder の名>-audit`。castlist の接頭辞は英小文字・数字・`-` だけなので、`.` でなく `-` でつなぎ、Key の大文字は小文字に、ほかの字は `-` に替える。issuer は `tpm.` と状態の folder の名（英小文字に替える。64 字を超える名は、頭を残して hash を足す）。
 - **起こしの印**（環境変数）: 起こす側が付け、hook が読む。`ROSTER_LAUNCH`（起こしの id。`roster start` の 1 行は打つたびに `uuidgen` で作り、`roster assign`・`roster audit start` は名簿の `launch` に書く）・`ROSTER_LAUNCHED_BY`（起こした者。`roster assign` は打った TPM 担当の `claude.session:<$CLAUDE_CODE_SESSION_ID>`、`roster start` と `roster audit start` は Product Manager）・`ROSTER_LAUNCH_MODEL`・`ROSTER_LAUNCH_EFFORT`（claude の `--model`・`--effort` と同じ値）・`ROSTER_LAUNCH_FRESH=1`（起こしたばかりの印）。担当には `roster run-role` が名簿から付ける。
 - **頼んだ model と effort**（`requested`）は、起こしたばかりの process の初めの登録（startup か resume）でだけ送る。`/clear` の後の session は同じ環境変数を持つが、その間に `/model` で替えたかもしれないので送らない。どの起こしで送ったかは状態の folder の `launches/<起こしの id>.jsonc` に残す。
 - **id**: 出来事・線・model と effort の id は、issuer・session・種類（と、何度も起きる物は番号）で決める。送り直しても同じ id なので、castlist は 2 度足さない。番号は送れた時だけ進める。登録の答え（本当の id と名）は `sessions/<session の id>.jsonc` に控える。
@@ -168,13 +168,14 @@ Auditor が、件の記録に残っている物（Key・役割・時刻）で ca
 |---|---|
 | TPM 担当 | Amber（#7D6608） |
 | Software Engineer 担当 | Green（#196F3D） |
+| Tech Lead 担当 | Red（#C0392B） |
 | DevOps Engineer 担当 | Orange（#A04000） |
 | Sustaining Engineer 担当 | Magenta（#AD1457） |
 | Staff Engineer 担当 | Purple（#6A1B9A） |
 | Auditor | Olive（#4A5C18） |
 
 - 色は、選んだ居場所の地の青と紛れない物から選ぶ（Blue・Navy・Indigo・Aqua・Teal・Charcoal は使わない）。どれも暗い画面の地より明るく、互いの色相も離す。課題ごとに色を替えない（同じ課題の席は、題の Key で分かる）。
-- 色相のいちばん近い組は Orange と Amber（24°）、Amber と Olive（28°）。どれも 1 席だけの役割（DevOps・TPM 担当・Audit）で、題も短く違うので、そのままにしている。
+- 色相のいちばん近い組は Red と Orange（18°）、Orange と Amber（24°）、Amber と Olive（28°）。Red は Orange より明るく、Orange・Amber・Olive はどれも 1 席だけの役割（DevOps・TPM 担当・Audit）で、題も短く違うので、そのままにしている。
 - どの席も、`roster hello` で名乗る時に自分の居場所に付ける（TPM 担当の居場所は利用者が作り、Auditor の席は Product Manager が手で起こすこともあるため）。起こされる席（`roster assign`・`roster ask review`・`roster audit start`）は、名乗る前から帯が出るように、宛先を名簿に書いた後に起こす命令も連携の口の `setColor` で付ける。TPM 担当の居場所に利用者が手で付けた色は、名乗るたびに Amber に戻る。
 - 色は飾りなので、付けられなくても止めずに 1 行で知らせる。
 - 色は起こす時・名乗る時に付くので、前から居る席には、次に `roster hello` を打つ（起こし直す）まで付かない。

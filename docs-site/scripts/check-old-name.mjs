@@ -38,6 +38,7 @@ const PEERS = [
   "pm-only",
   "unknown",
   "software-engineer",
+  "tech-lead",
   "devops-engineer",
   "staff-engineer",
   "sustaining-engineer",
