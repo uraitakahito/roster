@@ -70,7 +70,7 @@ describe('検査が止めた後に渡す（roster mail gate）', () => {
         ].join('\n'),
       },
     });
-    expect(deliveredLines(w.se)).toEqual([{ at: '2026-11-20T12:00:00.000Z', id, to: 't-x7k2', when: 'gate', nth: 1, lines: 7 }]);
+    expect(deliveredLines(w.se)).toEqual([{ at: '2026-11-20T12:00:00.000Z', id, to: 't-x7k2', when: 'gate', nth: 1, lines: 7, session: 's-200' }]);
     expect(w.office.work).toEqual([]);
     expect(w.se.state.read(gateFile('t-x7k2'))).toBeUndefined();
     expect(await askTpm(w.se, ask)).toContain('送った: 【ask-tpm】→ file:tpm（相手の手が空いた時に届く。送り直さない）');
@@ -187,7 +187,7 @@ describe('人が入力した時に渡す（roster mail prompt）', () => {
     const out = JSON.parse(await mailPrompt(w.hook(), JSON.stringify({ session_id: 's-200', transcript_path: transcript(3) })) ?? '{}') as { hookSpecificOutput: { hookEventName: string, additionalContext: string } };
     expect(out.hookSpecificOutput.hookEventName).toBe('UserPromptSubmit');
     expect(out.hookSpecificOutput.additionalContext).toBe(['roster: 人の入力の前に届いていたメッセージです（メッセージキューから渡した）。人の入力と合わせて扱ってください。', `--- ${TPM_FROM}（id ${id}）`, '【notify】入力の前に届いた物', '--- ここまで'].join('\n'));
-    expect(deliveredLines(w.se)).toEqual([{ at: '2026-11-20T12:00:00.000Z', id, to: 't-x7k2', when: 'prompt', nth: 1, lines: 3 }]);
+    expect(deliveredLines(w.se)).toEqual([{ at: '2026-11-20T12:00:00.000Z', id, to: 't-x7k2', when: 'prompt', nth: 1, lines: 3, session: 's-200' }]);
     expect(w.office.work).toEqual([]);
   });
 
@@ -217,7 +217,7 @@ describe('手を止めている間に待つ（roster mail wait）', () => {
     const id = left(w, 't-x7k2')[0]?.id ?? '';
     const r = await mailWait(w.hook(), JSON.stringify({ session_id: 's-200', transcript_path: transcript(5) }), new AbortController().signal);
     expect(r).toEqual({ code: 2, stderr: ['roster: 手を止めている間に届いたメッセージです（メッセージキューから渡した）。', `--- ${TPM_FROM}（id ${id}）`, '【notify】手が空いたら読む物', '--- ここまで'].join('\n') });
-    expect(deliveredLines(w.se)).toEqual([{ at: '2026-11-20T12:00:00.000Z', id, to: 't-x7k2', when: 'wake', nth: 1, lines: 5 }]);
+    expect(deliveredLines(w.se)).toEqual([{ at: '2026-11-20T12:00:00.000Z', id, to: 't-x7k2', when: 'wake', nth: 1, lines: 5, session: 's-200' }]);
     expect(w.office.work).toEqual([]);
     expect(w.se.state.read(waiterFile('t-x7k2'))).toBeUndefined();
   });

@@ -248,6 +248,8 @@ export interface DeliveredLine {
   nth: number
   /** その時の会話の記録（transcript）の行の数。分かる時だけ（guard が、送る命令を書いた返答より後に渡した物かを比べる）。 */
   lines?: number
+  /** 渡した session の id（hook の入力の session_id。分かる時だけ。guard が、同じ会話の記録の行の数だけを比べる）。 */
+  session?: string
 }
 
 /** 渡した記録を読む。 */
@@ -255,13 +257,28 @@ export const deliveredLines = (ctx: Context): DeliveredLine[] => ctx.state.lines
 
 /**
  * 渡した記録に 1 行足して返す。何度目か（nth）は、同じ受け手・同じ id の、hook が渡した行（output でない行）の数から出す（output の行は 0）。
- * lines は、その時の会話の記録の行の数（分かる時だけ）。
+ * lines は、その時の会話の記録の行の数、session は渡した session の id（どちらも、分かる時だけ）。
  */
-export function recordDelivered(ctx: Context, id: string, to: Recipient, when: DeliveredWhen, lines?: number): DeliveredLine {
+export function recordDelivered(ctx: Context, id: string, to: Recipient, when: DeliveredWhen, lines?: number, session?: string): DeliveredLine {
   const nth = when === 'output' ? 0 : deliveredLines(ctx).filter(l => l.id === id && l.to === to && l.when !== 'output').length + 1;
-  const line: DeliveredLine = { at: ctx.now().toISOString(), id, to, when, nth, ...(lines === undefined ? {} : { lines }) };
+  const line: DeliveredLine = { at: ctx.now().toISOString(), id, to, when, nth, ...(lines === undefined ? {} : { lines }), ...(session === undefined ? {} : { session }) };
   ctx.state.append(DELIVERED_FILE, line);
   return line;
+}
+
+/** guard が 1 度止めた、渡した記録の行を覚える数（受け手ごと）。 */
+const GUARDED_KEEP = 200;
+const guardedFile = (name: Recipient): string => `mail/guarded/${name}.jsonc`;
+
+/** 渡した記録の行を、1 行ずつ見分ける字。 */
+export const deliveredKey = (line: DeliveredLine): string => `${line.at} ${line.id} ${line.nth}`;
+
+/** guard が「渡した物を読んでから打ち直す」と 1 度止めた、渡した記録の行（同じ行では、2 度止めない）。 */
+export const guardedKeys = (ctx: Context, name: Recipient): Set<string> => new Set(ctx.state.read<string[]>(guardedFile(name)) ?? []);
+
+/** 渡した記録の行を、guard が止めた物として覚える。 */
+export function markGuarded(ctx: Context, name: Recipient, keys: string[]): void {
+  ctx.state.write(guardedFile(name), [...guardedKeys(ctx, name), ...keys].slice(-GUARDED_KEEP));
 }
 
 /** file の行の数（空の行は数えない）。読めなければ undefined。 */

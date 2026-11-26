@@ -159,6 +159,12 @@ function killsByPattern(words: string[]): boolean {
   return targets.length === 0 || targets.some(t => !KILL_TARGET.test(t));
 }
 
+/** roster の、メッセージを送る命令と、ページを置く命令（送る前の検査を通る物）。 */
+const SENDS = /^roster (?:(?:ask|report|notify|answer|dismiss|assign)\b|page put\b)/;
+
+/** 命令の中に、roster の送る命令（ask・report・notify・answer・dismiss・assign・page put）があるか。単純な命令の頭だけを見る。 */
+export const sendsMessage = (command: string): boolean => splitCommands(command).some(words => SENDS.test(words.join(' ')));
+
 /** 命令の頭にこれを書くと、道具の直打ちを通す（roster 自身の開発と試しのため。環境の手続きと、読むだけの担当の守りと、Audit の席を起こす命令と、pattern で process に合図を送る命令には効かない）。 */
 export const RAW = 'ROSTER_RAW=1';
 

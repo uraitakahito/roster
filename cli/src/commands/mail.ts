@@ -1,8 +1,10 @@
 // roster mail …: メッセージを NATS JetStream で渡す hook の命令（設定の messages が nats の席に、guard.ts の guardSettings が付ける）。
 // どれも hook の入力（stdin の JSON）を読み、Claude Code の作業を誤りで止めない（program.ts が、どの誤りでも exit 0 にする）。
 // 担当が中で起こした手伝い（subagent。入力に agent_id がある）の中では、何もしない。
+import { readFileSync } from 'node:fs';
 import type { Context } from '../context.ts';
-import { claimNamed, claudePid, deliveredLines, effective, gateFile, lineCount, ownName, readClaim, recordDelivered, removeClaim, stopWaiter, usesNats, waiterFile, writeClaim, type DeliveredWhen, type GateMark, type WaiterMark } from '../mail.ts';
+import { sendsMessage, type Verdict } from '../guard.ts';
+import { claimNamed, claudePid, deliveredKey, deliveredLines, effective, guardedKeys, markGuarded, gateFile, lineCount, ownName, readClaim, recordDelivered, removeClaim, stopWaiter, usesNats, waiterFile, writeClaim, type DeliveredWhen, type GateMark, type WaiterMark } from '../mail.ts';
 import type { Mailroom, Recipient, TakeLimit, Taken } from '../mailroom/types.ts';
 import { selfParty } from '../party.ts';
 import { copyMessageRecord } from './message-record.ts';
@@ -15,6 +17,8 @@ export interface HookInput {
   transcript_path?: string
   /** 手伝い（subagent）の中で動いた hook にだけ在る。 */
   agent_id?: string
+  /** 道具の hook にだけ在る: 道具の呼び出しの id（`toolu_…`）。 */
+  tool_use_id?: string
 }
 
 /** hook の入力を読む。JSON として読めなければ、欄の無い入力として扱う（hook は止めない）。 */
@@ -131,7 +135,7 @@ async function handOver(ctx: Context, room: Mailroom, name: Recipient, when: Del
   const lines = lineCount(input.transcript_path);
   const log = ctx.state.lines<Sent>('log.jsonl');
   for (const m of batch) {
-    const line = recordDelivered(ctx, m.id, name, when, lines);
+    const line = recordDelivered(ctx, m.id, name, when, lines, input.session_id);
     // 置き場の記録にも写す（待たない。写せなくても止めない）。
     copyMessageRecord(ctx, sentLineOf(log, m), { state: 'delivered', deliveredAt: line.at, via: when, deliveries: line.nth });
   }
@@ -300,4 +304,65 @@ async function pulled(ctx: Context, room: Mailroom, pulling: Promise<Taken[]>, l
   }
   if (got.taken === undefined) throw got.error;
   return got.taken;
+}
+
+// ---- 打つ前に止める守り（roster guard）への足し ----
+
+/** guard が見送った回の記録の file（送る命令を書いた返答の行が、会話の記録に見つからなかった回）。 */
+export const GUARD_SKIPS_FILE = 'mail-guard.jsonl';
+
+/**
+ * 会話の記録（JSONL）の中で、その道具の呼び出し（tool_use の id）を書いた返答の行が、何行目か（空の行は数えない。1 から）。
+ * 見つからない・読めない時は undefined。
+ */
+export function toolUseLine(path: string | undefined, toolUseId: string): number | undefined {
+  if (path === undefined || path === '') return undefined;
+  let lines: string[];
+  try {
+    lines = readFileSync(path, 'utf8').split('\n').filter(l => l !== '');
+  }
+  catch {
+    return undefined;
+  }
+  const found = lines.findIndex((l) => {
+    if (!l.includes(toolUseId)) return false;
+    try {
+      const row = JSON.parse(l) as { type?: string, message?: { content?: unknown } };
+      const content = row.message?.content;
+      return row.type === 'assistant' && Array.isArray(content) && content.some((c: { type?: string, id?: string } | null) => c?.type === 'tool_use' && c.id === toolUseId);
+    }
+    catch {
+      return false;
+    }
+  });
+  return found === -1 ? undefined : found + 1;
+}
+
+/**
+ * roster guard に足す守り（設定の messages が nats の席だけ。Bash の命令が、roster の送る命令・ページを置く命令の時）。
+ * - 手伝い（subagent。入力に agent_id がある）の中からの送る命令は止める（送る前の検査も、止めた後に渡す hook も、担当の物）。
+ * - 同じ返答の中で渡した物がある時は、1 度止める: この命令を書いた返答（会話の記録の中の、この道具の呼び出しの id を持つ行）より後に、
+ *   hook が渡した記録（行の数で比べる。同じ session の物だけ）があれば、「渡した物を読んでから打ち直す」と止める。同じ渡した記録では、2 度止めない。
+ *   会話の記録にその行が見つからない時は、止めずに、見送った事を GUARD_SKIPS_FILE に残す。
+ */
+export function mailGuard(ctx: Context, stdin: string, command: string): Verdict {
+  if (!usesNats(ctx) || !sendsMessage(command)) return { allow: true };
+  const input = hookInput(stdin);
+  if (input.agent_id !== undefined) {
+    return { allow: false, reason: '送る命令（roster ask・report・notify・answer・dismiss・assign・page put）は、手伝い（subagent）でなく担当が打ちます。手伝いは、送る中身を担当に返してください（担当が、届いたメッセージを読んだうえで打つ）。' };
+  }
+  const name = ownName(ctx);
+  if (name === undefined || input.tool_use_id === undefined) return { allow: true };
+  const hooked = deliveredLines(ctx).filter(l => l.to === name && l.when !== 'output' && l.lines !== undefined && (l.session === undefined || input.session_id === undefined || l.session === input.session_id));
+  if (hooked.length === 0) return { allow: true };
+  const written = toolUseLine(input.transcript_path, input.tool_use_id);
+  if (written === undefined) {
+    ctx.state.append(GUARD_SKIPS_FILE, { at: ctx.now().toISOString(), to: name, tool: input.tool_use_id, note: '会話の記録に、この道具の呼び出しの行が見つからない（止めていない）' });
+    return { allow: true };
+  }
+  const guarded = guardedKeys(ctx, name);
+  const after = hooked.filter(l => (l.lines ?? 0) >= written && !guarded.has(deliveredKey(l)));
+  if (after.length === 0) return { allow: true };
+  markGuarded(ctx, name, after.map(deliveredKey));
+  return { allow: false, reason: `この命令を書いた後に、メッセージが ${after.length} 件渡されています（同じ返答の中）。渡された物を読んでから、同じ命令を打ち直してください（事情が変わっていたら、中身を変えて打つ）。` };
 }
