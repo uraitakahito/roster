@@ -69,11 +69,11 @@ export interface CheckOutput {
  */
 export function checkStart(ctx: Context): CheckOutput | undefined {
   const me = selfParty(ctx.env);
-  const address = ctx.transport.whoami();
+  const address = ctx.seats.whoami();
   const now = ctx.now().getTime();
   const handled = new Set(ctx.state.lines<ReturnedLine>(RETURNED).map(l => l.id));
   const sent = new Map(ctx.state.lines<Sent>('log.jsonl').map(l => [l.id, l]));
-  const box = ctx.transport.mailbox(address);
+  const box = ctx.messages.mailbox(address);
   const wrong = box
     .filter(m => !handled.has(m.id) && candidate(m, now))
     .map(m => sent.get(m.id))
@@ -85,7 +85,7 @@ export function checkStart(ctx: Context): CheckOutput | undefined {
   // 既読にした物の中に、確かめた組の外の物（間に届いた物）があれば、失わないように中身を示す。
   const queued = box.filter(m => m.state === 'queued');
   const stopped = queued.length > 0 && queued.every(m => wrongIds.has(m.id));
-  const marked = stopped ? ctx.transport.markQueuedRead(address) : [];
+  const marked = stopped ? ctx.messages.markQueuedRead(address) : [];
   const yours = marked.filter(m => !wrongIds.has(m.id));
 
   const to = wrong[0]?.recipient ?? { key: '' };

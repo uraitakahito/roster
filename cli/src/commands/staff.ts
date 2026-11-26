@@ -78,7 +78,7 @@ export function relabelStaff(ctx: Context, seat: RoleRecord, subjectKey: string,
   const { target, description } = reviewLabel(asks);
   const title = ROLES[STAFF].title(subjectKey, target);
   try {
-    ctx.transport.relabel(seat.address ?? '', { title, ...(description === undefined ? {} : { description }) });
+    ctx.seats.relabel(seat.address ?? '', { title, ...(description === undefined ? {} : { description }) });
   }
   catch (e) {
     return [`居場所の題を替えられなかった（名簿の題は ${seat.title} のまま）: ${e instanceof Error ? e.message : String(e)}`];
@@ -178,7 +178,7 @@ export async function askReview(ctx: Context, options: { url: string, focus?: st
   if (same !== undefined) throw new TpmError(`同じ物のレビューを、もう頼んであります（#${same.n}。${same.askedAt} に頼んだ）。2 度目は送っていません。判定は Staff Engineer 担当から【review】で届きます`);
   const subject = staffSubject(ctx, self.key);
   const seat = readRole(ctx, staffKey(self.key));
-  const alive = seat?.address !== undefined && ctx.transport.seats().some(s => s.address === seat.address);
+  const alive = seat?.address !== undefined && ctx.seats.seats().some(s => s.address === seat.address);
   const focus = options.focus?.trim() || undefined;
   // 前の頼みで、席に渡したがまだ返っていない物（席が居る時は、その後ろに積む）と、まだ席に渡していない物（前の流れで TPM 担当に送られたまま、振られていない頼み。一緒に渡す）。
   const open = openReviews(ctx, self.key);

@@ -604,12 +604,12 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
 
   test('--briefs が無い【done】は、連携の道具が受信箱を読めなくても送る（案内の数えだけを飛ばす）', async () => {
     const w = await started();
-    const queued = w.se.transport.queued.bind(w.se.transport);
-    w.se.transport.queued = () => {
+    const queued = w.se.messages.queued.bind(w.se.messages);
+    w.se.messages.queued = () => {
       throw new TpmError('cmux agent inbox が失敗しました');
     };
     expect(reportDone(w.se, { kind: 'result', summary: 'x', remaining: 'なし', decisions: 'なし', points: [] })).toContain('送った: 【done】→ file:tpm（相手の手が空いた時に届く。送り直さない）');
-    w.se.transport.queued = queued;
+    w.se.messages.queued = queued;
   });
 
   test('答えが届く前に続きの assign を打っても止まらない（答え → すぐ続きの依頼書）', async () => {
@@ -737,8 +737,8 @@ describe('入口の検査: 自分が送った物は、未読に数えない（�
     await askTpm(w.se, { text: '1 通目', waitingFor: 'a' });
     const mine = w.wire.inbox('file:tpm').map(m => ({ id: m.id, from: m.from, text: m.text }));
     expect(mine).toHaveLength(1);
-    const real = w.se.transport.pending.bind(w.se.transport);
-    w.se.transport.pending = () => [...mine, ...real()];
+    const real = w.se.messages.pending.bind(w.se.messages);
+    w.se.messages.pending = () => [...mine, ...real()];
     expect(reportMerged(w.se, { pr: PR, note: '入れた' })[0]).toMatch(/^送った: 【merged】/);
     w.wire.release('file:tpm');
     w.wire.hold('file:1');
@@ -754,7 +754,7 @@ describe('入口の検査: 自分が送った物は、未読に数えない（�
     w.wire.hold('file:2');
     notify(w.tpm, 't-b2c3', { text: '取り違えた返事' });
     const stray = w.wire.inbox('file:2').map(m => ({ id: m.id, from: m.from, text: m.text }));
-    w.se.transport.pending = () => stray;
+    w.se.messages.pending = () => stray;
     await expect(askTpm(w.se, { text: 'q', waitingFor: 'a' })).rejects.toThrow(/まだ読んでいないメッセージが 1 件あります[\s\S]*【notify】取り違えた返事/);
   });
 });

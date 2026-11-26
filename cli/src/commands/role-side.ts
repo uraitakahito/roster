@@ -25,12 +25,12 @@ export async function hello(ctx: Context, options: { model?: string, effort?: st
   const tpm = record.role === 'auditor' ? undefined : requireTpm(ctx);
   const actor = await castlistHello(ctx);
   if (tpm === undefined) return [...actor, ...auditorHello(ctx, record)];
-  record.address = ctx.transport.whoami();
+  record.address = ctx.seats.whoami();
   record.helloAt = ctx.now().toISOString();
   // 起こす時の塗り（launch）が落ちた席・前から居る席も、名乗れば役割の色になる。
   const painted = paint(ctx, record.address, ROLES[record.role].color);
-  ctx.transport.setStatus('model', modelStatus(record.model, record.effort));
-  ctx.transport.setStatus('wait', WAIT.work('依頼書を読む'));
+  ctx.seats.setStatus('model', modelStatus(record.model, record.effort));
+  ctx.seats.setStatus('wait', WAIT.work('依頼書を読む'));
   writeRole(ctx, record);
   // 課題の Key が Jira か GitHub の Issue の形なら、課題管理の設定によらず中身を読める。
   const subject = subjectOf(record);
@@ -55,7 +55,7 @@ export async function hello(ctx: Context, options: { model?: string, effort?: st
 
 /** 自分宛てで、まだ届いていないメッセージを出す。届くのは手が空いた時なので、段の区切り（PR を出す前・merge を頼む前）に見る。 */
 export function inbox(ctx: Context): string[] {
-  const pending = ctx.transport.pending();
+  const pending = ctx.messages.pending();
   if (pending.length === 0) return ['まだ届いていないメッセージは無い'];
   // ここで見せた物では、送る前の検査（assertRead）は止まらない。
   markShown(ctx, pending);

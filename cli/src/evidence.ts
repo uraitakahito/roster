@@ -72,7 +72,7 @@ export function syncDeliveries(ctx: Context): number {
   const ours = new Set(ctx.state.lines<{ id: string }>('log.jsonl').map(l => l.id));
   const known = new Map(ctx.state.lines<MessageTrace>('deliveries.jsonl').map(t => [t.id, t]));
   let written = 0;
-  for (const trace of ctx.transport.history()) {
+  for (const trace of ctx.messages.history()) {
     const before = known.get(trace.id);
     if (!ours.has(trace.id) || (before !== undefined && same(before, trace))) continue;
     ctx.state.append('deliveries.jsonl', trace);

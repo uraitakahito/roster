@@ -14,7 +14,7 @@ import { RoutedTracker } from './tracker/routed.ts';
 import type { Tracker } from './tracker/types.ts';
 import { CmuxTransport } from './transport/cmux.ts';
 import { FileTransport } from './transport/file.ts';
-import type { Transport } from './transport/types.ts';
+import type { MessagePort, SeatPort } from './transport/types.ts';
 import { assertNoLegacySeat, envOf } from './env.ts';
 
 /** 生成した client を作る関数（server ごと。試験は偽の HTTP の handler を持つ client を作る物に替える）。 */
@@ -32,7 +32,10 @@ export interface Context {
   /** project の folder とその直下の folder の設定を合わせた物。 */
   config: RolesConfig
   state: State
-  transport: Transport
+  /** メッセージの口（送る・まだ届いていない物・届いた時刻）。 */
+  messages: MessagePort
+  /** 居場所の口（居場所を作る・題と状態・閉じる）。今は、メッセージの口と同じ道具の adapter。 */
+  seats: SeatPort
   tracker: Tracker
   env: NodeJS.ProcessEnv
   exec: Exec
@@ -66,5 +69,5 @@ export function createContext(env: NodeJS.ProcessEnv = process.env, cwd: string 
   const transport = config.transport === 'file' ? new FileTransport(state, envOf(env, 'ADDRESS') || 'file:tpm') : new CmuxTransport(exec);
   // 課題管理への書き込みは tracker.jsonl に残す。
   const tracker = new RecordedTracker(new RoutedTracker(config.trackers, exec), state, actor(env));
-  return { project, config, state, transport, tracker, env, exec, root, skillSets: composeSkillSets(config.sources, root), sleep, now: () => new Date(), clients: { castlist: url => castlistClient(url), pagetray: url => pagetrayClient(url) } };
+  return { project, config, state, messages: transport, seats: transport, tracker, env, exec, root, skillSets: composeSkillSets(config.sources, root), sleep, now: () => new Date(), clients: { castlist: url => castlistClient(url), pagetray: url => pagetrayClient(url) } };
 }

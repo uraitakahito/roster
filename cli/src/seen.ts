@@ -20,7 +20,7 @@ export function readShown(ctx: Context, address: string): Shown[] {
 /**
  * 見た時刻と、その出どころ。
  * - delivered: 連携の道具（cmux）が画面に配った時刻
- * - shown: roster が受け手に本文を見せた時刻（送る前の検査・roster inbox・roster hello。時刻の無い前の版の項目は、検査用では送った時刻、記録用では使わない）
+ * - shown: roster が受け手に本文を見せた時刻（送る前の検査・roster inbox。時刻の無い前の版の項目は、検査用では送った時刻、記録用では使わない）
  * - legacy: 前の版が送った時に「届いた」と書いた行（送った時刻）
  * - assumed: 時刻がどこにも無く、受け手の「まだ配っていない」にも無いので、送った時刻に倒した物（道具が時刻を返さない時。止めすぎない側）
  */
@@ -71,7 +71,7 @@ export function seenTimes(ctx: Context, options: { live: boolean }): SeenAt {
     if (before === undefined || t.deliveredAt < before) delivered.set(t.id, t.deliveredAt);
   };
   ctx.state.lines<MessageTrace>('deliveries.jsonl').forEach(keep);
-  ctx.transport.history().forEach(keep);
+  ctx.messages.history().forEach(keep);
   const shown = new Map<string, Map<string, string | undefined>>();
   const shownTo = (address: string): Map<string, string | undefined> => {
     let m = shown.get(address);
@@ -86,7 +86,7 @@ export function seenTimes(ctx: Context, options: { live: boolean }): SeenAt {
   const queuedTo = (address: string): Set<string> => {
     let q = queued.get(address);
     if (q === undefined) {
-      q = new Set(ctx.transport.queued(address));
+      q = new Set(ctx.messages.queued(address));
       queued.set(address, q);
     }
     return q;

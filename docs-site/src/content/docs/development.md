@@ -35,7 +35,7 @@ build は無い。`cli/bin/roster` は `cli/src/cli.ts` を node で直に動か
 | `cli/src/protocol.ts` | 担当の種類・見出しの表・状態の字の形・命令の一覧 |
 | `cli/src/commands/` | 決まりの命令（`tpm-side.ts`・`role-side.ts`・`messages.ts`・`launch.ts`・`staff.ts`・`infra.ts`・`page.ts`・`issue.ts`・`review.ts`） |
 | `cli/src/roster.ts`・`cli/src/state.ts`・`cli/src/reviews.ts` | 名簿と、状態の folder と、レビューの頼みの記録 |
-| `cli/src/transport/` | 連携の口（`types.ts`）と adapter（`cmux.ts`・`file.ts`） |
+| `cli/src/transport/` | 連携の口（`types.ts`。メッセージの口 `MessagePort` と居場所の口 `SeatPort` の 2 つ）と adapter（`cmux.ts`・`file.ts`。どちらも両方の口を持つ） |
 | `cli/src/tracker/` | 課題管理の口（`types.ts`）と adapter（`jira.ts`・`github.ts`）、課題の Key の形で adapter を選ぶ `routed.ts` |
 | `cli/src/guard.ts` | guard |
 | `cli/src/run-role.ts` | 連携の道具が担当の居場所で動かす `roster run-role`（名簿を読んで claude を起こす） |
@@ -43,7 +43,7 @@ build は無い。`cli/bin/roster` は `cli/src/cli.ts` を node で直に動か
 - **担当の種類を足す**: `cli/src/protocol.ts` の `ROLES` に足し、名の略（`cli/src/castlist.ts`）を書く（書き忘れは型の検査で落ちる）。設定で既定を替えられるようにするなら `cli/src/config.ts`、読むだけの担当なら `cli/src/guard.ts` の読むだけの担当の表にも足す。skill は `skill-sets/<名前>/.claude/skills/<役割>/SKILL.md`。
 - **見出しを足す・変える**: `cli/src/protocol.ts` の `HEADINGS` と、`skill-sets/core/.claude/skills/_shared/protocol.md` の表を合わせる（`check` が揃いを見る）。
 - **命令を足す**: `cli/src/program.ts`（か `cli/src/commands/register.ts`）に足し、`cli/src/protocol.ts` の `COMMANDS` にも書く（試験が命令の木との揃いを、`check` が skill と docs の `roster <命令>` が在るかを見る）。
-- **道具を足す**: `transport/` か `tracker/` に口を満たす adapter を書き、`cli/src/config.ts` の選択肢と `cli/src/context.ts`（課題管理は `cli/src/tracker/routed.ts`）に足す。上の層は変えない。
+- **道具を足す**: `transport/` か `tracker/` に口を満たす adapter を書き、`cli/src/config.ts` の選択肢と `cli/src/context.ts`（課題管理は `cli/src/tracker/routed.ts`）に足す。上の層は変えない。連携の口は 2 つに分かれていて、命令は `ctx.messages`（送る・まだ届いていない物・届いた時刻）と `ctx.seats`（居場所を作る・題と状態・閉じる）を名指して呼ぶ。メッセージだけ・居場所だけを別の道具に替える時は、その口だけを満たす adapter を書く。
 - **試し方**: 決まりの命令は、連携を `file`（メッセージ・居場所・状態をファイルに書くだけ）にした project で cmux 無しに試せる（`cli/test/helpers.ts`）。実機で担当を起こして試すときは、`ROSTER_STATE` を先に作った一時の folder（`mktemp -d` など）に向けて本物の名簿を汚さない（`ROSTER_STATE` の folder が無いと、`roster` は空の状態を作らずに止まる）。担当の居場所の中で試験を流しても、試験は roster の環境変数（`ROSTER_*`）を抜いてから `roster` を起こす（`cli/src/env.ts` の `withoutRosterEnv`）。
 - **道具を直に打つ**: `roster` が起こした session では、guard が `cmux` のメッセージ・状態・居場所の命令と、`acli`・`gh issue` の記録と状態の命令の直打ちを止める（課題を読む命令は止めない。見るのは単純な命令の頭だけなので、commit の文や here-document に道具の名を書いても止まらない）。担当が置き場に消す要求（`curl -X DELETE …/api/pages…`・`…/api/files…`）を直に送るのも、置き場の CLI の消す命令（`pagetray page delete`・`pagetray file delete`・`pagetray api -X DELETE`）を打つのも止める（消してよいのは TPM 担当だけ。担当には環境変数 `PAGETRAY_NO_DELETE=1` も渡すので、guard をすり抜けても CLI が消さない）。adapter の開発で直に打つときは、命令の頭に `ROSTER_RAW=1` を付ける。
 
