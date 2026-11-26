@@ -120,6 +120,21 @@ describe('課題への記録（GitHub の Issue）', () => {
     expect(texts(w, 'file:1')[0]).toBe('【answer】(1) 案 A (2) project ごと\n細かい事は依頼書に');
   });
 
+  test('置き場が 1.0.0 より前（0.8.x に戻した）なら、ask pm・answer・dismiss は送る前に止まる（送った後に印で落ちない。review-66）', async () => {
+    const w = await started();
+    w.store.version = '0.8.0';
+    const sent = () => [texts(w, 'file:tpm').length, texts(w, 'file:1').length];
+    const before = sent();
+    for (const run of [
+      () => askPm(w.se, { url: 'https://claude.ai/artifact/c1', items: ['案の選択'], waitingFor: '案の選択' }),
+      () => answer(w.tpm, 't-x7k2', { text: '(1) 案 A' }),
+      () => dismiss(w.tpm, 't-x7k2', { handover: false }),
+    ]) {
+      await expect(run()).rejects.toThrow(/の版は 0\.8\.0 で、この roster が話す API（1\.0\.0 から）を持ちません。何も頼んでいません。/);
+    }
+    expect(sent()).toEqual(before);
+  });
+
   test('【ask-pm】は状態を回答待ち(PM) にする。確認のページは開かない（Product Manager は置き場の一覧の UI で見る）', async () => {
     const w = await started();
     await askPm(w.se, { url: 'https://claude.ai/artifact/c1', items: ['案の選択'], waitingFor: '案の選択' });

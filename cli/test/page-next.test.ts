@@ -13,7 +13,7 @@ import { fileDelete, fileList, filePath, filePut } from '../src/commands/file.ts
 import { pageDelete, pageImport, pageList, pagePath, pagePut, pageReply } from '../src/commands/page.ts';
 import { setReply, waitingByParty, waitingUrls } from '../src/commands/reply.ts';
 import { markVerdict } from '../src/commands/review-marks.ts';
-import { pagetrayClient } from '../src/commands/store.ts';
+import { atLeast, pagetrayClient } from '../src/commands/store.ts';
 import type { Context } from '../src/context.ts';
 import { writeRole } from '../src/roster.ts';
 import { nextHandler, type NextAnswer, type NextSeen } from './next-fake.ts';
@@ -494,5 +494,16 @@ describe('設定の api の欄', () => {
     await pageList(s.tpm, {});
     expect(s.made()).toBeGreaterThan(0);
     expect(s.curls()).toEqual([]);
+  });
+});
+
+describe('版の比べ（atLeast。castlist の requireUp と置き場の requireStore が使う）', () => {
+  test('数で比べ、後ろの -dev などは読まない。形の違う字は、より前とみなす', () => {
+    expect(atLeast('1.0.0', '1.0.0')).toBe(true);
+    expect(atLeast('1.10.0', '1.9.9')).toBe(true);
+    expect(atLeast('1.0.1-dev', '1.0.0')).toBe(true);
+    expect(atLeast('0.8.0', '1.0.0')).toBe(false);
+    expect(atLeast('0.10.1', '0.9.0')).toBe(true);
+    for (const garbage of ['', 'ok', '1.0', 'v1.0.0']) expect(atLeast(garbage, '1.0.0')).toBe(false);
   });
 });
