@@ -144,7 +144,7 @@ roster infra run pagetray -- container run -d --name pagetray \
 - `PAGETRAY_CASTLIST_URL` を書いた置き場は、castlist が止まっている・名で届かない間、送り手を付けた置く要求を `503` で断る（何も置かない。`roster page put` は「castlist に送り手を聞けませんでした」と出す）。castlist を起こすのは Product Manager（[アクターの台帳](#アクターの台帳castlist)）。castlist が起きているのに続く時は、置き場から `castlist.box` に届いていない（同じ network に居ない・名が違う）。
 - 8801 が使われていたら別の port にし、担当が使う URL を環境変数 `ROSTER_PAGES_URL`（[設定](/configuration/)）で合わせる。
 - 起こしたら、pagetray の docs の「[確かめる](https://uraitakahito.github.io/pagetray/run.html#確かめる)」をする。試しのページを置いたら、TPM 担当が `roster page delete <URL> --yes` で消す（[担当のあいだの決まり](/protocol/#ページの置き場)）。
-- 「確かめる」の 6（一覧の UI を、読むだけの試験で見る）は、DevOps Engineer 担当が自分で流す。pagetray の checkout のある folder で、起こした版の試験を取り出して打ち、Node と pnpm が要る。試験は本物の browser（roster を動かす機械の Chrome）で一覧の UI を開くが、置き場には何も書かない。向ける置き場は `PAGETRAY_E2E_URL` だけで決まる（ほかの環境変数は要らない）。出力を結果のページに載せる。
+- 「確かめる」の 6（一覧の UI を、読むだけの試験で見る）は、DevOps Engineer 担当が自分で流す。pagetray の checkout のある folder で、起こした版の試験を取り出して打ち、Node と pnpm が要る。試験は本物の browser（roster を動かす機械の Chrome）で一覧の UI を開くが、置き場には何も書かない。向ける置き場は `PAGETRAY_E2E_URL` で決まる。ただし v1.0.0 の試験だけは、`PAGETRAY_E2E_URL` の前に `PAGETRAY_E2E_API=next` も付ける（v1.0.0 の試験の既定は前の API の形で、付けないと前の道を叩いて落ちる。次の版から要らない。pagetray の docs の「確かめる」と同じ）。出力を結果のページに載せる。
 
   ```sh
   git -C pagetray fetch --tags
@@ -199,7 +199,7 @@ pagetray の新しい版が出て、この repo の `.pagetray-version` が上�
 castlist と pagetray は、1.0.0 で API も DB も替えた（AI-36 の切り替え。castlist は `castlist-data-v1`、pagetray は `pagetray-data-v1` の volume で動く）。戻す道は、切り替えの前の volume（`castlist-data`・`pagetray-data`）が残っている間だけある。要る時だけする。
 
 - **2 つの server は組で戻す**。1.0.0 の pagetray は送り手を castlist の新しい API で聞き、0.8.x の pagetray は前の API で聞くので、片方だけ戻すと、送り手を付けたページと file がみな断られる。
-- **roster も戻す**。この repo の roster は、1.0.0 より前の castlist と置き場を版で見て止まる（上の castlist の「この roster が話す API（1.0.0 から）を持ちません」と、置き場の「[版を上げる](#版を上げる)」の 4）。roster も切り替えの前の版（castlist と置き場の前の API に curl で送る版）に戻さないと、担当を起こせず、ページも置けない。
+- **roster も戻す**。この repo の roster は、1.0.0 より前の castlist と置き場を版で見て止まる（上の castlist の「この roster が話す API（1.0.0 から）を持ちません」と、置き場の「[版を上げる](#版を上げる)」の 4）。roster も切り替えの前の版（castlist と置き場の前の API に curl で送る版）に戻さないと、担当を起こせず、ページも置けない。戻す先は、#217（castlist の前の道を消した PR）を merge する直前の main の commit（`git -C <roster の本体> rev-parse "$(git -C <roster の本体> log --merges --grep '#217' --format=%H -n 1)^1"` の出す commit）。ほかの途中の commit に戻すと、片方の server とだけ話せる形になる。本体の checkout を戻すのは担当を止めてから（全ての担当がこの checkout の roster を使う）。
 - 手順は、castlist の docs の「[release を出す](https://uraitakahito.github.io/castlist/release.html)」の「切り替え」と、pagetray の docs の「[release を出す](https://uraitakahito.github.io/pagetray/release.html)」の「切り替え」。castlist を起こすのは Product Manager、置き場は DevOps Engineer 担当（`roster infra run pagetray --`）。切り替えから戻すまでに 1.0.0 に書いた物は、前の volume に入らない。
 
 ## 手元の builder（buildkit）

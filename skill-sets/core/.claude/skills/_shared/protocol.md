@@ -222,7 +222,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
   - ページには、出た `ページからの参照:` の形で相対に書く（同じ Key なら `<img src="files/<語>-<n>.<拡張子>">`、別の Key なら `../<Key>/files/…`）。置き場でも控えでも同じ形で開く。
   - 読む: `roster file path <URL>` で file の path にして Read tool で読む。`roster page path` も、ページが参照する file を控えに写し、`参照の file:` の行に path を出す。探すのは `roster file list`。
   - 消す: ページと同じく TPM 担当だけ。担当は `roster ask tpm` で URL と訳を送って頼む（秘密を上げてしまった時は、すぐ）。TPM 担当は `roster file delete <URL>…` で消す物と、それを参照しているページを見て、`--yes` を付けて消す。
-  - 「置き場（pagetray）の版が古く、file を扱えません」と出たら、`roster ask devops` で置き場の版を上げるよう頼む。
+  - 「置き場（…）の版は … で、この roster が話す API（1.0.0 から）を持ちません」と出たら（ページも file も同じ）、`roster ask devops` で置き場を 1.0.0 から後の版で起こすよう頼む。
 
 ## Product Manager に確かめる
 
