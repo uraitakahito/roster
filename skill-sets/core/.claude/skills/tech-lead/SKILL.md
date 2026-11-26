@@ -90,7 +90,7 @@ roster seat add <名> --brief <依頼書の URL> [--cwd <受け持つ repo の f
 
 - 「受け取った」だけの返事は送らない。返すのは、中身（答え・決定・次の手）がある時だけ。
 - 送る命令が「まだ渡っていないメッセージが … 件あります」と止まったら、hook が渡した本文を読んでから、同じ命令を打ち直す（protocol.md の「連絡の仕方」）。
-- 落ちた席（`roster roles` に「消えた」と出る）は、同じ名の `roster seat add` で起こし直す（上限には数えない）。
+- 落ちた席（`roster roles` に「消えた」と出る。送る命令も「居場所がありません」と止まる）は、同じ名の `roster seat add` で起こし直す（上限には数えない）。要らなければ `roster seat close <名>`（その席の返っていないレビューの頼みは、取り下げになる）。
 
 ## 5. repo の席からのメッセージを受ける
 
@@ -102,7 +102,7 @@ repo の席の成果・merge・問い・レビューの頼みは、TPM 担当を
 | 【ask-review】 | 下の 6 |
 | 【merged】【doc-fix】 | merge の順と、合わせの始め時を見る。返事は要らない |
 | 【done】 | 成果のページを読む。続きがあれば `roster seat brief`、無ければ `roster seat dismiss` |
-| 【end】 | `roster seat close <名>` で席を閉じる |
+| 【end】 | `roster seat close <名>` で席を閉じる（その席が頼んだレビューが返っていなければ、命令が止める。先に返す） |
 
 - repo の席の【incident】【ask-devops】【ask-tpm】は、TPM 担当へ届く（あなたには来ない）。
 - repo の席どうしは、じかに話さない。席の間で決めることは、あなたが境の取り決めに書いて、両方に知らせる。
@@ -115,10 +115,10 @@ repo の席の `roster ask review` は、あなたに【ask-review】で届く�
 2. **自分の計画・境の取り決め・その席の依頼書に照らして見る。**見る所: 取り決めの名と形のとおりか・ほかの repo とぶつからないか・受け持ちの外を触っていないか・試験が受け入れの条件を見ているか。
 3. レビューのページを書いて置き（`roster page put <file> --kind review`）、返す。
    ```sh
-   roster report review --url <レビューのページの URL> --verdict <approve|concerns|reject|not-assessed> --summary "<一言>"
+   roster report review --url <レビューのページの URL> --verdict <approve|concerns|reject|not-assessed> --summary "<一言>" [--review <頼みの番号>]
    ```
    - 判定の意味は protocol.md の「レビュー」の表。指摘は、所・何が・なぜ・お勧めの直し方を書く。
-   - 命令は、頼みを**古い順に 1 つずつ**返す（頼んだ席へじかに届く）。いくつも溜まっていたら、古い物から返す（`roster review list` で見る）。
+   - 判定は、頼んだ席へじかに届く。**返していない頼みがいくつもある時は、どの頼みへの判定かを `--review <番号>` で名指す**（番号は【ask-review】の `頼み: #<番号>`。名指さなければ、命令が頼みを並べて止まる）。結果の「届けた先」で、席と見る物を確かめる。溜まった頼みは `roster review list --key <課題の Key>` で見る。
 - **レビューでは直さない。**直すのは、頼んだ席。取り決めの方が誤りなら、取り決めを直して（3）、関わる席に知らせる。
 - 席が「直すべき」を受けない時は、席が TPM 担当に上げる（`roster ask tpm --review <番号>`）。
 - repo の席の PR を merge するのは、その席。あなたは merge しない。
