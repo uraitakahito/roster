@@ -10,6 +10,8 @@ import { paint } from './launch.ts';
 import { issueCopyLine, markShown } from './messages.ts';
 import { recordingTo, tpmHello } from './tpm-side.ts';
 import { envOf } from '../env.ts';
+import { ownClaim } from '../mail.ts';
+import { peekInbox } from './mail.ts';
 
 /**
  * 名乗る。$ROSTER_KEY が無ければ TPM 担当の名乗り（tpmHello）。
@@ -51,6 +53,15 @@ export async function hello(ctx: Context, options: { model?: string, effort?: st
     // 落ちた session の推しの幕引き（castlist と cmux があれば。Auditor は打たない）。
     ...await sweep(ctx),
   ];
+}
+
+/**
+ * roster inbox の入口。設定の messages が nats で、自分（この session）の名乗りが効いていれば、配りの口に残っている自分宛てを出すだけ
+ * （取り置かない・届いたにしない。commands/mail.ts の peekInbox）。それ以外は、今のとおり（inbox）。
+ */
+export async function inboxNow(ctx: Context): Promise<string[]> {
+  const claim = ownClaim(ctx);
+  return claim === undefined ? inbox(ctx) : peekInbox(ctx, claim.name);
 }
 
 /** 自分宛てで、まだ届いていないメッセージを出す。届くのは手が空いた時なので、段の区切り（PR を出す前・merge を頼む前）に見る。 */

@@ -15,12 +15,13 @@ import { TpmError } from '../skill-sets.ts';
 import { MAX_POINTS, type Note, type NoteKind, type NoteLink } from '../tracker/types.ts';
 import type { Incoming } from '../transport/types.ts';
 import { isStorePage, pageOwner, replyLine, samePage, waitingByParty, waitingUrls, WAITING_PAGES } from './reply.ts';
+import { tidyMail } from './mail.ts';
 import { copyMessageRecord } from './message-record.ts';
 import { markEscalated } from './review-marks.ts';
 import { isPageUrl } from './store.ts';
 import { readShown, returnedIds, seenTimes, shownFile, type SeenAt } from '../seen.ts';
 import { envOf } from '../env.ts';
-import { claimOf, gateFile, markPassed, ownClaim, passedIds, recordDelivered, usesNats, type GateMark } from '../mail.ts';
+import { claimOf, endedLines, gateFile, markPassed, ownClaim, passedIds, recordDelivered, usesNats, type GateMark } from '../mail.ts';
 import type { Counts, Recipient, Stored } from '../mailroom/types.ts';
 import { selfParty, TPM_PARTY, type Party } from '../party.ts';
 
@@ -176,6 +177,9 @@ function seatOf(ctx: Context, role: RoleRecord): string {
 
 /** TPM 担当から担当へ。居場所が無ければ止まる。 */
 async function toRole(ctx: Context, role: RoleRecord, id: HeadingId, body: string, replyTo?: string, extra: Pick<Sent, 'settle'> = {}): Promise<string> {
+  // メッセージを NATS で配る設定の時だけ: 渡せない物・期限切れを記録し、命令の結果に 1 通につき 1 度だけ出す（設定が cmux なら何も出ない）。
+  const ended = await tidyMail(ctx, { sweep: false });
+  if (ended.length > 0) ctx.print(ended);
   return deliver(ctx, id, role.key, TPM_TITLE, seatOf(ctx, role), body, partyOf(role), replyTo, extra);
 }
 
@@ -461,7 +465,9 @@ export function assertSettled(ctx: Context, role: RoleRecord, command: 'dismiss'
   const { unseen, briefs } = unsettled(ctx, role, seatOf(ctx, role), command === 'assign' ? ['brief'] : undefined);
   // 届け違いで返した物は、配られて既読になっているので「まだ見ていない」と字を分ける（TPM 担当が【returned】で扱った後なら --supersede で外す）。
   const returned = returnedIds(ctx);
-  const what = (l: Sent): string => returned.has(l.id) ? '届け違いで返した' : 'まだ見ていない';
+  // NATS で運んで、届かないまま終わった物（渡せない・期限切れ・席を閉じた）も、宛先の担当は見ていない。
+  const lost = new Set(endedLines(ctx).map(e => e.id));
+  const what = (l: Sent): string => returned.has(l.id) ? '届け違いで返した' : lost.has(l.id) ? '届かないまま終わった' : 'まだ見ていない';
   // 済んでいない依頼書として挙げる【brief】は、まだ見ていない物として 2 度挙げない。
   const late = unseen.filter(l => !briefs.some(b => b.id === l.id));
   const names = [...briefs.map(b => `${briefName(b.url)}（${b.url}）`), ...late.map(l => `${what(l)}【${l.heading}】（${l.at} に送った。id ${l.id}）`)];
@@ -478,7 +484,9 @@ export function assertSettled(ctx: Context, role: RoleRecord, command: 'dismiss'
     `${role.key} の担当に、まだ済んでいない物があります。送っていません。`,
     ...unseen.flatMap(l => [returned.has(l.id)
       ? `--- 届け違いで返した（${l.at} に送った。id ${l.id}。roster returned show ${l.id}。送り直したか、要らないと決めたなら --supersede）`
-      : `--- まだ見ていない（届いておらず、roster も見せていない。${l.at} に送った。id ${l.id}）`, l.text]),
+      : lost.has(l.id)
+        ? `--- 届かないまま終わった（渡せない・期限切れ。${l.at} に送った。id ${l.id}。送り直したか、要らないと決めたなら --supersede）`
+        : `--- まだ見ていない（届いておらず、roster も見せていない。${l.at} に送った。id ${l.id}）`, l.text]),
     ...(briefs.length === 0 ? [] : [`--- 【done】が返っていない依頼書: ${briefs.map(b => `${briefName(b.url)}（${b.url}）`).join('・')}`]),
     '--- ここまで',
     how,

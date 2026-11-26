@@ -18,6 +18,7 @@ import { route } from '../tracker/routed.ts';
 import { findHook, oldBannerConfigNotice, staleHook } from './banner.ts';
 import { castlistHello, closeLaunch, sweep } from './castlist.ts';
 import { issueCopy, launch, paint, roleDefaults } from './launch.ts';
+import { clearSeat, tidyMail } from './mail.ts';
 import { assertRead, assertSettled, brief } from './messages.ts';
 import { pageFolder } from './page.ts';
 import { markBrief } from './review-marks.ts';
@@ -41,7 +42,9 @@ export async function tpmHello(ctx: Context, options: { model?: string, effort?:
   // 連携の道具が古いメッセージを捨てる前に、届いた時刻を写す。
   syncDeliveries(ctx);
   const legacy = legacyEnvNotice(ctx.env).map(line => `${line}（Product Manager に伝える）`);
-  return [...actor, `TPM 担当の宛先: ${address}`, ...painted, ...configLines(ctx), ...bannerHint(ctx), ...legacy, ...await roles(ctx)];
+  // メッセージを NATS で配る設定の時だけ: 渡せない物・期限切れを記録して出し、名簿に無い受け手の取り口を掃く（設定が cmux なら空）。
+  const mail = await tidyMail(ctx, { sweep: true });
+  return [...actor, `TPM 担当の宛先: ${address}`, ...painted, ...configLines(ctx), ...bannerHint(ctx), ...legacy, ...mail, ...await roles(ctx)];
 }
 
 /** 既定で埋めた値には「（既定）」を付ける（設定に書いた値と見分けるため）。 */
@@ -280,7 +283,9 @@ export async function close(ctx: Context, key: string): Promise<string[]> {
   // 居場所を閉じる前に、castlist に幕引きを送る（閉じた後の SessionEnd の hook が届くかは、閉じ方による）。
   const castlist = await closeLaunch(ctx, record);
   if (alive && record.address !== undefined) ctx.seats.close(record.address);
+  // メッセージを NATS で配る設定の時だけ: この受け手の取り口と残りを消し、残っていた物を記録する（設定が cmux なら空）。
+  const mail = await clearSeat(ctx, record);
   removeRole(ctx, key);
   const staff = isStaffKey(key) || readRole(ctx, staffKey(key)) === undefined ? [] : await close(ctx, staffKey(key));
-  return [`閉じた: ${record.title}${alive ? `（${record.address}）` : '（居場所はもう無かった）'}`, ...castlist, ...staff];
+  return [`閉じた: ${record.title}${alive ? `（${record.address}）` : '（居場所はもう無かった）'}`, ...castlist, ...mail, ...staff];
 }

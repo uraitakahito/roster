@@ -18,7 +18,7 @@ import { PAGE_KINDS, pageDelete, pageImport, pageList, pagePath, pagePut, pageRe
 import { mailClaim, mailGate, mailPrompt, mailRelease, mailWait, type WaitResult } from './commands/mail.ts';
 import { registerMessages } from './commands/register.ts';
 import { registerReview } from './commands/review.ts';
-import { hello, inbox } from './commands/role-side.ts';
+import { hello, inboxNow } from './commands/role-side.ts';
 import { assign, close, newKey, roles, type AssignOptions } from './commands/tpm-side.ts';
 import { composeSkillSets, readConfigSources } from './config.ts';
 import { createContext, mailroomsClosed } from './context.ts';
@@ -104,7 +104,7 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
     .option('--model <model>', 'TPM 担当の model（既定は roster start が起こす model。$ROSTER_MODEL があればそれ）')
     .option('--effort <effort>', 'TPM 担当の effort（既定は $CLAUDE_EFFORT、無ければ roster start が起こす effort）')
     .action(async (options: { model?: string, effort?: string }) => print(await hello(createContext(), options)));
-  program.command('inbox').description('自分宛てで、まだ届いていないメッセージを出す（段の区切りに見る）').action(() => print(inbox(createContext())));
+  program.command('inbox').description('自分宛てで、まだ届いていないメッセージを出す（段の区切りに見る）').action(async () => print(await inboxNow(createContext())));
   registerMessages(program, print);
   registerReview(program, print);
   registerIncident(program, print);

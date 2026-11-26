@@ -4,8 +4,10 @@
 import { readFileSync } from 'node:fs';
 import type { Context } from '../context.ts';
 import { sendsMessage, type Verdict } from '../guard.ts';
-import { claimNamed, claudePid, deliveredKey, deliveredLines, effective, guardedKeys, markGuarded, gateFile, lineCount, ownName, readClaim, recordDelivered, removeClaim, stopWaiter, usesNats, waiterFile, writeClaim, type DeliveredWhen, type GateMark, type WaiterMark } from '../mail.ts';
-import type { Mailroom, Recipient, TakeLimit, Taken } from '../mailroom/types.ts';
+import { allClaims, claimNamed, claudePid, deliveredKey, deliveredLines, effective, ENDED_FILE, endedLines, recipientName, removeClaim as dropClaim, type EndedHow, type EndedLine, guardedKeys, markGuarded, gateFile, lineCount, ownName, readClaim, recordDelivered, removeClaim, stopWaiter, usesNats, waiterFile, writeClaim, type DeliveredWhen, type GateMark, type WaiterMark } from '../mail.ts';
+import { MAILROOM_LIMITS, type Mailroom, type Recipient, type Stored, type TakeLimit, type Taken } from '../mailroom/types.ts';
+import { allRoles, type RoleRecord } from '../roster.ts';
+import { envOf } from '../env.ts';
 import { selfParty } from '../party.ts';
 import { copyMessageRecord } from './message-record.ts';
 import type { Sent } from './messages.ts';
@@ -365,4 +367,125 @@ export function mailGuard(ctx: Context, stdin: string, command: string): Verdict
   if (after.length === 0) return { allow: true };
   markGuarded(ctx, name, after.map(deliveredKey));
   return { allow: false, reason: `この命令を書いた後に、メッセージが ${after.length} 件渡されています（同じ返答の中）。渡された物を読んでから、同じ命令を打ち直してください（事情が変わっていたら、中身を変えて打つ）。` };
+}
+
+// ---- TPM 担当の側の片付け ----
+
+/** 届かずに終わった訳の、命令の結果に出す字と、置き場の記録に書く状態と道。 */
+const ENDED: Record<EndedHow, { label: string, why: string, state: 'undeliverable' | 'expired', via: string }> = {
+  undeliverable: { label: '渡せない', why: `渡し直しの上限（${MAILROOM_LIMITS.maxDeliveries} 度）を超えた`, state: 'undeliverable', via: 'max-deliveries' },
+  expired: { label: '期限切れ', why: `届かないまま ${MAILROOM_LIMITS.undeliveredTtlMs / 3_600_000} 時間で消えた`, state: 'expired', via: 'ttl' },
+  closed: { label: '期限切れ（席を閉じた）', why: '届かないまま、受け手の取り口を片付けた', state: 'expired', via: 'closed' },
+};
+
+/** 期限切れを判じた時刻を覚える file（送る命令のたびには、記録の箱を読み直さない）。 */
+const EXPIRED_CHECK_FILE = 'mail/expired-check.jsonc';
+/** 送る命令の時に、期限切れを判じ直すまでの間（ミリ秒）。名乗る時は、いつも判じる。 */
+const EXPIRED_CHECK_EVERY_MS = 60 * 60 * 1000;
+
+/**
+ * 届かずに終わった 1 通を記録し（ENDED_FILE。1 通につき 1 行）、置き場の記録に写し、命令の結果に出す 1 行を返す。
+ * もう記録してあれば、何もせず undefined（結果に出すのは、1 通につき 1 度だけ）。
+ */
+function ended(ctx: Context, log: Sent[], known: Set<string>, how: EndedHow, m: Stored): string | undefined {
+  if (known.has(m.id)) return undefined;
+  known.add(m.id);
+  ctx.state.append(ENDED_FILE, { at: ctx.now().toISOString(), id: m.id, to: m.to, how } satisfies EndedLine);
+  const sent = sentLineOf(log, m);
+  const deliveries = deliveredLines(ctx).filter(l => l.id === m.id && l.when !== 'output').length;
+  copyMessageRecord(ctx, sent, { state: ENDED[how].state, via: ENDED[how].via, ...(deliveries === 0 ? {} : { deliveries }) });
+  return `${ENDED[how].label}: 【${sent.heading}】${sent.from} → ${sent.recipient?.key ?? m.to}（${sent.at} に送った。id ${m.id}。${ENDED[how].why}。要る中身なら、送り直す）`;
+}
+
+/** 名簿の行の、配りの受け手の名。作れない組（長い）なら undefined。 */
+function nameOfRole(role: Pick<RoleRecord, 'key' | 'launch'>): Recipient | undefined {
+  try {
+    return recipientName({ key: role.key, ...(role.launch === undefined ? {} : { launch: role.launch }) });
+  }
+  catch {
+    return undefined;
+  }
+}
+
+/**
+ * TPM 担当の側の片付け（設定の messages が nats の時だけ。TPM 担当が名乗る時と、送る命令を打つ時に呼ぶ）。命令の結果に出す行を返す。
+ * - 渡し直しの上限を超えた物を引いて「渡せない」と記録し、置き場に写す（T2）。
+ * - 届かないまま期限で消えた物（記録の箱にあって・配る箱に無く・渡した記録が無く・置いてから期限を過ぎた物）を「期限切れ」と記録し、写す（T3）。
+ *   判じるのは、写しの遅れが 0 の時だけ。名乗る時（sweep）はいつも、送る命令の時は EXPIRED_CHECK_EVERY_MS に 1 度。
+ * - sweep（名乗る時）: 名簿に無く、名乗りも効いていない受け手の取り口を掃き、残っていた物を「期限切れ（席を閉じた）」と記録する（N1）。
+ * どの行も、1 通につき 1 度だけ出る。配りの口が誤りの時は、何も出さずに終わる（呼んだ命令を止めない）。
+ */
+export async function tidyMail(ctx: Context, options: { sweep: boolean }): Promise<string[]> {
+  if (!usesNats(ctx) || envOf(ctx.env, 'KEY') !== undefined) return [];
+  const out: string[] = [];
+  try {
+    const room = await ctx.mailroom();
+    const log = ctx.state.lines<Sent>('log.jsonl');
+    const known = new Set(endedLines(ctx).map(l => l.id));
+    const keep = (how: EndedHow, m: Stored): void => {
+      const line = ended(ctx, log, known, how, m);
+      if (line !== undefined) out.push(line);
+    };
+    for (const u of await room.undeliverable()) {
+      if (u.stored !== undefined) keep('undeliverable', u.stored);
+      else out.push(`${ENDED.undeliverable.label}: ${u.to} 宛ての 1 通（中身は、もう期限で消えていた。${ENDED.undeliverable.why}）`);
+    }
+    const now = ctx.now().getTime();
+    const checked = ctx.state.read<{ at: string }>(EXPIRED_CHECK_FILE)?.at;
+    if ((options.sweep || checked === undefined || now - Date.parse(checked) >= EXPIRED_CHECK_EVERY_MS) && await room.lag() === 0) {
+      // 前に判じた時より後に期限を過ぎた物だけを読む（初めは、記録の箱の残す長さの分）。
+      const since = new Date(checked === undefined ? now - MAILROOM_LIMITS.recordTtlMs : Date.parse(checked) - MAILROOM_LIMITS.undeliveredTtlMs - EXPIRED_CHECK_EVERY_MS);
+      const outstanding = await room.outstanding();
+      const handed = new Set(deliveredLines(ctx).filter(l => l.when !== 'output').map(l => l.id));
+      for (const m of await room.record(since)) {
+        if (Date.parse(m.at) + MAILROOM_LIMITS.undeliveredTtlMs <= now && !outstanding.has(m.id) && !handed.has(m.id)) keep('expired', m);
+      }
+      ctx.state.write(EXPIRED_CHECK_FILE, { at: new Date(now).toISOString() });
+    }
+    if (options.sweep) {
+      const listed = new Set([nameOfRole(selfParty(ctx.env)), ...allRoles(ctx).map(nameOfRole), ...allClaims(ctx).filter(c => effective(ctx, c)).map(c => c.name)]);
+      for (const name of await room.recipients()) {
+        if (listed.has(name)) continue;
+        const left = await room.clear(name);
+        for (const m of left) keep('closed', m);
+        dropClaim(ctx, name);
+        out.push(`名簿に無い受け手の取り口を片付けた: ${name}（残っていた物 ${left.length} 通）`);
+      }
+    }
+  }
+  catch {
+    // 配りの口が応えない時は、片付けを見送る（次の回に見る）。
+  }
+  return out;
+}
+
+/**
+ * 席を閉じる時の片付け（roster close。設定の messages が nats の時だけ）: その受け手の取り口と残りを消し、残っていた物を
+ * 「期限切れ（席を閉じた）」と記録して写す。名乗りと印も消す。命令の結果に出す行を返す。
+ * 担当の交代（dismiss --handover）の後の close では、消さない（同じ受け手の名を、次の担当が継ぐことがある）。
+ */
+export async function clearSeat(ctx: Context, role: RoleRecord): Promise<string[]> {
+  if (!usesNats(ctx) || role.dismissed === 'handover') return [];
+  const name = nameOfRole(role);
+  if (name === undefined) return [];
+  try {
+    const left = await (await ctx.mailroom()).clear(name);
+    const log = ctx.state.lines<Sent>('log.jsonl');
+    const known = new Set(endedLines(ctx).map(l => l.id));
+    const lines = left.map(m => ended(ctx, log, known, 'closed', m)).filter(l => l !== undefined);
+    dropClaim(ctx, name);
+    ctx.state.remove(gateFile(name));
+    if (stopWaiter(ctx, name)) ctx.state.remove(waiterFile(name));
+    return lines;
+  }
+  catch (e) {
+    return [`メッセージキューが応えないので、${role.key} の取り口を片付けられなかった（${e instanceof Error ? e.message : String(e)}）。次に TPM 担当が名乗る時に掃く`];
+  }
+}
+
+/** roster inbox の、NATS の形（設定の messages が nats で、名乗っている session）: 自分宛てで残っている物を、取り置かずに出すだけ（届いたとは記録しない）。 */
+export async function peekInbox(ctx: Context, name: Recipient): Promise<string[]> {
+  const letters = await (await ctx.mailroom()).peek(name);
+  if (letters.length === 0) return ['まだ届いていないメッセージは無い'];
+  return [...letters.flatMap(m => [`--- ${m.from}（id ${m.id}）`, m.text]), '--- ここまで（出しただけ。届いたとは記録していない。hook が、この後で渡す）'];
 }
