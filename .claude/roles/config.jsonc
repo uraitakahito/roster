@@ -6,8 +6,8 @@
     // ページの置き場（別の repo の pagetray の image で動かす container と、DB を置く volume）。
     // 止めると担当はページを置けず、volume を消すと置かれたページの記録（役割・workspace の ID）が消える。
     // 起こし方は docs-site の運用のページの「ページの置き場（pagetray）」と、pagetray の docs の「動かす」（https://uraitakahito.github.io/pagetray/run.html）。
-    // volume は今の pagetray-data-v1 と、戻す時のために残す切り替えの前の pagetray-data。「-v pagetray-data」は、どちらを付けて起こす
-    // container run（写しから戻す・移す時の書き込みも）にも当たる。消す命令の 2 つも、字の含みで見るので、どちらの volume にも当たる。
+    // volume は pagetray-data-v1。guard は字の含みで見るので、「-v pagetray-data」は pagetray-data-v1 を付けて起こす
+    // container run（写しから戻す時の書き込みも）に当たり、消す命令の 2 つも pagetray-data-v1 に当たる。
     // 裸の「pagetray-data」は書かない（container volume inspect のような、volume を読むだけの命令まで止めるため）。
     "pagetray": {
       "guard": "tpm",

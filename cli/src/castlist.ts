@@ -11,7 +11,6 @@ import { closeSync, existsSync, fstatSync, openSync, readSync } from 'node:fs';
 import { basename } from 'node:path';
 import type * as Castlist from '../gen/castlist-client/dist-types/index.js';
 import { castlistApi, clientConfig, sendOnce, withoutAwsMiddleware } from './clients.ts';
-import { atLeast } from './commands/store.ts';
 import type { Context } from './context.ts';
 import { ROLE_NAMES, type RoleName } from './protocol.ts';
 import { readRole } from './roster.ts';
@@ -23,10 +22,8 @@ import { envOf } from './env.ts';
  * castlist の release を出したら、ここと試験の版を上げる（決まりは docs の開発の「castlist を上げる時」と、castlist の docs の「release を出す」）。
  */
 export const CASTLIST_VERSION = 'v1.0.0';
-/** castlist の volume（1.0.0 から。0.x の volume の castlist-data では起こさない。castlist の docs の release.html の「切り替え」）。 */
+/** castlist の volume（1.0.0 から）。 */
 export const CASTLIST_VOLUME = 'castlist-data-v1';
-/** この roster が話す castlist の API を持つ版（/healthz の version がこれより前なら止める）。 */
-export const API_SINCE = '1.0.0';
 /** castlist の docs（動かし方）。 */
 export const CASTLIST_DOCS = 'https://uraitakahito.github.io/castlist/';
 
@@ -136,8 +133,8 @@ export function castlistClient(url: string, requestHandler?: HttpHandler): Castl
   return withoutAwsMiddleware(new CastlistClient(clientConfig(url, REQUEST_TIMEOUT * 1000, requestHandler)));
 }
 
-/** 誤りの型の無い 404 の訳: 新しい API の道を持たない castlist（1.0.0 より前の 0.x の版）が答えた物。 */
-const OUTDATED = 'castlist が新しい API を持たない（castlist の版が 1.0.0 より前に見える。castlist を 1.0.0 に替える。Product Manager に伝える）';
+/** NotFound でない 404（UnknownOperationException・誤りの型の無い 404）の訳: この roster の呼ぶ操作を持たない castlist（定義より古い版）が答えた物。 */
+const OUTDATED = 'castlist が、この roster の呼ぶ操作を持たない（castlist の版が、この roster の .castlist-version より古い。castlist の版を上げる。Product Manager に伝える）';
 
 /** castlist に送る要求の周り（状態の folder の issuer・時計・生成した client）。 */
 export type Sender = Pick<Context, 'state' | 'now' | 'clients'>;
@@ -257,13 +254,6 @@ export async function requireUp(ctx: Pick<Context, 'env' | 'config' | 'exec' | '
   const r = await viaNext(ctx, url, (client, api, options) => client.send(new api.GetHealthCommand({}), options), out => ({ status: out.status, version: out.version, now: out.now?.toISOString() }), HEALTH_TIMEOUT);
   if (r.kind === 'busy') throw new TpmError(busyMessage(url, done));
   if (r.kind !== 'ok') throw new TpmError(downMessage(ctx, url, done, after));
-  // 0.x の castlist（切り替えの前の版。戻した時）も /healthz は同じ形で答えるので、版で見て止める。止めないと、
-  // 起こす命令は通り、hook の書く物（登録・出来事）は型の無い 404 で断られて黙って落ちる。
-  const answered = (r.body as { version?: unknown } | undefined)?.version;
-  const version = typeof answered === 'string' ? answered : '';
-  if (!atLeast(version, API_SINCE)) {
-    throw new TpmError(`castlist（${url}）の版は ${version || 'わからない'} で、この roster が話す API（${API_SINCE} から）を持ちません。${done}castlist を ${API_SINCE} から後の版で起こしてください（Product Manager に伝える）。castlist を 0.x に戻したのなら、roster も切り替えの前の版に戻す（castlist の docs の release.html の「切り替え」）`);
-  }
   const now = (r.body as { now?: unknown } | undefined)?.now;
   if (typeof now !== 'string' || Number.isNaN(Date.parse(now))) return [];
   const at = Date.parse(now);

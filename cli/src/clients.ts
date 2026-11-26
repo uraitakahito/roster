@@ -68,7 +68,7 @@ export function withoutAwsMiddleware<T extends HasMiddleware>(client: T): T {
 /**
  * 生成した client で 1 つ送った結果（server を問わない形）。
  * failed は HTTP の誤りの答え（状態の数・訳・ValidationException の fieldList の path）。down は答えの無い物（つながらない・時間切れ）と、2xx なのに本文を読めない答え
- * （読めない 2xx は、その状態の数を status に持つ。切り替えの前の版（0.x）の server の、形の違う答えを見分けるため）。
+ * （読めない 2xx は、その状態の数を status に持つ。形の違う答えを、応えないと見分けるため）。
  */
 export type Sent<O> = { kind: 'ok', out: O } | { kind: 'failed', code: number, message: string, fields: string[] } | { kind: 'down', status?: number };
 
@@ -84,7 +84,7 @@ export interface SendHow {
   server: string
   /** 送る 1 回の全部（つなぐ・送る・答えの本文を読み終えるまで）の上限のミリ秒（curl の --max-time と同じ）。 */
   wait: number
-  /** 誤りの型の無い 404（新しい API の道を持たない、切り替えの前の版（0.x）の server が答えた物）の訳。 */
+  /** NotFound でない 404（UnknownOperationException・誤りの型の無い 404。この roster の呼ぶ操作を持たない、定義より古い版の server が答えた物）の訳。 */
   outdated: string
 }
 
@@ -110,7 +110,7 @@ export async function sendOnce<C extends Closable, O>(make: () => C, send: (clie
     const type = (e as { name?: unknown } | undefined)?.name;
     // 答えの無い物と、時間切れ・中止（頭の後に本文で止まった時も、状態の数を持つことがある）は、状態の数の無い down（応えない）。
     if (typeof code !== 'number' || type === 'AbortError' || type === 'TimeoutError') return { kind: 'down' };
-    // 2xx なのに本文を読めない答えは、状態の数を持つ down（0.x の置き場の /healthz の字の ok など）。
+    // 2xx なのに本文を読めない答え（形の違う答え）は、状態の数を持つ down。
     if (code >= 200 && code < 300) return { kind: 'down', status: code };
     const fields = ((e as { fieldList?: { path?: unknown }[] }).fieldList ?? []).map(f => f.path).filter((p): p is string => typeof p === 'string');
     const message = code === 404 && type !== 'NotFound' ? how.outdated : e instanceof Error ? e.message : String(e);

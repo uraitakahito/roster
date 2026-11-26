@@ -62,12 +62,8 @@ export class FakeStore {
   markError: number | undefined;
   /** 置く要求（CreatePage・CreateFile）の引数（新しい API の名）。送った順。 */
   posts: URLSearchParams[] = [];
-  /** 受けた新しい API の要求（つながらない間の物も。版を見る /healthz は入れずに healths で数える）。送った順。 */
+  /** 受けた新しい API の要求（つながらない間の物も）。送った順。 */
   requests: NextSeen[] = [];
-  /** /healthz（GetHealth）が答える版。1.0.0 より前なら、roster は頼まずに止まる。 */
-  version = '1.0.0';
-  /** /healthz を聞かれた数（1 つの命令で 1 度だけ）。 */
-  healths = 0;
   /**
    * 送り手（actorIssuer・actorRef）を書いた置く要求に、castlist が何と答えたことにするか（pagetray の「送り手」）。
    * known は登録のあるアクター（置く）、unregistered は登録が無い（400 の fieldList に /actorRef）、unreachable は castlist に聞けない（503）。どちらも何も置かない。
@@ -85,15 +81,13 @@ export class FakeStore {
 
   /** 新しい API の要求に答える。知らない道は undefined（型の無い 404 でなく、偽の handler の UnknownOperationException）。 */
   private answer(seen: NextSeen): NextAnswer | undefined {
-    if (seen.path === '/healthz') this.healths += 1;
-    else this.requests.push(seen);
+    this.requests.push(seen);
     if (this.down) return { throws: Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:8801'), { code: 'ECONNREFUSED' }) };
     const q = new URLSearchParams(Object.entries(seen.query).flatMap(([k, v]) => typeof v === 'string' ? [[k, v]] : []));
     const at = (re: RegExp): string[] | undefined => re.exec(seen.path)?.slice(1).map(decodeURIComponent);
     const page = at(/^\/api\/projects\/([^/]+)\/keys\/([^/]+)\/kinds\/([^/]+)\/pages\/([^/]+)\/(reply|review)$/);
     const pages = at(/^\/api\/projects\/([^/]+)\/keys\/([^/]+)\/kinds\/([^/]+)\/pages$/);
     const files = at(/^\/api\/projects\/([^/]+)\/keys\/([^/]+)\/files$/);
-    if (seen.method === 'GET' && seen.path === '/healthz') return { status: 200, body: { status: 'ok', version: this.version } };
     if (seen.method === 'POST' && pages !== undefined) return this.createPage(seen, q, pages);
     if (seen.method === 'POST' && files !== undefined) return this.createFile(seen, q, files);
     if (page !== undefined && ((seen.method === 'PUT' && page[4] === 'reply') || (seen.method === 'POST' && page[4] === 'review'))) {
