@@ -191,6 +191,44 @@ pagetray の新しい版が出て、この repo の `.pagetray-version` が上�
 
 置き場は roster を動かす機械に 1 つで、どの project の担当も同じ置き場を使う（一覧の UI では project で絞れる）。ほかの project で TPM 担当を起こすときも、その project の `.claude/roles/config.jsonc` に、この repo と同じ `infra.pagetray` の宣言を写す（写さないと、その project の担当は止める命令を断りなく打てる。[設定](/configuration/#環境の手続き)）。
 
+## メッセージキュー（NATS）
+
+担当どうしのメッセージを預かり、受け手ごとに配る段取り（取り置き・渡せたの確かめ・渡し直し・上限・期限）を受け持つ、既存のオープンソース [NATS](https://nats.io/) の server（JetStream を入れて使う）。roster は、これを「配りの口」（`cli/src/mailroom/`。[開発](/development/#nats-jetstreamメッセージキューとのつなぎ)）の向こうに置く。**今は、まだ命令からは使っていない**（メッセージは cmux が運んでいる。使い始めるのは、hook と送る前の検査を替える段から）。Apple Container（`container` CLI）で動かし、`127.0.0.1` だけで待ち受ける。起こす・止める・上げるのは DevOps Engineer 担当で、命令は `roster infra run nats -- <命令>` で打つ（この repo の `.claude/roles/config.jsonc` の「TPM に相談」）。
+
+| 物 | 値 |
+|---|---|
+| image | `nats:<版>`（Docker Hub の公式の image）。版と digest は、この repo の `.nats-version`（`v<版>@<digest>`。つなぎの試験が流している版） |
+| container | `roster-nats`（`127.0.0.1:4222` → 中の 4222） |
+| 設定 | この repo の `nats/nats-server.conf`（container の `/etc/nats` に読むだけで付ける）。預かった物を書くたびに disk に書く（`sync_interval: always`） |
+| data | 名前つきの volume `roster-nats-data`（中の `/data`）。届いていないメッセージ・取り口の位置・取り置き・記録が入る |
+
+### 起こす
+
+```sh
+container image pull nats:<版>
+container volume create roster-nats-data     # 初めての時だけ
+roster infra run nats -- container run -d --name roster-nats \
+  -p 127.0.0.1:4222:4222 \
+  -v roster-nats-data:/data \
+  -v <この repo の checkout>/nats:/etc/nats:ro \
+  nats:<版> -c /etc/nats/nats-server.conf
+```
+
+- `<版>` は `.nats-version` の `@` の前から頭の `v` を取った物（`2.15.3` など）。pull した image の digest が `@` の後ろと同じかを見る。
+- `-p` には必ず `127.0.0.1:` を書く。NATS は置いた者を確かめないので、LAN に開かない。
+- 起きたかは `container logs roster-nats` の `Server is ready` と `Version:` の行で見る。
+- 箱（stream）と取り口（consumer）は、roster が要る時に作る。手で作らない。
+
+### 止める・roster を動かす機械を起こし直した後
+
+- 止めている間に担当が送ろうとすると、「メッセージキューが応えません」で止まる（送っていない）。先に【ask-tpm】を送り、答えを待つ。止めるのは `roster infra run nats -- container stop roster-nats`。
+- roster を動かす機械を起こし直すと止まったままになる。`container system start` の後に `roster infra run nats -- container start roster-nats` を打つ。預かった物・取り置き・取り口の位置は volume から戻る（取り置き中だった物は、取った時から 30 秒の所で渡し直される）。
+- volume（`roster-nats-data`）は消さない。
+
+### 版を上げる
+
+NATS の release を見て、`.nats-version` を新しい版と digest にする PR を出す（つなぎの試験 `nats-e2e` が、その image に向けて通る）。merge の後に、container を新しい版で作り直す（volume はそのまま付ける）。
+
 ## 1.0.0 への切り替え（済み）
 
 castlist と pagetray は、1.0.0 で API も DB も替えた（AI-36 の切り替え。castlist は `castlist-data-v1`、pagetray は `pagetray-data-v1` の volume で動く）。切り替えの前の volume（`castlist-data`・`pagetray-data`）は 2026-11-26 に消したので、1.0.0 より前の版には戻せない。この repo の roster も、1.0.0 からの API だけを話す。

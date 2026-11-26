@@ -26,6 +26,8 @@
   },
   "dependencies": {
     "@aws-sdk/core": "^3.981.1",
+    "@nats-io/jetstream": "^3.5.0",
+    "@nats-io/transport-node": "^3.5.0",
     "@smithy/core": "^3.41.0",
     "@smithy/fetch-http-handler": "^5.8.1",
     "@smithy/node-http-handler": "^4.14.2",
