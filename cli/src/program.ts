@@ -6,7 +6,7 @@ import { emphasize } from './castlist.ts';
 import { startTpm } from './command.ts';
 import { registerAudit } from './commands/audit.ts';
 import { sessionEnd, sessionStart } from './commands/castlist.ts';
-import { checkStart, showReturned } from './commands/returned.ts';
+import { showReturned } from './commands/returned.ts';
 import { castlistEvents, castlistFind, castlistLineage, castlistSettings, castlistShow, type EventsOptions, type FindOptions, type JsonOption, type LineageOptions, type SettingsOptions } from './commands/castlist-read.ts';
 import { bannerCheck, bannerHook, bannerLog, bannerSetup } from './commands/banner.ts';
 import { registerIncident } from './commands/incident.ts';
@@ -22,7 +22,6 @@ import { hello, inboxNow } from './commands/role-side.ts';
 import { assign, close, newKey, roles, type AssignOptions } from './commands/tpm-side.ts';
 import { composeSkillSets, readConfigSources } from './config.ts';
 import { createContext, mailroomsClosed } from './context.ts';
-import { usesNats } from './mail.ts';
 import { exec } from './exec.ts';
 import type { Verdict } from './guard.ts';
 import { ROLE_NAMES, type RoleName } from './protocol.ts';
@@ -197,21 +196,12 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
       process.stderr.write(`roster guard: ${verdict.reason}\n`);
       process.exit(2);
     });
-  const returned = program.command('returned').description('届け違い: 新しい session の始まりに、前の session 宛てに届いたメッセージを見つけて TPM 担当へ返す（check は hook が呼ぶ）・返った物の全文を読む（show）');
-  returned.command('check').description('（SessionStart の hook が呼ぶ）この居場所に届いた・待っているメッセージの宛先の担当と自分を比べ、違う物を配らせず、扱わないよう示し、台帳に書いて【returned】で返す')
-    .action(async () => {
-      // hook なので、どんな誤りでも 0 で終わる。標準出力は、届け違いがあった時の JSON だけ（Claude Code が画面と文脈に出す）。
-      try {
-        const out = await checkStart(createContext());
-        if (out !== undefined) console.log(JSON.stringify(out));
-      }
-      catch (e) {
-        process.stderr.write(`roster returned check: ${(e as Error).message}\n`);
-      }
-    });
-  returned.command('show').description('返った物（【returned】の id）の宛先と全文を、送った記録から出す（TPM 担当。読むだけ）').argument('<id>', 'メッセージの id（頭の数字だけでもよい）')
+  const returned = program.command('returned').description('届け違い（前の版の記録）: 返った物の全文を読む（show）。check は、前の版が起こした席の hook が呼ぶ（何もしない）');
+  // 前の版が起こした席の settings に、この hook が書いてある。命令を消すと、その席の session の始まりで hook が誤りを出すので、残す（何もせず・何も出さず、0 で終わる）。
+  returned.command('check').description('前の版が起こした席の hook が呼ぶ。何もしない').action(() => undefined);
+  returned.command('show').description('返った物（前の版の【returned】の id）の宛先と全文を、送った記録から出す（TPM 担当。読むだけ）').argument('<id>', 'メッセージの id（頭の数字だけでもよい）')
     .action((id: string) => print(showReturned(createContext(), id)));
-  // メッセージを NATS で渡す hook の命令（設定の messages が nats の席にだけ付く。guard.ts の guardSettings）。
+  // メッセージを NATS で渡す hook の命令（どの席にも付く。guard.ts の guardSettings）。
   // hook なので、どんな誤りでも何も出さずに 0 で終わる（Claude Code の作業を止めない）。
   const quiet = (name: string, run: () => void | Promise<void>) => async (): Promise<void> => {
     try {
@@ -221,7 +211,7 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
       process.stderr.write(`roster mail ${name}: ${(e as Error).message}\n`);
     }
   };
-  const mail = program.command('mail').description('メッセージを NATS JetStream で渡す hook の命令（設定の messages が nats の席で、Claude Code の hook が呼ぶ）');
+  const mail = program.command('mail').description('メッセージを NATS JetStream で渡す hook の命令（Claude Code の hook が呼ぶ）');
   mail.command('claim').description('（SessionStart の hook が呼ぶ）この session が「渡す hook を持つ」と名乗る（Claude Code の pid が分からなければ名乗らない）')
     .action(quiet('claim', () => mailClaim(createContext(), readStdin())));
   mail.command('release').description('（SessionEnd の hook が呼ぶ）名乗りを外し、待つ命令を止める')
@@ -278,7 +268,7 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
       if (text !== undefined) await new Promise<void>(resolve => void process.stderr.write(`${text}\n`, () => resolve()));
       process.exit(text === undefined ? 0 : 2);
     });
-  mail.command('left').description('（TPM 担当が打つ）メッセージキュー（NATS）に残っている物を、受け手ごとに出す（読むだけ。設定の messages に依らない。設定を戻す前後に見る）')
+  mail.command('left').description('（TPM 担当が打つ）メッセージキュー（NATS）に残っている物を、受け手ごとに出す（読むだけ）')
     .action(async () => print(await mailLeft(createContext())));
   const castlist = program.command('castlist').description('アクターの台帳（castlist）: session の始まりと終わりを送る（hook が呼ぶ。castlist を設定していなければ何もしない）・監査の検索を読む（find・show・lineage・events・settings。読むだけ）');
   castlist.command('session-start').description('（SessionStart の hook が呼ぶ）session を登録し、登場・再登場・要約・分身と、起こした・継いだ線を送る')
@@ -360,7 +350,7 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
     .requiredOption('--state <folder>', '状態の folder')
     .action((key: string, options: { project: string, state: string }) => {
       const ctx = createContext(withEnv(process.env, { PROJECT: options.project, STATE: options.state }));
-      process.exit(runRole(requireRole(ctx, key), ctx.project, ctx.state.dir, ctx.root, process.env, usesNats(ctx)));
+      process.exit(runRole(requireRole(ctx, key), ctx.project, ctx.state.dir, ctx.root, process.env));
     });
 
   const banner = program.command('banner').description('通知のバナー（cmux の通知）を、居場所の役割 × きっかけで出すか消すか');

@@ -2,9 +2,21 @@
 // 「見たか」を所ごとに別の決め方で決めると、同じメッセージが所によって見た・見ていないになる（台帳 #110・#129）。
 import type { Context } from './context.ts';
 import { deliveredLines } from './mail.ts';
-import type { MessageTrace } from './transport/types.ts';
 
-/** 見せたメッセージの id と、初めて見せた時刻を覚える file（`shown/<宛先>.jsonc`）。 */
+/**
+ * 前の版（連携の道具（cmux）がメッセージを運んだ頃）の記録 `deliveries.jsonl` の 1 行: メッセージ 1 件の、送った・届いた・読んだ時刻
+ * （道具が覚えていた物の写し。ISO の字）。もう増えない（読むだけ）。
+ */
+export interface MessageTrace {
+  id: string
+  sentAt?: string
+  deliveredAt?: string
+  readAt?: string
+  /** 返事の先のメッセージの id。 */
+  replyTo?: string
+}
+
+/** 見せたメッセージの id と、初めて見せた時刻を覚えた file（`shown/<宛先>.jsonc`）。前の版の記録（もう書かない。読むだけ）。 */
 export const shownFile = (address: string): string => `shown/${address.replaceAll(/[^A-Za-z0-9._-]/g, '-')}.jsonc`;
 
 /** 見せたメッセージ 1 件。前の版は id の字だけを書いたので、その分は at が無い。 */
@@ -13,25 +25,25 @@ export interface Shown {
   at?: string
 }
 
-/** その居場所に見せたメッセージ（古い順）。 */
+/** その居場所に見せたメッセージ（古い順。前の版の記録）。 */
 export function readShown(ctx: Context, address: string): Shown[] {
   return (ctx.state.read<(Shown | string)[]>(shownFile(address)) ?? []).map(e => typeof e === 'string' ? { id: e } : e);
 }
 
 /**
  * 見た時刻と、その出どころ。
- * - delivered: 連携の道具（cmux）が画面に配った時刻。NATS で運んだ行では、hook が本文を渡した時刻（手元の渡した記録。mail.ts）
- * - shown: roster が受け手に本文を見せた時刻（送る前の検査・roster inbox。時刻の無い前の版の項目は、検査用では送った時刻、記録用では使わない）。
- *   NATS で運んだ行では、送る前の検査が命令の結果に本文を出した時刻（渡した記録の output。届いたには数えない）
+ * - delivered: hook が本文を渡した時刻（手元の渡した記録。mail.ts）。古い行（cmux が運んだ物）では、cmux が画面に配った時刻（deliveries.jsonl）
+ * - shown: 送る前の検査・roster inbox が命令の結果に本文を出した時刻（渡した記録の output。届いたには数えない）。
+ *   古い行では、roster が受け手に本文を見せた時刻（shown/。時刻の無い前の版の項目は、検査用では送った時刻、記録用では使わない）
  * - legacy: 前の版が送った時に「届いた」と書いた行（送った時刻）
- * - assumed: 時刻がどこにも無く、受け手の「まだ配っていない」にも無いので、送った時刻に倒した物（道具が時刻を返さない時。止めすぎない側）
+ * - assumed: 古い行で、時刻がどこにも無いので、送った時刻に倒した物（受け手の席は、もう残っていない。止めすぎない側）
  */
 export interface Seen {
   at: string
   by: 'delivered' | 'shown' | 'legacy' | 'assumed'
 }
 
-/** 届け違いで返したメッセージの控え（roster returned check が書く）。 */
+/** 届け違いで返したメッセージの控え（前の版の roster returned check が書いた。もう増えない）。 */
 export const RETURNED_FILE = 'returned.jsonl';
 
 /** 届け違いで返したメッセージの id。cmux の上では配られて既読になっているが、宛先の担当は見ていない（t-4q2b）。 */
@@ -46,7 +58,7 @@ export interface SentRef {
   to: string
   /** 前の版が送った時に書いた「届いたか」。 */
   delivered?: boolean
-  /** 運んだ道。NATS で運んだ行にだけ在る（無い行は、連携の道具が運んだ）。 */
+  /** 運んだ道。NATS で運んだ行に在る（無い行は、前の版で連携の道具（cmux）が運んだ古い行）。 */
   carrier?: 'nats'
 }
 
@@ -60,25 +72,23 @@ const earliest = (candidates: (Seen | undefined)[]): Seen | undefined =>
   candidates.filter(c => c !== undefined).sort((a, b) => a.at.localeCompare(b.at) || RANK[a.by] - RANK[b.by])[0];
 
 /**
- * 見た時刻を引く口を作る。見た時刻は、配った時刻（道具の history() と、その写しの deliveries.jsonl。無ければ前の版の行の delivered:true）と、
- * 見せた時刻（shown/ の受け手の file）の早い方。
- * live（送る前の検査と依頼書の数え）: どれも無ければ、受け手の「まだ配っていない」（queued）を引き、そこにあれば undefined（まだ見ていない）、
- * 無ければ送った時刻に倒す（assumed）。
- * live でない（時系列）: queued は「今」の受信箱で過去の行には意味が薄く、閉じた居場所では引けないので見ない。どれも無ければ undefined（分からない）。
- * 道具と file は口を作る時に 1 度だけ読み、queued と shown/ は宛先ごとに 1 度だけ読む。
- * NATS で運んだ行（carrier が nats）は、連携の道具には聞かず、手元の渡した記録（delivered.jsonl）だけで決める: hook が渡した行があれば、
+ * 見た時刻を引く口を作る。
+ * NATS で運んだ行（carrier が nats）は、手元の渡した記録（delivered.jsonl）だけで決める: hook が渡した行があれば、
  * そのいちばん早い時刻に届いた。命令の結果に出した行（output）は、見せた時刻。どちらも無ければ undefined
  * （配りの口にまだ残っているか、届かないまま終わった物。どちらも、受け手は見ていない）。
+ * 古い行（carrier の無い行。前の版で cmux が運んだ物）は、配った時刻（道具の記録の写しの deliveries.jsonl。無ければ前の版の行の delivered:true）と、
+ * 見せた時刻（shown/ の受け手の file）の早い方。どれも、もう増えない古い記録（読むだけ。連携の道具には聞かない）。
+ * どれも無い時は、live（送る前の検査と依頼書の数え）なら送った時刻に倒す（assumed。古い行の受け手の席は、もう残っていない）。
+ * live でない（時系列）なら undefined（分からない）。
+ * file は口を作る時に 1 度だけ読み、shown/ は宛先ごとに 1 度だけ読む。
  */
 export function seenTimes(ctx: Context, options: { live: boolean }): SeenAt {
   const delivered = new Map<string, string>();
-  const keep = (t: MessageTrace): void => {
-    if (t.deliveredAt === undefined) return;
+  for (const t of ctx.state.lines<MessageTrace>('deliveries.jsonl')) {
+    if (t.deliveredAt === undefined) continue;
     const before = delivered.get(t.id);
     if (before === undefined || t.deliveredAt < before) delivered.set(t.id, t.deliveredAt);
-  };
-  ctx.state.lines<MessageTrace>('deliveries.jsonl').forEach(keep);
-  ctx.messages.history().forEach(keep);
+  }
   const shown = new Map<string, Map<string, string | undefined>>();
   const shownTo = (address: string): Map<string, string | undefined> => {
     let m = shown.get(address);
@@ -89,15 +99,6 @@ export function seenTimes(ctx: Context, options: { live: boolean }): SeenAt {
     return m;
   };
   const returned = returnedIds(ctx);
-  const queued = new Map<string, Set<string>>();
-  const queuedTo = (address: string): Set<string> => {
-    let q = queued.get(address);
-    if (q === undefined) {
-      q = new Set(ctx.messages.queued(address));
-      queued.set(address, q);
-    }
-    return q;
-  };
   const handed = new Map<string, Seen>();
   for (const l of deliveredLines(ctx)) {
     const seen: Seen = { at: l.at, by: l.when === 'output' ? 'shown' : 'delivered' };
@@ -115,6 +116,6 @@ export function seenTimes(ctx: Context, options: { live: boolean }): SeenAt {
     const shownAt = s.has(sent.id) ? s.get(sent.id) ?? (options.live ? sent.at : undefined) : undefined;
     const seen = earliest([arrived, shownAt === undefined ? undefined : { at: shownAt, by: 'shown' }]);
     if (seen !== undefined || !options.live) return seen;
-    return queuedTo(sent.to).has(sent.id) ? undefined : { at: sent.at, by: 'assumed' };
+    return { at: sent.at, by: 'assumed' };
   };
 }

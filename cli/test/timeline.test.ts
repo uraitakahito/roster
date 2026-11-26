@@ -5,14 +5,14 @@ import { hello } from '../src/commands/role-side.ts';
 import { collect, incidentTimeline } from '../src/commands/timeline.ts';
 import { assign } from '../src/commands/tpm-side.ts';
 import { readIncidents } from '../src/incidents.ts';
-import type { MessageTrace } from '../src/transport/types.ts';
+import { DELIVERED_FILE, type DeliveredLine } from '../src/mail.ts';
 import { BRIEF, world, type World } from './helpers.ts';
 
 const PR = 'https://github.com/o/r/pull/7';
 const clock = (hhmmss: string) => (): Date => new Date(`2026-11-20T${hhmmss}.000Z`);
 
 /** 行き違いのある 1 幕: 担当が 12:00:10 に問い、TPM 担当の「待て」（12:01:00 に送り、12:05:00 に届く）の前に、担当が 12:02:00 に【merged】を送った。 */
-async function crossed(): Promise<World & { se: ReturnType<World['role']> }> {
+async function crossed(): Promise<World & { se: ReturnType<World['role']>, ask: string, note: string, merged: string }> {
   const w = world();
   await hello(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
   await assign(w.tpm, 't-x7k2', { role: 'software-engineer', title: '計画と実装', brief: BRIEF, wait: 0 });
@@ -21,26 +21,29 @@ async function crossed(): Promise<World & { se: ReturnType<World['role']> }> {
   se.now = clock('12:00:10');
   await askTpm(se, { text: 'tag を打ってよいか', waitingFor: '答え' });
   w.tpm.now = clock('12:01:00');
-  await notify(w.tpm, 't-x7k2', { text: 'まだ打たないで待つこと', replyTo: 'm1-file-tpm' });
+  const ask = w.posted('tpm')[0]?.id ?? '';
+  await notify(w.tpm, 't-x7k2', { text: 'まだ打たないで待つこと', replyTo: ask });
+  const note = w.posted('t-x7k2')[0]?.id ?? '';
   se.now = clock('12:02:00');
   await reportMerged(se, { pr: PR, note: '入れた' });
   se.now = clock('12:02:30');
   wait(se, 'work', 'tag を打つ');
-  w.tpm.state.append('deliveries.jsonl', { id: 'm1-file-tpm', sentAt: '2026-11-20T12:00:10.000Z', deliveredAt: '2026-11-20T12:00:11.000Z' } satisfies MessageTrace);
-  w.tpm.state.append('deliveries.jsonl', { id: 'm1-file-1', sentAt: '2026-11-20T12:01:00.000Z' } satisfies MessageTrace);
-  w.tpm.state.append('deliveries.jsonl', { id: 'm1-file-1', sentAt: '2026-11-20T12:01:00.000Z', deliveredAt: '2026-11-20T12:05:00.000Z' } satisfies MessageTrace);
-  return { ...w, se };
+  // 渡した記録を、この幕の時刻に書き直す（足場は、置いた時に渡した事にする）: 問いは 1 秒後、「待て」は 12:05:00 に hook が渡した。【merged】は、まだ渡っていない。
+  w.tpm.state.remove(DELIVERED_FILE);
+  w.tpm.state.append(DELIVERED_FILE, { at: '2026-11-20T12:00:11.000Z', id: ask, to: 'tpm', when: 'wake', nth: 1 } satisfies DeliveredLine);
+  w.tpm.state.append(DELIVERED_FILE, { at: '2026-11-20T12:05:00.000Z', id: note, to: 't-x7k2', when: 'wake', nth: 1 } satisfies DeliveredLine);
+  return { ...w, se, ask, note, merged: w.posted('tpm')[1]?.id ?? '' };
 }
 
 describe('時系列を集める', () => {
   test('Key の記録を時刻の順に並べ、届いた時刻と行き違いの印を付ける', async () => {
     const w = await crossed();
-    const events = collect(w.tpm, 't-x7k2', { from: '2026-11-20T12:00:05.000Z', to: '2026-11-20T12:10:00.000Z' }, 'm1-file-1');
+    const events = collect(w.tpm, 't-x7k2', { from: '2026-11-20T12:00:05.000Z', to: '2026-11-20T12:10:00.000Z' }, w.note);
     expect(events.map(e => [e.at.slice(11, 19), e.kind, e.what, e.notes, e.trigger ?? false])).toEqual([
-      ['12:00:10', 'メッセージ', '【ask-tpm】tag を打ってよいか（id m1-file-tpm）', ['届いた: 12:00:11（1 秒後）'], false],
+      ['12:00:10', 'メッセージ', `【ask-tpm】tag を打ってよいか（id ${w.ask}）`, ['届いた: 12:00:11（1 秒後）'], false],
       ['12:00:10', 'wait', '回答待ち(TPM): 答え', [], false],
-      ['12:01:00', 'メッセージ', '【notify】まだ打たないで待つこと（id m1-file-1）', ['届いた: 12:05:00（240 秒後）', '返事の先: m1-file-tpm', '行き違い: これが届く前に、相手が 1 件送った（【merged】12:02:00）'], true],
-      ['12:02:00', 'メッセージ', `【merged】${PR} 入れた（id m2-file-tpm）`, ['届いた時刻: 分からない'], false],
+      ['12:01:00', 'メッセージ', `【notify】まだ打たないで待つこと（id ${w.note}）`, ['届いた: 12:05:00（240 秒後）', `返事の先: ${w.ask}`, '行き違い: これが届く前に、相手が 1 件送った（【merged】12:02:00）'], true],
+      ['12:02:00', 'メッセージ', `【merged】${PR} 入れた（id ${w.merged}）`, ['届いた時刻: 分からない'], false],
       ['12:02:30', 'wait', '作業中: tag を打つ', [], false],
     ]);
     // ほかの Key の記録は入らない
@@ -49,12 +52,15 @@ describe('時系列を集める', () => {
 
   test('配られる前に roster が見せていれば「見た」と出し、見た後に相手が送った物は行き違いにしない（台帳 #110）', async () => {
     const w = await crossed();
-    // 担当は 12:01:30 に、送る前の検査で【notify】を見た（cmux が配ったのは 12:05:00）
-    w.tpm.state.write('shown/file-1.jsonc', [{ id: 'm1-file-1', at: '2026-11-20T12:01:30.000Z' }]);
-    expect(collect(w.tpm, 't-x7k2').find(e => e.what.includes('（id m1-file-1）'))?.notes).toEqual(['見た: 12:01:30（30 秒後。届く前に roster が見せた）', '返事の先: m1-file-tpm']);
+    // 担当は 12:01:30 に、送る前の検査で【notify】を見た（hook が渡したのは 12:05:00）
+    const shown = (at: string): void => w.tpm.state.append(DELIVERED_FILE, { at, id: w.note, to: 't-x7k2', when: 'output', nth: 0 } satisfies DeliveredLine);
+    const notes = (): string[] | undefined => collect(w.tpm, 't-x7k2').find(e => e.what.includes(`（id ${w.note}）`))?.notes;
+    shown('2026-11-20T12:01:30.000Z');
+    expect(notes()).toEqual(['見た: 12:01:30（30 秒後。届く前に roster が見せた）', `返事の先: ${w.ask}`]);
     // 見る前に相手が送っていれば、「見る前に」の行き違い
-    w.tpm.state.write('shown/file-1.jsonc', [{ id: 'm1-file-1', at: '2026-11-20T12:03:00.000Z' }]);
-    expect(collect(w.tpm, 't-x7k2').find(e => e.what.includes('（id m1-file-1）'))?.notes.at(-1)).toBe('行き違い: これを見る前に、相手が 1 件送った（【merged】12:02:00）');
+    const v = await crossed();
+    v.tpm.state.append(DELIVERED_FILE, { at: '2026-11-20T12:03:00.000Z', id: v.note, to: 't-x7k2', when: 'output', nth: 0 } satisfies DeliveredLine);
+    expect(collect(v.tpm, 't-x7k2').find(e => e.what.includes(`（id ${v.note}）`))?.notes.at(-1)).toBe('行き違い: これを見る前に、相手が 1 件送った（【merged】12:02:00）');
   });
 
   test('前の版の行（送った時に delivered を書いた）は、今までの字で出す。届け違いで返した物は「返した」と出す', async () => {
@@ -62,11 +68,11 @@ describe('時系列を集める', () => {
     const old = { at: '2026-11-20T12:03:00.000Z', key: 't-x7k2', heading: 'notify', from: 'Technical Program Manager', to: 'file:1' };
     w.tpm.state.append('log.jsonl', { ...old, text: '【notify】a', id: 'old-yes', delivered: true });
     w.tpm.state.append('log.jsonl', { ...old, text: '【notify】b', id: 'old-no', delivered: false });
-    w.tpm.state.append('returned.jsonl', { at: '2026-11-20T12:06:00.000Z', id: 'm1-file-1', incident: 1 });
+    w.tpm.state.append('returned.jsonl', { at: '2026-11-20T12:06:00.000Z', id: w.note, incident: 1 });
     const notes = (id: string): string[] | undefined => collect(w.tpm, 't-x7k2').find(e => e.what.includes(`（id ${id}）`))?.notes;
     expect(notes('old-yes')).toEqual(['送った時に届いた']);
     expect(notes('old-no')).toEqual(['届いた時刻: 分からない（送った時は、まだ届いていない）']);
-    expect(notes('m1-file-1')?.[0]).toBe('届け違いで返した（宛先の担当は見ていない。roster returned show）');
+    expect(notes(w.note)?.[0]).toBe('届け違いで返した（宛先の担当は見ていない。roster returned show）');
   });
 
   test('guard・入口の検査・課題管理・台帳の行も入る', async () => {
@@ -82,7 +88,7 @@ describe('時系列を集める', () => {
       ['入口の検査', '送るのを止めた（not-merged）'],
       ['guard', '止めた: acli jira workitem transition'],
       ['課題管理', 'AI-8 に「済み」'],
-      ['メッセージ', '【incident】#1 信頼性: tag を「待て」の前に打った（id m3-file-tpm）'],
+      ['メッセージ', `【incident】#1 信頼性: tag を「待て」の前に打った（id ${w.posted('tpm')[2]?.id ?? ''}）`],
       ['台帳', '#1 信頼性 t-x7k2 11-20 12:03「tag を「待て」の前に打った」'],
     ]);
   });
@@ -92,7 +98,7 @@ describe('roster incident timeline', () => {
   test('件の番号: 引き金のメッセージの前後を拾ってページを置き、件に URL を結ぶ', async () => {
     const w = await crossed();
     w.tpm.now = clock('12:30:00');
-    incidentAdd(w.tpm, 't-x7k2', { text: '「待て」の前に先へ進んだ', type: 'reliability', tags: [], msg: 'm1-file-1', severe: false });
+    incidentAdd(w.tpm, 't-x7k2', { text: '「待て」の前に先へ進んだ', type: 'reliability', tags: [], msg: w.note, severe: false });
     const out = await incidentTimeline(w.tpm, '#1', { minutes: 1 });
     const url = readIncidents(w.tpm)[0]?.timeline ?? '';
     expect(url).toMatch(/\/t-x7k2\/timeline-1\.html$/);

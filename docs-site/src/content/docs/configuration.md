@@ -12,8 +12,8 @@ TPM 担当を起こした folder（project）に置くと、道具の選び方�
 | 欄 | 中身 | 無いとき |
 |---|---|---|
 | `tracker` | 課題管理の道具。`jira`（acli）・`github`（その folder の repo の Issue。gh）・`none` | `none`（課題に記録を書かない） |
-| `transport` | 担当どうしの連携の道具。`cmux`（`file` は試験用） | `cmux` |
-| `messages` | 担当どうしのメッセージを配る道。`cmux`（連携の道具がそのまま運ぶ）か `nats`（NATS JetStream で配る。下の「[メッセージを配る道](#メッセージを配る道任意)」）。project の folder の設定だけが効く | `cmux`（今までどおり） |
+| `transport` | 連携の道具（担当の居場所を作り、題と状態を見せる。メッセージは運ばない）。`cmux`（`file` は試験用） | `cmux` |
+| `messages` | 担当どうしのメッセージを配る道。書けるのは `nats`（NATS JetStream）だけで、書いても書かなくても同じ（下の「[メッセージを配る道](#メッセージを配る道)」）。前の版の `cmux` は誤りで止まる | `nats`（いつも NATS で配る） |
 | `infra` | インフラの環境の宣言。環境の名前（英小文字・数字・`-`）ごとに `guard`（手続き）と `match`（その環境に触る命令が含む字の配列） | 宣言なし（guard は環境を見ない） |
 | `skill-sets` | core のほかに加える、追加の skill セットの名前の配列 | core だけ |
 | `folders` | 設定を集める folder（project の folder からの path）の配列。書くと、直下を探さずに書いた folder だけを集める。`[]` なら集めない | 直下の folder のうち、設定がある物を全部集める |
@@ -181,7 +181,7 @@ export ROSTER_EFFORT=medium
 アクターの台帳（別の repo の [castlist](https://uraitakahito.github.io/castlist/)）は、Claude Code の session 1 つ（TPM 担当・担当・Auditor）と人の Product Manager を、それぞれアクターとして残す、roster を動かす機械の中だけのサーバー。誰が誰を起こしたか・どの model と effort で動いたかを、Auditor が後から引く。`roster` が何をいつ送るかは [担当のあいだの決まり](/protocol/#アクターの台帳castlist)。
 
 - project の folder の `.claude/roles/config.jsonc` に `"castlist": "http://127.0.0.1:8802"` を書くと、`roster` が castlist に送る。直下の folder の設定に書いた値は読まない（連携と同じ）。
-- 書かなければ、`roster` は castlist に何も送らない。`roster start`（stderr。terminal で `NO_COLOR` が無ければ赤の太字）と `roster hello`（出力の頭）が、枠で囲んだ警告を出す（止めない。直下の folder の設定にだけ書いた時は、読まないことも書く）。警告を消す書き方は無い。hook の命令（`roster castlist session-start`・`roster castlist session-end`）はどの席にも付くが、何もしない。届け違いの hook（`roster returned check`）は castlist に依らずに動くが、担当の起こしの id は castlist を設定した時だけ名簿に書かれるので、同じ Key で起こし直した担当への届け違いは見分けない（Key が違う物は見分ける。[担当のあいだの決まり](/protocol/#届け違い)）。castlist を読む命令（`roster castlist find` など。[担当のあいだの決まり](/protocol/#監査の検索を読む)）は、設定していないと言う 1 行で止まり、`roster incident timeline` はアクターの欄を出さない。
+- 書かなければ、`roster` は castlist に何も送らない。`roster start`（stderr。terminal で `NO_COLOR` が無ければ赤の太字）と `roster hello`（出力の頭）が、枠で囲んだ警告を出す（止めない。直下の folder の設定にだけ書いた時は、読まないことも書く）。警告を消す書き方は無い。hook の命令（`roster castlist session-start`・`roster castlist session-end`）はどの席にも付くが、何もしない。メッセージの受け手の名に入る起こしの id は、castlist を設定した時だけ名簿に書かれるので、設定していない project では、同じ Key で起こし直した担当が、前の担当宛てで残っていた物を受け取る（Key が違う担当には届かない。[担当のあいだの決まり](/protocol/#届け違い)）。castlist を読む命令（`roster castlist find` など。[担当のあいだの決まり](/protocol/#監査の検索を読む)）は、設定していないと言う 1 行で止まり、`roster incident timeline` はアクターの欄を出さない。
 - 環境変数 `ROSTER_CASTLIST_URL` があれば、設定の値より先に使う（試験と、port を替えた時のため）。
 
 | 環境変数 | 決める物 | 無いとき |
@@ -193,13 +193,13 @@ export ROSTER_EFFORT=medium
 - 送る物はどれも 1 度だけ送り（送り直さない）、書く要求と監査の検索は 6 秒まで、`/healthz` は 1 秒まで待つ。`AWS_MAX_ATTEMPTS` などの `AWS_*` の環境変数と `~/.aws/config` は読まない。
 - 前の版の設定の欄 `api`（生成した client で送るかの選び）は、もう無い。残っていても、どんな値でも読み飛ばす（消してよい）。
 
-## メッセージを配る道（任意）
+## メッセージを配る道
 
-担当どうしのメッセージは、既定では連携の道具（cmux）がそのまま運ぶ。project の folder の `.claude/roles/config.jsonc` に `"messages": "nats"` と書くと、NATS JetStream（[運用](/operations/#メッセージキューnats)）で配る道が入る。書かなければ（か `"cmux"` なら）、`roster` の動きは今までと何も変わらない。
+担当どうしのメッセージは、いつも NATS JetStream（[運用](/operations/#メッセージキューnats)）で配る。連携の道具（cmux）は、メッセージを運ばない。project ごとに選ぶ所は無い（roster を使う project では、NATS が動いていること）。
 
-- 設定が効くのは、**席を起こす時**。`roster start` の 1 行と `roster assign` が、起こす claude に、メッセージを渡す hook（`roster mail …`）を足して付ける。設定を書く前から動いている席は hook を持たないので、起こし直すまで、今までどおり cmux で届く。
-- 送り手は、受け手ごとに道を決める。受け手の session が「渡す hook を持つ」と名乗っていれば NATS に置き、名乗っていなければ cmux で送る。だから、hook を持つ席と持たない席が混ざっていてよい。
-- 届き方・送る前の検査・状態の folder の file は、[担当のあいだの決まり](/protocol/#メッセージを-nats-で配る道設定で入れた時)。入れ方と戻し方は、[運用](/operations/#メッセージを-nats-で配る道を入れる戻す)。
+- `.claude/roles/config.jsonc` の `messages` に書けるのは `"nats"` だけで、書いても書かなくても同じ。前の版の `"cmux"` が残っていると、設定の誤りで止まり、その行を消すよう言う。
+- `roster start` の 1 行と `roster assign` は、起こす claude に、メッセージを渡す hook（`roster mail …`）をいつも付ける。前の版で起こした、hook を持たない席宛ての物も NATS に置かれ、その席の `roster inbox` と送る前の検査が、命令の結果に本文を出す。
+- 届き方・送る前の検査・状態の folder の file は、[担当のあいだの決まり](/protocol/#メッセージを-nats-で配る道)。確かめ方と戻し方は、[運用](/operations/#届くことを確かめる戻す)。
 
 | 環境変数 | 決める物 | 無いとき |
 |---|---|---|

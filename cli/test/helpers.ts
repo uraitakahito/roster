@@ -11,8 +11,10 @@ import { nextHandler, type NextAnswer, type NextSeen } from './next-fake.ts';
 import { reportDone } from '../src/commands/messages.ts';
 import { hello } from '../src/commands/role-side.ts';
 import { FileTransport } from '../src/transport/file.ts';
-import type { ProcInfo, Procs } from '../src/mail.ts';
+import { recipientName, recordDelivered, type ProcInfo, type Procs } from '../src/mail.ts';
+import { allRoles } from '../src/roster.ts';
 import { MemoryMailroom, MemoryPostOffice } from '../src/mailroom/memory.ts';
+import type { Stored } from '../src/mailroom/types.ts';
 
 /** 課題の概要の節（40 字以上）のある依頼書。world が置き場に置く。 */
 export const BRIEF_HTML = '<h1>依頼書</h1><section id="summary"><h2>課題の概要</h2><p>試しの課題。担当が課題の中身を読めるようにし、TPM 担当が相談に乗れるようにすることが求められている。</p></section>';
@@ -421,7 +423,7 @@ export interface World {
   tpm: Context
   /** key の担当の周り（address は居場所の宛先）。 */
   role: (key: string, address: string) => Context
-  /** file の連携（届いたメッセージ・起こす命令を読む）。 */
+  /** file の連携（居場所の見た目・起こす命令を読む）。 */
   wire: FileTransport
   /** 偽の置き場（roster page …・roster file … と、roster assign の課題の写しが使う。API は生成した client で、本文は curl で受ける）。 */
   store: FakeStore
@@ -441,6 +443,26 @@ export interface World {
   printed: string[]
   /** 時を ms 進める（周りの now と、配りの口の時計）。 */
   pass: (ms: number) => void
+  /**
+   * その受け手宛てに置かれた物（古い順。もう渡った物も入る）。to は、配りの受け手の名（TPM 担当は tpm、担当は Key）か、
+   * 居場所の宛先（file:tpm・file:1。名簿から、その席の担当の受け手の名を引く）。hold・release の to も同じ。
+   */
+  posted: (to: string) => Stored[]
+  /** その受け手を「手を動かしている」にする。これより後に置かれた物は、release まで配りの口に残る（席の hook が渡さない）。 */
+  hold: (to: string) => void
+  /** hold をやめ、残っていた物を、受け手が hook で受け取った事にする。at は渡した時刻（無ければ今）。 */
+  release: (to: string, at?: string) => Promise<void>
+  /** 命令を通さずに、その受け手宛ての 1 通を配りの口に置く（from は送り手の題）。置いた id を返す。 */
+  send: (to: string, from: string, text: string) => Promise<{ id: string }>
+}
+
+/** world に渡す、試験用の席の動き。 */
+export interface WorldOptions {
+  /**
+   * 置かれたメッセージを、受け手の席の hook がすぐ渡した事にするか（既定は true）: 渡した記録（delivered.jsonl）に wake と残し、箱から外す。
+   * hold した受け手の分は、release まで箱に残る。false なら、どの受け手の分も箱に残る（渡すのは、試験が hook の命令を呼んだ時だけ）。
+   */
+  handOver?: boolean
 }
 
 /** 偽の process の表。alive に入れた pid だけが居る。stopped は、止める合図を送った pid。 */
@@ -475,8 +497,9 @@ const withStore = (ctx: Context, store: FakeStore): Context => ({ ...ctx, client
 /**
  * config は .claude/roles/config.jsonc に書く中身（transport は file に固定する）。env は TPM 担当の周りの環境変数に足す物。
  * folders は、project の直下の folder の名前 → その folder の設定の中身（上の folder から、下のいくつもの repo を触る形）。
+ * options は、試験用の席の動き（WorldOptions）。
  */
-export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessEnv = {}, folders: Record<string, Record<string, unknown>> = {}): World {
+export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessEnv = {}, folders: Record<string, Record<string, unknown>> = {}, options: WorldOptions = {}): World {
   const base = realpathSync(mkdtempSync(join(tmpdir(), 'roster-world-')));
   const project = join(base, 'project');
   const put = (dir: string, body: Record<string, unknown>): void => {
@@ -509,10 +532,27 @@ export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessE
   const office = new MemoryPostOffice(() => new Date(now));
   const procs = new FakeProcs();
   const printed: string[] = [];
+  // 受け手の席の hook に当たる口。置かれた物を取り置き、渡した記録を書いて「渡せた」と返す。
+  const seat = new MemoryMailroom(office);
+  const held = new Set<string>();
+  const handOver = async (ctx: Context, box: string, when?: string): Promise<void> => {
+    for (;;) {
+      const taken = await seat.take(box, { max: 20, chars: Number.MAX_SAFE_INTEGER });
+      if (taken.length === 0) return;
+      for (const m of taken) recordDelivered(when === undefined ? ctx : { ...ctx, now: () => new Date(when) }, m.id, box, 'wake');
+      await seat.done(taken);
+    }
+  };
   const at = (env: NodeJS.ProcessEnv): Context => {
     // 周りごとに別の口（別の process に当たる）。同じ預かる側を見る。
     const room = new MemoryMailroom(office);
-    return {
+    const put = room.put.bind(room);
+    room.put = async (letter) => {
+      const result = await put(letter);
+      if (options.handOver !== false && ![...held].some(to => boxOf(to) === letter.to)) await handOver(ctx, letter.to);
+      return result;
+    };
+    const ctx: Context = {
       // 控えの folder も一時の folder にする（本物の控えに試験のページを置かない）。
       ...withStore(createContext({ XDG_STATE_HOME: join(base, 'state'), ROSTER_PAGES_DIR: join(base, 'pages'), ...env }, project, exec), store),
       now: () => new Date(now),
@@ -524,8 +564,16 @@ export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessE
       procs,
       print: lines => void printed.push(...lines),
     };
+    return ctx;
   };
   const tpm = at(env);
+  // 居場所の宛先（file:…）から、その席の担当の受け手の名を引く。宛先でなければ、受け手の名としてそのまま返す。
+  const boxOf = (to: string): string => {
+    if (!to.startsWith('file:')) return to;
+    if (to === tpm.seats.whoami()) return 'tpm';
+    const seated = allRoles(tpm).find(r => r.address === to);
+    return seated === undefined ? to : recipientName({ key: seated.key, ...(seated.launch === undefined ? {} : { launch: seated.launch }) });
+  };
   return {
     project,
     calls,
@@ -542,6 +590,17 @@ export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessE
     printed,
     pass: (ms) => {
       now += ms;
+    },
+    posted: to => office.log.filter(m => m.to === boxOf(to)),
+    hold: to => void held.add(to),
+    send: async (to, from, text) => {
+      const id = `m${office.log.length + 1}`;
+      await (await tpm.mailroom()).put({ id, from, to: boxOf(to), text });
+      return { id };
+    },
+    release: async (to, when) => {
+      held.delete(to);
+      await handOver(tpm, boxOf(to), when);
     },
   };
 }

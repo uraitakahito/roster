@@ -247,8 +247,10 @@ describe('hook の入力と settings', () => {
     expect(commandOf(JSON.stringify({ tool_name: 'Read', tool_input: { file_path: '/x' } }))).toBeUndefined();
   });
 
-  test('settings は Bash の前に roster guard を呼ぶ hook と、session の始まりと終わりに roster castlist を呼ぶ hook', () => {
-    expect(JSON.parse(guardSettings('/r/cli/bin/roster'))).toEqual({ hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: '/r/cli/bin/roster guard' }] }], SessionStart: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-start' }, { type: 'command', command: '/r/cli/bin/roster returned check' }] }], SessionEnd: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-end' }] }] } });
+  test('settings は Bash の前に roster guard を呼ぶ hook と、session の始まりと終わりに roster castlist を呼ぶ hook と、メッセージを渡す hook（roster mail …）', () => {
+    const waiting = { type: 'command', async: true, asyncRewake: true, timeout: 86400, command: '/r/cli/bin/roster mail wait' };
+    const gate = [{ matcher: 'Bash', hooks: [{ type: 'command', command: '/r/cli/bin/roster mail gate' }] }];
+    expect(JSON.parse(guardSettings('/r/cli/bin/roster'))).toEqual({ hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: '/r/cli/bin/roster guard' }] }], SessionStart: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-start' }, { type: 'command', command: '/r/cli/bin/roster mail claim' }, waiting] }], SessionEnd: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-end' }, { type: 'command', command: '/r/cli/bin/roster mail release' }] }], PostToolUse: gate, PostToolUseFailure: gate, Stop: [{ hooks: [waiting] }], UserPromptSubmit: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster mail prompt' }] }] } });
   });
 
   test('path に空白などがあれば、hook の命令の中で引用する', () => {
@@ -491,8 +493,8 @@ describe('Staff Engineer 担当は repo を変えない', () => {
   test('席の settings は、file を書き替える道具の前にも roster guard を呼ぶ。audit fresh は Auditor の席だけ', () => {
     const settings = (role: RoleName) => JSON.parse(guardSettings('/r/cli/bin/roster', role)) as { hooks: { PreToolUse: { matcher: string }[], SessionStart: { hooks: { command: string }[] }[] } };
     expect(settings('staff-engineer').hooks.PreToolUse[0]?.matcher).toBe('Bash|Edit|Write|NotebookEdit');
-    expect(settings('staff-engineer').hooks.SessionStart[0]?.hooks.map(h => h.command)).toEqual(['/r/cli/bin/roster castlist session-start', '/r/cli/bin/roster returned check']);
-    expect(settings('auditor').hooks.SessionStart[0]?.hooks.map(h => h.command)).toEqual(['/r/cli/bin/roster audit fresh', '/r/cli/bin/roster castlist session-start', '/r/cli/bin/roster returned check']);
+    expect(settings('staff-engineer').hooks.SessionStart[0]?.hooks.map(h => h.command)).toEqual(['/r/cli/bin/roster castlist session-start', '/r/cli/bin/roster mail claim', '/r/cli/bin/roster mail wait']);
+    expect(settings('auditor').hooks.SessionStart[0]?.hooks.map(h => h.command)).toEqual(['/r/cli/bin/roster audit fresh', '/r/cli/bin/roster castlist session-start', '/r/cli/bin/roster mail claim', '/r/cli/bin/roster mail wait']);
   });
 });
 

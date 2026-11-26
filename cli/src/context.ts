@@ -16,7 +16,7 @@ import { RoutedTracker } from './tracker/routed.ts';
 import type { Tracker } from './tracker/types.ts';
 import { CmuxTransport } from './transport/cmux.ts';
 import { FileTransport } from './transport/file.ts';
-import type { MessagePort, SeatPort } from './transport/types.ts';
+import type { SeatPort } from './transport/types.ts';
 import { assertNoLegacySeat, envOf } from './env.ts';
 
 /** 生成した client を作る関数（server ごと。試験は偽の HTTP の handler を持つ client を作る物に替える）。 */
@@ -34,9 +34,7 @@ export interface Context {
   /** project の folder とその直下の folder の設定を合わせた物。 */
   config: RolesConfig
   state: State
-  /** メッセージの口（送る・まだ届いていない物・届いた時刻）。 */
-  messages: MessagePort
-  /** 居場所の口（居場所を作る・題と状態・閉じる）。今は、メッセージの口と同じ道具の adapter。 */
+  /** 居場所の口（居場所を作る・題と状態・閉じる）。 */
   seats: SeatPort
   tracker: Tracker
   env: NodeJS.ProcessEnv
@@ -52,7 +50,7 @@ export interface Context {
   /** 生成した client を作る関数（castlist と pagetray に送る物は、みなこれで作った client で送る。試験は偽の HTTP を差し込む）。 */
   clients: Clients
   /**
-   * 配りの口（NATS JetStream。設定の messages が nats の時だけ使う）。要る時に 1 度だけ作る（使わない命令は、NATS の client を読まない）。
+   * 配りの口（NATS JetStream。担当どうしのメッセージは、いつもこれで運ぶ）。要る時に 1 度だけ作る（使わない命令は、NATS の client を読まない）。
    * 試験は、試験用の口（mailroom/memory.ts）を返す物に替える。
    */
   mailroom: () => Promise<Mailroom>
@@ -106,7 +104,6 @@ export function createContext(env: NodeJS.ProcessEnv = process.env, cwd: string 
     project,
     config,
     state,
-    messages: transport,
     seats: transport,
     tracker,
     env,

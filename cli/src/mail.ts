@@ -1,4 +1,4 @@
-// メッセージを NATS JetStream で配る道（設定の messages が nats の時）の、手元の物:
+// メッセージを NATS JetStream で配る道の、手元の物:
 // 受け手の名・「渡す hook を持つ」の名乗り・process の見方・送る前の検査の印・渡した記録・届かずに終わった記録。
 // どれも状態の folder の file で、配りの口（mailroom/）には聞かない（聞く物は commands/mail.ts と commands/messages.ts）。
 import { execFileSync } from 'node:child_process';
@@ -8,9 +8,6 @@ import type { Context } from './context.ts';
 import type { Recipient } from './mailroom/types.ts';
 import { selfParty, TPM_PARTY, type Party } from './party.ts';
 import { TpmError } from './skill-sets.ts';
-
-/** 設定で、メッセージを NATS で配る道を入れているか。 */
-export const usesNats = (ctx: Pick<Context, 'config'>): boolean => ctx.config.messages === 'nats';
 
 // ---- 受け手の名 ----
 
@@ -25,7 +22,7 @@ const encode = (part: string): string =>
  * 担当の組（Key と起こした回）から、配りの受け手の名を作る。違う組は、同じ名にならない
  * （節の中の `_` の後ろは必ず 16 進 2 桁なので、`__` は Key と起こした回の境にしか出ない）。64 字を超える組は誤り。
  * TPM 担当だけは、起こした回を付けず、Key だけから作る: TPM 担当の席は project に 1 つで、起こし直した TPM 担当が、
- * 前の TPM 担当宛てで届いていなかった物を受け取る（cmux で運ぶ時と同じ）。前の session と今の session は、名乗りの pid と始まった時刻で見分ける。
+ * 前の TPM 担当宛てで届いていなかった物を受け取る。前の session と今の session は、名乗りの pid と始まった時刻で見分ける。
  */
 export function recipientName(party: Party): Recipient {
   const name = party.launch === undefined || party.key === TPM_PARTY ? encode(party.key) : `${encode(party.key)}__${encode(party.launch)}`;
@@ -157,7 +154,7 @@ export function claimNamed(ctx: Context, name: Recipient): Claim | undefined {
 }
 
 /**
- * その担当の、効いている名乗り（送り手が、運ぶ道を決めるのに引く）。受け手の名（recipientName）の file を読む。
+ * その担当の、効いている名乗り。受け手の名（recipientName）の file を読む。
  * 起こした回の分からない担当（castlist を設定していない project の席）は、Key だけの名。TPM 担当は、起こした回に依らず 1 つの名。
  */
 export function claimOf(ctx: Context, party: Party): Claim | undefined {
@@ -181,9 +178,8 @@ export function ownName(ctx: Pick<Context, 'env'>): Recipient | undefined {
   }
 }
 
-/** 設定が nats で、自分（この session）の名乗りが効いていれば、その名乗り。そうでなければ undefined（今のとおり cmux で動く）。 */
+/** 自分（この session）の名乗りが効いていれば、その名乗り。そうでなければ undefined（渡す hook を持たない session）。 */
 export function ownClaim(ctx: Context): Claim | undefined {
-  if (!usesNats(ctx)) return undefined;
   const name = ownName(ctx);
   return name === undefined ? undefined : claimNamed(ctx, name);
 }

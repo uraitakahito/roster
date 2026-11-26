@@ -8,7 +8,7 @@ import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { pagetrayApi } from '../src/clients.ts';
 import { fileDelete, fileList, filePath, filePut, type FileRecord } from '../src/commands/file.ts';
-import { MESSAGE_RECORDS_FILE, messageRecordsSettled } from '../src/commands/message-record.ts';
+import { copyMessageRecord, MESSAGE_RECORDS_FILE, messageRecordsSettled } from '../src/commands/message-record.ts';
 import { askTpm, notify, TPM_PARTY, type Sent } from '../src/commands/messages.ts';
 import { PAGE_KINDS, pageDelete, pageImport, pageList, pagePath, pagePut, pageReply, type PageRecord } from '../src/commands/page.ts';
 import { setReply, waitingUrls } from '../src/commands/reply.ts';
@@ -261,7 +261,7 @@ describe.skipIf(URL === '')('cli と pagetray のつなぎ（レビューの印�
 });
 
 describe.skipIf(URL === '')('cli と pagetray のつなぎ（送った記録）', () => {
-  test('送ると、送った記録が carried で置かれ、ListMessages で読める。同じ id をもう 1 度置いても 1 件のまま', async () => {
+  test('送ると、送った記録が waiting で置かれ、ListMessages で読める。前の版の行は carried で、長い本文は切る。同じ id をもう 1 度置いても 1 件のまま', async () => {
     const s = setup();
     // 名乗りと起こしは偽の置き場で済ませ（状態の folder は同じ）、送る所だけを本物の置き場に向ける。
     await hello(s.w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
@@ -270,25 +270,30 @@ describe.skipIf(URL === '')('cli と pagetray のつなぎ（送った記録）'
     await notify(s.tpm, 'K-40', { text: 'A で進める' });
     // 試験の時刻は止めてあるので、2 件の送った時刻は同じ。置いた順で並ぶように、1 件ずつ写しが済むのを待つ。
     await messageRecordsSettled();
-    await askTpm(s.real(s.w.role('K-40', 'file:1')), { text: '長'.repeat(9000), waitingFor: '答え' });
+    await askTpm(s.real(s.w.role('K-40', 'file:1')), { text: 'B でよいか', waitingFor: '答え' });
     await messageRecordsSettled();
     const log = s.tpm.state.lines<Sent>('log.jsonl');
+    // 前の版の行（連携の道具が運んだ。carrier が無い）。今の送る命令は、8000 字を超える本文を置かないので、長い本文はこの形で見る。
+    const old: Sent = { at: log[0]?.at ?? '', key: 'K-40', heading: 'done', from: 'SWE K-40: 計画と実装', to: 'file:tpm', text: `【done】${'長'.repeat(9000)}`, id: 'old-1', sender: { key: 'K-40' }, recipient: { key: TPM_PARTY } };
+    copyMessageRecord(s.tpm, old);
+    await messageRecordsSettled();
     const client = pagetrayClient(URL);
     const api = pagetrayApi();
     const list = async () => (await client.send(new api.ListMessagesCommand({ project: s.project, sort: 'sentAt' }))).messages ?? [];
     const found = await list();
     expect(found.map(m => [m.id, m.key, m.heading, m.from, m.to, m.state, m.sentAt?.toISOString()])).toEqual([
-      [log[0]?.id, 'K-40', 'notify', TPM_PARTY, 'K-40', 'carried', log[0]?.at],
-      [log[1]?.id, 'K-40', 'ask-tpm', 'K-40', TPM_PARTY, 'carried', log[1]?.at],
+      [log[0]?.id, 'K-40', 'notify', TPM_PARTY, 'K-40', 'waiting', log[0]?.at],
+      [log[1]?.id, 'K-40', 'ask-tpm', 'K-40', TPM_PARTY, 'waiting', log[1]?.at],
+      ['old-1', 'K-40', 'done', 'K-40', TPM_PARTY, 'carried', old.at],
     ]);
     expect(found[0]?.text).toBe('【notify】A で進める');
-    expect([...found[1]?.text ?? '']).toHaveLength(8000);
-    expect(found[1]?.text?.endsWith('…（長いので切った）')).toBe(true);
+    expect([...found[2]?.text ?? '']).toHaveLength(8000);
+    expect(found[2]?.text?.endsWith('…（長いので切った）')).toBe(true);
     // 写せたので、写せなかった記録は無い。
     expect(existsSync(join(s.tpm.state.dir, MESSAGE_RECORDS_FILE))).toBe(false);
     // 同じ id の置き直しは書き足し（200）で、件は増えない。
     const again = await client.send(new api.PutMessageCommand({ project: s.project, id: log[0]?.id ?? '', heading: 'notify', from: 'x', to: 'y', text: '違う本文', sentAt: new Date(log[0]?.at ?? ''), state: 'carried' }));
     expect([again.status, again.text]).toEqual([200, '【notify】A で進める']);
-    expect(await list()).toHaveLength(2);
+    expect(await list()).toHaveLength(3);
   });
 });

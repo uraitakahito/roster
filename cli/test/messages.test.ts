@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import { answer, askDevops, askPm, askTpm, dismiss, doneKind, notify, reportDependabot, reportDocFix, reportDone, reportEnd, reportMerged, show, wait } from '../src/commands/messages.ts';
-import { hello, inbox } from '../src/commands/role-side.ts';
+import { hello, inboxNow } from '../src/commands/role-side.ts';
+import { deliveredLines } from '../src/mail.ts';
 import { assign, close, roles } from '../src/commands/tpm-side.ts';
 import { requireRole } from '../src/roster.ts';
-import { TpmError } from '../src/skill-sets.ts';
 import { BRIEF, finish, world, type World } from './helpers.ts';
 
 const OUT = 'https://claude.ai/artifact/o1';
@@ -19,7 +19,10 @@ async function started(config: Record<string, unknown> = {}, issue?: string): Pr
   await hello(se);
   return { ...w, se };
 }
-const texts = (w: World, address: string): string[] => w.wire.inbox(address).map(m => m.text);
+const texts = (w: World, address: string): string[] => w.posted(address).map(m => m.text);
+/** t-x7k2 の担当宛て（TPM 担当宛て）に置かれた n 番目の物の id。 */
+const idTo = (w: World, n = 0): string => w.posted('t-x7k2')[n]?.id ?? '';
+const idToTpm = (w: World, n = 0): string => w.posted('tpm')[n]?.id ?? '';
 const waitOf = (w: World, address: string): string | undefined => w.wire.status(address)?.wait;
 
 describe('1 つの課題の 1 周（課題管理なし）', () => {
@@ -28,10 +31,10 @@ describe('1 つの課題の 1 周（課題管理なし）', () => {
     const FROM = 'SWE t-x7k2: 計画と実装';
 
     expect(await askTpm(w.se, { text: '案 A と B で迷う。お勧めは A', waitingFor: '案の選択' })).toEqual(['送った: 【ask-tpm】→ file:tpm（相手の手が空いた時に届く。送り直さない）', '状態: 回答待ち(TPM): 案の選択']);
-    const asked = w.wire.inbox('file:tpm')[0];
+    const asked = w.posted('tpm')[0];
     expect(asked).toMatchObject({ from: FROM, text: '【ask-tpm】案 A と B で迷う。お勧めは A' });
     await notify(w.tpm, 't-x7k2', { text: 'A で進める', ...(asked ? { replyTo: asked.id } : {}) });
-    expect(w.wire.inbox('file:1')[0]).toMatchObject({ from: 'Technical Program Manager', text: '【notify】A で進める', replyTo: asked?.id });
+    expect(w.posted('file:1')[0]).toMatchObject({ from: 'Technical Program Manager', text: '【notify】A で進める', replyTo: asked?.id });
 
     expect(wait(w.se, 'work', '実装')).toEqual(['状態: 作業中: 実装']);
     await reportMerged(w.se, { pr: PR, note: '段 1 を入れた' });
@@ -63,7 +66,8 @@ describe('1 つの課題の 1 周（課題管理なし）', () => {
       `【done】${OUT} 要点: 実装した／残り: なし／決めてほしいこと: なし`,
       `【end】成果: ${OUT}／merge した PR: ${PR}／消した worktree: skills-worktrees/t-x-impl／残っている物: なし`,
     ]);
-    expect(texts(w, 'file:1')).toEqual([
+    // 閉じた席の宛先は名簿から引けないので、受け手の名で読む。
+    expect(texts(w, 't-x7k2')).toEqual([
       '【notify】A で進める',
       '【brief】https://claude.ai/artifact/b2 計画の実装',
       '【dismiss】この課題に続きは無い。worktree と課題を片付けて【end】を返す。',
@@ -218,7 +222,7 @@ describe('ほかのメッセージ', () => {
       `【merge-request】${PR}／CI: 緑`,
       `【end】成果: なし／merge した PR: ${PR}／消した worktree: なし／残っている物: なし`,
     ]);
-    expect(w.wire.inbox('file:tpm').at(-1)?.from).toBe('Sustaining app#15');
+    expect(w.posted('tpm').at(-1)?.from).toBe('Sustaining app#15');
   });
 
   test('居場所が消えた担当には送らずに止まる', async () => {
@@ -306,10 +310,10 @@ describe('入口の検査: PR が merge 済みか', () => {
 describe('入口の検査: 送る前に、読んでいないメッセージを見せる', () => {
   test('担当: TPM 担当からのメッセージが届いていなければ、出して 1 度止まり、打ち直すと送る', async () => {
     const w = await started({ tracker: 'github' }, 'gh-12');
-    w.wire.hold('file:1');
+    w.hold('file:1');
     expect((await notify(w.tpm, 't-x7k2', { text: 'tag はまだ打たないで待つこと' }))[0]).toMatch(/相手の手が空いた時に届く/);
     const done = (): Promise<string[]> => reportDone(w.se, { url: OUT, kind: 'result', summary: '実装した', remaining: 'なし', decisions: 'なし', points: [] });
-    await expect(done()).rejects.toThrow('相手から、まだ読んでいないメッセージが 1 件あります。送っていません。\n--- Technical Program Manager（id m1-file-1）\n【notify】tag はまだ打たないで待つこと\n--- ここまで\n読んだうえで、同じ命令を打ち直せば送ります（事情が変わっていたら、中身を変えて打つ）。');
+    await expect(done()).rejects.toThrow(`相手から、まだ読んでいないメッセージが 1 件あります。送っていません。\n--- Technical Program Manager（id ${idTo(w)}）\n【notify】tag はまだ打たないで待つこと\n--- ここまで\n読んだうえで、同じ命令を打ち直せば送ります（事情が変わっていたら、中身を変えて打つ）。`);
     // 止まった回は、メッセージも課題の記録も書かない
     expect(texts(w, 'file:tpm')).toEqual([]);
     expect(w.calls.filter(c => c.args[1] === 'comment')).toEqual([]);
@@ -322,9 +326,9 @@ describe('入口の検査: 送る前に、読んでいないメッセージを�
 
   test('担当: roster inbox で見た後は止まらない', async () => {
     const w = await started();
-    w.wire.hold('file:1');
+    w.hold('file:1');
     await notify(w.tpm, 't-x7k2', { text: '知らせ' });
-    expect(inbox(w.se)).toEqual(['--- Technical Program Manager（id m1-file-1）', '【notify】知らせ']);
+    expect(await inboxNow(w.se)).toEqual([`--- Technical Program Manager（id ${idTo(w)}）`, '【notify】知らせ', '--- ここまで']);
     await reportMerged(w.se, { pr: PR, note: '入れた' });
     expect(texts(w, 'file:tpm')).toHaveLength(1);
   });
@@ -336,7 +340,7 @@ describe('入口の検査: 送る前に、読んでいないメッセージを�
     const other = w.role('t-b2c3', 'file:2');
     await hello(other);
     const comments = (): number => w.calls.filter(c => c.args[1] === 'comment').length;
-    w.wire.hold('file:tpm');
+    w.hold('tpm');
     await askTpm(other, { text: '別の課題の問い', waitingFor: 'a' });
     // ほかの担当のメッセージでは止まらない
     await notify(w.tpm, 't-x7k2', { text: '知らせ' });
@@ -367,10 +371,10 @@ describe('入口の検査: 同じメッセージの 2 度送り', () => {
     await done();
     expect(comments()).toBe(1);
     w.se.now = at(2);
-    await expect(done()).rejects.toThrow('同じ【done】を、2026-11-20T12:00:00.000Z にもう送っています（id m1-file-tpm）。2 度目は送っていません。\n打ち直しを ; や || で 1 行に続けて書いていないか確かめてください。もう 1 度送る必要があれば、30 秒待つか、中身を変えて打つ。');
+    await expect(done()).rejects.toThrow(`同じ【done】を、2026-11-20T12:00:00.000Z にもう送っています（id ${idToTpm(w)}）。2 度目は送っていません。\n打ち直しを ; や || で 1 行に続けて書いていないか確かめてください。もう 1 度送る必要があれば、30 秒待つか、中身を変えて打つ。`);
     expect(comments()).toBe(1);
     expect(texts(w, 'file:tpm')).toHaveLength(1);
-    expect(w.tpm.state.lines<{ gate: string, detail: string }>('gate.jsonl').map(l => [l.gate, l.detail])).toEqual([['repeat', 'm1-file-tpm']]);
+    expect(w.tpm.state.lines<{ gate: string, detail: string }>('gate.jsonl').map(l => [l.gate, l.detail])).toEqual([['repeat', idToTpm(w)]]);
     // 中身が違えば送る。30 秒を過ぎれば、同じ中身でも送る
     await done('実装した（直した）');
     w.se.now = at(31);
@@ -412,7 +416,7 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
   async function sentBrief4(held: boolean): Promise<World & { se: ReturnType<World['role']> }> {
     const w = await started();
     await reportDone(w.se, { kind: 'result', summary: '1 つ目', remaining: 'なし', decisions: 'なし', points: [] });
-    if (held) w.wire.hold('file:1');
+    if (held) w.hold('file:1');
     await assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B4, wait: 0 });
     return w;
   }
@@ -424,7 +428,7 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
     const sent = texts(w, 'file:1').length;
     await expect(dismiss(w.tpm, 't-x7k2', { handover: true })).rejects.toThrow([
       't-x7k2 の担当に、まだ済んでいない物があります。送っていません。',
-      '--- まだ見ていない（届いておらず、roster も見せていない。2026-11-20T12:00:00.000Z に送った。id m1-file-1）',
+      `--- まだ見ていない（届いておらず、roster も見せていない。2026-11-20T12:00:00.000Z に送った。id ${idTo(w)}）`,
       `【brief】${B4}`,
       `--- 【done】が返っていない依頼書: brief-4（${B4}）`,
       '--- ここまで',
@@ -433,7 +437,7 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
     // 止まった回は送らず、名簿も変えない。gate.jsonl に残す
     expect(texts(w, 'file:1')).toHaveLength(sent);
     expect(requireRole(w.tpm, 't-x7k2').dismissed).toBeUndefined();
-    expect(gates(w)).toEqual([['unsettled', `t-x7k2: m1-file-1 ${B4}`]]);
+    expect(gates(w)).toEqual([['unsettled', `t-x7k2: ${idTo(w)} ${B4}`]]);
   });
 
   test('--supersede を付ければ送り、本文に取り消す依頼書が載る', async () => {
@@ -454,12 +458,13 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
   test('#110 の形: 配られていなくても、担当に見せた物では止まらない（見せていない物では今までどおり止まる）', async () => {
     const w = await started();
     await reportDone(w.se, { kind: 'result', summary: '1 つ目', remaining: 'なし', decisions: 'なし', points: [] });
-    // 担当は手を動かし続けていて、cmux は配らない。TPM 担当の【notify】2 通は queued のまま
-    w.wire.hold('file:1');
+    // 担当は手を動かし続けていて、hook は渡さない。TPM 担当の【notify】2 通は、配りの口に残ったまま
+    w.hold('file:1');
     await notify(w.tpm, 't-x7k2', { text: '受け取った' });
     await notify(w.tpm, 't-x7k2', { text: 'お勧めのとおりで' });
-    // 担当が roster inbox で 2 通を見た（shown/ に入る）。cmux はまだ配っていない
-    expect(inbox(w.se)).toHaveLength(4);
+    // 担当が roster inbox で 2 通を見た（渡した記録に output と残る）。hook はまだ渡していない
+    expect(await inboxNow(w.se)).toHaveLength(5);
+    expect(deliveredLines(w.tpm).filter(l => l.to === 't-x7k2').map(l => l.when)).toEqual(['output', 'output']);
     await dismiss(w.tpm, 't-x7k2', { handover: false });
     expect(gates(w)).toEqual([]);
   });
@@ -468,7 +473,7 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
     const w = await started();
     await reportDone(w.se, { kind: 'result', summary: '1 つ目', remaining: 'なし', decisions: 'なし', points: [] });
     await assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B4, wait: 0 });
-    w.tpm.state.append('returned.jsonl', { at: '2026-11-20T12:00:01.000Z', id: 'm1-file-1', incident: 1 });
+    w.tpm.state.append('returned.jsonl', { at: '2026-11-20T12:00:01.000Z', id: idTo(w), incident: 1 });
     // 担当が【done】を送っても、返した依頼書の分には数えない
     await reportDone(w.se, { kind: 'result', summary: '別の物', remaining: 'なし', decisions: 'なし', points: [] });
     await expect(dismiss(w.tpm, 't-x7k2', { handover: false })).rejects.toThrow(`--- 【done】が返っていない依頼書: brief-4（${B4}）`);
@@ -478,32 +483,32 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
     const w = await started();
     await reportDone(w.se, { kind: 'result', summary: '1 つ目', remaining: 'なし', decisions: 'なし', points: [] });
     await notify(w.tpm, 't-x7k2', { text: '前の担当への知らせ' });
-    w.tpm.state.append('returned.jsonl', { at: '2026-11-20T12:00:01.000Z', id: 'm1-file-1', incident: 1 });
+    w.tpm.state.append('returned.jsonl', { at: '2026-11-20T12:00:01.000Z', id: idTo(w), incident: 1 });
     // TPM 担当が【returned】を扱い、今の担当に送り直した
     await notify(w.tpm, 't-x7k2', { text: '今の担当への知らせ' });
     await expect(dismiss(w.tpm, 't-x7k2', { handover: false })).rejects.toThrow([
       't-x7k2 の担当に、まだ済んでいない物があります。送っていません。',
-      '--- 届け違いで返した（2026-11-20T12:00:00.000Z に送った。id m1-file-1。roster returned show m1-file-1。送り直したか、要らないと決めたなら --supersede）',
+      `--- 届け違いで返した（2026-11-20T12:00:00.000Z に送った。id ${idTo(w)}。roster returned show ${idTo(w)}。送り直したか、要らないと決めたなら --supersede）`,
       '【notify】前の担当への知らせ',
       '--- ここまで',
     ].join('\n'));
     await dismiss(w.tpm, 't-x7k2', { handover: false, supersede: true });
-    expect(texts(w, 'file:1').at(-1)).toMatch(/取り消す: 届け違いで返した【notify】（2026-11-20T12:00:00\.000Z に送った。id m1-file-1）$/);
+    expect(texts(w, 'file:1').at(-1)?.endsWith(`取り消す: 届け違いで返した【notify】（2026-11-20T12:00:00.000Z に送った。id ${idTo(w)}）`)).toBe(true);
   });
 
   test('見せていない queued の物は「まだ見ていない」として出して止まり、--supersede の本文も同じ字にする', async () => {
     const w = await started();
     await reportDone(w.se, { kind: 'result', summary: '1 つ目', remaining: 'なし', decisions: 'なし', points: [] });
-    w.wire.hold('file:1');
+    w.hold('file:1');
     await notify(w.tpm, 't-x7k2', { text: '受け取った' });
     await expect(dismiss(w.tpm, 't-x7k2', { handover: false })).rejects.toThrow([
       't-x7k2 の担当に、まだ済んでいない物があります。送っていません。',
-      '--- まだ見ていない（届いておらず、roster も見せていない。2026-11-20T12:00:00.000Z に送った。id m1-file-1）',
+      `--- まだ見ていない（届いておらず、roster も見せていない。2026-11-20T12:00:00.000Z に送った。id ${idTo(w)}）`,
       '【notify】受け取った',
       '--- ここまで',
     ].join('\n'));
     await dismiss(w.tpm, 't-x7k2', { handover: false, supersede: true });
-    expect(texts(w, 'file:1').at(-1)).toMatch(/取り消す: まだ見ていない【notify】（2026-11-20T12:00:00\.000Z に送った。id m1-file-1）$/);
+    expect(texts(w, 'file:1').at(-1)?.endsWith(`取り消す: まだ見ていない【notify】（2026-11-20T12:00:00.000Z に送った。id ${idTo(w)}）`)).toBe(true);
   });
 
   test('ふつうの流れ（依頼書 → 【done】 → dismiss・続きの assign）では止まらない', async () => {
@@ -602,20 +607,10 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
     expect((await dismiss(w.tpm, 't-x7k2', { handover: false }))[0]).toMatch(/^送った: 【dismiss】/);
   });
 
-  test('--briefs が無い【done】は、連携の道具が受信箱を読めなくても送る（案内の数えだけを飛ばす）', async () => {
-    const w = await started();
-    const queued = w.se.messages.queued.bind(w.se.messages);
-    w.se.messages.queued = () => {
-      throw new TpmError('cmux agent inbox が失敗しました');
-    };
-    expect(await reportDone(w.se, { kind: 'result', summary: 'x', remaining: 'なし', decisions: 'なし', points: [] })).toContain('送った: 【done】→ file:tpm（相手の手が空いた時に届く。送り直さない）');
-    w.se.messages.queued = queued;
-  });
-
   test('答えが届く前に続きの assign を打っても止まらない（答え → すぐ続きの依頼書）', async () => {
     const w = await started();
     await reportDone(w.se, { kind: 'plan', summary: '計画', remaining: 'なし', decisions: 'なし', points: [] });
-    w.wire.hold('file:1');
+    w.hold('file:1');
     await answer(w.tpm, 't-x7k2', { text: '確認の 1 は案 A。続けて依頼書を送る' });
     expect((await assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B4, wait: 0 }))[0]).toMatch(/^送った: 【brief】/);
   });
@@ -629,7 +624,7 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
   test('#3 の形（担当が手を動かす間に「待て」を送る）は、送る側では止めない（A1 の外）', async () => {
     const w = await started();
     await reportDone(w.se, { kind: 'result', summary: '済んだ', remaining: 'なし', decisions: 'なし', points: [] });
-    w.wire.hold('file:1');
+    w.hold('file:1');
     expect((await notify(w.tpm, 't-x7k2', { text: 'tag はまだ打たないで待つこと' }))[0]).toMatch(/相手の手が空いた時に届く/);
     expect(gates(w)).toEqual([]);
   });
@@ -637,15 +632,15 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
   test('#36 の形: 画面に届く前に roster inbox で読んで済ませた依頼書は、済んだと数える', async () => {
     const w = await sentBrief4(true);
     w.se.now = at(60);
-    expect(inbox(w.se)).toEqual(['--- Technical Program Manager（id m1-file-1）', `【brief】${B4}`]);
+    expect(await inboxNow(w.se)).toEqual([`--- Technical Program Manager（id ${idTo(w)}）`, `【brief】${B4}`, '--- ここまで']);
     w.se.now = at(150);
     await reportDone(w.se, { kind: 'proposal', summary: 'brief-4', remaining: 'なし', decisions: 'なし', points: [] });
-    // 連携の道具は【done】の 8 秒後に画面へ届けた
-    w.wire.release('file:1', '2026-11-20T12:02:38.000Z');
-    // 見せた時刻は、初めて見せた時のまま（後で見せ直しても進まない）
+    // hook は【done】の 8 秒後に本文を渡した
+    await w.release('file:1', '2026-11-20T12:02:38.000Z');
+    // 見せた時刻は、初めて見せた時のまま（後で roster inbox を打っても進まない）
     w.se.now = at(200);
-    inbox(w.se);
-    expect(w.tpm.state.read('shown/file-1.jsonc')).toEqual([{ id: 'm1-file-1', at: '2026-11-20T12:01:00.000Z' }]);
+    await inboxNow(w.se);
+    expect(deliveredLines(w.tpm).filter(l => l.to === 't-x7k2').map(l => [l.id, l.when, l.at])).toEqual([[idTo(w), 'output', '2026-11-20T12:01:00.000Z'], [idTo(w), 'wake', '2026-11-20T12:02:38.000Z']]);
     w.tpm.now = at(300);
     expect(await assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B5, wait: 0 })).toEqual(['送った: 【brief】→ file:1（相手の手が空いた時に届く。送り直さない）']);
     expect(gates(w)).toEqual([]);
@@ -658,7 +653,7 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
     await expect(done()).rejects.toThrow(/まだ読んでいないメッセージが 1 件あります[\s\S]*brief-4/);
     w.se.now = at(150);
     await done();
-    w.wire.release('file:1', '2026-11-20T12:02:38.000Z');
+    await w.release('file:1', '2026-11-20T12:02:38.000Z');
     expect((await dismiss(w.tpm, 't-x7k2', { handover: false }))[0]).toMatch(/^送った: 【dismiss】/);
   });
 
@@ -666,22 +661,25 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
     const w = await sentBrief4(true);
     // 担当が brief-4 を見る前に【done】が出た（送る命令と依頼書が行き違った）。送る前の検査を通らない形を、log に直に書いて作る
     w.se.state.append('log.jsonl', { at: '2026-11-20T12:00:03.000Z', key: 't-x7k2', heading: 'done', from: 'SWE t-x7k2: 計画と実装', to: 'file:tpm', text: '【done】前の分', id: 'd-race', delivered: true });
-    w.wire.release('file:1', '2026-11-20T12:00:08.000Z');
+    await w.release('file:1', '2026-11-20T12:00:08.000Z');
     await expect(dismiss(w.tpm, 't-x7k2', { handover: false })).rejects.toThrow(/【done】が返っていない依頼書: brief-4/);
   });
 
-  test('#58 の形: 前の版が時刻を書かずに覚えた依頼書は、送った時刻に見せた物として、画面に届く前の【done】で済む', async () => {
-    const w = await sentBrief4(true);
-    w.tpm.state.write('shown/file-1.jsonc', ['m1-file-1']);
-    // 送る前の検査は、前の形で覚えた物でも止まらない
+  test('#58 の形: 前の版（cmux が運んだ頃）の依頼書で、時刻を書かずに覚えた物は、送った時刻に見せた物として、後の【done】で済む。shown/ は、もう書き替えない', async () => {
+    const w = await started();
+    await reportDone(w.se, { kind: 'result', summary: '1 つ目', remaining: 'なし', decisions: 'なし', points: [] });
+    // 前の版の行（carrier が無い）と、前の版が時刻を書かずに覚えた見せた物
+    w.tpm.state.append('log.jsonl', { at: '2026-11-20T12:00:30.000Z', key: 't-x7k2', heading: 'brief', from: 'Technical Program Manager', to: 'file:1', text: `【brief】${B4}`, id: 'old-b4', settle: 'none' });
+    w.tpm.state.write('shown/file-1.jsonc', ['old-b4']);
     w.se.now = at(60);
     await reportDone(w.se, { kind: 'result', summary: 'brief-4', remaining: 'なし', decisions: 'なし', points: [] });
-    // 新しい版が書き直しても、時刻の無い項目は時刻の無いまま
+    // 今の版が見せた物は、渡した記録に残す（shown/ には書かない）
     w.se.now = at(90);
-    w.wire.send('file:1', 'Technical Program Manager', '【notify】受け取った');
-    inbox(w.se);
-    expect(w.tpm.state.read('shown/file-1.jsonc')).toEqual([{ id: 'm1-file-1' }, { id: 'm2-file-1', at: '2026-11-20T12:01:30.000Z' }]);
-    w.wire.release('file:1', '2026-11-20T12:05:00.000Z');
+    w.hold('file:1');
+    await w.send('file:1', 'Technical Program Manager', '【notify】受け取った');
+    await inboxNow(w.se);
+    expect(w.tpm.state.read('shown/file-1.jsonc')).toEqual(['old-b4']);
+    w.tpm.now = at(120);
     expect((await dismiss(w.tpm, 't-x7k2', { handover: false }))[0]).toMatch(/^送った: 【dismiss】/);
   });
 
@@ -730,31 +728,16 @@ describe('入口の検査: TPM 担当だけの命令は、担当の session か�
 });
 
 describe('入口の検査: 自分が送った物は、未読に数えない（台帳 #97・#100）', () => {
-  // 連携の道具（cmux）は、自分の受信箱の「まだ届いていない物」に、自分が送ってまだ届いていない物も返す。
+  // 自分の箱（配りの口の、自分の受け手の名）には、自分宛ての物しか入らない。
   test('担当: 自分が送ってまだ届いていない物では止まらない。相手からの未読では、今のとおり止まる', async () => {
     const w = await started();
-    w.wire.hold('file:tpm');
+    w.hold('tpm');
     await askTpm(w.se, { text: '1 通目', waitingFor: 'a' });
-    const mine = w.wire.inbox('file:tpm').map(m => ({ id: m.id, from: m.from, text: m.text }));
-    expect(mine).toHaveLength(1);
-    const real = w.se.messages.pending.bind(w.se.messages);
-    w.se.messages.pending = () => [...mine, ...real()];
+    expect(w.posted('tpm')).toHaveLength(1);
     expect((await reportMerged(w.se, { pr: PR, note: '入れた' }))[0]).toMatch(/^送った: 【merged】/);
-    w.wire.release('file:tpm');
-    w.wire.hold('file:1');
+    await w.release('file:tpm');
+    w.hold('file:1');
     await notify(w.tpm, 't-x7k2', { text: '待つこと' });
     await expect(askTpm(w.se, { text: '2 通目', waitingFor: 'a' })).rejects.toThrow(/まだ読んでいないメッセージが 1 件あります[\s\S]*【notify】待つこと/);
-  });
-
-  test('返事の形で、記録の宛先とずれて自分に届いた物は、除かない（送り手で見分ける）', async () => {
-    const w = await started();
-    await assign(w.tpm, 't-b2c3', { role: 'software-engineer', title: '別の課題', brief: BRIEF, wait: 0 });
-    await hello(w.role('t-b2c3', 'file:2'));
-    // TPM 担当が別の担当（file:2）宛てに送った物が、返事の先の取り違えで、この担当に届いた形（記録の宛先は file:2 のまま）
-    w.wire.hold('file:2');
-    await notify(w.tpm, 't-b2c3', { text: '取り違えた返事' });
-    const stray = w.wire.inbox('file:2').map(m => ({ id: m.id, from: m.from, text: m.text }));
-    w.se.messages.pending = () => stray;
-    await expect(askTpm(w.se, { text: 'q', waitingFor: 'a' })).rejects.toThrow(/まだ読んでいないメッセージが 1 件あります[\s\S]*【notify】取り違えた返事/);
   });
 });

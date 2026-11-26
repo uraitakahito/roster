@@ -6,7 +6,6 @@ import { requireUp, sessionRef } from '../castlist.ts';
 import { describeTrackers, OWN_LABEL, sourceLabel, type ConfigSource } from '../config.ts';
 import type { Context } from '../context.ts';
 import { legacyEnvNotice } from '../env.ts';
-import { syncDeliveries } from '../evidence.ts';
 import { AUDIT_KEY, modelStatus, ROLES, TPM_COLOR, TPM_TITLE, WAIT, type RoleName } from '../protocol.ts';
 import { lastAuditLine } from '../audits.ts';
 import { openLine } from '../incidents.ts';
@@ -39,10 +38,8 @@ export async function tpmHello(ctx: Context, options: { model?: string, effort?:
   ctx.seats.setStatus('model', modelStatus(settings.model, settings.effort));
   ctx.seats.setStatus('wait', WAIT.work('起動'));
   ctx.state.write('tpm.jsonc', { address } satisfies TpmRecord);
-  // 連携の道具が古いメッセージを捨てる前に、届いた時刻を写す。
-  syncDeliveries(ctx);
   const legacy = legacyEnvNotice(ctx.env).map(line => `${line}（Product Manager に伝える）`);
-  // メッセージを NATS で配る設定の時だけ: 渡せない物・期限切れを記録して出し、名簿に無い受け手の取り口を掃く（設定が cmux なら空）。
+  // 渡せない物・期限切れを記録して出し、名簿に無い受け手の取り口を掃く。
   const mail = await tidyMail(ctx, { sweep: true });
   return [...actor, `TPM 担当の宛先: ${address}`, ...painted, ...configLines(ctx), ...bannerHint(ctx), ...legacy, ...mail, ...await roles(ctx)];
 }
@@ -278,12 +275,10 @@ export async function close(ctx: Context, key: string): Promise<string[]> {
   if (record === undefined) throw new TpmError(`名簿に担当がいません: ${key}`);
   if (record.role === 'auditor') throw new TpmError('Auditor の席は、Product Manager が起こし、閉じます。roster close では閉じられません（居場所が消えていたら、Product Manager が roster audit start で起こし直す）');
   const alive = record.address !== undefined && ctx.seats.seats().some(s => s.address === record.address);
-  // 閉じる前に、この担当とのメッセージの届いた時刻を写す。
-  syncDeliveries(ctx);
   // 居場所を閉じる前に、castlist に幕引きを送る（閉じた後の SessionEnd の hook が届くかは、閉じ方による）。
   const castlist = await closeLaunch(ctx, record);
   if (alive && record.address !== undefined) ctx.seats.close(record.address);
-  // メッセージを NATS で配る設定の時だけ: この受け手の取り口と残りを消し、残っていた物を記録する（設定が cmux なら空）。
+  // この受け手の取り口と残りを消し、残っていた物を記録する。
   const mail = await clearSeat(ctx, record);
   removeRole(ctx, key);
   const staff = isStaffKey(key) || readRole(ctx, staffKey(key)) === undefined ? [] : await close(ctx, staffKey(key));

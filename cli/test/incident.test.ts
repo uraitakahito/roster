@@ -51,9 +51,9 @@ describe('台帳に書く', () => {
       '台帳に書いた: #1 信頼性 t-x7k2 11-20 12:00「merge が断られたのに【merged】を送った」',
       '送った: 【incident】→ file:tpm（相手の手が空いた時に届く。送り直さない）',
     ]);
-    expect(w.wire.inbox('file:tpm').at(-1)?.text).toBe('【incident】#1 信頼性: merge が断られたのに【merged】を送った');
+    expect(w.posted('tpm').at(-1)?.text).toBe('【incident】#1 信頼性: merge が断られたのに【merged】を送った');
     await reportIncident(w.se, { text: 'image が public だった', type: 'safety', tags: ['公開'], severe: true });
-    expect(w.wire.inbox('file:tpm').at(-1)?.text).toBe('【incident】#2 [重い] 安全性: image が public だった（tag: 公開）');
+    expect(w.posted('tpm').at(-1)?.text).toBe('【incident】#2 [重い] 安全性: image が public だった（tag: 公開）');
     expect(readIncidents(w.tpm).map(i => [i.by, i.source])).toEqual([['t-x7k2', 'report'], ['t-x7k2', 'report']]);
     expect(w.calls.filter(c => c.args[1] === 'comment')).toHaveLength(comments);
     // 種類の誤りは、送る前の検査より先に見る（何も書かない）

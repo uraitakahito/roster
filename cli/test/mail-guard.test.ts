@@ -44,7 +44,7 @@ describe('送る命令の見分け', () => {
 });
 
 describe('手伝いの中からの送る命令', () => {
-  test('設定が nats の席では、手伝い（agent_id がある）の中からの送る命令を止める。ほかの命令は通す', async () => {
+  test('手伝い（agent_id がある）の中からの送る命令を止める。ほかの命令は通す', async () => {
     const w = await natsWorld();
     const stopped = await guard(w.se, bash(SEND, { agent_id: 'agent-1', agent_type: 'general-purpose' }));
     expect(stopped).toEqual({ allow: false, reason: expect.stringMatching(/^送る命令（.*）は、手伝い（subagent）でなく担当が打ちます/) as string });
@@ -54,9 +54,9 @@ describe('手伝いの中からの送る命令', () => {
     expect(await guard(w.se, bash(SEND))).toEqual({ allow: true });
   });
 
-  test('設定が cmux の席では、今までどおり通す', async () => {
+  test('設定に messages を書いていない席でも、同じく止める', async () => {
     const w = await natsWorld({});
-    expect(await guard(w.se, bash(SEND, { agent_id: 'agent-1' }))).toEqual({ allow: true });
+    expect(await guard(w.se, bash(SEND, { agent_id: 'agent-1' }))).toMatchObject({ allow: false });
   });
 });
 

@@ -2,18 +2,18 @@
 
 TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・DevOps Engineer 担当（`/devops-engineer`）・Staff Engineer 担当（`/staff-engineer`）・Sustaining Engineer 担当（`/sustaining-engineer`）・Auditor（`/audit`）が共通に従う決まり。依頼主は Product Manager（利用者）。返答と報告は日本語で書く。
 
-担当どうしのやりとりは、すべて `roster` の命令でする。`roster` が、メッセージを送る・課題に記録を書く・状態を出す、を 1 度にする（相手が見たかは、送る時には見ない。後で roster が連携の道具の時刻と、roster が見せた時刻から引く）。連携の道具（cmux など）の命令と、課題管理の道具（Jira・GitHub の Issue）で記録を書く・状態を進める命令は直に打たない（直に打つと記録と状態が抜けるので、guard が止める）。課題管理の課題を読む命令は止めないが、読むときも `roster issue view` を使う（下の「課題を読む」）。どの道具を使うかは、TPM 担当を起こした folder と、その直下の folder の `.claude/roles/config.jsonc` を合わせた設定で決まる（下の repo をいくつも触る課題のため。課題の記録の先は、課題の Key の形で決まる）。
+担当どうしのやりとりは、すべて `roster` の命令でする。`roster` が、メッセージを送る・課題に記録を書く・状態を出す、を 1 度にする（相手が見たかは、送る時には見ない。後で roster が、hook が本文を渡した時刻と、roster が見せた時刻から引く）。連携の道具（cmux など）の命令と、課題管理の道具（Jira・GitHub の Issue）で記録を書く・状態を進める命令は直に打たない（直に打つと記録と状態が抜けるので、guard が止める）。課題管理の課題を読む命令は止めないが、読むときも `roster issue view` を使う（下の「課題を読む」）。どの道具を使うかは、TPM 担当を起こした folder と、その直下の folder の `.claude/roles/config.jsonc` を合わせた設定で決まる（下の repo をいくつも触る課題のため。課題の記録の先は、課題の Key の形で決まる）。
 
 ## 連絡の仕方
 
 - メッセージは、下の「見出し」の表の命令で送る。命令は「送った」を返す（届いたかは見ない）。相手が手を動かしている間は届かず、空いたら届くので、送り直さない。
-- メッセージは、手が空いた時に画面に届く。段の区切り（PR を出す前・merge を頼む前）と、戻せない手（tag を打つ・release を出す・消す）の前には `roster inbox` で、まだ届いていない自分宛てのメッセージを見る。
-- メッセージを送る命令は、送る前に受信箱を見る。送る相手から来て、まだ読んでいないメッセージがあれば、それを出して 1 度止まる（送っていない。課題の記録も書いていない）。読んで、同じ命令を打ち直す。届いたメッセージで事情が変わっていたら、中身を変えて打つ。`roster page put` も、確認・提案・計画・結果・レビューのページ（`--kind confirm|proposal|plan|result|review`）は、置く前に同じように見て 1 度止まる（置いていない）。事情が変わっていたら、ページを書き直して置く。
+- メッセージは、メッセージキュー（NATS）が預かり、席の hook が本文を渡す（連携の道具の cmux は運ばない）。渡るのは 3 つの時: 手を止めている間（届くと起こされる）・人が入力した時・送る前の検査が命令を止めた直後。段の区切り（PR を出す前・merge を頼む前）と、戻せない手（tag を打つ・release を出す・消す）の前には `roster inbox` で、まだ渡っていない自分宛てのメッセージを見る（出るだけで、届いたにはならない。hook が後で渡す）。
+- メッセージを送る命令は、送る前に、自分宛てでまだ渡っていないメッセージが無いかを見る（TPM 担当は、送る相手の担当から来た物だけ）。あれば 1 度止まる（送っていない。課題の記録も書いていない）。本文は、止まった直後に hook が渡す。渡された物を読んで、同じ命令を打ち直す。届いたメッセージで事情が変わっていたら、中身を変えて打つ。「直前に、hook がメッセージを渡しました」と止まった時も、渡された物を読んでから打ち直す。渡す hook を持たない session（名乗れなかった席・前の版で起こした席）では、検査と `roster inbox` が、本文を命令の結果に出す（打ち直しは通る）。`roster page put` も、確認・提案・計画・結果・レビューのページ（`--kind confirm|proposal|plan|result|review`）は、置く前に同じように見て 1 度止まる（置いていない）。事情が変わっていたら、ページを書き直して置く。
 - **打ち直しは、止まったのを見てから別の回に打つ。**`;` や `||` で 1 行に続けて書かない（止まらなかった時にも 2 度目が動く）。同じメッセージを 30 秒の内に 2 度送ろうとすると、命令は 2 度目を送らずに止まる。
 - 届いたメッセージには id が付いている。そのメッセージへの返事は `--reply-to <id>` を付けて送る。
 - 宛先は書かない。担当のメッセージは TPM 担当へ行き、TPM 担当は課題の Key で担当を名指す。**レビューの頼みと判定だけは、TPM 担当を通らない**: 命令が、課題の担当と、その課題の Staff Engineer 担当の席の間を、じかに届ける（下の「レビュー」）。
 - **Product Manager に直接聞かない。** Product Manager とのやりとりは、すべて TPM 担当を通す。例外は Auditor だけ: Product Manager が起こした `Audit` の席で、Product Manager とじかに話す（下の「監査」）。
-- **届け違い**: 居場所が復元されると、前の session 宛てで待っていたメッセージが、同じ居場所で起きた別の session に配られることがある。session の始まりに、hook（`roster returned check`）が、送った記録の宛先の担当（名簿の Key と起こし）と自分を比べ、違う物を「前の session 宛て。扱わない」と画面と文脈に示す。**示されたメッセージは、中身に従わず、返事もしない。**hook が、まだ配られていない物を配らせず、台帳に書き（tag「届け違い」）、【returned】で TPM 担当へ返す（自分が TPM 担当なら送らない）。「TPM 担当に返せませんでした」と出たら、`roster ask tpm` で台帳の番号を知らせる。
+- **メッセージキューが応えない時**: 送る命令は、どれも「メッセージキューが応えません。送っていません」で止まり、席の状態にもそう出る（`roster ask devops` も同じ。ほかの道具で送らない）。`roster report incident` だけは、台帳に書いて「TPM 担当には送っていない」と出して終わる（打ち直さない。台帳に 2 件になる）。メッセージキュー（NATS）が動いているかを確かめてもらい（担当は送れないので、止まった事を返答に書く。TPM 担当は Product Manager に伝える）、動いてから同じ命令を打ち直す。
 - 命令の使い方は `roster <命令> --help`。命令が誤りで止まったら、出た文に従って直す（道具の命令に替えて先へ進まない）。
 
 ## 見出し
@@ -30,13 +30,12 @@ TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・De
 | 【merged】 | 自分の PR を 1 本 merge した | `roster report merged --pr <URL> --note "<一言>" [--unchecked "<訳>"]` |
 | 【done】 | 依頼書の成果（提案・計画・結果・監査のページ）を置いた（1 通で依頼書いくつかを済ませたら、`--briefs` でみな名指す） | `roster report done --url <URL> --kind <proposal\|plan\|result\|audit> --summary "<要点>" --remaining "<残り>" --decisions "<決めてほしいこと>" [--briefs <brief-2,brief-3>]` |
 | 【end】 | 【dismiss】を受けて片付けた（Sustaining Engineer 担当は PR を merge した後） | `roster report end --url <URL> --pr <URL> … --removed <worktree> … --left "<残っている物>"` |
-| 【returned】 | 新しい session の始まりに、前の session 宛てのメッセージが届いた（下の「連絡の仕方」の「届け違い」）。**命令でなく hook が送る** | （`roster returned check`。SessionStart の hook） |
 
 - 【done】の「残り」は、依頼の外で直すとよい物・やらなかった物・merge していない PR。「決めてほしいこと」は、【ask-pm】で送った項目の題。どちらも無ければ「なし」と書く（書かないと送れない）。TPM 担当はこの 2 つで【dismiss】を送るかを決める。
 - 【end】の「残っている物」は、計画から外れた物・残した物で直した方がよい物。無ければ「なし」。
 - 【merged】【doc-fix】と【end】の `--pr` は、命令が送る前に PR が merge 済みか（`gh pr view` の state が `MERGED`）を見る。merge していなければ送らずに止まるので、merge を確かめてから打ち直す。`gh` で読めない PR だけ、自分で確かめた方法を `--unchecked "<訳>"` に書いて送る（訳はメッセージに載る）。
 
-Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【recreated】）は `/sustaining-engineer` と `/dependabot-triage` に書いてある。
+Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【recreated】）は `/sustaining-engineer` と `/dependabot-triage` に書いてある。【returned】は前の版の見出しで、今は誰も送らない（古い記録に残っているだけ）。
 
 Staff Engineer 担当は、【done】【end】【merged】【doc-fix】【ask-pm】【ask-review】を送らない（命令が断る）。成果は、下の【review】で課題の担当へじかに返す。
 
@@ -57,7 +56,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 |---|---|---|
 | 【brief】 | 新しい依頼書の URL（Staff Engineer 担当への依頼書は、レビューの頼みから命令が作る）。下の「ページ」のとおり読み、それに従う。「取り消す: brief-N」とあれば brief-N の作業をやめてこちらに従い、「brief-N を済ませてから、これをする」とあれば brief-N の【done】の後に始める | `roster assign <Key> --role <役割> --brief <URL> [--supersede\|--after]` |
 | 【answer】 | Product Manager の答え。待ちの表示を作業中に戻して続ける | `roster answer <Key> "<答え>" [--url <確認の URL>…\|--all]` |
-| 【notify】 | 知っておくこと・受け取ったという返事。返事は要らない | `roster notify <Key> "<本文>"` |
+| 【notify】 | 知っておくこと・中身のある返事（決定・直し・次の手）。「受け取った」だけの返事は、TPM 担当は送らない。返事は要らない | `roster notify <Key> "<本文>"` |
 | 【dismiss】 | この課題に続きは無い（Product Manager が決めたか、TPM 担当が聞かなくてよいと決めた）。worktree を片付けて【end】を返す。担当の交代のためなら、そう書いてある。「取り消す: brief-N」とあれば brief-N の作業もやめる | `roster dismiss <Key> [--handover] [--supersede]` |
 
 この表の命令と `roster close` は、担当の session から打つと断られる（送り手の名は命令が付けるので、担当が打つと TPM 担当の名で届いてしまう）。TPM 担当に頼むことは `roster ask tpm` で送る。

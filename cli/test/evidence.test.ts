@@ -2,11 +2,9 @@ import { describe, expect, test } from 'vitest';
 import { guard } from '../src/commands/infra.ts';
 import { answer, askTpm, notify, reportDone, reportMerged, wait } from '../src/commands/messages.ts';
 import { hello } from '../src/commands/role-side.ts';
-import { assign, close } from '../src/commands/tpm-side.ts';
-import { syncDeliveries, type GateStop, type GuardStop, type WaitChange } from '../src/evidence.ts';
+import { assign } from '../src/commands/tpm-side.ts';
+import { type GateStop, type GuardStop, type WaitChange } from '../src/evidence.ts';
 import type { TrackerWrite } from '../src/tracker/recorded.ts';
-import { CmuxTransport } from '../src/transport/cmux.ts';
-import type { MessageTrace } from '../src/transport/types.ts';
 import { BRIEF, world, type World } from './helpers.ts';
 
 const PR = 'https://github.com/o/r/pull/7';
@@ -58,7 +56,7 @@ describe('guard が止めた命令（guard.jsonl）', () => {
 describe('入口の検査が止めた回（gate.jsonl）と、返事の先（log.jsonl）', () => {
   test('読んでいないメッセージ・merge していない PR・読めない PR を残す', async () => {
     const w = await started();
-    w.wire.hold('file:1');
+    w.hold('file:1');
     await notify(w.tpm, 't-x7k2', { text: '待つこと' });
     await expect(askTpm(w.se, { text: 'q', waitingFor: 'a' })).rejects.toThrow(/読んでいない/);
     w.prs.set(PR, 'OPEN');
@@ -66,7 +64,7 @@ describe('入口の検査が止めた回（gate.jsonl）と、返事の先（log
     w.prs.set(PR, undefined);
     await expect(reportMerged(w.se, { pr: PR, note: 'n' })).rejects.toThrow(/読めません/);
     expect(w.tpm.state.lines<GateStop>('gate.jsonl')).toEqual([
-      { at: AT, by: 't-x7k2', role: 'tpm', gate: 'unread', detail: 'm1-file-1' },
+      { at: AT, by: 't-x7k2', role: 'tpm', gate: 'unread', detail: w.posted('t-x7k2')[0]?.id },
       { at: AT, by: 't-x7k2', role: 'tpm', gate: 'not-merged', detail: `${PR} OPEN` },
       { at: AT, by: 't-x7k2', role: 'tpm', gate: 'pr-unreadable', detail: PR },
     ]);
@@ -75,8 +73,11 @@ describe('入口の検査が止めた回（gate.jsonl）と、返事の先（log
   test('--reply-to の id を log.jsonl に残す', async () => {
     const w = await started();
     await askTpm(w.se, { text: 'q', waitingFor: 'a' });
-    await notify(w.tpm, 't-x7k2', { text: 'a', replyTo: 'm1-file-tpm' });
-    expect(w.tpm.state.lines<{ heading: string, replyTo?: string }>('log.jsonl').map(l => [l.heading, l.replyTo])).toEqual([['ask-tpm', undefined], ['notify', 'm1-file-tpm']]);
+    const asked = w.posted('tpm')[0]?.id ?? '';
+    await notify(w.tpm, 't-x7k2', { text: 'a', replyTo: asked });
+    expect(w.tpm.state.lines<{ heading: string, replyTo?: string }>('log.jsonl').map(l => [l.heading, l.replyTo])).toEqual([['ask-tpm', undefined], ['notify', asked]]);
+    // 返事の先は、置く物にも残る。届く担当は、呼ぶ側が名指した担当のまま。
+    expect(w.posted('t-x7k2').at(-1)).toMatchObject({ text: '【notify】a', replyTo: asked });
   });
 });
 
@@ -91,43 +92,5 @@ describe('wait の移り（waits.jsonl）', () => {
       ['t-x7k2', 'file:1', '回答待ち(TPM): 次の依頼'],
       ['tpm', 'file:tpm', '回答待ち(PM): 指示'],
     ]);
-  });
-});
-
-describe('届いた時刻（deliveries.jsonl）', () => {
-  const traces = (w: World): MessageTrace[] => w.tpm.state.lines<MessageTrace>('deliveries.jsonl');
-
-  test('この project が送ったメッセージだけを写し、変わった時だけ足す。居場所を閉じる前にも写す', async () => {
-    const w = await started();
-    await askTpm(w.se, { text: 'q', waitingFor: 'a' });
-    let history: MessageTrace[] = [
-      { id: 'm1-file-tpm', sentAt: '2026-11-20T12:00:01.000Z' },
-      { id: 'ほかの project のメッセージ', sentAt: '2026-11-20T12:00:02.000Z', deliveredAt: '2026-11-20T12:00:03.000Z' },
-    ];
-    w.tpm.messages.history = () => history;
-    expect(syncDeliveries(w.tpm)).toBe(1);
-    expect(syncDeliveries(w.tpm)).toBe(0);
-    history = [{ id: 'm1-file-tpm', sentAt: '2026-11-20T12:00:01.000Z', deliveredAt: '2026-11-20T12:04:00.000Z' }];
-    await close(w.tpm, 't-x7k2');
-    expect(traces(w)).toEqual([
-      { id: 'm1-file-tpm', sentAt: '2026-11-20T12:00:01.000Z' },
-      { id: 'm1-file-tpm', sentAt: '2026-11-20T12:00:01.000Z', deliveredAt: '2026-11-20T12:04:00.000Z' },
-    ]);
-  });
-
-  test('cmux: 受信箱の秒の時刻を ISO にする。読めなければ空（命令は止めない）', () => {
-    const inbox = { messages: [{ id: 'a', created_at: 1795264623.5, delivered_at: 1795264624.25, read_at: null, in_reply_to: 'b' }, { id: 'c', created_at: 1795264625, in_reply_to: null }] };
-    const asked: string[][] = [];
-    const cmux = new CmuxTransport((_, args) => {
-      asked.push(args);
-      return { status: 0, stdout: JSON.stringify(inbox), stderr: '' };
-    });
-    expect(cmux.history()).toEqual([
-      { id: 'a', sentAt: '2026-11-21T12:37:03.500Z', deliveredAt: '2026-11-21T12:37:04.250Z', replyTo: 'b' },
-      { id: 'c', sentAt: '2026-11-21T12:37:05.000Z' },
-    ]);
-    expect(asked).toEqual([['--json', 'agent', 'inbox', '--limit', '1000']]);
-    expect(new CmuxTransport(() => ({ status: 1, stdout: '', stderr: 'x' })).history()).toEqual([]);
-    expect(new CmuxTransport(() => ({ status: 0, stdout: 'not json', stderr: '' })).history()).toEqual([]);
   });
 });

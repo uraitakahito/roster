@@ -16,7 +16,10 @@ import { withoutRosterEnv } from '../src/env.ts';
 const cli = realpathSync(join(import.meta.dirname, '..'));
 const root = join(cli, '..');
 const entry = join(cli, 'bin', 'roster');
-const head = `PATH=${root}/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"${root}/cli/bin/roster guard"}]}],"SessionStart":[{"hooks":[{"type":"command","command":"${root}/cli/bin/roster castlist session-start"},{"type":"command","command":"${root}/cli/bin/roster returned check"}]}],"SessionEnd":[{"hooks":[{"type":"command","command":"${root}/cli/bin/roster castlist session-end"}]}]}}'`;
+/** 席に付く、メッセージを渡す hook の字（待つ命令と、Bash の後に渡す命令）。 */
+const waiting = `{"type":"command","async":true,"asyncRewake":true,"timeout":86400,"command":"${root}/cli/bin/roster mail wait"}`;
+const gate = `[{"matcher":"Bash","hooks":[{"type":"command","command":"${root}/cli/bin/roster mail gate"}]}]`;
+const head = `PATH=${root}/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"${root}/cli/bin/roster guard"}]}],"SessionStart":[{"hooks":[{"type":"command","command":"${root}/cli/bin/roster castlist session-start"},{"type":"command","command":"${root}/cli/bin/roster mail claim"},${waiting}]}],"SessionEnd":[{"hooks":[{"type":"command","command":"${root}/cli/bin/roster castlist session-end"},{"type":"command","command":"${root}/cli/bin/roster mail release"}]}],"PostToolUse":${gate},"PostToolUseFailure":${gate},"Stop":[{"hooks":[${waiting}]}],"UserPromptSubmit":[{"hooks":[{"type":"command","command":"${root}/cli/bin/roster mail prompt"}]}]}}'`;
 let scratch: string;
 const mkdirp = (dir: string): string => {
   mkdirSync(dir, { recursive: true });

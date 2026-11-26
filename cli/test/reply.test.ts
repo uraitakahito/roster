@@ -31,7 +31,7 @@ async function started() {
     const r = w.store.pages.get(`/${project}/t-x7k2/confirm-${n}.html`)?.record;
     return r?.answered_at !== undefined ? 'answered' : r?.asked_at !== undefined ? 'waiting' : 'none';
   };
-  const texts = (address: string): string[] => w.wire.inbox(address).map(m => m.text);
+  const texts = (address: string): string[] => w.posted(address).map(m => m.text);
   return { w, se, tpm: w.tpm, confirm, state, texts, project };
 }
 

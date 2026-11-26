@@ -315,13 +315,13 @@ export function judgeWrite(call: WriteCall, role: RoleName | undefined, roots: P
  * 担当の claude に渡す settings（--settings）。道具の前に roster guard を呼ぶ hook。hook の命令は shell が読むので、path を引用する。
  * 見る道具は Bash。読むだけの担当の席だけ、file を書き替える道具（WRITE_TOOLS）も見る（ほかの担当では、書くたびに hook を動かさない）。
  * どの席にも、session の始まりと終わりに castlist に送る hook（roster castlist session-start・session-end）を付ける。castlist を設定していなければ、その命令は何もしない。
- * session の始まりには、前の session 宛てに届いたメッセージ（届け違い）を見る hook（roster returned check）も付ける。castlist の設定に依らない。
  * Auditor の席には、session の始まりに roster audit fresh を呼ぶ hook も付ける。
- * mail（設定の messages が nats の席）の時だけ、メッセージを NATS で渡す hook（roster mail …）を、今ある hook の後ろに足す:
+ * どの席にも、メッセージを NATS で渡す hook（roster mail …）を、その後ろに付ける:
  * 名乗る・外す（SessionStart・SessionEnd）、検査が止めた後に渡す（Bash を使い終えた後。PostToolUse と PostToolUseFailure の両方）、人の入力の時に渡す（UserPromptSubmit）、
- * 手を止めている間に待つ（Stop と SessionStart。背景で動き、exit 2 で session を起こす）。mail が false なら、今までと 1 字も変わらない。
+ * 手を止めている間に待つ（Stop と SessionStart。背景で動き、exit 2 で session を起こす）。
+ * 前の版が付けた、届け違いを見る hook（roster returned check）は付けない（命令は、前の版が起こした席のために残してある。何もしない）。
  */
-export function guardSettings(tpmBin: string, role?: RoleName, mail = false): string {
+export function guardSettings(tpmBin: string, role?: RoleName): string {
   const hook = (command: string) => ({ type: 'command', command: `${shellQuote(tpmBin)} ${command}` });
   // 待つ命令: 背景で動かし（async）、exit 2 で終わった時に stderr の字で session を起こさせる（asyncRewake）。待つのは長くて 1 日。
   const waiting = { type: 'command', async: true, asyncRewake: true, timeout: 86400, command: `${shellQuote(tpmBin)} mail wait` };
@@ -330,17 +330,13 @@ export function guardSettings(tpmBin: string, role?: RoleName, mail = false): st
     hooks: {
       PreToolUse: [{ matcher, hooks: [hook('guard')] }],
       // Auditor の席は、席を起こした時と /clear の時に印を書く（前の監査の文脈が残ったまま、次の監査を始めないため）。
-      SessionStart: [{ hooks: [...(role === AUDIT_ROLE ? [hook('audit fresh')] : []), hook('castlist session-start'), hook('returned check'), ...(mail ? [hook('mail claim'), waiting] : [])] }],
-      SessionEnd: [{ hooks: [hook('castlist session-end'), ...(mail ? [hook('mail release')] : [])] }],
-      ...(mail
-        ? {
-            // Bash を使い終えた後（成功の後・失敗の後の両方）。結果を pipe で切る（… | tail -1）と、検査が止めても命令は「成功」になるため。
-            PostToolUse: [{ matcher: 'Bash', hooks: [hook('mail gate')] }],
-            PostToolUseFailure: [{ matcher: 'Bash', hooks: [hook('mail gate')] }],
-            Stop: [{ hooks: [waiting] }],
-            UserPromptSubmit: [{ hooks: [hook('mail prompt')] }],
-          }
-        : {}),
+      SessionStart: [{ hooks: [...(role === AUDIT_ROLE ? [hook('audit fresh')] : []), hook('castlist session-start'), hook('mail claim'), waiting] }],
+      SessionEnd: [{ hooks: [hook('castlist session-end'), hook('mail release')] }],
+      // Bash を使い終えた後（成功の後・失敗の後の両方）。結果を pipe で切る（… | tail -1）と、検査が止めても命令は「成功」になるため。
+      PostToolUse: [{ matcher: 'Bash', hooks: [hook('mail gate')] }],
+      PostToolUseFailure: [{ matcher: 'Bash', hooks: [hook('mail gate')] }],
+      Stop: [{ hooks: [waiting] }],
+      UserPromptSubmit: [{ hooks: [hook('mail prompt')] }],
     },
   });
 }

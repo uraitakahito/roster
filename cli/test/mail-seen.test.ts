@@ -7,7 +7,7 @@ import { assign } from '../src/commands/tpm-side.ts';
 import { recordDelivered } from '../src/mail.ts';
 import { seenTimes } from '../src/seen.ts';
 import { messageRecordsSettled } from '../src/commands/message-record.ts';
-import { claim, left, natsWorld } from './mail-helpers.ts';
+import { claim, handed, left, natsWorld } from './mail-helpers.ts';
 
 const ask = { text: '案 A と B で迷う', waitingFor: '案' };
 const done = { kind: 'result' as const, summary: '済んだ', remaining: 'なし', decisions: 'なし', points: [] };
@@ -45,19 +45,19 @@ describe('届いた時刻（NATS で運んだ行）', () => {
     expect(w.tpm.state.lines<{ when: string }>('delivered.jsonl').map(l => l.when)).toEqual(['output', 'wake']);
   });
 
-  test('cmux で運んだ行は、今までどおり連携の道具の時刻で決まる（渡した記録は見ない）', async () => {
+  test('古い行（carrier の無い行。前の版で cmux が運んだ物）は、渡した記録を見ない', async () => {
     const w = await natsWorld();
-    await notify(w.tpm, 't-x7k2', { text: 'cmux で届く' });
-    const sent = w.tpm.state.lines<Sent>('log.jsonl').at(-1);
-    if (sent === undefined) throw new Error('送った記録が無い');
-    recordDelivered(w.se, sent.id, 't-x7k2', 'wake');
-    expect(seenTimes(w.tpm, { live: true })(sent)).toEqual({ at: sent.at, by: 'assumed' });
+    const old = { id: 'old-1', at: '2026-11-19T09:00:00.000Z', to: 'file:1' };
+    recordDelivered(w.se, old.id, 't-x7k2', 'wake');
+    expect(seenTimes(w.tpm, { live: true })(old)).toEqual({ at: old.at, by: 'assumed' });
+    expect(seenTimes(w.tpm, { live: false })(old)).toBeUndefined();
   });
 
   test('TPM 担当の「済んでいない物」の検査と依頼書の数えは、渡した記録で、今と同じ意味に動く', async () => {
     const w = await natsWorld();
     claim(w, w.se, 200);
     await reportDone(w.se, done);
+    await handed(w.tpm);
     await assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: 'https://claude.ai/artifact/b2', wait: 0 });
     expect(left(w, 't-x7k2').map(s => s.text)).toEqual(['【brief】https://claude.ai/artifact/b2']);
     // まだ届いていない依頼書がある: dismiss は止まる。届く前の【done】は、その依頼書の分に数えない。
@@ -67,6 +67,7 @@ describe('届いた時刻（NATS で運んだ行）', () => {
     expect(await mailGate(w.role('t-x7k2', 'file:1'), '{}')).toContain('【brief】https://claude.ai/artifact/b2');
     w.pass(60_000);
     await reportDone(w.se, { ...done, summary: '2 つ目も済んだ' });
+    await handed(w.tpm);
     expect((await dismiss(w.tpm, 't-x7k2', { handover: false }))[0]).toBe('送った: 【dismiss】→ file:1（相手の手が空いた時に届く。送り直さない）');
   });
 });

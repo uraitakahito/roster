@@ -72,7 +72,7 @@ describe('roster assign が課題の写しを作る', () => {
     await assign(tpm, 'AI-14', { ...SE, brief: 'https://claude.ai/artifact/b2', note: '計画まで' });
     const page = requireRole(tpm, 'AI-14').issuePage ?? '';
     expect(page).toMatch(/\/AI-14\/issue-2\.html$/);
-    expect(w.wire.inbox('file:1').map(m => m.text)).toEqual([`【brief】https://claude.ai/artifact/b2 課題の写し: ${page} 計画まで`]);
+    expect(w.posted('AI-14').map(m => m.text)).toEqual([`【brief】https://claude.ai/artifact/b2 課題の写し: ${page} 計画まで`]);
   });
 
   test('t- の Key と Dependabot の PR の Key では写しを作らず、道具も打たない', async () => {
@@ -102,7 +102,7 @@ describe('roster assign が課題の写しを作る', () => {
     expect(await hello(w.role('AI-14', 'file:1'))).toContain('課題の写し: 無し（認証切れ。中身は依頼書に写した）');
     await finish(w, 'AI-14', 'file:1');
     await assign(tpm, 'AI-14', { ...SE, brief: 'https://claude.ai/artifact/b2', noIssueCopy: 'まだ認証切れ' });
-    expect(w.wire.inbox('file:1').map(m => m.text)).toEqual(['【brief】https://claude.ai/artifact/b2 課題の写し: 無し（まだ認証切れ）']);
+    expect(w.posted('AI-14').map(m => m.text)).toEqual(['【brief】https://claude.ai/artifact/b2 課題の写し: 無し（まだ認証切れ）']);
   });
 
   test('--no-issue-copy の訳が空なら止まる', async () => {
