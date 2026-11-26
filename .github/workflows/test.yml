@@ -42,11 +42,15 @@ jobs:
           cache-dependency-path: cli/pnpm-lock.yaml
       # client の build は cli/node_modules の tsc と @smithy/* で打つ。
       - run: pnpm install --frozen-lockfile
-      # Smithy の CLI を cache に置き、毎回は取りに行かない（key は gen.sh の hash なので、版と digest を替えれば取り直す）。
+      # Smithy の CLI の zip（gen.sh が毎回 digest を見る）・公開から 2 日たったと見た依存の印・smithy build が Maven Central から
+      # 取る物（~/.m2/repository）を cache に置き、毎回は取りに行かない（開いた CLI は gen.sh が毎回 zip から開くので入れない。下の見張りの試しで何度も流し、429 で落ちたため。#211）。
       - uses: actions/cache@v6
         with:
-          path: ~/.cache/roster-smithy
-          key: smithy-cli-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('cli/gen/gen.sh') }}
+          path: |
+            ~/.cache/roster-smithy
+            !~/.cache/roster-smithy/*/smithy-cli-*
+            ~/.m2/repository
+          key: smithy-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('cli/gen/gen.sh', 'cli/gen/smithy-build.json') }}
       - run: gen/gen.sh --check
       # 見張りが本当に落とすか: 入れた物（生成した TS・build した JS・取った定義）を 1 byte 替えると、--check が、期待した NG の字で落ちる
       # （ほかの訳で落ちた回を「効いた」と数えない）。
