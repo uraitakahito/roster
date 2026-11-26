@@ -51,11 +51,10 @@ describe('readRolesConfig', () => {
     expect(readRolesConfig(config('{ "staff-engineer": { "model": "claude-fable-5-2" } }')).roles).toEqual({ 'staff-engineer': { model: 'claude-fable-5-2' } });
   });
 
-  test('api は、生成した client で送る server（next）を書いた欄だけを返す。無ければ欄ごと無い', () => {
-    expect(readRolesConfig(config('{ "api": { "castlist": "next" } }')).api).toEqual({ castlist: 'next' });
-    expect(readRolesConfig(config('{ "api": { "castlist": "next", "pagetray": "next" } }')).api).toEqual({ castlist: 'next', pagetray: 'next' });
-    expect(readRolesConfig(config('{ "api": {} }')).api).toEqual({});
-    expect(readRolesConfig(config('{ "tracker": "jira" }'))).not.toHaveProperty('api');
+  test('前の欄 api（AI-36 の切り替えの間の client の選び）は、どんな値でも読み飛ばす（誤りにしない。設定に残っていても止まらない）', () => {
+    for (const text of ['{ "api": { "castlist": "next", "pagetray": "next" } }', '{ "api": "next" }', '{ "api": { "pages": "curl" } }']) {
+      expect(readRolesConfig(config(text))).not.toHaveProperty('api');
+    }
   });
 
   test.each([
@@ -70,9 +69,6 @@ describe('readRolesConfig', () => {
     ['object でない担当の欄', '{ "software-engineer": "opus" }', /software-engineer は/],
     ['文字列でない model', '{ "devops-engineer": { "model": 5 } }', /devops-engineer\.model は/],
     ['空白だけの match', '{ "infra": { "x": { "guard": "pm", "match": [" "] } } }', /infra\.x\.match は/],
-    ['object でない api', '{ "api": "next" }', /api は \{ "castlist": "next", "pagetray": "next" \} の形/],
-    ['知らない server の api', '{ "api": { "pages": "next" } }', /api の server は castlist・pagetray/],
-    ['next でない api の値', '{ "api": { "castlist": "curl" } }', /api\.castlist は next/],
   ])('%sなら TpmError', (_, text, message) => {
     const file = config(text);
     expect(() => readRolesConfig(file)).toThrow(TpmError);
@@ -207,11 +203,6 @@ describe('composeRolesConfig', () => {
     expect(config.transport).toBe('file');
     expect(config.roles).toEqual({ 'software-engineer': { effort: 'high' } });
     expect(composeRolesConfig(tree({ '': null, 'a': { transport: 'file' } })).transport).toBe('cmux');
-  });
-
-  test('api は project の folder の設定だけ（castlist の URL と同じ。直下の folder の値は読まない）', () => {
-    expect(composeRolesConfig(tree({ '': { api: { castlist: 'next' } }, 'a': { api: { pagetray: 'next' } } })).api).toEqual({ castlist: 'next' });
-    expect(composeRolesConfig(tree({ '': null, 'a': { api: { castlist: 'next' } } }))).not.toHaveProperty('api');
   });
 });
 

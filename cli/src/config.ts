@@ -28,13 +28,6 @@ export const GUARDS = ['free', 'tpm', 'pm', 'pm-only'] as const;
 /** 環境の手続きの名前。 */
 export type Guard = typeof GUARDS[number];
 
-/** 生成した client（cli/gen/<server>-client/）に替えられる server。 */
-export const API_SERVERS = ['castlist', 'pagetray'] as const;
-/** 生成した client に替えられる server の名前。 */
-export type ApiServer = typeof API_SERVERS[number];
-/** server ごとの client の選び（next は生成した client。書かない server は今の client）。段 9 で今の client と共に消す。 */
-export type ApiChoice = Partial<Record<ApiServer, 'next'>>;
-
 /** インフラの環境 1 つ。match のどれかを含む命令が、この環境に触る命令。 */
 export interface InfraEnv {
   guard: Guard
@@ -52,8 +45,6 @@ export interface FileConfig {
   roles: Partial<Record<RoleName, Partial<RoleSettings>>>
   /** アクターの台帳（castlist）の URL。書かなければ castlist に何も送らない。 */
   castlist?: string
-  /** server ごとの client の選び。書かなければ、どの server も今の client。 */
-  api?: ApiChoice
 }
 
 /** 集めた設定の file 1 つ。 */
@@ -76,7 +67,7 @@ export type RecordingTracker = Exclude<Tracker, 'none'>;
 /**
  * project の folder とその直下の folder の設定を合わせた物。TPM 担当も、起こした担当も、guard もこれを使う。
  * 課題管理は道具ごとに宣言した設定を持ち（記録の先は課題の Key の形で選ぶ。tracker/routed.ts）、infra は環境の名前ごとに合わせ、
- * 連携と担当の既定と castlist と api は project の folder の設定だけを使う。
+ * 連携と担当の既定と castlist は project の folder の設定だけを使う。
  */
 export interface RolesConfig {
   transport: Transport
@@ -87,8 +78,6 @@ export interface RolesConfig {
   roles: Partial<Record<RoleName, Partial<RoleSettings>>>
   /** アクターの台帳（castlist）の URL（project の folder の設定だけ。$ROSTER_CASTLIST_URL が勝つ。castlist.ts の castlistUrl）。 */
   castlist?: string
-  /** server ごとの client の選び（project の folder の設定だけ。castlist の URL と同じ。clients.ts の nextApi が読む）。 */
-  api?: ApiChoice
   /** 集めた設定（project の folder 自身が先頭、次に直下の folder を名前の順）。 */
   sources: ConfigSource[]
 }
@@ -133,20 +122,7 @@ function fileConfig(config: Record<string, unknown>, configFile: string): FileCo
     infra: infraField(config.infra, configFile),
     roles: rolesField(config, configFile),
     ...castlistField(config.castlist, configFile),
-    ...apiField(config.api, configFile),
   };
-}
-
-function apiField(value: unknown, configFile: string): Pick<FileConfig, 'api'> {
-  if (value === undefined) return {};
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new TpmError(`${configFile} の api は { "castlist": "next", "pagetray": "next" } の形にしてください（書かない server は今の client）`);
-  const api: ApiChoice = {};
-  for (const [server, choice] of Object.entries(value as Record<string, unknown>)) {
-    if (!(API_SERVERS as readonly string[]).includes(server)) throw new TpmError(`${configFile} の api の server は ${API_SERVERS.join('・')} のどれかにしてください: ${server}`);
-    if (choice !== 'next') throw new TpmError(`${configFile} の api.${server} は next にしてください（今の client にするなら、欄を書かない）`);
-    api[server as ApiServer] = choice;
-  }
-  return { api };
 }
 
 /** castlist が受けるのは、roster を動かす機械の中からだけ（Host が 127.0.0.1 か localhost）。 */
@@ -256,7 +232,7 @@ const strictest = (a: Guard, b: Guard): Guard => GUARDS.indexOf(a) >= GUARDS.ind
 /**
  * project の folder とその直下の folder の設定を合わせる。
  * 課題管理: 道具ごとに、宣言した設定を覚える（none は足さない）。infra: 環境の名前ごとに合わせ、同じ名前は match を足して厳しい方の手続きにする。
- * 連携・担当の既定・castlist・api: project の folder の設定だけ（直下の folder の値は読まない）。
+ * 連携・担当の既定・castlist: project の folder の設定だけ（直下の folder の値は読まない）。
  */
 export function composeRolesConfig(project: string): RolesConfig {
   const sources = readConfigSources(project);
@@ -278,7 +254,6 @@ export function composeRolesConfig(project: string): RolesConfig {
     infra,
     roles: own.config.roles,
     ...(own.config.castlist === undefined ? {} : { castlist: own.config.castlist }),
-    ...(own.config.api === undefined ? {} : { api: own.config.api }),
     sources,
   };
 }

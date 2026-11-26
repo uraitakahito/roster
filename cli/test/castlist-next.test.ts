@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 import type * as Castlist from '../gen/castlist-client/dist-types/index.js';
 import { castlistClient, castlistIssuer, projectPrefix, registerPm } from '../src/castlist.ts';
+import { TpmError } from '../src/skill-sets.ts';
 import { withoutAwsMiddleware } from '../src/clients.ts';
 import { castlistGuard, readSession, sessionStart } from '../src/commands/castlist.ts';
 import type { Context } from '../src/context.ts';
@@ -191,7 +192,17 @@ describe('castlist の client の守り（review-33）', () => {
     expect('reason' in verdict ? verdict.reason : '').toMatch(/pnpm install --frozen-lockfile/);
   });
 
+  test('middleware を外せない時は、install を言わずに、その訳で止まる（install し直しても直らない。review-34）', async () => {
+    const { ctx } = nextSeat();
+    const renamed = () => withoutAwsMiddleware({ middlewareStack: { remove: () => false } }) as never;
+    const seat: Context = { ...ctx, clients: { ...ctx.clients, castlist: renamed } };
+    const message = await registerPm(seat, dead).then(() => '', (e: unknown) => (e as Error).message);
+    expect(message).toMatch(/^生成した client から recursionDetectionMiddleware を外せない（@aws-sdk\/core の名が替わった。/);
+    expect(message).not.toMatch(/pnpm install/);
+  });
+
   test('AWS の Lambda の頭の middleware を外せなければ止まり、外せば _X_AMZN_TRACE_ID を置いても X-Amzn-Trace-Id を付けない', async () => {
+    expect(() => withoutAwsMiddleware({ middlewareStack: { remove: () => false } })).toThrow(TpmError);
     expect(() => withoutAwsMiddleware({ middlewareStack: { remove: () => false } })).toThrow(/recursionDetectionMiddleware/);
     vi.stubEnv('AWS_LAMBDA_FUNCTION_NAME', 'f');
     vi.stubEnv('_X_AMZN_TRACE_ID', 'Root=1-00000000-000000000000000000000000');

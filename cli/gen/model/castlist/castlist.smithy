@@ -457,12 +457,12 @@ operation GetActor {
         method: "GET"
         uri: "/api/actors"
         queryParams: [
-            "label=project:castlist"
-            "label=tpm.role:auditor"
-            "binding=cmux.workspace.ref:workspace:3"
-            "at=2026-11-24T00:00:00Z"
-            "activeFrom=2026-11-24T00:00:00Z"
-            "activeTo=2026-11-25T00:00:00Z"
+            "label=project%3Acastlist"
+            "label=tpm.role%3Aauditor"
+            "binding=cmux.workspace.ref%3Aworkspace%3A3"
+            "at=2026-11-24T00%3A00%3A00Z"
+            "activeFrom=2026-11-24T00%3A00%3A00Z"
+            "activeTo=2026-11-25T00%3A00%3A00Z"
             "kind=ai"
             "model=claude-opus-5-5"
             "effort=high"
@@ -902,7 +902,7 @@ operation ListActorSettings {
         protocol: restJson1
         method: "GET"
         uri: "/api/actors/019abcde-0000-7000-8000-000000000001/settings/at"
-        queryParams: ["time=2026-11-24T00:00:01Z"]
+        queryParams: ["time=2026-11-24T00%3A00%3A01Z"]
         params: { actorId: "019abcde-0000-7000-8000-000000000001", time: 1795478401 }
     }
 ])
@@ -1003,8 +1003,8 @@ operation GetActorSettingAt {
             "model=claude-opus-5-5"
             "effort=high"
             "source=observed"
-            "from=2026-11-24T00:00:00Z"
-            "to=2026-11-25T00:00:00Z"
+            "from=2026-11-24T00%3A00%3A00Z"
+            "to=2026-11-25T00%3A00%3A00Z"
             "mismatch=true"
             "skewed=true"
             "maxResults=10"
@@ -1128,8 +1128,8 @@ operation ListSettings {
             "type=model_unreadable"
             "type=closed"
             "actor=019abcde-0000-7000-8000-000000000001"
-            "from=2026-11-24T00:00:00Z"
-            "to=2026-11-25T00:00:00Z"
+            "from=2026-11-24T00%3A00%3A00Z"
+            "to=2026-11-25T00%3A00%3A00Z"
             "reason=timeout"
             "source=clear"
             "skewed=true"
@@ -1252,7 +1252,7 @@ list EventTypes {
         protocol: restJson1
         method: "GET"
         uri: "/api/graph"
-        queryParams: ["label=tpm.key:t-23zs", "from=2026-11-24T00:00:00Z", "to=2026-11-25T00:00:00Z"]
+        queryParams: ["label=tpm.key%3At-23zs", "from=2026-11-24T00%3A00%3A00Z", "to=2026-11-25T00%3A00%3A00Z"]
         params: { label: "tpm.key:t-23zs", from: 1795478400, to: 1795564800 }
     }
     {

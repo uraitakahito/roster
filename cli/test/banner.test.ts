@@ -1,6 +1,6 @@
 // 通知のバナー（roster banner …）: 決め方・設定・cmux の通知の hook・setup と check。
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
@@ -333,11 +333,22 @@ describe('入口（bin/roster）を cmux の app と同じ既定の PATH で起�
     expect(r.stdout).toBe('{}\n');
   });
 
-  test('node がどこにも無ければ、探した所を出して 127 で終わる', () => {
+  test('node がどこにも無ければ、探した所を出して 2 で終わる（hook の guard が命令を止める数。ほかの数では止めずに通す）', () => {
     const { home, nodenv } = sandbox();
     const r = run({ PATH: APP_PATH, HOME: home, NODENV_ROOT: nodenv });
-    expect(r.status).toBe(127);
+    expect(r.status).toBe(2);
     expect(r.stderr).toContain(`roster: node が見つかりません（PATH と ${nodenv}/shims/node を探した）`);
+  });
+
+  test('cli/node_modules が無ければ、入れ方を出して 2 で終わる（guard が守り無しで通さない）', () => {
+    const { home } = sandbox();
+    const copy = join(home, 'roster-copy', 'cli');
+    mkdirSync(join(copy, 'bin'), { recursive: true });
+    copyFileSync(join(cli, 'bin', 'roster'), join(copy, 'bin', 'roster'));
+    chmodSync(join(copy, 'bin', 'roster'), 0o755);
+    const r = spawnSync(join(copy, 'bin', 'roster'), ['guard'], { input: '{}', encoding: 'utf8', cwd: '/', env: { PATH: APP_PATH, HOME: home } });
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain(`roster: ${copy}/node_modules がありません。先に cd ${copy} && pnpm install --frozen-lockfile を打ってください`);
   });
 
   test('PATH に cmux が無ければ cmux の app の bin を後ろに足し、node があれば shim を足さない', () => {
