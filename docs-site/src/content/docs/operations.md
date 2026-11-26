@@ -135,13 +135,13 @@ roster infra run pagetray -- container run -d --name pagetray \
   ghcr.io/uraitakahito/pagetray:<版>
 ```
 
-- `<版>` は `.pagetray-version` の `@` の前（`v1.0.2` など）。`.pagetray-version` は v1.0.2 だが、動いている置き場は、起こし直すまで v1.0.0 のまま（API の形は同じ。2026-11-26）。次に起こす時は、この版で起きる。pull した image の digest が `@` の後ろと同じかを見る（見方は pagetray の docs の「[起こす](https://uraitakahito.github.io/pagetray/run.html#起こす)」）。
+- `<版>` は `.pagetray-version` の `@` の前（`v1.0.2` など）。pull した image の digest が `@` の後ろと同じかを見る（見方は pagetray の docs の「[起こす](https://uraitakahito.github.io/pagetray/run.html#起こす)」）。
 - `-p` には必ず `127.0.0.1:` を書く。`-p 8801:8080` と書くと LAN に開く。
 - `PAGETRAY_CASTLIST_URL` は、置き場が送り手を castlist（[アクターの台帳](#アクターの台帳castlist)）に聞く先。`roster page put`・`roster file put` は、castlist の設定がある project では送り手（session の付随する id）を付けて置き、置き場が受けたその時に castlist に聞いて記録に残す（[担当のあいだの決まり](/protocol/#ページの置き場)）。container の中の `127.0.0.1` は container 自身なので、castlist の container `castlist.box` に名でつなぐ（Apple Container の DNS が domain `box` の名を答える）。一覧の UI の送り手の link の頭 `PAGETRAY_CASTLIST_LINK_URL` は、既定の `http://127.0.0.1:8802`（host の browser で開く castlist）のままにする。
 - `PAGETRAY_CASTLIST_URL` を書いた置き場は、castlist が止まっている・名で届かない間、送り手を付けた置く要求を `503` で断る（何も置かない。`roster page put` は「castlist に送り手を聞けませんでした」と出す）。castlist を起こすのは Product Manager（[アクターの台帳](#アクターの台帳castlist)）。castlist が起きているのに続く時は、置き場から `castlist.box` に届いていない（同じ network に居ない・名が違う）。
 - 8801 が使われていたら別の port にし、担当が使う URL を環境変数 `ROSTER_PAGES_URL`（[設定](/configuration/)）で合わせる。
 - 起こしたら、pagetray の docs の「[確かめる](https://uraitakahito.github.io/pagetray/run.html#確かめる)」をする。試しのページを置いたら、TPM 担当が `roster page delete <URL> --yes` で消す（[担当のあいだの決まり](/protocol/#ページの置き場)）。
-- 「確かめる」の 6（一覧の UI を、読むだけの試験で見る）は、DevOps Engineer 担当が自分で流す。pagetray の checkout のある folder で、起こした版の試験を取り出して打ち、Node と pnpm が要る。試験は本物の browser（roster を動かす機械の Chrome）で一覧の UI を開くが、置き場には何も書かない。向ける置き場は `PAGETRAY_E2E_URL` で決まる。ただし置き場を v1.0.0 で動かしている間は（取り出すのが v1.0.0 の試験の時は）、`PAGETRAY_E2E_URL` の前に `PAGETRAY_E2E_API=next` も付ける（v1.0.0 の試験の既定は前の API の形で、付けないと前の道を叩いて落ちる。1.0.1 から後の試験では要らない。pagetray の docs の「確かめる」と同じ）。出力を結果のページに載せる。
+- 「確かめる」の 6（一覧の UI を、読むだけの試験で見る）は、DevOps Engineer 担当が自分で流す。pagetray の checkout のある folder で、起こした版の試験を取り出して打ち、Node と pnpm が要る。試験は本物の browser（roster を動かす機械の Chrome）で一覧の UI を開くが、置き場には何も書かない。向ける置き場は `PAGETRAY_E2E_URL` で決まる。出力を結果のページに載せる。
 
   ```sh
   git -C pagetray fetch --tags
