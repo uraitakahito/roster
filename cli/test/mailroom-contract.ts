@@ -7,7 +7,8 @@ import type { Mailroom, MailroomLimits } from '../src/mailroom/types.ts';
 export const SHORT_LIMITS: MailroomLimits = {
   holdMs: 1500,
   maxDeliveries: 3,
-  undeliveredTtlMs: 6000,
+  // 渡し直しの上限まで待つ試験（取り置きの期限 × 上限）より、十分に長くする（短いと、その試験の途中で物が期限で消える）。
+  undeliveredTtlMs: 15_000,
   recordTtlMs: 60_000,
   duplicateWindowMs: 3000,
   maxHeld: 20,
@@ -132,6 +133,77 @@ export function mailroomContract(name: string, bench: () => Bench | Promise<Benc
       await x.close();
       await y.close();
     }, slow + (SHORT_LIMITS.holdMs + 300) * SHORT_LIMITS.maxDeliveries);
+
+    test('上限まで渡した物は、取りに行くまで「取り置き中」に数えられ、取りに行った時に外れて、引けるようになる', async () => {
+      // 送る前の検査は、この「取り置き中」の数で止めるかを決める。取りに行かなければ数は減らないので、検査の後には必ず取りに行く。
+      const b = await bench();
+      const x = b.open();
+      const y = b.open();
+      const to = someone();
+      await y.counts(to);
+      await x.put(letter(to, 'bad'));
+      await b.pass(200);
+      // 同じ口が、自分の取り置きの期限が切れた物を取り直せる。
+      for (let i = 1; i <= SHORT_LIMITS.maxDeliveries; i++) {
+        expect((await y.take(to, ALL)).map(t => t.deliveries)).toEqual([i]);
+        await b.pass(SHORT_LIMITS.holdMs + 300);
+      }
+      expect(await y.counts(to)).toEqual({ waiting: 0, held: 1 });
+      expect((await y.undeliverable()).filter(u => u.to === to)).toEqual([]);
+      expect(await y.take(to, ALL)).toEqual([]);
+      expect(await y.counts(to)).toEqual({ waiting: 0, held: 0 });
+      expect((await y.undeliverable()).filter(u => u.to === to).map(u => u.stored?.id)).toEqual([`${to}-bad`]);
+      await x.close();
+      await y.close();
+    }, slow + (SHORT_LIMITS.holdMs + 300) * SHORT_LIMITS.maxDeliveries + 2000);
+
+    test('1 つの口で 2 人の受け手を扱っても、片方の取り置きが、もう片方の取り直しを妨げない', async () => {
+      const b = await bench();
+      const x = b.open();
+      const y = b.open();
+      const a = someone();
+      const c = someone();
+      await y.counts(a);
+      await y.counts(c);
+      await x.put(letter(a, 'a1'));
+      await x.put(letter(c, 'c1'));
+      await b.pass(200);
+      const heldA = await y.take(a, ALL);
+      expect(heldA.map(t => t.id)).toEqual([`${a}-a1`]);
+      // c の物を取って返す。a の物を取り置いたままでも、c の物はすぐ取り直せる。
+      await y.giveBack(await y.take(c, ALL));
+      await b.pass(200);
+      const again = await y.take(c, ALL);
+      expect(again.map(t => [t.id, t.deliveries])).toEqual([[`${c}-c1`, 2]]);
+      await y.done([...heldA, ...again]);
+      expect(await y.counts(a)).toEqual({ waiting: 0, held: 0 });
+      expect(await y.counts(c)).toEqual({ waiting: 0, held: 0 });
+      await x.close();
+      await y.close();
+    }, slow);
+
+    test('重なり除けの窓を過ぎた置き直しは、2 通になる。受け手の名に使えない字は断る', async () => {
+      const b = await bench();
+      const x = b.open();
+      const y = b.open();
+      const to = someone();
+      await y.counts(to);
+      await x.put(letter(to, 'a'));
+      await b.pass(SHORT_LIMITS.duplicateWindowMs + 1500);
+      expect(await x.put(letter(to, 'a'))).toEqual({ duplicate: false });
+      await b.pass(200);
+      const taken = await y.take(to, ALL);
+      expect(taken.map(t => t.id)).toEqual([`${to}-a`, `${to}-a`]);
+      // 預かった時刻は、記録の箱と配る箱で同じ。
+      const at = (await y.record(new Date(Date.now() - 60_000))).filter(s => s.to === to).map(s => s.at);
+      expect(taken.map(t => t.at)).toEqual(at);
+      await y.done(taken.slice(0, 1));
+      await y.giveBack(taken.slice(1));
+      await expect(x.put({ id: 'x', from: 'X', to: 'a.b', text: 't' })).rejects.toThrow(/受け手の名に使えない字/);
+      await expect(y.counts('a b')).rejects.toThrow(/受け手の名に使えない字/);
+      await x.close();
+      await y.close();
+    }, slow + SHORT_LIMITS.duplicateWindowMs + 1500);
 
     test('届かないまま期限を過ぎた物は、配る箱から消える。記録には残る', async () => {
       const b = await bench();

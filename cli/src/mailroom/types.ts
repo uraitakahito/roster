@@ -2,7 +2,7 @@
 // 段取りそのものは道具（NATS JetStream など）が持ち、ここは道具の言葉（stream・consumer）を知らない。
 // 受け手に本文を渡す（Claude Code の文脈に入れる）のと、いつ止めるかの決まりは、この上の層が持つ。
 
-/** 受け手の名（名簿の課題の Key と、起こした回の組から作る字）。道具の宛名と取り口の名になる。 */
+/** 受け手の名（名簿の課題の Key と、起こした回の組から作る字）。道具の宛名と取り口の名になるので、英数字と `_` と `-` を 64 字まで。 */
 export type Recipient = string;
 
 /** 置くメッセージ。id は置く側が決める（同じ id を、重なり除けの窓の内に置き直しても 1 通になる）。 */
@@ -21,7 +21,11 @@ export interface Stored extends Letter {
   at: string
 }
 
-/** 取り置いたメッセージ。deliveries は、道具が渡した回数（1 が初めて。2 より上は渡し直し）。 */
+/**
+ * 取り置いたメッセージ。deliveries は、道具が受け手の口に渡した回数（1 が初めて）。
+ * 口が渡さずに返した回（giveBack・close・1 度に取る字の上限に入りきらずに返した回）も数える（道具がそう数える）ので、
+ * 2 より上でも、受け手に本文を出したとは限らない。渡し直しの上限（maxDeliveries）も、この数で数える。
+ */
 export interface Taken extends Stored {
   deliveries: number
 }

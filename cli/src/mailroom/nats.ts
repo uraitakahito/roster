@@ -4,7 +4,7 @@
 // - 配る箱（stream。workqueue）: 記録の箱から写しを受ける。渡せたと返った物は消える。届かないまま残った物は期限で消える。
 // - 知らせの箱（stream。limits）: 渡し直しの上限を超えた時に NATS が出す知らせを溜める。
 // 受け手ごとに、配る箱の上に取り口（durable の pull consumer）を作る。
-import { AckPolicy, DeliverPolicy, DiscardPolicy, jetstream, jetstreamManager, RetentionPolicy, StorageType, type Consumer, type JetStreamClient, type JetStreamManager, type JsMsg, type StoredMsg } from '@nats-io/jetstream';
+import { AckPolicy, DeliverPolicy, DiscardPolicy, jetstream, JetStreamApiCodes, JetStreamApiError, jetstreamManager, RetentionPolicy, StorageType, type Consumer, type JetStreamClient, type JetStreamManager, type JsMsg, type StoredMsg } from '@nats-io/jetstream';
 import { connect, headers, nanos, type NatsConnection } from '@nats-io/transport-node';
 import { TpmError } from '../skill-sets.ts';
 import { MAILROOM_LIMITS, type Counts, type Letter, type Mailroom, type MailroomLimits, type Recipient, type Stored, type TakeLimit, type Taken, type Undeliverable } from './types.ts';
@@ -12,8 +12,23 @@ import { MAILROOM_LIMITS, type Counts, type Letter, type Mailroom, type Mailroom
 /** NATS に 1 回聞く時の時間切れ（ミリ秒。plan-4 の T9）。 */
 const REQUEST_TIMEOUT_MS = 2000;
 
-/** 道具の名（stream・consumer・subject の 1 語）に使える字だけにする。 */
+/** 箱の名に入れる、project を分ける名（道具の名の 1 語に使える字だけにする）。 */
 const token = (s: string): string => s.replaceAll(/[^A-Za-z0-9_-]/g, '_');
+
+/** 受け手の名に使える形（そのまま道具の宛名と取り口の名にする。字を替えると、違う受け手が同じ名になりうるので、替えずに断る）。 */
+const RECIPIENT = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** 受け手の名を確かめて返す。 */
+function recipientName(to: Recipient): string {
+  if (!RECIPIENT.test(to)) throw new TpmError(`受け手の名に使えない字があります（英数字と _ と - を 64 字まで）: ${to}`);
+  return to;
+}
+
+/** 決めた時間で諦める（NATS が止まっている時に、返らない問いを待ち続けない）。 */
+const within = <T>(p: Promise<T>, ms: number): Promise<T | undefined> =>
+  Promise.race([p, new Promise<undefined>((resolve) => {
+    setTimeout(resolve, ms, undefined).unref();
+  })]);
 
 /** 知らせの箱を読む取り口の名。 */
 const ADVISORY_READER = 'roster-undeliverable';
@@ -27,10 +42,18 @@ interface MaxDeliveriesAdvisory {
   deliveries: number
 }
 
-const NOT_FOUND = /not found|no message found/i;
+const MISSING: number[] = [JetStreamApiCodes.StreamNotFound, JetStreamApiCodes.ConsumerNotFound, JetStreamApiCodes.NoMessageFound];
 
-/** 「無い」の誤りか（stream・consumer・message）。 */
-const missing = (e: unknown): boolean => e instanceof Error && NOT_FOUND.test(e.message);
+/** 「無い」の誤りか（stream・consumer・message）。NATS の誤りの番号で見る（字では見ない）。 */
+const missing = (e: unknown): boolean => e instanceof JetStreamApiError && MISSING.includes(e.code);
+
+/** この口で取り置いた 1 通。 */
+interface Held {
+  to: Recipient
+  msg: JsMsg
+  /** 取り置きの期限（この口の時計。過ぎた物は、NATS が渡し直す物として数える）。 */
+  until: number
+}
 
 /** NATS JetStream で配る adapter。space は、同じ NATS を使う project を分ける名（状態の folder の名）。 */
 export class NatsMailroom implements Mailroom {
@@ -42,7 +65,7 @@ export class NatsMailroom implements Mailroom {
   private jsm?: JetStreamManager;
   private ready = false;
   /** この口で取り置いた物（id → NATS のメッセージ）。渡せた・返すは、これにだけ効く。 */
-  private readonly held = new Map<string, JsMsg>();
+  private readonly held = new Map<string, Held>();
 
   constructor(url: string, space: string, limits: MailroomLimits = MAILROOM_LIMITS) {
     this.url = url;
@@ -53,22 +76,27 @@ export class NatsMailroom implements Mailroom {
   private get log(): string { return `roster-${this.space}-log`; }
   private get work(): string { return `roster-${this.space}-work`; }
   private get advisories(): string { return `roster-${this.space}-adv`; }
-  private subject(to: Recipient): string { return `roster.${this.space}.msg.${token(to)}`; }
+  private subject(to: Recipient): string { return `roster.${this.space}.msg.${recipientName(to)}`; }
 
-  /** 繋ぎ、箱が無ければ作る（あれば作らない）。 */
+  /** 繋ぎ、箱が無ければ作る（あれば作らない）。繋ぎと JetStream の口は、みな作れてから覚える（途中で落ちたら、繋ぎを閉じて何も覚えない）。 */
   private async open(): Promise<{ js: JetStreamClient, jsm: JetStreamManager }> {
-    if (this.nc === undefined) {
+    if (this.nc === undefined || this.js === undefined || this.jsm === undefined) {
+      let nc: NatsConnection | undefined;
       try {
-        this.nc = await connect({ servers: this.url, timeout: REQUEST_TIMEOUT_MS, maxReconnectAttempts: -1, name: 'roster' });
+        // 繋ぎ直しはしない（短く生きる命令と hook が使う。切れたら誤りにして、呼ぶ側が口を作り直す）。
+        nc = await connect({ servers: this.url, timeout: REQUEST_TIMEOUT_MS, reconnect: false, name: 'roster' });
+        const js = jetstream(nc, { timeout: REQUEST_TIMEOUT_MS });
+        const jsm = await jetstreamManager(nc, { timeout: REQUEST_TIMEOUT_MS });
+        this.nc = nc;
+        this.js = js;
+        this.jsm = jsm;
       }
       catch (e) {
+        await nc?.close().catch(() => undefined);
         throw new TpmError(`メッセージキュー（NATS。${this.url}）が応えません: ${e instanceof Error ? e.message : String(e)}`);
       }
-      this.js = jetstream(this.nc, { timeout: REQUEST_TIMEOUT_MS });
-      this.jsm = await jetstreamManager(this.nc, { timeout: REQUEST_TIMEOUT_MS });
     }
-    const js = this.js as JetStreamClient;
-    const jsm = this.jsm as JetStreamManager;
+    const { js, jsm } = this;
     if (!this.ready) {
       await this.ensureStreams(jsm);
       this.ready = true;
@@ -87,8 +115,18 @@ export class NatsMailroom implements Mailroom {
         throw e;
       }
     };
-    if (!await exists(this.log)) {
-      await jsm.streams.add({
+    // ほかの process が同時に作った時（同じ名で、作った時刻だけが違う設定になる）は、もうあるのを見て進む。
+    const add = async (name: string, config: Parameters<JetStreamManager['streams']['add']>[0]): Promise<void> => {
+      if (await exists(name)) return;
+      try {
+        await jsm.streams.add(config);
+      }
+      catch (e) {
+        if (!await exists(name)) throw e;
+      }
+    };
+    {
+      await add(this.log, {
         name: this.log,
         subjects: [`roster.${this.space}.msg.>`],
         retention: RetentionPolicy.Limits,
@@ -99,8 +137,8 @@ export class NatsMailroom implements Mailroom {
         num_replicas: 1,
       });
     }
-    if (!await exists(this.work)) {
-      await jsm.streams.add({
+    {
+      await add(this.work, {
         name: this.work,
         // 写しを受け始める位置を、作った時刻からにする。書かないと、作り直した時に記録の箱の中身をみな写し直し、届いた物まで渡り直す。
         sources: [{ name: this.log, opt_start_time: new Date().toISOString() }],
@@ -113,8 +151,8 @@ export class NatsMailroom implements Mailroom {
         num_replicas: 1,
       });
     }
-    if (!await exists(this.advisories)) {
-      await jsm.streams.add({
+    {
+      await add(this.advisories, {
         name: this.advisories,
         subjects: [`$JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES.${this.work}.>`],
         retention: RetentionPolicy.Limits,
@@ -129,13 +167,14 @@ export class NatsMailroom implements Mailroom {
   /** 受け手の取り口（無ければ作る）。 */
   private async consumer(to: Recipient): Promise<Consumer> {
     const { js, jsm } = await this.open();
-    const name = token(to);
+    const name = recipientName(to);
     try {
       return await js.consumers.get(this.work, name);
     }
     catch (e) {
       if (!missing(e)) throw e;
     }
+    // 同時に作っても、同じ設定なら NATS は同じ取り口を返す。
     await jsm.consumers.add(this.work, {
       durable_name: name,
       filter_subject: this.subject(to),
@@ -153,6 +192,8 @@ export class NatsMailroom implements Mailroom {
     const h = headers();
     h.set('Roster-From', encodeURIComponent(letter.from));
     h.set('Roster-To', encodeURIComponent(letter.to));
+    // 預かった時刻は、置く時に 1 度決めて持たせる（記録の箱と配る箱で、同じ時刻を返すため）。
+    h.set('Roster-At', new Date().toISOString());
     if (letter.replyTo !== undefined) h.set('Roster-Reply-To', letter.replyTo);
     const ack = await js.publish(this.subject(letter.to), letter.text, { msgID: letter.id, headers: h });
     return { duplicate: ack.duplicate };
@@ -184,7 +225,10 @@ export class NatsMailroom implements Mailroom {
         // 待たない取り方: まだ渡していない物も、渡し直す物（取り置き中の物。返された物・期限の切れた物を含む）も無ければ、聞かずに終わる。
         // 取り置き中の物がほかの口の手にある間は、ここで 1 秒待って空で返る（NATS の 1 回の問いは、短くても 1 秒）。
         const info = await consumer.info();
-        if (info.num_pending === 0 && info.num_ack_pending - this.held.size <= 0) break;
+        // 自分がまだ取り置いている物（期限の内の物）は、渡し直されないので引く。期限を過ぎた物は、渡し直される物として残す。
+        const now = Date.now();
+        const mine = [...this.held.values()].filter(h => h.to === to && h.until > now).length;
+        if (info.num_pending === 0 && info.num_ack_pending - mine <= 0) break;
         expires = 1000;
       }
       const m = await consumer.next({ expires });
@@ -195,7 +239,7 @@ export class NatsMailroom implements Mailroom {
         m.nak();
         break;
       }
-      this.held.set(taken.id, m);
+      this.held.set(taken.id, { to, msg: m, until: Date.now() + this.limits.holdMs });
       out.push(taken);
       chars += taken.text.length;
     }
@@ -209,27 +253,28 @@ export class NatsMailroom implements Mailroom {
   private stored(to: Recipient, id: string, text: string, h: { get(k: string): string } | undefined, at: string): Stored {
     const replyTo = h?.get('Roster-Reply-To') ?? '';
     const recipient = decodeURIComponent(h?.get('Roster-To') ?? '') || to;
-    return { id, from: decodeURIComponent(h?.get('Roster-From') ?? ''), to: recipient, text, at, ...(replyTo === '' ? {} : { replyTo }) };
+    return { id, from: decodeURIComponent(h?.get('Roster-From') ?? ''), to: recipient, text, at: (h?.get('Roster-At') ?? '') || at, ...(replyTo === '' ? {} : { replyTo }) };
   }
 
   async done(taken: Taken[]): Promise<void> {
     for (const t of taken) {
-      const m = this.held.get(t.id);
-      if (m === undefined) throw new TpmError(`この口で取り置いていないメッセージです: ${t.id}`);
+      const h = this.held.get(t.id);
+      if (h === undefined) throw new TpmError(`この口で取り置いていないメッセージです: ${t.id}`);
       // NATS が受け取ったのを確かめてから進む（返事が届かなければ誤りにする。渡せたと思い込まない）。
-      if (!await m.ackAck({ timeout: REQUEST_TIMEOUT_MS })) throw new TpmError(`メッセージキューが「渡せた」を受けませんでした: ${t.id}`);
+      if (!await h.msg.ackAck({ timeout: REQUEST_TIMEOUT_MS })) throw new TpmError(`メッセージキューが「渡せた」を受けませんでした: ${t.id}`);
       this.held.delete(t.id);
     }
   }
 
   async giveBack(taken: Taken[]): Promise<void> {
     for (const t of taken) {
-      const m = this.held.get(t.id);
-      if (m === undefined) continue;
-      m.nak();
+      const h = this.held.get(t.id);
+      if (h === undefined) continue;
+      h.msg.nak();
       this.held.delete(t.id);
     }
-    await this.nc?.flush();
+    // 返したのが NATS に届くのを、決めた時間だけ待つ（届かなくても、取り置きの期限で外れる）。
+    if (this.nc !== undefined && !this.nc.isClosed()) await within(this.nc.flush().catch(() => undefined), REQUEST_TIMEOUT_MS);
   }
 
   async undeliverable(): Promise<Undeliverable[]> {
@@ -251,7 +296,12 @@ export class NatsMailroom implements Mailroom {
       const to = kept === undefined ? a.consumer : decodeURIComponent(kept.header.get('Roster-To')) || a.consumer;
       out.push({ to, deliveries: a.deliveries, at: a.timestamp, ...(kept === undefined ? {} : { stored: this.fromStored(to, kept) }) });
       // 元の物は配る箱に残っているので消す（残すと、取り口を作り直した時にまた渡る）。
-      if (kept !== undefined) await jsm.streams.deleteMessage(this.work, a.stream_seq);
+      if (kept !== undefined) {
+        await jsm.streams.deleteMessage(this.work, a.stream_seq).catch((e: unknown) => {
+          // 読んでから消すまでの間に、期限で消えていた時は、消せた扱いにする。
+          if (!missing(e)) throw e;
+        });
+      }
       await m.ackAck({ timeout: REQUEST_TIMEOUT_MS });
     }
     return out;
@@ -293,15 +343,17 @@ export class NatsMailroom implements Mailroom {
 
   async clear(to: Recipient): Promise<Stored[]> {
     const { jsm } = await this.open();
-    const left = (await this.peek(this.subject(to))).map(m => this.fromStored(to, m));
+    const kept = await this.peek(this.subject(to));
     try {
-      await jsm.consumers.delete(this.work, token(to));
+      await jsm.consumers.delete(this.work, recipientName(to));
     }
     catch (e) {
       if (!missing(e)) throw e;
     }
-    await jsm.streams.purge(this.work, { filter: this.subject(to) });
-    return left;
+    // 消すのは、読んだ物まで（読んだ後に置かれた物は残す。返す物に入っていない物を、黙って消さない）。
+    const last = kept.at(-1);
+    if (last !== undefined) await jsm.streams.purge(this.work, { filter: this.subject(to), seq: last.seq + 1 });
+    return kept.map(m => this.fromStored(to, m));
   }
 
   async recipients(): Promise<Recipient[]> {
@@ -341,10 +393,18 @@ export class NatsMailroom implements Mailroom {
   }
 
   async close(): Promise<void> {
-    for (const m of this.held.values()) m.nak();
-    this.held.clear();
-    await this.nc?.drain();
+    const nc = this.nc;
     delete this.nc;
+    delete this.js;
+    delete this.jsm;
     this.ready = false;
+    if (nc === undefined) return;
+    if (!nc.isClosed()) {
+      for (const h of this.held.values()) h.msg.nak();
+      // 送りかけの物を流してから閉じるのを、決めた時間だけ待つ。NATS が止まっていれば諦めて閉じる。
+      await within(nc.drain().catch(() => undefined), REQUEST_TIMEOUT_MS);
+    }
+    this.held.clear();
+    if (!nc.isClosed()) await within(nc.close().catch(() => undefined), REQUEST_TIMEOUT_MS);
   }
 }

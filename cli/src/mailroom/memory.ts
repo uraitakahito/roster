@@ -3,6 +3,14 @@
 import { TpmError } from '../skill-sets.ts';
 import { MAILROOM_LIMITS, type Counts, type Letter, type Mailroom, type MailroomLimits, type Recipient, type Stored, type TakeLimit, type Taken, type Undeliverable } from './types.ts';
 
+/** 受け手の名に使える形（NATS の adapter と同じ決まり）。 */
+const RECIPIENT = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** 受け手の名を確かめる。 */
+function check(to: Recipient): void {
+  if (!RECIPIENT.test(to)) throw new TpmError(`受け手の名に使えない字があります（英数字と _ と - を 64 字まで）: ${to}`);
+}
+
 /** 配る箱の 1 通。deliveries は渡した回数、heldUntil は取り置きの期限（ミリ秒の時刻）。 */
 export interface Item {
   stored: Stored
@@ -55,6 +63,12 @@ export class MemoryMailroom implements Mailroom {
   }
 
   put(letter: Letter): Promise<{ duplicate: boolean }> {
+    try {
+      check(letter.to);
+    }
+    catch (e) {
+      return Promise.reject(e);
+    }
     const now = this.office.sweep();
     if (this.office.recent.has(letter.id)) return Promise.resolve({ duplicate: true });
     this.office.recent.set(letter.id, now);
@@ -66,13 +80,20 @@ export class MemoryMailroom implements Mailroom {
 
   /** その受け手の、まだ渡す物（上限を超えた物を除く）。 */
   private live(to: Recipient): Item[] {
+    check(to);
     this.office.sweep();
     this.office.consumers.add(to);
     return this.office.work.filter(i => i.stored.to === to && !i.dead);
   }
 
   counts(to: Recipient): Promise<Counts> {
-    const items = this.live(to);
+    let items: Item[];
+    try {
+      items = this.live(to);
+    }
+    catch (e) {
+      return Promise.reject(e);
+    }
     return Promise.resolve({ waiting: items.filter(i => i.deliveries === 0).length, held: items.filter(i => i.deliveries > 0).length });
   }
 

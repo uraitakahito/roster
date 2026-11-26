@@ -2,6 +2,7 @@
 // 試験用の口と同じ試験（mailroom-contract.ts）を、本物の時を待って流す。ほかに、NATS の箱の作りに依る事を確かめる。
 import { jetstreamManager } from '@nats-io/jetstream';
 import { connect } from '@nats-io/transport-node';
+import { createServer, connect as tcp, type Socket } from 'node:net';
 import { describe, expect, test } from 'vitest';
 import { mailroomContract, SHORT_LIMITS } from './mailroom-contract.ts';
 import { NatsMailroom } from '../src/mailroom/nats.ts';
@@ -14,7 +15,60 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => {
 const SPACE = `e2e-${process.pid}-${Date.now()}`;
 
 describe.skipIf(URL === '')('cli と NATS のつなぎ', () => {
-  mailroomContract('NATS JetStream', () => ({ open: () => new NatsMailroom(URL, SPACE, SHORT_LIMITS), pass: sleep }), 15_000);
+  mailroomContract('NATS JetStream', () => {
+    const probe = new NatsMailroom(URL, SPACE, SHORT_LIMITS);
+    return {
+      open: () => new NatsMailroom(URL, SPACE, SHORT_LIMITS),
+      // 時を待った後、置いた物が配る箱に写し終わるまで待つ（決まった時間だけに頼らない）。
+      pass: async (ms) => {
+        await sleep(ms);
+        for (let i = 0; i < 50 && await probe.lag() > 0; i++) await sleep(100);
+      },
+    };
+  }, 15_000);
+
+  test('2 つの口が、同時に初めて箱と取り口を作っても、どちらも進む', async () => {
+    const space = `${SPACE}-race`;
+    const rooms = [1, 2, 3, 4].map(() => new NatsMailroom(URL, space, SHORT_LIMITS));
+    expect(await Promise.all(rooms.map(r => r.counts('same')))).toEqual(Array(4).fill({ waiting: 0, held: 0 }));
+    await Promise.all(rooms.map(r => r.close()));
+  }, 20_000);
+
+  test('NATS との繋ぎが切れても、返す・閉じるは、決めた時間で返る', async () => {
+    // 本物の NATS との間に、切れる中継を置く（NATS そのものは止めない）。
+    const target = new globalThis.URL(URL.replace(/^nats:/, 'http:'));
+    const sockets: Socket[] = [];
+    const proxy = createServer((client) => {
+      const upstream = tcp(Number(target.port), target.hostname);
+      sockets.push(client, upstream);
+      client.pipe(upstream).pipe(client);
+      for (const s of [client, upstream]) s.on('error', () => undefined);
+    });
+    await new Promise<void>((resolve) => {
+      proxy.listen(0, '127.0.0.1', resolve);
+    });
+    const port = (proxy.address() as { port: number }).port;
+    const y = new NatsMailroom(`nats://127.0.0.1:${port}`, SPACE, SHORT_LIMITS);
+    const to = `cut-${Date.now()}`;
+    await y.counts(to);
+    await y.put({ id: `${to}-a`, from: 'X', to, text: '切れる前に取り置く物' });
+    await sleep(300);
+    const taken = await y.take(to, { max: 20, chars: 9000 });
+    expect(taken).toHaveLength(1);
+    for (const s of sockets) s.destroy();
+    proxy.close();
+    const started = Date.now();
+    await y.giveBack(taken);
+    await y.close();
+    expect(Date.now() - started).toBeLessThan(5000);
+    // 切れた口が返せなかった物は、取り置きの期限の後に、ほかの口が取れる。
+    const z = new NatsMailroom(URL, SPACE, SHORT_LIMITS);
+    await sleep(SHORT_LIMITS.holdMs + 500);
+    const again = await z.take(to, { max: 20, chars: 9000 });
+    expect(again.map(t => t.id)).toEqual([`${to}-a`]);
+    await z.done(again);
+    await z.close();
+  }, 20_000);
 
   test('来るまで待つ: 待っている間に置かれた物が、すぐ渡る', async () => {
     const x = new NatsMailroom(URL, SPACE, SHORT_LIMITS);
@@ -64,5 +118,8 @@ describe.skipIf(URL === '')('cli と NATS のつなぎ', () => {
   test('NATS が応えない時は、置けずに誤りで止まる', async () => {
     const x = new NatsMailroom('nats://127.0.0.1:1', SPACE, SHORT_LIMITS);
     await expect(x.put({ id: 'a', from: 'X', to: 'nobody', text: 't' })).rejects.toThrow(/メッセージキュー.*応えません/);
+    // 繋げなかった後も、口は同じ誤りを返す（中途半端に覚えて、別の誤りで落ちない）。
+    await expect(x.counts('nobody')).rejects.toThrow(/メッセージキュー.*応えません/);
+    await x.close();
   }, 10_000);
 });
