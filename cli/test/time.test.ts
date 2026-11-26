@@ -123,6 +123,29 @@ describe('roster time', () => {
     expect(out.at(-1)).toBe('- AI-45（Software Engineer）  作業中 2.0 時間・レビュー待ち 1.5 時間');
   });
 
+  test('repo の席が【end】を送った後（席を閉じる待ち）と、その間にメッセージキューの止まりの字に替わった間は、数えない', () => {
+    const w = world();
+    noteRepoSeat(w.tpm, 'AI-36', 'AI-36.pagetray');
+    waited(w.tpm, '10:00', 'AI-36', '作業中: 計画', 'tech-lead');
+    waited(w.tpm, '10:00', 'AI-36.pagetray', '作業中: server');
+    waited(w.tpm, '11:00', 'AI-36.pagetray', '回答待ち(Lead): 席を閉じる');
+    w.tpm.state.append('log.jsonl', { at: at('11:00'), key: 'AI-36.pagetray', heading: 'end', from: 'SWE AI-36 pagetray: 題', to: 'file:1', text: '【end】x', id: 'm1', sender: { key: 'AI-36.pagetray' } });
+    waited(w.tpm, '11:30', 'AI-36.pagetray', 'メッセージキューが応えません');
+    waited(w.tpm, '13:00', 'AI-36', '回答待ち(TPM): 次の依頼', 'tech-lead');
+    const out = time(w.tpm, 'AI-36');
+    expect(out.slice(-2)).toEqual(['- AI-36（Tech Lead）  作業中 3.0 時間', '- AI-36.pagetray（Software Engineer）  作業中 1.0 時間']);
+    expect(out[5]).toBe('  2026-11-20T11:30Z → 2026-11-20T13:00Z  1.5 時間（その間の状態: AI-36 作業中）');
+  });
+
+  test('【end】を送っていない席が、手で同じ字の状態にしても、その間は数える', () => {
+    const w = world();
+    waited(w.tpm, '10:00', 't-x7k2', '作業中: 実装');
+    waited(w.tpm, '11:00', 't-x7k2', '回答待ち(TPM): workspace を閉じる');
+    waited(w.tpm, '12:00', 't-x7k2', '作業中: 続き');
+    waited(w.tpm, '12:30', 't-x7k2', '回答待ち(TPM): 次の依頼');
+    expect(time(w.tpm, 't-x7k2').at(-1)).toBe('- t-x7k2（Software Engineer）  作業中 1.5 時間・TPM 待ち 1.0 時間');
+  });
+
   test('担当の名乗り（roster hello）と、メッセージキューの止まりは、状態の移りに残る', async () => {
     const w = world();
     await hello(w.tpm);
