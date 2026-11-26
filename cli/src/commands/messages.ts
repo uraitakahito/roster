@@ -107,7 +107,8 @@ export class QueueDownError extends TpmError {}
 
 /** メッセージキュー（NATS）が応えない時の誤り。居場所の状態にも出し、gate.jsonl（種類 queue）に残す。not は「送っていません」などの字。 */
 export function queueDown(ctx: Context, not: string, e: unknown): QueueDownError {
-  ctx.seats.setStatus('wait', 'メッセージキューが応えません');
+  // 状態の移りの記録（waits.jsonl）にも残す（roster time が、止まっていた間を、前の状態に数えないように）。
+  showWait(ctx, 'メッセージキューが応えません');
   recordGateStop(ctx, 'queue', `down: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200));
   return new QueueDownError(`メッセージキューが応えません。${not}（${e instanceof Error ? e.message : String(e)}）。${queueDownNext(ctx)}、動いてから同じ命令を打ち直してください`);
 }
@@ -378,7 +379,7 @@ async function assertUnclaimed(ctx: Context, name: Recipient, who: string, from:
 /** 写しの遅れ（N4）が、待っても残っていれば止める。居場所の状態にも出す。 */
 function assertNoLag(ctx: Context, lag: number, not: string): void {
   if (lag === 0) return;
-  ctx.seats.setStatus('wait', 'メッセージキューの写しが遅れています');
+  showWait(ctx, 'メッセージキューの写しが遅れています');
   recordGateStop(ctx, 'queue', `lag: ${lag}`);
   throw new TpmError(`メッセージキューの写しが遅れています（まだ写されていない物が ${lag} 通）。${not}。少し待って、同じ命令を打ち直してください`);
 }
