@@ -2,6 +2,7 @@
 // 担当が打つ物（ask・report・wait）と、TPM 担当が打つ物（answer・notify・dismiss・show）。brief は命令でなく、assign の中で使う。
 // レビューの頼み（roster ask review）と判定（roster report review）は staff.ts にある（課題の担当と Staff Engineer 担当の席の間を、じかに届ける）。
 // Auditor は、成果を roster report audit（Product Manager へじかに出した報告の写し）と roster report decided（Product Manager の決定）で出す。
+import { randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
 import { appendAudit } from '../audits.ts';
 import type { Context } from '../context.ts';
@@ -19,6 +20,8 @@ import { markEscalated } from './review-marks.ts';
 import { isPageUrl } from './store.ts';
 import { readShown, returnedIds, seenTimes, shownFile, type SeenAt } from '../seen.ts';
 import { envOf } from '../env.ts';
+import { claimOf, gateFile, markPassed, ownClaim, passedIds, recordDelivered, usesNats, type GateMark } from '../mail.ts';
+import type { Counts, Recipient, Stored } from '../mailroom/types.ts';
 import { selfParty, TPM_PARTY, type Party } from '../party.ts';
 
 export { selfParty, TPM_PARTY, type Party } from '../party.ts';
@@ -59,6 +62,10 @@ export interface Sent {
    * 前の版の行には無い（届いた所で比べない）。
    */
   recipient?: Party
+  /** 運んだ道。NATS（配りの口）で運んだ行にだけ書く。無い行は、連携の道具（cmux）が運んだ。 */
+  carrier?: 'nats'
+  /** NATS で運んだ行だけ: 配りの受け手の名（受け手の担当の組から作った字）。 */
+  box?: Recipient
   /** 【done】の行だけ: 担当が --briefs で名指して済ませた依頼書の URL（渡された時の字のまま）。無ければ、見ていた依頼書のいちばん古い 1 つを済ませる。 */
   briefs?: string[]
 }
@@ -85,15 +92,46 @@ async function assertNotRepeat(ctx: Context, id: HeadingId, from: string, to: st
 /** 担当が TPM 担当へ送る物の 2 度送りを見る（課題に記録を書く前に呼ぶ）。 */
 const notRepeatToTpm = async (ctx: Context, self: RoleRecord, id: HeadingId, body: string): Promise<void> => assertNotRepeat(ctx, id, self.title, requireTpm(ctx).address, body);
 
+/** NATS で送れる本文の長さ（字。符号位置で数える。置き場の記録の本文の上限と同じ）。 */
+const NATS_TEXT_MAX = 8000;
+
+/** メッセージキュー（NATS）が応えない時の誤り。居場所の状態にも出す。not は「送っていません」などの字。 */
+function queueDown(ctx: Context, not: string, e: unknown): TpmError {
+  ctx.seats.setStatus('wait', 'メッセージキューが応えません');
+  recordGateStop(ctx, 'queue', `down: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200));
+  return new TpmError(`メッセージキューが応えません。${not}（${e instanceof Error ? e.message : String(e)}）。メッセージキュー（NATS）が動いているかを TPM 担当か Product Manager に確かめ、動いてから同じ命令を打ち直してください`);
+}
+
+/** メッセージを配りの口（NATS）に置き、作った id を返す。長すぎる本文は置かずに誤り。配りの口が誤りなら、置けていないとして止まる。 */
+async function post(ctx: Context, box: Recipient, from: string, text: string, replyTo?: string): Promise<string> {
+  const length = [...text].length;
+  if (length > NATS_TEXT_MAX) throw new TpmError(`本文が長すぎます（${length} 字。メッセージキューで送れるのは ${NATS_TEXT_MAX} 字まで）。長い本文はページに書いて（roster page put）、URL を送ってください。送っていません`);
+  const id = randomUUID();
+  try {
+    await (await ctx.mailroom()).put({ id, from, to: box, text, ...(replyTo === undefined ? {} : { replyTo }) });
+  }
+  catch (e) {
+    throw queueDown(ctx, '送っていません', e);
+  }
+  return id;
+}
+
 /**
  * メッセージを送り、送った記録を log.jsonl に足す。recipient は届く担当（返事の形なら元の行の送り手に替える）、extra は記録の行に足す欄。
  * 足した行は、置き場にも写す（message-record.ts。待たない。写せなくても、送った事と log.jsonl は変わらない）。
+ * 運ぶ道: 設定の messages が nats で、届く担当の名乗り（mail.ts）が効いていれば、配りの口（NATS）に置く（cmux では送らない。記録の行に carrier: nats）。
+ * それ以外（設定が cmux・届く担当が名乗っていない・届く担当が分からない）は、今のとおり連携の道具（cmux）で送る。
+ * cmux で送る返事の先が NATS で運んだ物（cmux の知らない id）の時は、cmux には返事の形を付けずに宛先へ送る（記録の replyTo は残す）。
  */
 async function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: string, body: string, recipient: Party, replyTo?: string, extra: Pick<Sent, 'settle' | 'peer' | 'briefs'> = {}): Promise<string> {
   await assertNotRepeat(ctx, id, from, to, body, replyTo);
   const text = message(id, body);
-  const receiving = replyTo === undefined ? recipient : ctx.state.lines<Sent>('log.jsonl').findLast(l => l.id === replyTo)?.sender;
-  const d = ctx.messages.send(to, from, text, replyTo);
+  const original = replyTo === undefined ? undefined : ctx.state.lines<Sent>('log.jsonl').findLast(l => l.id === replyTo);
+  const receiving = replyTo === undefined ? recipient : original?.sender;
+  const box = usesNats(ctx) && receiving !== undefined ? claimOf(ctx, receiving)?.name : undefined;
+  const sentId = box === undefined
+    ? ctx.messages.send(to, from, text, original?.carrier === 'nats' ? undefined : replyTo).id
+    : await post(ctx, box, from, text, replyTo);
   const sent: Sent = {
     at: ctx.now().toISOString(),
     key,
@@ -101,11 +139,12 @@ async function deliver(ctx: Context, id: HeadingId, key: string, from: string, t
     from,
     to,
     text,
-    id: d.id,
+    id: sentId,
     ...(replyTo === undefined ? {} : { replyTo }),
     ...extra,
     sender: selfParty(ctx.env),
     ...(receiving === undefined ? {} : { recipient: receiving }),
+    ...(box === undefined ? {} : { carrier: 'nats' as const, box }),
   };
   ctx.state.append('log.jsonl', sent);
   copyMessageRecord(ctx, sent);
@@ -195,10 +234,11 @@ const READ_STOP = {
  * （送った直後の次の命令が、自分のメッセージを未読として出して止まった。台帳 #97・#100）。送った記録（log.jsonl）の、送り手が自分の行の id を除く。
  * 送り手は、担当なら「Key が自分で、TPM 担当の名でない行」、TPM 担当なら「TPM 担当の名の行」で見る（宛先では見ない。返事の形（--reply-to）は、
  * 記録の宛先と本当の受け手がずれることがある。題でも見ない。居場所の題は替わることがある）。
+ * 設定の messages が nats で、自分（この session）の名乗りが効いている時は、配りの口（NATS）に聞く形になる（assertHandedOver）。
  */
-// 今は待つ物が無い。形だけ非同期にしておく（呼ぶ側を替えずに、Promise を返す配りの口（mailroom）を待てるように）。
-// eslint-disable-next-line @typescript-eslint/require-await
 export async function assertRead(ctx: Context, who: string, from?: string, action: keyof typeof READ_STOP = 'send'): Promise<void> {
+  const claim = ownClaim(ctx);
+  if (claim !== undefined) return assertHandedOver(ctx, claim.name, who, from, action);
   const incoming = ctx.messages.pending().filter(m => from === undefined || m.from === from);
   if (incoming.length === 0) return;
   const self = ctx.seats.whoami();
@@ -217,6 +257,81 @@ export async function assertRead(ctx: Context, who: string, from?: string, actio
     ...unread.flatMap(m => [`--- ${m.from}（id ${m.id}）`, m.text]),
     '--- ここまで',
     `読んだうえで、${READ_STOP[action].retry}。`,
+  ].join('\n'));
+}
+
+/** 写しの遅れ（N4）が無くなるのを待つ回数と、1 回の間（合わせて長くて 2 秒）。 */
+const LAG_TRIES = 20;
+const LAG_PAUSE_MS = 100;
+
+/** メッセージの本文の頭の見出し（`【brief】…` の brief）。無ければ空。 */
+const headingOf = (text: string): string => /^【([^】]+)】/.exec(text)?.[1] ?? '';
+
+/** 配りの口に聞いた、自分宛ての様子: 写しの遅れ・残っている物（古い順）・箱の数。 */
+async function askQueue(ctx: Context, name: Recipient): Promise<{ lag: number, letters: Stored[], counts: Counts }> {
+  const room = await ctx.mailroom();
+  let lag = await room.lag();
+  for (let i = 0; lag > 0 && i < LAG_TRIES; i++) {
+    await ctx.sleep(LAG_PAUSE_MS);
+    lag = await room.lag();
+  }
+  if (lag > 0) return { lag, letters: [], counts: { waiting: 0, held: 0 } };
+  const letters = await room.peek(name);
+  return { lag, letters, counts: letters.length === 0 ? { waiting: 0, held: 0 } : await room.counts(name) };
+}
+
+/**
+ * 送る前の検査の、NATS の形（設定の messages が nats で、自分の名乗りが効いている時。name は自分の受け手の名）。
+ * 自分宛てで、配りの口にまだ残っている物（まだ渡っていない物）があれば止める。**本文は出さない**: 止めた事を印（mail.ts の GateMark）に書き、
+ * すぐ後の hook（roster mail gate）が本文を渡す。渡された後の打ち直しは通る。
+ * - 写しの遅れ（N4）が、長くて 2 秒待っても残れば止める。配りの口が応えなければ止める。どちらも、居場所の状態に出す。
+ * - 「検査では止めない」の印の付いた id と、渡し直しの上限を超えた物しか残っていない時（箱の数が 0）は、止めない。
+ * - 前の印が残っていて（hook が渡していない）、同じ id がまだ残っている時（T8）:
+ *   (a) 取り置き中の物があれば、渡している途中と見て、もう 1 度止める。
+ *   (b) 無ければ、hook が働いていないと見て、本文を命令の結果に出して通す。出した id には「検査では止めない」の印を付ける。
+ *       届いたとは記録せず（渡した記録に output と残す）、配りの口にも残す（hook が後で渡せる）。
+ * from（相手の題）で絞る決まりは、今までと同じ（TPM 担当が担当に送る時は、その担当からの物だけで止まる）。
+ */
+async function assertHandedOver(ctx: Context, name: Recipient, who: string, from: string | undefined, action: keyof typeof READ_STOP): Promise<void> {
+  const not = READ_STOP[action].not;
+  const asked = await askQueue(ctx, name).catch((e: unknown) => {
+    throw queueDown(ctx, not, e);
+  });
+  if (asked.lag > 0) {
+    ctx.seats.setStatus('wait', 'メッセージキューの写しが遅れています');
+    recordGateStop(ctx, 'queue', `lag: ${asked.lag}`);
+    throw new TpmError(`メッセージキューの写しが遅れています（まだ写されていない物が ${asked.lag} 通）。${not}。少し待って、同じ命令を打ち直してください`);
+  }
+  const mark = ctx.state.read<GateMark>(gateFile(name));
+  // 印の物が、もう 1 つも残っていなければ（hook のほかの道で渡った）、印を消す。
+  if (mark !== undefined && !asked.letters.some(m => mark.ids.includes(m.id))) ctx.state.remove(gateFile(name));
+  const passed = passedIds(ctx, name);
+  const unread = asked.letters.filter(m => (from === undefined || m.from === from) && !passed.has(m.id));
+  // 残っていても箱の数が 0 なのは、渡し直しの上限を超えた物（片付けるのは TPM 担当の命令）。
+  if (unread.length === 0 || asked.counts.waiting + asked.counts.held === 0) return;
+  const ids = unread.map(m => m.id);
+  const again = mark !== undefined && unread.some(m => mark.ids.includes(m.id));
+  if (again && asked.counts.held > 0) {
+    recordGateStop(ctx, 'unread', ids.join(' '));
+    throw new TpmError(`${who}からのメッセージ ${unread.length} 件を、渡している途中です。${not}。長くて 30 秒待って、同じ命令を打ち直してください`);
+  }
+  if (again) {
+    ctx.print([
+      `${who}から、まだ渡っていないメッセージが ${unread.length} 件あります。渡す hook が働いていないようなので、ここに出します（届いたとは記録しません）。読んだうえで進めてください。`,
+      ...unread.flatMap(m => [`--- ${m.from}（id ${m.id}）`, m.text]),
+      '--- ここまで',
+    ]);
+    markPassed(ctx, name, ids);
+    for (const id of ids) recordDelivered(ctx, id, name, 'output');
+    ctx.state.remove(gateFile(name));
+    return;
+  }
+  const reason = `送る前の検査が止めた: ${who}から、まだ渡っていないメッセージが ${unread.length} 件あった（${not}）`;
+  ctx.state.write(gateFile(name), { at: ctx.now().toISOString(), ids, reason } satisfies GateMark);
+  recordGateStop(ctx, 'unread', ids.join(' '));
+  throw new TpmError([
+    `${who}から、まだ渡っていないメッセージが ${unread.length} 件あります（${unread.map(m => `【${headingOf(m.text)}】${m.from}`).join('・')}）。${not}。`,
+    `この後すぐ、hook が本文を渡します。渡された物を読んでから、${READ_STOP[action].retry}。`,
   ].join('\n'));
 }
 

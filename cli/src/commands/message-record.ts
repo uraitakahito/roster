@@ -51,7 +51,7 @@ function refusal(r: Reply): string {
 
 /**
  * 送った記録 1 行を置き場に置く。残す物が無ければ（置けた）undefined、あれば写しの記録に残す欄を返す（投げない）。
- * 状態は carried（今は cmux が運ぶので「ほかの道具で運んだ」。届いたかは置き場に書かない）。
+ * 状態は、cmux が運んだ行は carried（「ほかの道具で運んだ」。届いたかは置き場に書かない）、NATS で運んだ行（carrier が nats）は waiting（届くのを待っている）。
  * 送り手・受け手の名は、担当の Key（TPM 担当は tpm）。置き場の記録の名は初めの値から替わらないので、替わる居場所の題でなく Key で書く。
  * 送り手の組の無い前の版の行は居場所の題、届く担当の分からない行は宛先の字に落とす。どちらも PARTY_MAX 字までに切り、空なら写さない。
  * id の形が置き場の決まりに合わない時は、字を替えずに、写さない。Key・返事の先は、形が合う時だけ付ける。
@@ -75,7 +75,7 @@ async function put(ctx: Context, sent: Sent): Promise<Pick<MessageRecordNote, 'r
         to,
         text: cut(sent.text, TEXT_MAX, CUT_MARK),
         sentAt: new Date(sent.at),
-        state: 'carried',
+        state: sent.carrier === 'nats' ? 'waiting' : 'carried',
         ...(sent.replyTo !== undefined && fits(MESSAGE_ID, sent.replyTo) ? { replyTo: sent.replyTo } : {}),
       },
     });

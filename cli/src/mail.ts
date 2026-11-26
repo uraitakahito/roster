@@ -253,6 +253,17 @@ export interface DeliveredLine {
 /** 渡した記録を読む。 */
 export const deliveredLines = (ctx: Context): DeliveredLine[] => ctx.state.lines<DeliveredLine>(DELIVERED_FILE);
 
+/**
+ * 渡した記録に 1 行足して返す。何度目か（nth）は、同じ受け手・同じ id の、hook が渡した行（output でない行）の数から出す（output の行は 0）。
+ * lines は、その時の会話の記録の行の数（分かる時だけ）。
+ */
+export function recordDelivered(ctx: Context, id: string, to: Recipient, when: DeliveredWhen, lines?: number): DeliveredLine {
+  const nth = when === 'output' ? 0 : deliveredLines(ctx).filter(l => l.id === id && l.to === to && l.when !== 'output').length + 1;
+  const line: DeliveredLine = { at: ctx.now().toISOString(), id, to, when, nth, ...(lines === undefined ? {} : { lines }) };
+  ctx.state.append(DELIVERED_FILE, line);
+  return line;
+}
+
 /** file の行の数（空の行は数えない）。読めなければ undefined。 */
 export function lineCount(path: string | undefined): number | undefined {
   if (path === undefined || path === '') return undefined;
