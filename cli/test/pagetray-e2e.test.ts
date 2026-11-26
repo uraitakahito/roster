@@ -1,18 +1,23 @@
 // cli と本物の置き場（pagetray）のつなぎの試験。$ROSTER_E2E_PAGES_URL に動いている pagetray の URL がある時だけ流す
 // （CI の pagetray-e2e.yml。手元では docs-site の開発のページの「pagetray（ページの置き場のサーバー）とのつなぎ」）。
 // ほかの試験は偽の置き場（helpers.ts の FakeStore）で流すので、API の形（URL・引数の名・JSON の欄）のずれはここで見つける。
-// 置き場には、いつも生成した client で新しい API（pagetray 1.0.0 から）に送る。置き場は file・返事・レビューの印をみな持つので、版で試験を選ばない。
+// 置き場には、いつも生成した client で新しい API（pagetray 1.0.0 から。送った記録は 1.1.0 から）に送る。置き場は file・返事・レビューの印・送った記録をみな持つので、版で試験を選ばない。
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
+import { pagetrayApi } from '../src/clients.ts';
 import { fileDelete, fileList, filePath, filePut, type FileRecord } from '../src/commands/file.ts';
+import { MESSAGE_RECORDS_FILE, messageRecordsSettled } from '../src/commands/message-record.ts';
+import { askTpm, notify, type Sent } from '../src/commands/messages.ts';
 import { PAGE_KINDS, pageDelete, pageImport, pageList, pagePath, pagePut, pageReply, type PageRecord } from '../src/commands/page.ts';
 import { setReply, waitingUrls } from '../src/commands/reply.ts';
+import { hello } from '../src/commands/role-side.ts';
+import { assign } from '../src/commands/tpm-side.ts';
 import type { Context } from '../src/context.ts';
 import { exec } from '../src/exec.ts';
 import { ROLE_NAMES } from '../src/protocol.ts';
-import { world } from './helpers.ts';
+import { BRIEF, world } from './helpers.ts';
 import { markBrief, markEscalated, markVerdict } from '../src/commands/review-marks.ts';
 import { pagetrayClient } from '../src/commands/store.ts';
 import type { Review } from '../src/reviews.ts';
@@ -252,5 +257,38 @@ describe.skipIf(URL === '')('cli と pagetray のつなぎ（レビューの印�
     expect(await setReply(s.tpm, review, 'answered')).toBe('conflict');
     expect(await pageReply(s.tpm, [review], { answered: true, on: 'tpm' })).toEqual([`決まったにした: ${review}`]);
     expect(await s.list(s.tpm, { key: 'K-30', reply: 'waiting', on: 'tpm' })).toEqual([]);
+  });
+});
+
+describe.skipIf(URL === '')('cli と pagetray のつなぎ（送った記録）', () => {
+  test('送ると、送った記録が carried で置かれ、ListMessages で読める。同じ id をもう 1 度置いても 1 件のまま', async () => {
+    const s = setup();
+    // 名乗りと起こしは偽の置き場で済ませ（状態の folder は同じ）、送る所だけを本物の置き場に向ける。
+    await hello(s.w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
+    await assign(s.w.tpm, 'K-40', { role: 'software-engineer', title: '計画と実装', brief: BRIEF, wait: 0 });
+    await hello(s.w.role('K-40', 'file:1'));
+    notify(s.tpm, 'K-40', { text: 'A で進める' });
+    // 試験の時刻は止めてあるので、2 件の送った時刻は同じ。置いた順で並ぶように、1 件ずつ写しが済むのを待つ。
+    await messageRecordsSettled();
+    await askTpm(s.real(s.w.role('K-40', 'file:1')), { text: '長'.repeat(9000), waitingFor: '答え' });
+    await messageRecordsSettled();
+    const log = s.tpm.state.lines<Sent>('log.jsonl');
+    const client = pagetrayClient(URL);
+    const api = pagetrayApi();
+    const list = async () => (await client.send(new api.ListMessagesCommand({ project: s.project, sort: 'sentAt' }))).messages ?? [];
+    const found = await list();
+    expect(found.map(m => [m.id, m.key, m.heading, m.from, m.to, m.state, m.sentAt?.toISOString()])).toEqual([
+      [log[0]?.id, 'K-40', 'notify', 'Technical Program Manager', 'K-40', 'carried', log[0]?.at],
+      [log[1]?.id, 'K-40', 'ask-tpm', 'SWE K-40: 計画と実装', 'tpm', 'carried', log[1]?.at],
+    ]);
+    expect(found[0]?.text).toBe('【notify】A で進める');
+    expect([...found[1]?.text ?? '']).toHaveLength(8000);
+    expect(found[1]?.text?.endsWith('…（長いので切った）')).toBe(true);
+    // 写せたので、写せなかった記録は無い。
+    expect(existsSync(join(s.tpm.state.dir, MESSAGE_RECORDS_FILE))).toBe(false);
+    // 同じ id の置き直しは書き足し（200）で、件は増えない。
+    const again = await client.send(new api.PutMessageCommand({ project: s.project, id: log[0]?.id ?? '', heading: 'notify', from: 'x', to: 'y', text: '違う本文', sentAt: new Date(log[0]?.at ?? ''), state: 'carried' }));
+    expect([again.status, again.text]).toEqual([200, '【notify】A で進める']);
+    expect(await list()).toHaveLength(2);
   });
 });

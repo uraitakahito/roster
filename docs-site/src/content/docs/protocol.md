@@ -43,6 +43,7 @@ flowchart TB
 | `reviews/<番号>.jsonc` | レビューの頼み 1 件（下の「Staff Engineer 担当の席」）。課題の Key・見る物・頼んだ担当と時刻・渡した依頼書・判定・レビューのページ・返った時刻・TPM 担当に上げた時刻。レビューを 1 度も頼んでいない project には無い |
 | `approvals/<環境>.jsonc` | Product Manager の承認と期限 |
 | `log.jsonl`・`infra.jsonl` | 送ったメッセージ（時刻・Key・見出し・本文・返事の先・送り手と届く担当。前の版の行には、送った後 2 秒の内に届いたかの `delivered` もある。今の版は書かず、見た時刻は `cli/src/seen.ts` の口が `deliveries.jsonl`・`shown/`・`returned.jsonl` から引く）と、`roster infra run` で打った命令の記録 |
+| `message-records.jsonl` | 送った記録を置き場に写せなかった回（時刻・メッセージの id・訳の短い字。下の「[ページの置き場](#ページの置き場)」の「送った記録の写し」）。写せた時は書かない。1 度も写しそこねていない project には無い |
 | `deliveries.jsonl` | メッセージの送った・届いた・読んだ時刻（連携の道具が覚えている物の写し）。cmux は新しい 1,000 件より古い物を捨てるので、`roster close` で居場所を閉じる前と、TPM 担当が `roster hello` を打った時に写す。変わった時だけ 1 行足すので、同じ id の行は後ろが新しい |
 | `tracker.jsonl` | `roster` が課題管理に書いた物（コメント・済み）。時刻・打った担当・課題・記録の種類・通ったか。課題管理の履歴は人も担当も同じ account なので、`roster` の手かどうかはここで見分ける |
 | `guard.jsonl`・`gate.jsonl` | guard が止めた命令（頭の 300 字と訳）と、入口の検査が送る・置くのを止めた回（読んでいないメッセージ・merge していない PR・読めない PR・同じメッセージの 2 度送り・TPM 担当が送って済んでいない物・前の監査の文脈が残ったまま始めようとした監査） |
@@ -78,6 +79,9 @@ flowchart TB
   - 置き場が応えない時も、`roster ask pm`・`roster answer`・`roster dismiss` はメッセージを送り、`置き場の印: 付けていない` と訳を出す。`roster page reply` だけは誤りで止まる。
   - 置き場が `.pagetray-version` より古い版で、呼ぶ操作を持たない時は、置き場に頼む命令はどれも「置き場が、この roster の呼ぶ操作を持たない」で止まる（[運用](/operations/#版を上げる)の 4）。
   - `roster ask pm` で送っていないページは、状態を持たない（印は付かない）。
+- **送った記録の写し**: `roster` は、メッセージを送るたびに、送った記録（`log.jsonl` の 1 行）を置き場にも 1 件置く（pagetray 1.1.0 から）。Product Manager は、一覧の画面 `http://127.0.0.1:8801/messages` で、誰が誰に何を送ったかを見る。写すのは、Key・見出し・送り手の名・受け手の名（届く担当の Key。TPM 担当は `tpm`。届く担当が分からない時は宛先の字）・本文（8,000 字を超える時は、頭の 7,990 字に「…（長いので切った）」を付ける）・送った時刻・返事の先の id。castlist の設定と session の id があれば、ページを置く時と同じ送り手の付随する id も付ける。
+  - 状態は、今は `carried`（ほかの道具で運んだ）だけ。メッセージを運ぶのが cmux の間は、届いたかを置き場に書かない（届いた時刻は、今までどおり `deliveries.jsonl`）。
+  - **写せなくても、送りは止めない**。置き場が応えない・古い版・castlist に聞けない・形の誤りのどれでも、送った事と `log.jsonl` は変わらず、命令の出力にも何も出ない。写せなかった事だけが、状態の folder の `message-records.jsonl` に 1 行残る。後から写し直す命令は無い。
 - **レビューの印**: 置き場は、返事待ちの相手（Product Manager・レビューの席・TPM 担当）と、レビューの判定・見た物も持つ。TPM 担当を通らないレビューのやりとりを、Product Manager と TPM 担当が一覧の UI で追うための物。書くのは `roster` の命令で、担当は手で書かない。置き場に写すのは、判定の語・見た物の URL・時刻だけ。
   - `roster ask review` と、Staff Engineer 担当の席の起こし直し（`roster ask review`・`roster assign --role staff-engineer`）が、依頼書に見る物（置き場のページは path、PR は URL）を書いて「レビュー待ち」にする。起こし直しで置き換えた前の依頼書は、返っていない頼みがほかに無ければ待ちを外す。
   - `roster report review` が、レビューのページに判定と、済ませた頼みの見る物をみな書き、依頼書を「レビュー済み」にする。一覧の UI は、レビューの行に判定の印と「見た物:」の link、見られたページの行に「レビュー: review-N 判定」を出す。
