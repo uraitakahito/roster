@@ -1,8 +1,8 @@
 # 依頼書のひな形
 
-TPM 担当が Software Engineer 担当・DevOps Engineer 担当に渡す依頼書（Staff Engineer 担当への依頼書は、`roster assign --role staff-engineer` がレビューの頼みから作るので、書かない）。HTML の file に書いて `roster page put <file> --kind brief --key <Key>` で置き（protocol.md の「ページ」）、出た URL を `roster assign <Key> … --brief <URL>` で渡す（担当が動いていれば【brief】で届き、いなければ起こされた担当が `roster hello` で受け取る）。
+TPM 担当が Software Engineer 担当・Tech Lead 担当・DevOps Engineer 担当に渡す依頼書（Tech Lead 担当が repo の席に渡す依頼書も、このひな形で書く。その時は `--key` を付けずに置き、`roster seat add <名> --brief <URL>`・`roster seat brief <名> --brief <URL>` で渡す。Staff Engineer 担当への依頼書は、`roster assign --role staff-engineer` がレビューの頼みから作るので、書かない）。HTML の file に書いて `roster page put <file> --kind brief --key <Key>` で置き（protocol.md の「ページ」）、出た URL を `roster assign <Key> … --brief <URL>` で渡す（担当が動いていれば【brief】で届き、いなければ起こされた担当が `roster hello` で受け取る）。
 
-**書かない物**: 連絡の仕方・見出しの表・状態・終わり方・文書の食い違いの扱い・共有の環境の扱い・TPM 担当の宛先。これらは `/software-engineer`・`/devops-engineer` と `_shared/protocol.md`、`roster` の命令にある。依頼書には、その課題だけのことを書く。
+**書かない物**: 連絡の仕方・見出しの表・状態・終わり方・文書の食い違いの扱い・共有の環境の扱い・TPM 担当の宛先。これらは `/software-engineer`・`/tech-lead`・`/devops-engineer` と `_shared/protocol.md`、`roster` の命令にある。依頼書には、その課題だけのことを書く。
 
 ## 欄
 

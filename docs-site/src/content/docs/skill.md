@@ -19,8 +19,8 @@ skill セット `<名前>` の skill は `skill-sets/<名前>/.claude/skills/` �
 | skill | 起こす人 | 担当者 | すること |
 |---|---|---|---|
 | `/tpm` | Product Manager（`roster start` が出す 1 行を打つ。`/tpm` はその 1 行の最初の入力） | TPM | Product Manager を助け、課題ごとに担当者を割り当てる |
-| `/software-engineer` | TPM（`roster assign <Key> --role software-engineer`） | Software Engineer | 課題 1 つを受け持つ。`roster hello` で依頼書の URL を受け取り、調査・提案・計画・実装・テストを worktree で進め、成果をページ（置き場の HTML）と PR で出す。TPM 担当が【dismiss】を送るまで、同じ課題の続きを同じ担当が受ける |
-| `/tech-lead` | TPM（`roster assign <Key> --role tech-lead`） | Tech Lead | いくつもの repo に渡る課題 1 つの全体をまとめる（作りかけ。今は、名乗って依頼書を読み、まだ進められないことを TPM 担当に知らせる所まで。repo ごとの席を起こす命令と手順は、これから足す） |
+| `/software-engineer` | TPM（`roster assign <Key> --role software-engineer`）。分けた課題では Tech Lead 担当（`roster seat add <名>`。repo の席） | Software Engineer | 課題 1 つを受け持つ。`roster hello` で依頼書の URL を受け取り、調査・提案・計画・実装・テストを worktree で進め、成果をページ（置き場の HTML）と PR で出す。TPM 担当が【dismiss】を送るまで、同じ課題の続きを同じ担当が受ける |
+| `/tech-lead` | TPM（`roster assign <Key> --role tech-lead`） | Tech Lead | いくつもの repo に渡る課題 1 つの全体をまとめる。計画（並べられる仕事の組・分けるかの見立て・席の数）と repo の境の取り決めを書き、repo ごとの席（Software Engineer 担当）を `roster seat add` で起こして依頼書を渡し、その計画と PR をレビューし、repo をまたぐ合わせの PR を出す。自分では repo を受け持たない。席とのやりとりは、TPM 担当を通らず、じかに届く |
 | `/devops-engineer` | TPM（`roster assign devops --role devops-engineer`） | DevOps Engineer | project の設定に書いた環境のビルド・デプロイ・整備と、ページの置き場（環境 `pagetray`）を起こして保つこと。共有の環境を変える前に、環境ごとの手続きに従って、TPM 担当への相談か Product Manager の承認を取る |
 | `/staff-engineer` | 課題の担当の `roster ask review`（席が無ければ、命令が起こす。依頼書は、命令がレビューの頼みから作る。TPM 担当の `roster assign <課題の Key> --role staff-engineer` は起こし直し） | Staff Engineer | 課題の担当が頼んだ計画・提案のページや PR を、書いた者から離れた目で見て、判定（よい・気になる所あり・直すべき・見られなかった）と指摘をレビューのページで、頼んだ担当へじかに返す（TPM 担当を通らない）。席は課題ごとに、課題の担当の隣に立つ。見て助言するだけで、直さない・決めない（読むだけの守りが掛かる）。受けるかは課題の担当が決める。運びは [運用](/operations/#レビューstaff-engineer-担当の席) |
 | `/audit` | Product Manager（`roster audit start` で `Audit` の席を起こし、その席で `/audit`・`/audit <件の番号…>` を呼ぶ） | Auditor | 担当の仕組み（`roster`・skill・決まり・ページの置き場）を証拠で調べ、指摘と勧告を Product Manager へじかに報告する。台帳の出来事の見直し・原因の調べ・追いかけをする。TPM 担当の回し方も見る。直さない・決めない（監査の規程は `_shared/audit-charter.md`）。運びは [運用](/operations/#監査auditor-の席) |
