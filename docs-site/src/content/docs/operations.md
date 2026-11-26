@@ -213,6 +213,7 @@ castlist と pagetray は、1.0.0 で API も DB も替えた（AI-36 の切り�
 担当の Claude Code の session・cmux・container が思わず止まった時に、何が・いつ・どの process の合図で止まったかを、後から引く手順。2026-11-23 の朝（05:33:17 JST）に、担当の session が打った `pkill -f "castlist-server" -n` が、command line に `-n` を含む process すべてに SIGTERM を送り、担当の session 3 つ・cmux-cua の helper・container がいっせいに止まった件（台帳 #89）は、この 3 つの手で元まで追えた。見張りは置いていないので、記録は macOS と Claude Code が元から残す物だけ。
 
 - 打つのは読むだけの命令に限る。process を止める・合図を送る命令は、確かめのためにも打たない。
+- 今は、`pkill`・`killall` と pid を名指さない `kill` を、roster が起こした session では guard が止める（[担当のあいだの決まり](/protocol/#guard)）。止まるのは「うっかり」までで、script に包んだ物や Product Manager の手元の session は止めない。
 - 分かった事実は `roster report incident` で台帳に書く（[担当のあいだの決まり](/protocol/#台帳)）。原因を調べ、扱いを決めるのは Auditor。
 - 下の命令の日時は、今朝の件の値。落ちた時刻に替えて打つ。
 

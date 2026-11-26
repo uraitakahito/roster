@@ -37,7 +37,7 @@ roster infra list
   - 誰も困らない操作（新しい物を足す・読むだけ）は確かめずに進める。
 - 承認の下で環境を変える命令は `roster infra run <環境> -- <命令>` で打つ（打った記録が残る）。
 - repo を変えるときは `/software-engineer` と同じく git worktree で作業し、PR を出して CI が緑になってから merge する（置き場所・branch の名前・片付け方は `${CLAUDE_SKILL_DIR}/../software-engineer/SKILL.md` の 2 と 4）。merge したら、main の push で動く workflow が通ったかを見てから `roster report merged`（同じ 2）。
-- 止める process は、`pgrep -fl '<型>'` で pid と command line を見て、その pid だけに `kill <pid>` で送る（`pkill`・`killall` と pid を名指さない `kill` は guard が止める。台帳 #89）。
+- 止める process は、`pgrep -fl '<型>'` で pid と command line を見て、当たった数を確かめてから、その数字を `kill <pid>` に書く（`pkill`・`killall` と pid を名指さない `kill` は guard が止める。台帳 #89）。
 - 動いたことを示してから「できた」と言う（container の状態・log・health check・job の結果。置き場の一覧の UI は、読むだけの試験の結果）。
 - 思わぬ出来事（計画と違う公開や削除・権限で断られた命令・依頼書と計画の食い違い・自分の誤り）に気づいたら、その場で `roster report incident` で台帳に 1 行書いて続ける（protocol.md の「思わぬ出来事」）。
 - 計画や PR に別の目が要ると見たら、`/software-engineer` と同じく `roster ask review` で Staff Engineer 担当に頼める（protocol.md の「レビュー」。頼みと判定は TPM 担当を通らず、じかに届く。依頼書に「レビューを受ける」とあれば必ず頼む。「直すべき」を受けない時だけ `roster ask tpm … --review <番号>` で上げる）。

@@ -133,7 +133,8 @@ const KILL_TARGET = /^(?:[1-9]\d*|%\S+|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)$/;
 
 /**
  * 単純な命令（語の並び）が、pattern で選んだ process に合図を送る命令か。pkill・killall はいつも。
- * kill は、的（旗でない引数）が無い（`pgrep … | xargs kill`）か、pid・job・変数でない的（`$(pgrep …)` は空の語になる・0）があれば。
+ * kill は、的（旗でない引数）がみな pid・job・変数の時だけ通す（通す形を数える。疑わしければ止める）。的が無い（`pgrep … | xargs kill`）・
+ * 空の語（`$(pgrep …)` の跡）・`{}`・0・負の数（process group）は止める。`--` の後ろはみな的。
  * `kill -l`・`kill -L`（合図の一覧）は通す。
  */
 function killsByPattern(words: string[]): boolean {
@@ -157,7 +158,7 @@ function killsByPattern(words: string[]): boolean {
   return targets.length === 0 || targets.some(t => !KILL_TARGET.test(t));
 }
 
-/** 命令の頭にこれを書くと、道具の直打ちを通す（roster 自身の開発と試しのため。環境の手続きと、読むだけの担当の守りと、Audit の席を起こす命令には効かない）。 */
+/** 命令の頭にこれを書くと、道具の直打ちを通す（roster 自身の開発と試しのため。環境の手続きと、読むだけの担当の守りと、Audit の席を起こす命令と、pattern で process に合図を送る命令には効かない）。 */
 export const RAW = 'ROSTER_RAW=1';
 
 /** guard に聞く 1 件。打った命令と、決めるのに要る設定・承認・時刻。 */
@@ -208,7 +209,7 @@ export function judge(asked: Asked): Verdict {
   }
   const killer = commands.find(killsByPattern);
   if (killer !== undefined) {
-    return { allow: false, reason: `pattern で選んで process に合図を送る命令は止めます（${killer.slice(0, 3).join(' ')}）。思わぬ process に届くため（macOS の pkill は後ろの旗も pattern に読み、2026-11-22 に担当の session ごと 29 個を止めた）。pgrep -fl '<型>' で pid と command line を見て、kill <pid> でその pid だけに送ってください。` };
+    return { allow: false, reason: `pattern で選んで process に合図を送る命令は止めます（${killer.slice(0, 3).join(' ')}）。思わぬ process に届くため（macOS の pkill は後ろの旗も pattern に読み、2026-11-22 に担当の session ごと 29 個を止めた）。pgrep -fl '<型>' で pid と command line を見て、当たった数を確かめてから、その数字を kill <pid> に書いてください（pgrep の出力を変数や $(…) で kill に渡すと、見る手が抜けます）。` };
   }
   const reader = readOnly(asked.role);
   if (reader !== undefined) {
