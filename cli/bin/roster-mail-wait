@@ -1,0 +1,181 @@
+#!/bin/sh
+# roster-mail-wait <cli.ts の path>: 手を止めている間に待つ hook（roster mail wait）の、軽い待ち方。cli/bin/roster が呼ぶ（人は打たない）。
+#
+# Node.js で待つ（roster mail wait の本体）と、手を止めた席 1 つにつき memory が 127MB ほど居続ける。ここは、待つ所だけを
+# NATS の CLI（nats sub。29MB ほど）に任せる。決まりは Node.js の待つ命令と同じ（待つ者は 1 つ・Claude Code が居る間だけ・空で起こさない）。
+#   1. 構える（node … mail wait --arm）: 前の待つ命令を止め、待つ者の印を、この sh の pid で書く。合図の在り処を受け取る。
+#   2. 合図を聞き始めてから（nats sub。取り置かない）、見る（node … mail wait --check）: 自分宛てがあれば渡して exit 2（Claude Code が起きる）。
+#   3. 無ければ、合図（自分宛てが置かれた）を待つ。待つ間は、見張りが 2 秒ごとに、Claude Code が居るか・印が自分のままかを見る。合図が来たら 2 へ。
+# 合図は「新しく置かれた」だけを伝える。合図の無い物は、見直しで拾う:
+#   - 取りこぼし（聞き始める前に置かれた・NATS と切れていた間に置かれた）は、RECHECK_TICKS ごとの見直し（5 分）。
+#   - 置かれた後で取れるようになる物（ほかの hook が取り置いて返した・取り置きの期限が切れた渡し直し）は、見る段が「まだ箱に残っている」
+#     （13）と返すので、取り置きの長さ（30 秒）の後に見直す。
+# NATS の CLI が無い機械・合図の在り処を持たない配りの口では、今までどおり Node.js で待つ（exec node … mail wait）。CLI があるのに
+# うまく待てない時（合図の空振り・CLI の失敗が続く）も、Node.js の待つ命令に替わる（待つ者を居なくしない）。
+# 段の exit code は cli/src/commands/mail.ts の WAIT_STEP: 0 何もせず終わる・2 起こす・10 待ってよい・11 配りの口が応えない・
+# 12 Node.js で待つ・13 待ってよいが、箱に取れない物が残っている。
+set -u
+cli_js=${1:?roster-mail-wait: cli.ts の path が要る}
+
+# NATS の CLI を探す。$ROSTER_NATS_CLI があれば、その path（none なら使わない）。hook は PATH が短いことがあるので、よくある置き場も見る。
+nats_cli=${ROSTER_NATS_CLI-}
+if [ -z "$nats_cli" ]; then
+  for candidate in "$(command -v nats 2>/dev/null)" "${HOME:-}/.local/bin/nats" /opt/homebrew/bin/nats /usr/local/bin/nats; do
+    if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+      nats_cli=$candidate
+      break
+    fi
+  done
+fi
+if [ -z "$nats_cli" ] || [ "$nats_cli" = none ] || [ ! -x "$nats_cli" ]; then
+  exec node "$cli_js" mail wait
+fi
+
+# 見直しの間（TICK 秒 × この数）: 合図を取りこぼした時（長くて 5 分）と、箱に取れない物が残っている時（取り置きの長さの 30 秒と少し）。
+RECHECK_TICKS=${ROSTER_MAIL_RECHECK_TICKS:-150}
+SOON_TICKS=${ROSTER_MAIL_SOON_TICKS:-16}
+TICK=${ROSTER_MAIL_TICK_SECONDS:-2}
+# 配りの口が応えない間の試し直しの間（秒。倍々で、長くて 30 秒）。
+BACKOFF_MAX=30
+# 合図の空振り・CLI の失敗を、続けて許す数。超えたら、Node.js の待つ命令に替わる。
+EMPTY_MAX=5
+FAIL_MAX=3
+
+input=$(cat)
+sub=''
+dog=''
+nap=''
+stopped=0
+mark=''
+
+# 合図を聞く process と見張りを止める。
+hush() {
+  if [ -n "$dog" ]; then
+    kill "$dog" 2>/dev/null
+    dog=''
+  fi
+  if [ -n "$sub" ]; then
+    kill "$sub" 2>/dev/null
+    wait "$sub" 2>/dev/null
+    sub=''
+  fi
+}
+# 待つ者の印が、この sh か（印の pid で見る。file の字を覚えて比べると、構えた直後に次の待つ命令が書き替えた印を、自分の印と取り違える）。
+mine() {
+  [ -n "$mark" ] && grep -Eq "\"pid\": *$$([^0-9]|\$)" "$mark" 2>/dev/null
+}
+# 終わる: 聞く process を止め、印が自分のままなら消す（次の待つ命令が書き替えた印には触らない）。
+leave() {
+  hush
+  if mine; then rm -f "$mark"; fi
+  exit "$1"
+}
+# Node.js の待つ命令に替わる（この sh の process が、そのまま node になる。印は、node が自分の pid＝同じ pid で書き直す）。
+heavy() {
+  hush
+  exec node "$cli_js" mail wait <<INPUT
+$input
+INPUT
+}
+# 止める合図（次の待つ命令・人の入力の時の hook・roster guard・session の終わりが送る SIGTERM）: 印を付けて、聞く process と眠りを止める。
+trap 'stopped=1; if [ -n "$sub" ]; then kill "$sub" 2>/dev/null; fi; if [ -n "$nap" ]; then kill "$nap" 2>/dev/null; fi' TERM INT HUP
+# 眠る（止める合図で、すぐ切り上がる）。
+doze() {
+  sleep "$1" >/dev/null 2>&1 &
+  nap=$!
+  wait "$nap" 2>/dev/null
+  nap=''
+}
+
+armed=$(printf '%s' "$input" | node "$cli_js" mail wait --arm --waiter "$$")
+case $? in
+  10) ;;
+  12) heavy ;;
+  *) exit 0 ;;
+esac
+IFS='	' read -r claude mark url subject <<ARMED
+$armed
+ARMED
+if [ -z "${claude:-}" ] || [ -z "${mark:-}" ] || [ -z "${url:-}" ] || [ -z "${subject:-}" ]; then exit 0; fi
+
+backoff=1
+# 配りの口が応えない時に、間を空ける（倍々）。
+rest() {
+  doze "$backoff"
+  backoff=$((backoff * 2))
+  if [ "$backoff" -gt "$BACKOFF_MAX" ]; then backoff=$BACKOFF_MAX; fi
+}
+# 終わるべきか: Claude Code が居ない・印が自分でない（止められた・次の待つ命令に替わった）。
+gone() {
+  if ! kill -0 "$claude" 2>/dev/null; then return 0; fi
+  ! mine
+}
+# 見張り（背景で動かす）: 終わるべき時と、見直しの時（$1 回見た後）に、聞く process を止める（待っている本体が先へ進む）。
+watch() {
+  ticks=0
+  while kill -0 "$sub" 2>/dev/null; do
+    sleep "$TICK" >/dev/null 2>&1
+    ticks=$((ticks + 1))
+    if gone || [ "$ticks" -ge "$1" ]; then
+      kill "$sub" 2>/dev/null
+      return 0
+    fi
+  done
+}
+signaled=0
+empties=0
+fails=0
+while :; do
+  if [ "$stopped" -ne 0 ] || gone; then leave 0; fi
+  # 先に聞き始めてから見る（見た後・聞き始める前に置かれた物を、取りこぼさないように）。
+  # URL は引数でなく環境変数で渡す（ps に出さない。URL に認証を書いた時のため）。
+  NATS_URL="$url" "$nats_cli" sub "$subject" --count 1 >/dev/null 2>&1 &
+  sub=$!
+  doze 0.3
+  printf '%s' "$input" | node "$cli_js" mail wait --check --waiter "$$"
+  checked=$?
+  recheck=$RECHECK_TICKS
+  case $checked in
+    # 渡した（本文は node が stderr に出した）。止める合図が来ていても、渡した物は起こして届ける。
+    2) leave 2 ;;
+    10) ;;
+    # 箱に、今は取れない物が残っている（取り置き中・渡し直し待ち）。合図は来ないので、取り置きの長さの後に見直す。
+    13) recheck=$SOON_TICKS ;;
+    11) hush; rest; continue ;;
+    *) leave 0 ;;
+  esac
+  backoff=1
+  # 合図で見に来たのに何も無かった（空振り。ほかの hook が先に渡した時など）。続けて EMPTY_MAX 度なら、Node.js の待つ命令に替わる
+  # （聞く process が、合図も無いのに終わってしまう時）。
+  if [ "$signaled" -ne 0 ] && [ "$checked" -eq 10 ]; then
+    empties=$((empties + 1))
+    if [ "$empties" -ge "$EMPTY_MAX" ]; then heavy; fi
+    doze 1
+  else
+    empties=0
+  fi
+  signaled=0
+  if [ "$stopped" -ne 0 ] || gone; then leave 0; fi
+  # 合図を待つ。聞く process が終われば、すぐ先へ進む（合図から渡すまでを遅らせない）。待つ間は、見張りが TICK ごとに見る。
+  watch "$recheck" >/dev/null 2>&1 &
+  dog=$!
+  wait "$sub" 2>/dev/null
+  heard=$?
+  kill "$dog" 2>/dev/null
+  wait "$dog" 2>/dev/null
+  dog=''
+  # 止める合図で wait が切り上がった時は、聞く process がまだ居る（leave が止める）。
+  if [ "$stopped" -ne 0 ] || gone; then leave 0; fi
+  sub=''
+  case $heard in
+    # 合図が来た（自分宛てが置かれた）。
+    0) signaled=1; fails=0 ;;
+    # 見張りが止めた（見直しの時）。
+    143) fails=0 ;;
+    # CLI が NATS と切れた・繋げなかった。続けて FAIL_MAX 度なら（見る段は繋げているのに、CLI だけが繋げない）、Node.js の待つ命令に替わる。
+    *)
+      fails=$((fails + 1))
+      if [ "$fails" -ge "$FAIL_MAX" ]; then heavy; fi
+      rest ;;
+  esac
+done

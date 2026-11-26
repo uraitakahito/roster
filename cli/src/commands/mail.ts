@@ -2,10 +2,11 @@
 // どれも hook の入力（stdin の JSON）を読み、Claude Code の作業を誤りで止めない（program.ts が、どの誤りでも exit 0 にする）。
 // 担当が中で起こした手伝い（subagent。入力に agent_id がある）の中では、何もしない。
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Context } from '../context.ts';
 import { sendsMessage, type Verdict } from '../guard.ts';
 import { allClaims, claimNamed, claudePid, deliveredKey, deliveredLines, effective, ENDED_FILE, endedLines, recipientName, removeClaim as dropClaim, type EndedHow, type EndedLine, guardedKeys, markGuarded, gateFile, lineCount, ownName, readClaim, recordDelivered, removeClaim, stopWaiter, usesNats, waiterFile, writeClaim, type DeliveredWhen, type GateMark, type WaiterMark } from '../mail.ts';
-import { MAILROOM_LIMITS, type Mailroom, type Recipient, type Stored, type TakeLimit, type Taken } from '../mailroom/types.ts';
+import { MAILROOM_LIMITS, type Beacon, type Mailroom, type Recipient, type Stored, type TakeLimit, type Taken } from '../mailroom/types.ts';
 import { allRoles, requireTpmSide, type RoleRecord } from '../roster.ts';
 import { envOf } from '../env.ts';
 import { selfParty } from '../party.ts';
@@ -230,6 +231,9 @@ const BACKOFF_MAX_MS = 30_000;
 const CLAIM_TRIES = 10;
 const CLAIM_PAUSE_MS = 500;
 
+/** 手を止めている session を起こす時に、本文の頭に添える行。 */
+const WAKE_HEAD = ['roster: 手を止めている間に届いたメッセージです（メッセージキューから渡した）。'];
+
 /** ms 待つ。止める合図が来たら、待たずに返る。眠りが先に終わったら、合図の listener を外す（待つ命令は TICK_MS ごとに呼ぶので、残すと溜まる）。 */
 export async function pause(ctx: Pick<Context, 'sleep'>, ms: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted) return;
@@ -300,9 +304,8 @@ export async function mailWait(ctx: Context, stdin: string, signal: AbortSignal)
         await room.giveBack(taken).catch(() => undefined);
         return QUIET;
       }
-      const head = ['roster: 手を止めている間に届いたメッセージです（メッセージキューから渡した）。'];
-      const batch = await batchOf(ctx, room, name, head, taken);
-      return { code: 2, stderr: await handOver(ctx, room, name, 'wake', head, batch, input) };
+      const batch = await batchOf(ctx, room, name, WAKE_HEAD, taken);
+      return { code: 2, stderr: await handOver(ctx, room, name, 'wake', WAKE_HEAD, batch, input) };
     }
   }
   finally {
@@ -332,6 +335,110 @@ async function pulled(ctx: Context, room: Mailroom, pulling: Promise<Taken[]>, l
   }
   if (got.taken === undefined) throw got.error;
   return got.taken;
+}
+
+// ---- 軽い待ち方（NATS の CLI で待つ） ----
+// 待つ命令（mailWait）は、Node.js の process が居続ける（1 席につき memory が 127MB ほど）。機械に NATS の CLI（nats）があれば、
+// 待つ所だけを CLI に任せる（29MB ほど）: cli/bin/roster-mail-wait（sh）が、下の 2 つの段を Node.js で短く動かし、その間を CLI の
+// 「置かれた事を聞く」（nats sub。取り置かない）で待つ。hook の命令（roster mail wait）は変わらない。
+// 決まり（待つ者は 1 つ・Claude Code が居る間だけ・空で起こさない）は mailWait と同じで、印の pid は sh の process になる。
+
+/**
+ * 軽い待ち方の段の終わり方（exit code）。quit は何もせずに終わる、woke は本文を stderr に出して session を起こす（mailWait の code 2 と同じ）、
+ * armed は待ってよい（自分宛ては今は無い）、retry は配りの口が応えない（間を空けて試し直す）、heavy は軽い待ち方ができない（mailWait に任せる）、
+ * soon は待ってよいが、箱に今は取れない自分宛てが残っている（取り置き中・渡し直し待ち。合図は来ないので、sh が取り置きの長さの後に見直す）。
+ */
+export const WAIT_STEP = { quit: 0, woke: 2, armed: 10, retry: 11, heavy: 12, soon: 13 } as const;
+
+/** 軽い待ち方の段の結果。stdout は sh が読む 1 行、stderr は起こす時の本文。 */
+export interface StepResult {
+  code: typeof WAIT_STEP[keyof typeof WAIT_STEP]
+  stdout?: string
+  stderr?: string
+}
+
+/** 合図の後に、配る箱に写されるのを待つ長さ（ミリ秒。NATS の「来るまで待つ」1 回の短い方の限り）。 */
+const CHECK_WAIT_MS = 1000;
+
+/**
+ * 軽い待ち方の 1 段目（構える）: 名乗りを待ち、前の待つ命令を止め、待つ者の印を sh の process（waiter）で書く（T4）。
+ * stdout に、sh が要る物を tab 区切りの 1 行で返す: Claude Code の pid・印の file の path・NATS の URL・合図の宛名。
+ * 手伝いの中・名乗れない時は quit。配りの口が合図の在り処を持たない時（試験用の口）は heavy。
+ */
+export async function mailArm(ctx: Context, stdin: string, waiter: number): Promise<StepResult> {
+  const input = hookInput(stdin);
+  if (input.agent_id !== undefined) return { code: WAIT_STEP.quit };
+  const name = ownName(ctx);
+  if (name === undefined) return { code: WAIT_STEP.quit };
+  // session の始めは、名乗る hook と並んで動くので、名乗りが書かれるのを少し待つ（mailWait と同じ）。
+  let claim = claimNamed(ctx, name);
+  for (let i = 0; claim === undefined && i < CLAIM_TRIES; i++) {
+    await ctx.sleep(CLAIM_PAUSE_MS);
+    claim = claimNamed(ctx, name);
+  }
+  if (claim === undefined) return { code: WAIT_STEP.quit };
+  const started = ctx.procs.startedAt(waiter);
+  if (started === undefined) return { code: WAIT_STEP.quit };
+  let beacon: Beacon | undefined;
+  try {
+    beacon = (await ctx.mailroom()).beacon?.(name);
+  }
+  catch {
+    return { code: WAIT_STEP.heavy };
+  }
+  if (beacon === undefined) return { code: WAIT_STEP.heavy };
+  stopWaiter(ctx, name);
+  ctx.state.write(waiterFile(name), { pid: waiter, started } satisfies WaiterMark);
+  return { code: WAIT_STEP.armed, stdout: [claim.pid, join(ctx.state.dir, waiterFile(name)), beacon.url, beacon.subject].join('\t') };
+}
+
+/**
+ * 軽い待ち方の 2 段目（見る）: 自分宛てがあれば取り置いて渡す（woke。本文は stderr）。無ければ armed（sh が、合図を待つ）。
+ * 取れなかったのに箱に残っていれば soon（sh が、取り置きの長さの後に見直す）。
+ * 合図のすぐ後は、配る箱にまだ写されていないことがあるので、CHECK_WAIT_MS だけ待って取る。
+ * 名乗りが効かない・待つ者の印が waiter でない（止められた・次の待つ命令に替わった）時は、取った物を返して quit。配りの口が応えなければ retry。
+ */
+export async function mailCheck(ctx: Context, stdin: string, waiter: number): Promise<StepResult> {
+  const input = hookInput(stdin);
+  if (input.agent_id !== undefined) return { code: WAIT_STEP.quit };
+  const name = ownName(ctx);
+  if (name === undefined) return { code: WAIT_STEP.quit };
+  const leaving = (): boolean => claimNamed(ctx, name) === undefined || ctx.state.read<WaiterMark>(waiterFile(name))?.pid !== waiter;
+  if (leaving()) return { code: WAIT_STEP.quit };
+  let room: Mailroom;
+  let taken: Taken[];
+  try {
+    room = await ctx.mailroom();
+    taken = await room.wait(name, TOP, CHECK_WAIT_MS);
+  }
+  catch {
+    return { code: WAIT_STEP.retry };
+  }
+  if (taken.length === 0) {
+    // 取れなかったが箱に残っている物（ほかの hook が取り置いている・返されて渡し直しを待っている）には、合図が来ない。
+    const left = await room.counts(name).catch(() => undefined);
+    return { code: left !== undefined && left.waiting + left.held > 0 ? WAIT_STEP.soon : WAIT_STEP.armed };
+  }
+  // 取った所で止められていたら、渡さずに返す（T4。次の hook が取り直す）。
+  if (leaving()) {
+    await room.giveBack(taken).catch(() => undefined);
+    return { code: WAIT_STEP.quit };
+  }
+  const batch = await batchOf(ctx, room, name, WAKE_HEAD, taken);
+  return { code: WAIT_STEP.woke, stderr: await handOver(ctx, room, name, 'wake', WAKE_HEAD, batch, input) };
+}
+
+/**
+ * 担当が道具（Bash）を使う時に、残っている待つ命令を止める（roster guard が呼ぶ）。作業を始めた後に、前の待つ命令が担当を起こさないように（T4）。
+ * 人の入力の時の hook（mailPrompt）が止めるのと同じ事を、入力を経ずに作業が始まった時（席を起こす時に渡した最初の入力・session の始まりの
+ * 待つ命令が、名乗りを待っている間に過ぎた入力）にもする。手伝い（subagent）の道具では止めない（担当は、手を止めて待っていることがある）。
+ */
+export function settleWaiter(ctx: Context, stdin: string): void {
+  if (hookInput(stdin).agent_id !== undefined) return;
+  const name = ownName(ctx);
+  if (name === undefined || ctx.state.read<WaiterMark>(waiterFile(name)) === undefined) return;
+  stopWaiter(ctx, name);
+  ctx.state.remove(waiterFile(name));
 }
 
 // ---- 打つ前に止める守り（roster guard）への足し ----

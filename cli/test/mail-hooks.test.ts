@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import type { Context } from '../src/context.ts';
-import { mailGate, mailPrompt, mailWait, pause } from '../src/commands/mail.ts';
+import { guard } from '../src/commands/infra.ts';
+import { mailArm, mailCheck, mailGate, mailPrompt, mailWait, pause, settleWaiter, WAIT_STEP } from '../src/commands/mail.ts';
 import { askTpm, notify } from '../src/commands/messages.ts';
 import { deliveredLines, gateFile, waiterFile, type GateMark } from '../src/mail.ts';
 import { MemoryMailroom } from '../src/mailroom/memory.ts';
@@ -425,5 +426,129 @@ describe('トークンの試験（空で起こさない）', () => {
     }
     await notify(w.tpm, 't-x7k2', { text: '1 度だけ渡る' });
     expect((await new MemoryMailroom(w.office).take('t-x7k2', ALL)).map(t => t.deliveries)).toEqual([1]);
+  });
+});
+
+describe('軽い待ち方の段（roster mail wait --arm・--check。cli/bin/roster-mail-wait が呼ぶ）', () => {
+  /** 合図の在り処を持つ配りの口（NATS の口に当たる）の周り。 */
+  const beaconed = (ctx: Context): Promise<Context> => patched(ctx, { beacon: to => ({ url: 'nats://127.0.0.1:4222', subject: `roster.test.msg.${to}` }) });
+
+  test('構える: 待つ者の印を sh の pid で書き、Claude Code の pid・印の path・NATS の URL・合図の宛名を 1 行で返す', async () => {
+    const w = await seated();
+    w.procs.add(900, 1, 'sh');
+    const r = await mailArm(await beaconed(w.hook()), '{"session_id":"s-200"}', 900);
+    expect(r).toEqual({ code: WAIT_STEP.armed, stdout: ['200', join(w.se.state.dir, waiterFile('t-x7k2')), 'nats://127.0.0.1:4222', 'roster.test.msg.t-x7k2'].join('\t') });
+    expect(w.se.state.read(waiterFile('t-x7k2'))).toEqual({ pid: 900, started: 'started-900' });
+  });
+
+  test('構える: 前の待つ命令を止めてから、印を書き替える（待つ者は 1 つ）', async () => {
+    const w = await seated();
+    w.procs.add(800, 1, 'node');
+    w.se.state.write(waiterFile('t-x7k2'), { pid: 800, started: 'started-800' });
+    w.procs.add(900, 1, 'sh');
+    expect((await mailArm(await beaconed(w.hook()), '{}', 900)).code).toBe(WAIT_STEP.armed);
+    expect(w.procs.stopped).toEqual([800]);
+    expect(w.se.state.read(waiterFile('t-x7k2'))).toEqual({ pid: 900, started: 'started-900' });
+  });
+
+  test('構える: 手伝いの中・名乗っていない・sh が居ない時は、何も書かずに終わる。合図の在り処を持たない口では、Node.js で待つ', async () => {
+    const w = await seated();
+    w.procs.add(900, 1, 'sh');
+    expect(await mailArm(await beaconed(w.hook()), '{"agent_id":"a-1"}', 900)).toEqual({ code: WAIT_STEP.quit });
+    expect(await mailArm(await beaconed(w.hook()), '{}', 901)).toEqual({ code: WAIT_STEP.quit });
+    // 試験用の口は、合図の在り処を持たない。前の待つ命令は、止めない（Node.js の待つ命令が、自分で止めて替わる）。
+    w.procs.add(800, 1, 'node');
+    w.se.state.write(waiterFile('t-x7k2'), { pid: 800, started: 'started-800' });
+    expect(await mailArm(w.hook(), '{}', 900)).toEqual({ code: WAIT_STEP.heavy });
+    expect(w.procs.stopped).toEqual([]);
+    expect(w.se.state.read(waiterFile('t-x7k2'))).toEqual({ pid: 800, started: 'started-800' });
+    const unclaimed = await natsWorld();
+    unclaimed.procs.add(900, 1, 'sh');
+    expect(await mailArm(await beaconed(unclaimed.se), '{}', 900)).toEqual({ code: WAIT_STEP.quit });
+    expect(unclaimed.se.state.read(waiterFile('t-x7k2'))).toBeUndefined();
+  });
+
+  test('見る: 自分宛てがあれば渡して woke（本文・記録は、待つ命令と同じ）。無ければ armed', async () => {
+    const w = await seated();
+    w.se.state.write(waiterFile('t-x7k2'), { pid: 900, started: 'started-900' });
+    expect(await mailCheck(w.hook(), '{}', 900)).toEqual({ code: WAIT_STEP.armed });
+    await notify(w.tpm, 't-x7k2', { text: '手が空いたら読む物' });
+    const id = left(w, 't-x7k2')[0]?.id ?? '';
+    const r = await mailCheck(w.hook(), JSON.stringify({ session_id: 's-200', transcript_path: transcript(5) }), 900);
+    expect(r).toEqual({ code: WAIT_STEP.woke, stderr: ['roster: 手を止めている間に届いたメッセージです（メッセージキューから渡した）。', `--- ${FROM_TPM}（id ${id}）`, '【notify】手が空いたら読む物', '--- ここまで'].join('\n') });
+    expect(deliveredLines(w.se)).toEqual([{ at: '2026-11-20T12:00:00.000Z', id, to: 't-x7k2', when: 'wake', nth: 1, lines: 5, session: 's-200' }]);
+    expect(w.office.work).toEqual([]);
+  });
+
+  test('見る: 印が自分でない（止められた・替わった）・名乗りが効かない・手伝いの中では、取らずに quit', async () => {
+    const w = await seated();
+    await notify(w.tpm, 't-x7k2', { text: '残る物' });
+    expect(await mailCheck(w.hook(), '{}', 900)).toEqual({ code: WAIT_STEP.quit });
+    w.se.state.write(waiterFile('t-x7k2'), { pid: 901, started: 'started-901' });
+    expect(await mailCheck(w.hook(), '{}', 900)).toEqual({ code: WAIT_STEP.quit });
+    w.se.state.write(waiterFile('t-x7k2'), { pid: 900, started: 'started-900' });
+    expect(await mailCheck(w.hook(), '{"agent_id":"a-1"}', 900)).toEqual({ code: WAIT_STEP.quit });
+    w.procs.alive.delete(200);
+    expect(await mailCheck(w.hook(), '{}', 900)).toEqual({ code: WAIT_STEP.quit });
+    expect(left(w, 't-x7k2')).toHaveLength(1);
+    expect(deliveredLines(w.se)).toEqual([]);
+  });
+
+  test('見る: 取った所で止められていたら、返して quit（渡した記録は書かない）', async () => {
+    const w = await seated();
+    await notify(w.tpm, 't-x7k2', { text: '取った瞬間に止められた物' });
+    w.se.state.write(waiterFile('t-x7k2'), { pid: 900, started: 'started-900' });
+    const room = new MemoryMailroom(w.office);
+    const ctx = await patched({ ...w.hook(), mailroom: () => Promise.resolve(room) }, {
+      wait: async (to, limit) => {
+        const taken = await room.take(to, limit);
+        w.se.state.remove(waiterFile('t-x7k2'));
+        return taken;
+      },
+    });
+    expect(await mailCheck(ctx, '{}', 900)).toEqual({ code: WAIT_STEP.quit });
+    expect(deliveredLines(w.se)).toEqual([]);
+    // 返した物は、期限を待たずに取り直せる。
+    expect((await new MemoryMailroom(w.office).take('t-x7k2', ALL)).map(t => t.deliveries)).toEqual([2]);
+  });
+
+  test('見る: 取れないのに箱に残っている（ほかの口が取り置いている）なら soon（合図は来ないので、sh が取り置きの長さの後に見直す）', async () => {
+    const w = await seated();
+    await notify(w.tpm, 't-x7k2', { text: 'ほかの hook が取り置いている物' });
+    w.se.state.write(waiterFile('t-x7k2'), { pid: 900, started: 'started-900' });
+    // 人の入力の時の hook などが、先に取り置いた所。
+    expect(await new MemoryMailroom(w.office).take('t-x7k2', ALL)).toHaveLength(1);
+    expect(await mailCheck(w.hook(), '{}', 900)).toEqual({ code: WAIT_STEP.soon });
+    expect(deliveredLines(w.se)).toEqual([]);
+  });
+
+  test('見る: 配りの口が応えなければ retry（起こさない）', async () => {
+    const w = await seated();
+    w.se.state.write(waiterFile('t-x7k2'), { pid: 900, started: 'started-900' });
+    expect(await mailCheck(down(w.hook()), '{}', 900)).toEqual({ code: WAIT_STEP.retry });
+  });
+});
+
+describe('担当が Bash を使う時に、残っている待つ命令を止める（roster guard）', () => {
+  const bash = (extra: Record<string, unknown> = {}): string => JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'ls' }, ...extra });
+
+  test('待つ命令が残っていれば止めて、印を消す（作業の途中に起こさせない）。命令は通す', async () => {
+    const w = await seated();
+    w.procs.add(800, 1, 'sh');
+    w.se.state.write(waiterFile('t-x7k2'), { pid: 800, started: 'started-800' });
+    expect(await guard(w.hook(), bash())).toEqual({ allow: true });
+    expect(w.procs.stopped).toEqual([800]);
+    expect(w.se.state.read(waiterFile('t-x7k2'))).toBeUndefined();
+  });
+
+  test('手伝い（subagent）の Bash では止めない（担当は、手を止めて待っていることがある）。印が無ければ何もしない', async () => {
+    const w = await seated();
+    settleWaiter(w.hook(), bash());
+    expect(w.procs.stopped).toEqual([]);
+    w.procs.add(800, 1, 'sh');
+    w.se.state.write(waiterFile('t-x7k2'), { pid: 800, started: 'started-800' });
+    expect(await guard(w.hook(), bash({ agent_id: 'a-1' }))).toEqual({ allow: true });
+    expect(w.procs.stopped).toEqual([]);
+    expect(w.se.state.read(waiterFile('t-x7k2'))).toEqual({ pid: 800, started: 'started-800' });
   });
 });

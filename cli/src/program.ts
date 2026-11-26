@@ -1,7 +1,7 @@
 // roster の命令の木。cli.ts がこれを動かし、試験が命令の一覧（protocol.ts の COMMANDS）と揃っているかを見る。
 import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { Command, CommanderError } from 'commander';
+import { Command, CommanderError, Option } from 'commander';
 import { emphasize } from './castlist.ts';
 import { startTpm } from './command.ts';
 import { registerAudit } from './commands/audit.ts';
@@ -15,7 +15,7 @@ import { issueView } from './commands/issue.ts';
 import { messageRecordsSettled } from './commands/message-record.ts';
 import { fileDelete, fileList, filePath, filePut, type FileListOptions, type FilePutOptions } from './commands/file.ts';
 import { PAGE_KINDS, pageDelete, pageImport, pageList, pagePath, pagePut, pageReply, type PageDeleteOptions, type PageListOptions } from './commands/page.ts';
-import { mailClaim, mailGate, mailLeft, mailPrompt, mailRelease, mailWait, type WaitResult } from './commands/mail.ts';
+import { mailArm, mailCheck, mailClaim, mailGate, mailLeft, mailPrompt, mailRelease, mailWait, WAIT_STEP, type StepResult, type WaitResult } from './commands/mail.ts';
 import { registerMessages } from './commands/register.ts';
 import { registerReview } from './commands/review.ts';
 import { hello, inboxNow } from './commands/role-side.ts';
@@ -237,7 +237,30 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
       if (out !== undefined) console.log(out);
     }));
   mail.command('wait').description('（Stop・SessionStart の hook が背景で呼ぶ）自分宛てが来るまで待ち、来たら本文を stderr に出して exit 2 で終わる（Claude Code が session を起こす）')
-    .action(async () => {
+    // 軽い待ち方（機械に NATS の CLI がある時。cli/bin/roster-mail-wait が、この 2 つの段を呼ぶ）。人は打たない。
+    .addOption(new Option('--arm', '（roster-mail-wait が呼ぶ）構える: 待つ者の印を書き、合図の在り処を出す').hideHelp())
+    .addOption(new Option('--check', '（roster-mail-wait が呼ぶ）見る: 自分宛てがあれば渡して exit 2').hideHelp())
+    .addOption(new Option('--waiter <pid>', '（roster-mail-wait が渡す）待つ者（sh）の pid').hideHelp())
+    .action(async (options: { arm?: boolean, check?: boolean, waiter?: string }) => {
+      if (options.arm === true || options.check === true) {
+        // 段は、どの誤りでも「何もせずに終わる」（hook を誤りにしない）。
+        let step: StepResult = { code: WAIT_STEP.quit };
+        try {
+          const waiter = Number(options.waiter);
+          if (Number.isInteger(waiter) && waiter > 1) step = await (options.arm === true ? mailArm : mailCheck)(createContext(), readStdin(), waiter);
+        }
+        catch (e) {
+          process.stderr.write(`roster mail wait: ${(e as Error).message}\n`);
+        }
+        await messageRecordsSettled();
+        await mailroomsClosed();
+        // sh が読む 1 行は、書き終えてから終わる（pipe への書き込みは、書き切る前に process が終わると欠ける）。
+        const line = step.stdout;
+        if (line !== undefined) await new Promise<void>(resolve => void process.stdout.write(`${line}\n`, () => resolve()));
+        const woke = step.stderr;
+        if (woke !== undefined) await new Promise<void>(resolve => void process.stderr.write(`${woke}\n`, () => resolve()));
+        process.exit(step.code);
+      }
       // 止める合図（次の待つ命令・人の入力の時の hook が送る SIGTERM）で、取り置いた物を返して終わる。
       const stop = new AbortController();
       for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) process.once(sig, () => stop.abort());

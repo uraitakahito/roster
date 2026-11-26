@@ -7,7 +7,7 @@
 import { AckPolicy, DeliverPolicy, DiscardPolicy, jetstream, JetStreamApiCodes, JetStreamApiError, jetstreamManager, RetentionPolicy, StorageType, type Consumer, type JetStreamClient, type JetStreamManager, type JsMsg, type StoredMsg } from '@nats-io/jetstream';
 import { connect, headers, nanos, type NatsConnection } from '@nats-io/transport-node';
 import { TpmError } from '../skill-sets.ts';
-import { MAILROOM_LIMITS, type Counts, type Letter, type Mailroom, type MailroomLimits, type Recipient, type Stored, type TakeLimit, type Taken, type Undeliverable } from './types.ts';
+import { MAILROOM_LIMITS, type Beacon, type Counts, type Letter, type Mailroom, type MailroomLimits, type Recipient, type Stored, type TakeLimit, type Taken, type Undeliverable } from './types.ts';
 
 /** NATS に 1 回聞く時の時間切れ（ミリ秒。plan-4 の T9）。 */
 const REQUEST_TIMEOUT_MS = 2000;
@@ -88,6 +88,11 @@ export class NatsMailroom implements Mailroom {
   private get work(): string { return `roster-${this.space}-work`; }
   private get advisories(): string { return `roster-${this.space}-adv`; }
   private subject(to: Recipient): string { return `roster.${this.space}.msg.${recipientName(to)}`; }
+
+  /** 受け手宛てが置かれる宛名（記録の箱が聞く宛名）と server。NATS の CLI（nats sub）が、置かれた事を知るのに聞く。 */
+  beacon(to: Recipient): Beacon {
+    return { url: this.url, subject: this.subject(to) };
+  }
 
   /** 繋ぎ、箱が無ければ作る（あれば作らない）。繋ぎと JetStream の口は、みな作れてから覚える（途中で落ちたら、繋ぎを閉じて何も覚えない）。 */
   private async open(): Promise<{ js: JetStreamClient, jsm: JetStreamManager }> {
