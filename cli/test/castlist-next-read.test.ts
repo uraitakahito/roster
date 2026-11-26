@@ -299,9 +299,11 @@ describe('起きているか（GetHealth）と版', () => {
     expect((await requireUp(skewed.ctx, '何もしていません。'))[0]).toMatch(/^castlist の時計と、roster を動かす機械の時計が 5 秒ずれています/);
   });
 
-  test('版は見ない: 0.x の castlist（/healthz の形は同じ）も起きているとみなし、新しい API の道が型の無い 404 で断られれば、版が合わないと言う', async () => {
+  test('0.x の castlist（戻した時。/healthz の形は同じ）は、版で見て止める。書く道に当たっても、型の無い 404 は版が合わないと言う', async () => {
     const { ctx } = nextWorld(s => s.path === '/healthz' ? { status: 200, body: { status: 'ok', version: '0.4.0', now: AS_OF } } : { status: 404, raw: '{"error":"無い"}' });
-    expect(await requireUp(ctx, '名乗っていません。')).toEqual([]);
+    expect(await thrown(() => requireUp(ctx, '名乗っていません。'))).toBe(`castlist（${url}）の版は 0.4.0 で、この roster が話す API（1.0.0 から）を持ちません。名乗っていません。castlist を 1.0.0 から後の版で起こしてください（Product Manager に伝える）。castlist を 0.x に戻したのなら、roster も切り替えの前の版に戻す（castlist の docs の release.html の「切り替え」）`);
+    const unknown = nextWorld(s => s.path === '/healthz' ? { status: 200, body: { status: 'ok', now: AS_OF } } : { status: 404, raw: '' });
+    expect(await thrown(() => requireUp(unknown.ctx, '名乗っていません。'))).toMatch(/の版は わからない で、/);
     expect(await registerPm(ctx, url)).toEqual({ kind: 'refused', code: 404, error: expect.stringMatching(/^castlist が新しい API を持たない（castlist の版が 1\.0\.0 より前に見える。/) as unknown });
   });
 

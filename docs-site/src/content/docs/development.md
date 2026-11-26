@@ -61,7 +61,7 @@ build は無い。`cli/bin/roster` は `cli/src/cli.ts` を node で直に動か
 
 ## castlist（アクターの台帳）とのつなぎ
 
-アクターの台帳のサーバー（Rust）は、別の repo [castlist](https://github.com/uraitakahito/castlist) にある（[castlist の docs](https://uraitakahito.github.io/castlist/)）。この repo が持つのは、その API を `curl` で呼ぶ側（`cli/src/castlist.ts`）と、偽の castlist（`cli/test/castlist-fake.ts`）。
+アクターの台帳のサーバー（Rust）は、別の repo [castlist](https://github.com/uraitakahito/castlist) にある（[castlist の docs](https://uraitakahito.github.io/castlist/)）。この repo が持つのは、その API を定義から作った client で呼ぶ側（`cli/src/castlist.ts`・`cli/src/castlist-query.ts`）と、新しい API を話す偽の castlist（`cli/test/fake-castlist.ts`。試験の process の中の HTTP の server）。
 
 - **合わせる版**: castlist が止まっていて container も無い時に出す `container run` の 1 行は、image の版に `cli/src/castlist.ts` の `CASTLIST_VERSION` を使う（[運用](/operations/)）。古い版のままだと、送る欄の名が替わった後に古い image を起こす 1 行を出してしまう（0.2.0 で送り手の時刻の名が `sent_at` に替わった）。
 - **castlist を上げる時**: castlist で release を出す（castlist の docs の「[release を出す](https://uraitakahito.github.io/castlist/release.html)」）→ この repo で `CASTLIST_VERSION` と、それを名指す試験（`cli/test/castlist.test.ts` の `expect(CASTLIST_VERSION).toBe(…)`）を新しい版にする PR を出す。API を変えた版なら、同じ PR で偽の castlist（`/healthz` の `version` も）と `cli/src/castlist.ts` を合わせる。
