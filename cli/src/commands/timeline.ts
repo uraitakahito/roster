@@ -32,6 +32,8 @@ interface Sent {
   replyTo?: string
   /** 担当から担当へじかに送った行（レビューの頼みと判定）。 */
   peer?: true
+  /** 送った担当（TPM 担当は tpm）。前の版の行には無い。 */
+  sender?: { key: string }
 }
 
 /** infra.jsonl の 1 行（読む欄だけ）。 */
@@ -111,8 +113,10 @@ export function collect(ctx: Context, key: string, window?: { from: string, to: 
       const crossed = messages.filter(o => reply(o) && o.at > m.at && o.at < arrived);
       if (crossed.length > 0) notes.push(`行き違い: これ${seen?.by === 'shown' ? 'を見る' : 'が届く'}前に、相手が ${crossed.length} 件送った（${crossed.map(o => `【${o.heading}】${hms(o.at)}`).join('・')}）`);
     }
+    // 列は、送った担当で決める（Tech Lead 担当が repo の席へ送った【brief】【dismiss】を、TPM 担当の列に入れない）。
+    // 送り手の欄の無い前の版の行は、見出しの向きで決める（担当からなら行の Key、TPM 担当からなら TPM 担当の列）。
     const from = direction(m.heading);
-    const seat = from === 'role' ? m.key : from === 'tpm' ? 'tpm' : undefined;
+    const seat = m.sender?.key ?? (from === 'role' ? m.key : from === 'tpm' ? 'tpm' : undefined);
     return { at: m.at, kind: 'メッセージ', who: m.from, what: `${cut(m.text)}（id ${m.id}）`, notes, ...(m.id === triggerId ? { trigger: true } : {}), ...(seat === undefined ? {} : { seat }) };
   });
   for (const w of ctx.state.lines<TrackerWrite>('tracker.jsonl').filter(l => l.issue === key || mine(l.by))) {

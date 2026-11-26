@@ -5,7 +5,7 @@ import { WAIT, type WaitKind } from '../protocol.ts';
 import { TpmError } from '../skill-sets.ts';
 import { INCIDENT_TYPES } from '../incidents.ts';
 import { VERDICTS } from '../reviews.ts';
-import { answer, askDevops, askPm, askTpm, dismiss, DONE_KINDS, doneKind, notify, reportAudit, reportDecided, reportDependabot, reportDocFix, reportDone, reportEnd, reportIncident, reportMerged, show, wait } from './messages.ts';
+import { answer, askDevops, askLead, askPm, askTpm, dismiss, DONE_KINDS, doneKind, notify, reportAudit, reportDecided, reportDependabot, reportDocFix, reportDone, reportEnd, reportIncident, reportMerged, show, wait } from './messages.ts';
 import { askReview, reportReview } from './staff.ts';
 
 const collect = (value: string, all: string[]): string[] => [...all, value];
@@ -39,6 +39,9 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
   ask.command('devops').description('【ask-devops】共有の環境で DevOps Engineer 担当の手が要る')
     .requiredOption('--what <何を>').requiredOption('--why <なぜ>').option('--urgent', '急ぎ', false)
     .action(async (options: { what: string, why: string, urgent: boolean }) => print(await askDevops(createContext(), options)));
+  ask.command('lead <text>').description('【ask-lead】repo の席が、Tech Lead 担当に問いを送る（答えは【notify】で来る）')
+    .requiredOption('--waiting-for <何を>', '状態に出す、待っている物')
+    .action(async (text: string, options: { waitingFor: string }) => print(await askLead(createContext(), { text, ...options })));
   ask.command('review').description('【ask-review】計画・提案のページか PR のレビューを頼む（Staff Engineer 担当の席へじかに届く。席が無ければ起こす。レビューは助言）')
     .requiredOption('--url <URL>', '見る物（置き場のページか PR の URL）')
     .option('--focus <見てほしい所>', '特に見てほしい所')

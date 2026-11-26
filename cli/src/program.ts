@@ -19,7 +19,7 @@ import { mailArm, mailCheck, mailClaim, mailGate, mailLeft, mailPrompt, mailRele
 import { registerMessages } from './commands/register.ts';
 import { registerReview } from './commands/review.ts';
 import { hello, inboxNow } from './commands/role-side.ts';
-import { seatAdd, seatClose } from './commands/seat.ts';
+import { seatAdd, seatBrief, seatClose, seatDismiss, seatNotify } from './commands/seat.ts';
 import { assign, close, newKey, roles, type AssignOptions } from './commands/tpm-side.ts';
 import { composeSkillSets, readConfigSources } from './config.ts';
 import { createContext, mailroomsClosed } from './context.ts';
@@ -101,13 +101,25 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
       print(await assign(createContext(), key, { ...options, ...skip, ...(seats === undefined ? {} : { seats: Number(seats) }), role: options.role as RoleName, wait: Number(options.wait) }));
     });
   program.command('close <key>').description('担当の居場所を閉じ、名簿から消す').action(async (key: string) => print(await close(createContext(), key)));
-  const seat = program.command('seat').description('Tech Lead 担当が、自分の課題の repo の席を起こす・閉じる');
+  const seat = program.command('seat').description('Tech Lead 担当が、自分の課題の repo の席を起こす・依頼書と知らせを送る・片付けさせる・閉じる');
   seat.command('add <name>').description('repo の席（Software Engineer 担当）を起こし、依頼書を渡す（名簿の Key は <課題の Key>.<名>）')
     .requiredOption('--brief <URL>', '依頼書の URL（課題の概要の節が要る）')
     .option('--cwd <folder>', '席を起こす folder（受け持つ repo。既定は Tech Lead 担当の folder）')
     .option('--title <短い題>', '居場所の題に付ける短い題')
     .option('--wait <秒>', '起こした席の roster hello を待つ秒（0 なら待たない）', '90')
     .action(async (name: string, options: { brief: string, cwd?: string, title?: string, wait: string }) => print(await seatAdd(createContext(), name, { ...options, wait: Number(options.wait) })));
+  seat.command('brief <name>').description('【brief】居る repo の席に、次の依頼書を送る')
+    .requiredOption('--brief <URL>', '依頼書の URL')
+    .option('--note <一言>', '【brief】に添える一言')
+    .option('--supersede', '済んでいない前の依頼書を取り消す（本文に「取り消す: …」と載る）')
+    .option('--after', '済んでいない前の依頼書を済ませてから、これをさせる（本文に載る）')
+    .action(async (name: string, options: { brief: string, note?: string, supersede?: boolean, after?: boolean }) => print(await seatBrief(createContext(), name, options)));
+  seat.command('notify <name> <text>').description('【notify】repo の席に、知らせ・問いへの答えを送る（返事は要らない）')
+    .option('--reply-to <id>', '返事の先のメッセージの id')
+    .action(async (name: string, text: string, options: { replyTo?: string }) => print(await seatNotify(createContext(), name, { text, ...options })));
+  seat.command('dismiss <name>').description('【dismiss】repo の席に、片付けの指示を送る（席は【end】を返す。受けたら roster seat close）')
+    .option('--supersede', '済んでいない依頼書・まだ見ていないメッセージを取り消す')
+    .action(async (name: string, options: { supersede?: boolean }) => print(await seatDismiss(createContext(), name, options)));
   seat.command('close <name>').description('片付けの終わった（か、居場所の無い）repo の席を閉じ、名簿から消す')
     .action(async (name: string) => print(await seatClose(createContext(), name)));
   program.command('hello').description('名乗る（TPM 担当は宛先を状態に書いて名簿を出す。担当は受け持ちを返す）')
