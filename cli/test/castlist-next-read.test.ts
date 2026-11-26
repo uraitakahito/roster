@@ -313,8 +313,8 @@ describe('起きているか（GetHealth）と版', () => {
     down.w.answers.set('container inspect castlist', { status: 1, stdout: '', stderr: '' });
     const message = await thrown(() => requireUp(down.ctx, '名乗っていません。'));
     expect(message.split('\n').slice(1)).toEqual([
-      `container run -d --name castlist.box -p 127.0.0.1:${new URL(url).port}:8080 -v castlist-data-v1:/data -m 200M -c 1 ghcr.io/uraitakahito/castlist:v1.0.0-rc.1`,
-      '（新しい API の castlist は、新しい volume（castlist-data-v1）で起こす。今の volume（castlist-data）の記録は、先に移す: https://uraitakahito.github.io/castlist/release.html の「rc を動かす時と切り替え」）',
+      `container run -d --name castlist.box -p 127.0.0.1:${new URL(url).port}:8080 -v castlist-data-v1:/data -m 200M -c 1 ghcr.io/uraitakahito/castlist:v1.0.0`,
+      '（新しい API の castlist は、新しい volume（castlist-data-v1）で起こす。castlist-data-v1 がまだ無い時だけ、前の volume（castlist-data）の記録を先に移す: https://uraitakahito.github.io/castlist/release.html の「rc を動かす時と切り替え」）',
     ]);
   });
 

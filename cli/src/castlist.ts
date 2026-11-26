@@ -27,7 +27,7 @@ export const CASTLIST_VERSION = 'v0.4.0';
  * 設定の api.castlist が next の時に、castlist が止まっていれば Product Manager へ出す `container run` の image の版（新しい API の castlist。gen/gen.sh の DEFS の castlist の tag と揃える）。
  * 切り替え（AI-36 の段 8）の後は、CASTLIST_VERSION を上げて、これを消す。
  */
-export const CASTLIST_NEXT_VERSION = 'v1.0.0-rc.1';
+export const CASTLIST_NEXT_VERSION = 'v1.0.0';
 /** 新しい API を持つ castlist の版（/healthz の version がこれより前なら、api.castlist の next では送らない）。 */
 export const NEXT_API_SINCE = '1.0.0';
 /** 新しい API の castlist の volume（今の volume の castlist-data では起こさない。castlist の docs の release.html の「rc を動かす時と切り替え」）。 */
@@ -273,7 +273,7 @@ export function pmStartLines(ctx: Pick<Context, 'exec' | 'config'>, url: string)
   if (!nextApi(ctx, 'castlist')) return [run('castlist-data', CASTLIST_VERSION)];
   return [
     run(NEXT_VOLUME, CASTLIST_NEXT_VERSION),
-    `（新しい API の castlist は、新しい volume（${NEXT_VOLUME}）で起こす。今の volume（castlist-data）の記録は、先に移す: ${CASTLIST_DOCS}release.html の「rc を動かす時と切り替え」）`,
+    `（新しい API の castlist は、新しい volume（${NEXT_VOLUME}）で起こす。${NEXT_VOLUME} がまだ無い時だけ、前の volume（castlist-data）の記録を先に移す: ${CASTLIST_DOCS}release.html の「rc を動かす時と切り替え」）`,
   ];
 }
 
