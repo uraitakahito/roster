@@ -11,7 +11,7 @@ permissions:
   contents: read
 jobs:
   e2e:
-    # castlist は .castlist-version の、pagetray は .pagetray-version の版（動いている版と合わせる）の image に向けて流す。
+    # castlist は .castlist-version の、pagetray は .pagetray-version の版（運用で起こす版。動いている版と違う間は、docs-site の operations.md の「起こす」に書く）の image に向けて流す。
     # pagetray は PAGETRAY_CASTLIST_URL で同じ docker の network の castlist に送り手を聞く（castlist の container の名でつなぐ）。
     # roster（castlist にも pagetray にも生成した client で送る）で、pagetray-e2e の試験と castlist-e2e の試験を流す。
     # image は arm64 だけなので、arm64 の runner で流す。
