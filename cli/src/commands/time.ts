@@ -7,7 +7,7 @@
 // 状態の移りは、roster hello・roster wait・送る命令・メッセージキューの止まりが書く（commands/messages.ts の showWait）。
 import type { Context } from '../context.ts';
 import type { GateStop, GuardStop, WaitChange } from '../evidence.ts';
-import { ROLES, WAIT, type RoleName, type WaitKind } from '../protocol.ts';
+import { ROLES, WAIT, WAIT_CLOSE, WAIT_SEAT_CLOSE, type RoleName, type WaitKind } from '../protocol.ts';
 import { repoSeatKeys, staffKey } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
 
@@ -24,11 +24,16 @@ const NAMES: Record<WaitKind, string> = { work: WORK, pm: 'PM 待ち', tpm: 'TPM
 const ORDER = [...Object.values(NAMES), NEXT_ASK];
 const PREFIXES = (Object.keys(WAIT) as WaitKind[]).map(kind => [kind, WAIT[kind]('')] as const);
 
+/** 片付けの終わり（【end】）を送った後の状態の字（席が閉じられるのを待つ間。課題の時間には数えない）。 */
+const ENDED: string[] = [WAIT_CLOSE, WAIT_SEAT_CLOSE];
+
 /**
  * 状態の字から、種類の名を引く。決まった頭（`作業中: ` など）はその名。Staff Engineer 担当の席の `回答待ち(レビュー)` は、次の頼み待ち。
  * どれにも当たらない字（メッセージキューが応えません・メッセージキューの写しが遅れています）は、`:` の前の字をそのまま名にする。
+ * 片付けの終わりを送った後の字は undefined（その席は終えている。同じ Key で次の担当が起きれば、その名乗りからまた数える）。
  */
-function nameOf(text: string, role: string): string {
+function nameOf(text: string, role: string): string | undefined {
+  if (ENDED.includes(text)) return undefined;
   const kind = PREFIXES.find(([, prefix]) => text.startsWith(prefix))?.[0];
   if (kind === undefined) return text.split(/[:：]/)[0]?.trim() || 'ほか';
   return kind === 'review' && role === 'staff-engineer' ? NEXT_ASK : NAMES[kind];
@@ -66,8 +71,6 @@ interface SeatTime {
   key: string
   role: string
   spans: Map<string, Span[]>
-  /** 片付けの終わり（【end】）を送った時刻。送っていなければ無い。 */
-  endedAt?: number
 }
 
 /** 送った記録の行（読む欄だけ）。 */
@@ -75,7 +78,6 @@ interface SentLine {
   at: string
   key?: string
   heading?: string
-  sender?: { key: string }
 }
 
 /** 課題の最後の記録（時刻と、何の記録か）。 */
@@ -86,7 +88,8 @@ interface Mark {
 
 /**
  * 課題の時間の分け。集める席は、課題の Key・その Staff Engineer 担当の席・Tech Lead 担当が起こした repo の席（とその Staff の席）。
- * 席の最後の状態は、その席が片付けの終わり（【end】）を送っていればその時刻まで、いなければ課題の最後の記録の時刻まで続いたとして数える。
+ * 席の最後の状態は、課題の最後の記録の時刻まで続いたとして数える。片付けの終わり（【end】）を送った後の状態（席が閉じられるのを待つ間）は、
+ * どの種類にも数えない（同じ Key で次の担当が起きれば、その名乗りからまた数える。担当の交代）。
  * gapMinutes は、長い空きとみなす長さ。
  */
 export function time(ctx: Context, key: string, options: { gapMinutes?: number } = {}): string[] {
@@ -115,7 +118,7 @@ export function time(ctx: Context, key: string, options: { gapMinutes?: number }
     const from = Date.parse(change.at);
     if (to <= from) return;
     const name = nameOf(change.text, seat.role);
-    seat.spans.set(name, [...seat.spans.get(name) ?? [], { from, to }]);
+    if (name !== undefined) seat.spans.set(name, [...seat.spans.get(name) ?? [], { from, to }]);
   };
   for (const w of waits) {
     const seat = seats.get(w.by) ?? { key: w.by, role: w.role, spans: new Map<string, Span[]>() };
@@ -127,10 +130,7 @@ export function time(ctx: Context, key: string, options: { gapMinutes?: number }
   for (const [by, change] of lastOf) {
     const seat = seats.get(by);
     if (seat === undefined) continue;
-    // 片付けの終わり（【end】）を送った席は、そこで終える（その後の「workspace を閉じる」の待ちを、課題の終わりまで数えない）。
-    const ended = sent.findLast(l => l.heading === 'end' && l.key === by && (l.sender === undefined || l.sender.key === by));
-    if (ended !== undefined) seat.endedAt = Date.parse(ended.at);
-    close(seat, change, Math.max(Date.parse(change.at), seat.endedAt ?? end));
+    close(seat, change, end);
   }
 
   const gapMs = gapMinutes * 60_000;
@@ -138,9 +138,9 @@ export function time(ctx: Context, key: string, options: { gapMinutes?: number }
   const working = union([...seats.values()].flatMap(s => s.spans.get(WORK) ?? []));
   // 空きの間の、席ごとの状態（空きの始まりに出ていた字の種類）。何を待って止まっていたかを見る。片付けを終えた席は出さない。
   const stateAt = (ms: number): string => [...seats.values()].flatMap((seat) => {
-    if (seat.endedAt !== undefined && seat.endedAt <= ms) return [];
     const change = waits.findLast(w => w.by === seat.key && Date.parse(w.at) <= ms);
-    return change === undefined ? [] : [`${seat.key} ${nameOf(change.text, seat.role)}`];
+    const name = change === undefined ? undefined : nameOf(change.text, seat.role);
+    return name === undefined ? [] : [`${seat.key} ${name}`];
   }).join('・') || '無し';
   const label = (role: string): string => Object.hasOwn(ROLES, role) ? ROLES[role as RoleName].label : role;
   const named = (seat: SeatTime): string[] => [...ORDER.filter(n => seat.spans.has(n)), ...[...seat.spans.keys()].filter(n => !ORDER.includes(n))];
