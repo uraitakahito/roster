@@ -1,17 +1,11 @@
-// 生成した client（cli/gen/<server>-client/。server の Smithy の定義から作った restJson1 の client）の土台（AI-36 の段 6c）。
-// server ごとに、今の client（curl）と生成した client のどちらで送るかを、設定の api で選ぶ。分けるのは nextApi の 1 か所だけ（段 9 で今の client と共に消す）。
+// 生成した client（cli/gen/<server>-client/。server の Smithy の定義から作った restJson1 の client）の土台。castlist と pagetray には、これで送る。
 // 生成した client は、使う時だけ読む（module の頭で読まない。送る物の無い guard の起動を遅くしない）。build した JS（dist-cjs/）を createRequire で読み、型は dist-types/ から取る。
 import { createRequire } from 'node:module';
 import type { HttpHandler, HttpHandlerUserInput } from '@smithy/core/protocols';
 import type { Provider, UserAgent } from '@smithy/types';
 import type * as Castlist from '../gen/castlist-client/dist-types/index.js';
 import type * as Pagetray from '../gen/pagetray-client/dist-types/index.js';
-import type { ApiServer } from './config.ts';
-import type { Context } from './context.ts';
 import { TpmError } from './skill-sets.ts';
-
-/** server に、生成した client で送るか（設定の api の、その server の欄が next）。書いていなければ今の client。 */
-export const nextApi = (ctx: Pick<Context, 'config'>, server: ApiServer): boolean => ctx.config.api?.[server] === 'next';
 
 const load = createRequire(import.meta.url);
 
@@ -66,7 +60,8 @@ export interface HasMiddleware {
 /** 作った client から、AWS の Lambda のための頭（環境変数 AWS_LAMBDA_FUNCTION_NAME・_X_AMZN_TRACE_ID を読んで X-Amzn-Trace-Id を足す）を外す。 */
 export function withoutAwsMiddleware<T extends HasMiddleware>(client: T): T {
   // 外せなければ止める（@aws-sdk/core の更新で名が替わると、黙って環境変数を読む形に戻るため）。
-  if (!client.middlewareStack.remove('recursionDetectionMiddleware')) throw new Error('生成した client から recursionDetectionMiddleware を外せない（@aws-sdk/core の名が替わった）');
+  // install し直しても直らないので、install の訳にしない（sendOnce は TpmError をそのまま投げる）。
+  if (!client.middlewareStack.remove('recursionDetectionMiddleware')) throw new TpmError('生成した client から recursionDetectionMiddleware を外せない（@aws-sdk/core の名が替わった。cli/pnpm-lock.yaml の版に戻すか、外す名を直す）。roster ask tpm で知らせてください');
   return client;
 }
 
@@ -104,6 +99,7 @@ export async function sendOnce<C extends Closable, O>(make: () => C, send: (clie
     client = make();
   }
   catch (e) {
+    if (e instanceof TpmError) throw e;
     throw new TpmError(`生成した ${how.server} の client を読めません（${e instanceof Error ? e.message : String(e)}）。cli/ で pnpm install --frozen-lockfile を打ってください`);
   }
   try {

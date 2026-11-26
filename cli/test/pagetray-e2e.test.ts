@@ -122,7 +122,7 @@ describe.skipIf(URL === '')('cli と pagetray のつなぎ', () => {
     const empty = join(s.dir, 'empty.html');
     writeFileSync(empty, '');
     // 訳は ValidationException の字（欄の path は /body）。
-    await expect(pagePut(ctx, empty, { kind: 'plan' })).rejects.toThrow('置き場がページを受け取りませんでした（400）');
+    await expect(pagePut(ctx, empty, { kind: 'plan' })).rejects.toThrow(/置き場がページを受け取りませんでした（400）.*\/body/s);
     await expect(pagePath(ctx, `${URL}/${s.project}/K-4/plan-1.html`)).rejects.toThrow('置き場にページがありません（404）');
   });
 });

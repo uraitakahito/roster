@@ -4,37 +4,37 @@ name: pagetray-e2e
 on:
   push:
     branches: [main]
-    paths: [cli/**, .node-version, .castlist-next-version, .pagetray-next-version, .github/workflows/pagetray-e2e.yml]
+    paths: [cli/**, .node-version, .castlist-version, .pagetray-version, .github/workflows/pagetray-e2e.yml]
   pull_request:
-    paths: [cli/**, .node-version, .castlist-next-version, .pagetray-next-version, .github/workflows/pagetray-e2e.yml]
+    paths: [cli/**, .node-version, .castlist-version, .pagetray-version, .github/workflows/pagetray-e2e.yml]
 permissions:
   contents: read
 jobs:
-  next:
-    # 新しい API（AI-36 の作り直し）の image に向けて流す。castlist は .castlist-next-version の、pagetray は .pagetray-next-version の版（切り替えで動いている 1.0.0）。
+  e2e:
+    # castlist は .castlist-version の、pagetray は .pagetray-version の版（動いている版と合わせる）の image に向けて流す。
     # pagetray は PAGETRAY_CASTLIST_URL で同じ docker の network の castlist に送り手を聞く（castlist の container の名でつなぐ）。
     # roster（castlist にも pagetray にも生成した client で送る）で、pagetray-e2e の試験と castlist-e2e の試験を流す。
-    # 古い版（.pagetray-version）の image に向けた cli の job は、片付け（AI-36 の段 9）で消した。image は arm64 だけなので、arm64 の runner で流す。
+    # image は arm64 だけなので、arm64 の runner で流す。
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
-      - name: 新しい API の image を、digest で取って起こす（castlist は 127.0.0.1:8812、pagetray は 127.0.0.1:8811）
+      - name: image を、digest で取って起こす（castlist は 127.0.0.1:8812、pagetray は 127.0.0.1:8811）
         run: |
           pin() { pinned=$(cat "$1"); echo "${pinned%%@*} ${pinned#*@}"; }   # v<版> sha256:<digest>
-          read -r castlist_version castlist_digest < <(pin .castlist-next-version)
-          read -r pages_version pages_digest < <(pin .pagetray-next-version)
+          read -r castlist_version castlist_digest < <(pin .castlist-version)
+          read -r pages_version pages_digest < <(pin .pagetray-version)
           docker network create e2e-next
           # volume は付けない（新しい server は、空の /data に新しい DB を作る。今の volume では起こさない決まり）。
           docker run -d --name=e2e-castlist --network=e2e-next -p 127.0.0.1:8812:8080 "ghcr.io/uraitakahito/castlist@$castlist_digest"
           docker run -d --name=e2e-pages --network=e2e-next -p 127.0.0.1:8811:8080 \
             -e PAGETRAY_CASTLIST_URL=http://e2e-castlist:8080 "ghcr.io/uraitakahito/pagetray@$pages_digest"
-          # 起きた物の版が、書いた版と同じか（新しい API の版は /healthz の version）。
+          # 起きた物の版が、書いた版と同じか（版は /healthz の version。字のまま比べる: grep -F。版の . を正規表現にしない）。
           for port in 8812 8811; do
             for _ in $(seq 1 40); do curl -fsS "http://127.0.0.1:$port/healthz" > "healthz-$port.json" && break; sleep 0.5; done
             cat "healthz-$port.json"; echo
           done
-          grep -q "\"version\":\"${castlist_version#v}\"" healthz-8812.json
-          grep -q "\"version\":\"${pages_version#v}\"" healthz-8811.json
+          grep -qF "\"version\":\"${castlist_version#v}\"" healthz-8812.json
+          grep -qF "\"version\":\"${pages_version#v}\"" healthz-8811.json
       - uses: pnpm/action-setup@v6
         with:
           package_json_file: cli/package.json
