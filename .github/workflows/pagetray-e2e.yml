@@ -4,51 +4,17 @@ name: pagetray-e2e
 on:
   push:
     branches: [main]
-    paths: [cli/**, .node-version, .pagetray-version, .castlist-next-version, .pagetray-next-version, .github/workflows/pagetray-e2e.yml]
+    paths: [cli/**, .node-version, .castlist-next-version, .pagetray-next-version, .github/workflows/pagetray-e2e.yml]
   pull_request:
-    paths: [cli/**, .node-version, .pagetray-version, .castlist-next-version, .pagetray-next-version, .github/workflows/pagetray-e2e.yml]
+    paths: [cli/**, .node-version, .castlist-next-version, .pagetray-next-version, .github/workflows/pagetray-e2e.yml]
 permissions:
   contents: read
 jobs:
-  cli:
-    # roster page put・path・list・import・delete を、.pagetray-version の版の pagetray に向けて流す。
-    # roster file put・path・list・delete は、置き場に file のエンドポイントがある版（0.4.0 から）でだけ流れる（無い版では試験が飛ばす）。
-    # pagetray の image は arm64 だけ（roster を動かす Apple silicon の機械と同じ）なので、arm64 の runner で流す。
-    runs-on: ubuntu-24.04-arm
-    steps:
-      - uses: actions/checkout@v7
-      - name: .pagetray-version の版の image を、digest で取って起こす
-        run: |
-          pinned=$(cat .pagetray-version)            # v<版>@sha256:<digest>
-          version=${pinned%%@*}
-          digest=${pinned#*@}
-          # login しない（public の image）。digest で取るので、tag が指す先が替わっても同じ物が来る。
-          docker run -d --name=e2e-store -p 127.0.0.1:8801:8080 "ghcr.io/uraitakahito/pagetray@$digest"
-          for _ in $(seq 1 40); do curl -fsS http://127.0.0.1:8801/healthz && break; sleep 0.5; done
-          # 起きた物の版が、書いた版と同じか。
-          curl -fsS http://127.0.0.1:8801/api/version | tee version.json
-          grep -q "\"version\":\"${version#v}\"" version.json
-      - uses: pnpm/action-setup@v6
-        with:
-          package_json_file: cli/package.json
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-          cache-dependency-path: cli/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-        working-directory: cli
-      - name: roster の命令を本物に向けて流す
-        working-directory: cli
-        # $ROSTER_E2E_PAGES_URL が無いと、この試験は飛ばされる（ふだんの pnpm test）。ここでは必ず渡す。
-        run: ROSTER_E2E_PAGES_URL=http://127.0.0.1:8801 pnpm exec vitest run test/pagetray-e2e.test.ts
-      - if: always()
-        run: docker logs e2e-store
   next:
     # 新しい API（AI-36 の作り直し）の image に向けて流す。castlist は .castlist-next-version の、pagetray は .pagetray-next-version の版（切り替えで動いている 1.0.0）。
     # pagetray は PAGETRAY_CASTLIST_URL で同じ docker の network の castlist に送り手を聞く（castlist の container の名でつなぐ）。
-    # 設定の api の castlist と pagetray を next にした roster で、pagetray-e2e の試験と castlist-e2e の試験を流す（$ROSTER_E2E_API=next）。
-    # 古い版（.pagetray-version）の image に向ける上の cli の job は、片付け（AI-36 の段 9）で消す。image は arm64 だけなので、arm64 の runner で流す。
+    # roster（castlist にも pagetray にも生成した client で送る）で、pagetray-e2e の試験と castlist-e2e の試験を流す。
+    # 古い版（.pagetray-version）の image に向けた cli の job は、片付け（AI-36 の段 9）で消した。image は arm64 だけなので、arm64 の runner で流す。
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
@@ -83,7 +49,6 @@ jobs:
         working-directory: cli
         # $ROSTER_E2E_* が無いと、これらの試験は飛ばされる（ふだんの pnpm test）。ここでは必ず渡す。
         env:
-          ROSTER_E2E_API: next
           ROSTER_E2E_PAGES_URL: http://127.0.0.1:8811
           ROSTER_E2E_CASTLIST_URL: http://127.0.0.1:8812
         run: pnpm exec vitest run test/pagetray-e2e.test.ts test/castlist-e2e.test.ts

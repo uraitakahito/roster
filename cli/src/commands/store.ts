@@ -1,17 +1,17 @@
-// 置き場（別の repo の pagetray。127.0.0.1 で待つ、ページと file を DB に持つサーバー）に curl で頼む足場と、roster を動かす機械の控えの folder。
+// 置き場（別の repo の pagetray。127.0.0.1 で待つ、ページと file を DB に持つサーバー）に頼む足場と、roster を動かす機械の控えの folder。
 // roster page と roster file が使う。置き場は roster を動かす機械に 1 つで、project をまたいで同じなので、控えの folder と URL は設定（config.jsonc）でなく環境変数で替える。
 // 置き場を起こす・止めるのは DevOps Engineer 担当（docs-site の運用のページの「ページの置き場（pagetray）」）。
-// 設定の api.pagetray が next なら、置き場の API（ページと file を置く・探す・消す・返事の状態・レビューの印）と版は、生成した pagetray の client で新しい API に送る（pagesRequest・storeAtLeast。AI-36 の段 6c）。
-// 答えは今の道の Reply の形（本文は今の API の JSON の字・code は状態の数の字）にそろえ、呼ぶ側（page.ts）は替えない。
-// ページと file の本文の URL は新しい API でも同じ手の道なので、fetchTo・compareStored は curl のまま（next の時に curl で打つのは、この 2 つだけ）。
+// 置き場の API（ページと file を置く・探す・消す・返事の状態・レビューの印）は、いつも生成した pagetray の client で新しい API（pagetray 1.0.0 から）に送る（pagesRequest）。
+// 送る前に、1 つの命令で 1 度だけ置き場の版を /healthz で見て、1.0.0 より前（切り替えの前の版に戻した置き場）なら止める（requireStore）。
+// 答えは Reply の形（本文は記録を snake_case にした JSON の字・code は状態の数の字）にそろえ、呼ぶ側（page.ts）は替えない。
+// ページと file の本文は URL の手の道なので、fetchTo・compareStored は curl で取る（curl で打つのは、この 2 つだけ）。
 import type { HttpHandler } from '@smithy/core/protocols';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type * as Pagetray from '../../gen/pagetray-client/dist-types/index.js';
-import { clientConfig, nextApi, pagetrayApi, sendOnce, toSnake, withoutAwsMiddleware } from '../clients.ts';
+import { clientConfig, pagetrayApi, sendOnce, toSnake, withoutAwsMiddleware } from '../clients.ts';
 import type { Context } from '../context.ts';
-import type { ExecResult } from '../exec.ts';
 import type { RoleRecord, TpmRecord } from '../roster.ts';
 import { castlistUrl, issuerOf, sessionRef } from '../castlist.ts';
 import { rolesConfigFile } from '../config.ts';
@@ -24,9 +24,6 @@ import { rosterHome } from '../state.ts';
 export const DEFAULT_PAGES_URL = 'http://127.0.0.1:8801';
 /** 前の置き場（Nginx）の URL。前に置いたページの URL も、読む時は受ける。 */
 export const LEGACY_PAGES_URLS = ['http://127.0.0.1:8800'];
-
-/** この cli が話せる、置き場の API の版（pagetray の docs/src/api.md。置き場は、どの答えにも header `Pagetray-Api` で自分の版を付ける）。 */
-export const PAGES_API = '1';
 
 /** 課題の Key として folder の名にしてよい字（path の外へ出ないように）。 */
 export const KEY = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -58,35 +55,24 @@ export function inStore(env: NodeJS.ProcessEnv, url: string): string | undefined
 /** URL が置き場のページか file を指しているか。 */
 export const isPageUrl = (env: NodeJS.ProcessEnv, url: string): boolean => inStore(env, url) !== undefined;
 
-/** {@link call} と {@link pagesRequest} の答え。 */
+/** {@link pagesRequest} の答え。 */
 export interface Reply {
   body: string
   /** HTTP の code（つながらなければ 000）。 */
   code: string
-  /** curl の結果（curl で送った時だけ）。 */
-  result?: ExecResult
-  /** 置き場が、送り手（actorRef）を castlist に登録の無い物として断った（新しい API の 400 の fieldList に /actorRef。今の API の 422 と同じ訳）。 */
+  /** 置き場が、送り手（actorRef）を castlist に登録の無い物として断った（400 の fieldList に /actorRef）。 */
   unknownSender?: boolean
 }
 
-/**
- * 置き場に curl で頼む。答えの本文と HTTP の code を返す（つながらなければ code は 000）。
- * 答えの API の版がこの cli の話せる版と違えば、答えを使わずに止まる。header の無い答えは、API の版ができる前の置き場の物で、形は版 1 と同じなので通す。
- * 今は curl を spawnSync で打つので、待つ物は無い。形だけ非同期にしておき、後で Promise を返す HTTP の client に替える（AI-36）。
- */
-// eslint-disable-next-line @typescript-eslint/require-await
-export async function call(ctx: Context, args: string[], input?: string): Promise<Reply> {
-  const result = ctx.exec('curl', ['-sS', '--max-time', TIMEOUT, '-w', '\n%{http_code} %header{pagetray-api}', ...args], input === undefined ? undefined : { input });
-  const cut = result.stdout.lastIndexOf('\n');
-  const [code = '', api = ''] = result.stdout.slice(cut + 1).trim().split(' ');
-  if (result.status === 0 && api !== '' && api !== PAGES_API) {
-    throw new TpmError(`置き場（${pagesUrl(ctx.env)}）の API の版は ${api} で、この roster が話せるのは ${PAGES_API} です。置き場の版（pagetray）と roster の版が合っていません。roster を pull するか、置き場の版を roster の .pagetray-version に合わせるよう roster ask devops で頼んでください`);
-  }
-  return { body: result.stdout.slice(0, Math.max(cut, 0)), code: result.status !== 0 || code === '' ? '000' : code, result };
+/** 置き場の物（ページか file）の本文を、URL で curl で取り、out の path に書く。HTTP の code を返す（つながらなければ 000）。 */
+function fetchBody(ctx: Context, storePath: string, out: string): string {
+  const result = ctx.exec('curl', ['-sS', '--max-time', TIMEOUT, '-w', '%{http_code}', '-o', out, `${pagesUrl(ctx.env)}${storePath}`]);
+  const code = result.stdout.trim();
+  return result.status !== 0 || code === '' ? '000' : code;
 }
 
 /**
- * 生成した pagetray の client を作る（pagetray の client を作る所は、ここだけ）。送り直さず、時間切れは今の curl と同じ（TIMEOUT）。
+ * 生成した pagetray の client を作る（pagetray の client を作る所は、ここだけ）。送り直さず、時間切れは本文を取る curl と同じ（TIMEOUT）。
  * requestHandler は試験が偽の HTTP を差し込む所。
  */
 export function pagetrayClient(url: string, requestHandler?: HttpHandler): Pagetray.PagetrayClient {
@@ -98,18 +84,18 @@ export function pagetrayClient(url: string, requestHandler?: HttpHandler): Paget
 const UNREGISTERED = 'castlist に登録の無い送り手';
 
 /**
- * 送り手を castlist に登録の無い物として断った答えか（今の API の 422 と同じ訳にする物）。fieldList に /actorRef があり、訳が UNREGISTERED で始まる時だけ。
+ * 送り手を castlist に登録の無い物として断った答えか（senderRefused の「登録されてから打ち直す」の訳にする物）。fieldList に /actorRef があり、訳が UNREGISTERED で始まる時だけ。
  * actorRef の形の誤りも /actorRef の 400 だが、打ち直しても通らないので、「登録されてから打ち直す」の訳にしない。
  */
 const unknownSender = (sent: { message: string, fields: string[] }): boolean => sent.fields.includes('/actorRef') && sent.message.startsWith(UNREGISTERED);
 
-/** 誤りの型の無い 404 の訳: 新しい API の道を持たない置き場（今の 0.x の版）が答えた物。 */
-const OUTDATED = '置き場が新しい API を持たない（設定の api.pagetray は next だが、置き場（pagetray）の版が 1.0.0 より前に見える。置き場の版か、設定の api を見る）';
+/** 誤りの型の無い 404 の訳: 新しい API の道を持たない置き場（1.0.0 より前の版）が答えた物。 */
+const OUTDATED = '置き場が新しい API を持たない（置き場（pagetray）の版が 1.0.0 より前に見える。置き場を 1.0.0 に替えるよう roster ask devops で頼む）';
 
 /**
- * 生成した pagetray の client で 1 つ送り（clients.ts の sendOnce。送る 1 回は今の curl と同じ TIMEOUT で切る）、答えを今の道の Reply の形にする
- * （本文は shape で今の API の JSON の形にした字、code は状態の数）。答えの無い物と、2xx なのに本文を読めない答えは 000（今の curl の道で、つながらない時と同じ）。
- * 誤りの答えの本文は、今の API の誤りの形（`{"error": <message>}`）にする。送り手を断った 400（fieldList に /actorRef）には unknownSender を付ける。
+ * 生成した pagetray の client で 1 つ送り（clients.ts の sendOnce。送る 1 回は TIMEOUT で切る）、答えを Reply の形にする
+ * （本文は shape で JSON の形にした字、code は状態の数）。答えの無い物と、2xx なのに本文を読めない答えは 000（つながらない時と同じ）。
+ * 誤りの答えの本文は `{"error": <message>}`（reason が読む形）にする。送り手を断った 400（fieldList に /actorRef）には unknownSender を付ける。
  */
 async function viaPagetray<O extends { $metadata: { httpStatusCode?: number } }>(ctx: Context, send: (client: Pagetray.PagetrayClient, api: typeof Pagetray, options: { abortSignal: AbortSignal }) => Promise<O>, shape: (out: O) => unknown): Promise<Reply> {
   const sent = await sendOnce(() => ctx.clients.pagetray(pagesUrl(ctx.env)), (client, options) => send(client, pagetrayApi(), options), { server: 'pagetray', wait: Number(TIMEOUT) * 1000, outdated: OUTDATED });
@@ -119,8 +105,8 @@ async function viaPagetray<O extends { $metadata: { httpStatusCode?: number } }>
 }
 
 /**
- * 新しい API の記録（ページか file）を、今の API の記録の形にする（page.ts の PageRecord・file.ts の FileRecord）。番号 n は数に、送り手の actor は無ければ null（今の API の未確認）。
- * 置く答えの url・location は、今の API の記録に無いので落とす。
+ * 新しい API の記録（ページか file）を、roster の記録の形にする（page.ts の PageRecord・file.ts の FileRecord。欄は snake_case）。番号 n は数に、送り手の actor は無ければ null（未確認）。
+ * 置く答えの url・location は、記録に無いので落とす。
  */
 function recordOf(record: object): Record<string, unknown> {
   const rest = Object.fromEntries(Object.entries(toSnake(record) as Record<string, unknown>).filter(([k]) => k !== 'url' && k !== 'location'));
@@ -129,7 +115,7 @@ function recordOf(record: object): Record<string, unknown> {
 }
 
 /**
- * 置き場の API の要求（今の道の引数の名で書く）。返事の状態（state・on）とレビューの印は、ページ 1 枚（project・key・kind・n）を引数で名指す。
+ * 置き場の API の要求（引数は snake_case の名で書く。inputOf が新しい API の名にする）。返事の状態（state・on）とレビューの印は、ページ 1 枚（project・key・kind・n）を引数で名指す。
  * file を置く時の contentType は、file.ts の拡張子の表の Content-Type。
  */
 export type PagesRequest =
@@ -138,10 +124,10 @@ export type PagesRequest =
   | { op: 'CreateFile', query: URLSearchParams, file: string, contentType: string }
   | { op: 'AddReviewMarks', query: URLSearchParams, marks: { verdict?: string, targets: string[] } };
 
-/** 今の API の引数の名 → 新しい API の名（ここに無い名は、どちらも同じ）。 */
+/** 要求の引数の名 → 新しい API の名（ここに無い名は、どちらも同じ）。 */
 const RENAMED: Record<string, string> = { created_at: 'createdAt', actor_issuer: 'actorIssuer', actor_ref: 'actorRef' };
 
-/** 今の API の引数を、新しい API の入力にする（時刻は Date）。 */
+/** 要求の引数を、新しい API の入力にする（時刻は Date）。 */
 function inputOf(query: URLSearchParams, skip: string[] = []): Record<string, unknown> {
   const input: Record<string, unknown> = {};
   for (const [name, value] of query) {
@@ -155,27 +141,9 @@ function inputOf(query: URLSearchParams, skip: string[] = []): Record<string, un
 /** 一覧の 1 頁の上限（新しい API の maxResults）。 */
 const PAGE_MAX = 1000;
 
-/** 今の道（curl）で頼む。 */
-function curlOf(ctx: Context, request: PagesRequest): Promise<Reply> {
-  const at = (path: string): string => `${pagesUrl(ctx.env)}${path}?${request.query.toString()}`;
-  switch (request.op) {
-    case 'CreatePage': {
-      const { source } = request;
-      return call(ctx, ['-X', 'POST', '-H', 'Content-Type: text/html; charset=utf-8', '--data-binary', 'file' in source ? `@${source.file}` : '@-', at('/api/pages')], 'file' in source ? undefined : source.text);
-    }
-    case 'ListPages': return call(ctx, [at('/api/pages')]);
-    case 'DeletePages': return call(ctx, ['-X', 'DELETE', at('/api/pages')]);
-    case 'CreateFile': return call(ctx, ['-X', 'POST', '-H', `Content-Type: ${request.contentType}`, '--data-binary', `@${request.file}`, at('/api/files')]);
-    case 'ListFiles': return call(ctx, [at('/api/files')]);
-    case 'DeleteFiles': return call(ctx, ['-X', 'DELETE', at('/api/files')]);
-    case 'SetReplyState': return call(ctx, ['-X', 'POST', at('/api/pages/reply')]);
-    case 'AddReviewMarks': return call(ctx, ['-X', 'POST', '-H', 'Content-Type: application/json', '--data-binary', '@-', at('/api/pages/review')], JSON.stringify(request.marks));
-  }
-}
-
 /**
- * 一覧（ListPages・ListFiles）を、limit の数まで nextToken で辿って読む（今の置き場と同じく 1 から 1000 に丸める）。sort の created_at は createdAt。
- * 答えは今の道の形（`{"pages": […]}`・`{"files": […]}`）。
+ * 一覧（ListPages・ListFiles）を、limit の数まで nextToken で辿って読む（1 から 1000 に丸める。既定は 100）。sort の created_at は createdAt。
+ * 答えは `{"pages": […]}`・`{"files": […]}` の形。
  */
 async function listAll(ctx: Context, op: 'ListPages' | 'ListFiles', query: URLSearchParams): Promise<Reply> {
   const limit = Number.parseInt(query.get('limit') ?? '', 10);
@@ -206,12 +174,11 @@ async function listAll(ctx: Context, op: 'ListPages' | 'ListFiles', query: URLSe
 }
 
 /**
- * 置き場の API に頼む（ページと file を置く・探す・消す・返事の状態とレビューの印を書く）。今の道なら curl、設定の api.pagetray が next なら生成した client。
- * 答えはどちらも今の道の形（記録は今の API の欄の名。誤りは今の Reply の形）。
+ * 置き場の API に頼む（ページと file を置く・探す・消す・返事の状態とレビューの印を書く）。生成した pagetray の client で送る。
+ * 答えは Reply の形（記録は snake_case の欄の名。誤りは `{"error": …}` の本文）。
  */
 export async function pagesRequest(ctx: Context, request: PagesRequest): Promise<Reply> {
-  if (!nextApi(ctx, 'pagetray')) return curlOf(ctx, request);
-  await requireNextStore(ctx);
+  await requireStore(ctx);
   const input = inputOf(request.query);
   switch (request.op) {
     case 'CreatePage': {
@@ -237,63 +204,35 @@ export async function pagesRequest(ctx: Context, request: PagesRequest): Promise
   }
 }
 
-/** 新しい API を持つ置き場の版（設定の api.pagetray が next なのに、これより前の版なら送らない）。 */
-export const PAGES_NEXT_SINCE = '1.0.0';
+/** この roster が話す置き場の API を持つ版（/healthz の version がこれより前なら止める）。 */
+export const STORE_API_SINCE = '1.0.0';
 
-/** 1 つの命令の中で、置き場の版を引いた答え（引くのは 1 度だけ）。null は応えなかった（覚えて、頼むたびに待ち直さない。今の道も同じ）。 */
-const storeVersions = new WeakMap<Context, string | null>();
+/** 1 つの命令の中で、置き場の版を引いた答え（引くのは 1 度だけ）。null は応えなかった（覚えて、頼むたびに待ち直さない）。 */
+const healthVersions = new WeakMap<Context, string | null>();
 
 /**
- * 置き場の版の字。版を答えない置き場は ''。応えなければ undefined（応えなかったことも覚え、同じ命令の中では聞き直さない）。1 つの命令（Context）の中では、置き場に 1 度だけ聞く。
- * 設定の api.pagetray が next なら、新しい API の /healthz（GetHealth）の version で見る（新しい API に /api/version は無い）。
- * 2xx で読めない答え（今の版の置き場の /healthz は字の ok）・version の無い答え・型の無い 404 は、新しい API を持たない置き場として ''。
+ * 置き場の版の字（/healthz の GetHealth の version）。版を答えない置き場は ''。応えなければ undefined（応えなかったことも覚え、同じ命令の中では聞き直さない）。
+ * 2xx で読めない答え（0.x の置き場の /healthz は字の ok）・version の無い答え・型の無い 404 は、新しい API を持たない置き場として ''。
  */
-async function storeVersion(ctx: Context): Promise<string | undefined> {
-  const known = storeVersions.get(ctx);
+async function healthVersion(ctx: Context): Promise<string | undefined> {
+  const known = healthVersions.get(ctx);
   if (known !== undefined) return known ?? undefined;
   let version: string | undefined;
-  if (nextApi(ctx, 'pagetray')) {
-    const sent = await sendOnce(() => ctx.clients.pagetray(pagesUrl(ctx.env)), (client, options) => client.send(new (pagetrayApi().GetHealthCommand)({}), options), { server: 'pagetray', wait: Number(TIMEOUT) * 1000, outdated: OUTDATED });
-    if (sent.kind === 'ok') version = sent.out.version ?? '';
-    else if ((sent.kind === 'down' && sent.status !== undefined) || (sent.kind === 'failed' && sent.message === OUTDATED)) version = '';
-  }
-  else {
-    const r = await call(ctx, [`${pagesUrl(ctx.env)}/api/version`]);
-    // 覚えるのは、版を答えた（200）か、版を答えない古い置き場（404）の時だけ。起き直す間の 502・503 などは、応えないとみなす。
-    if (r.code === '200' || r.code === '404') {
-      let answered: unknown;
-      try {
-        answered = r.code === '200' ? (JSON.parse(r.body) as { version?: unknown }).version : undefined;
-      }
-      catch { /* JSON でない答えは、版を答えない置き場 */ }
-      version = typeof answered === 'string' ? answered : '';
-    }
-  }
-  storeVersions.set(ctx, version ?? null);
+  const sent = await sendOnce(() => ctx.clients.pagetray(pagesUrl(ctx.env)), (client, options) => client.send(new (pagetrayApi().GetHealthCommand)({}), options), { server: 'pagetray', wait: Number(TIMEOUT) * 1000, outdated: OUTDATED });
+  if (sent.kind === 'ok') version = sent.out.version ?? '';
+  else if ((sent.kind === 'down' && sent.status !== undefined) || (sent.kind === 'failed' && sent.message === OUTDATED)) version = '';
+  healthVersions.set(ctx, version ?? null);
   return version;
 }
 
 /**
- * 置き場の版が since（`<major>.<minor>.<patch>`）以上か。yes・old（古い。版を答えない置き場も）・down（応えない）。
- * 版は数にして比べる（字で比べると 0.10.0 を 0.8.0 より前とみなす）。道は設定の api.pagetray で決まる（storeVersion）。
+ * 置き場が、この roster の話す API（1.0.0 から）を持つかを見る（1 つの命令で 1 度だけ。castlist の requireUp の版の見方と同じ）。
+ * 古い版（切り替えの前の 0.x に戻した置き場）なら、送らずに止める（送ると、答えの形が違って黙って崩れるため）。応えなければ止めない（頼む物の答えで、応えないと出る）。
  */
-export async function storeAtLeast(ctx: Context, since: string): Promise<'yes' | 'old' | 'down'> {
-  const version = await storeVersion(ctx);
-  if (version === undefined) return 'down';
-  return atLeast(version, since) ? 'yes' : 'old';
-}
-
-/** 置き場の版が古く、新しい API（api.pagetray の next）で頼めない（requireNextStore）。頼む物によっては、止めずに見分けて続ける（返事の状態・返事待ちの一覧）。 */
-export class OldStoreError extends TpmError {}
-
-/**
- * 設定の api.pagetray が next の時に、置き場が新しい API を持つかを見る（1 つの命令で 1 度だけ。castlist の requireUp の版の見方と同じ）。
- * 1.0.0 より前の版なら、送らずに止める（今の版の置き場に新しい API の道で頼むと、どれも断られるため）。応えなければ止めない（頼む物の答えで、応えないと出る）。
- */
-async function requireNextStore(ctx: Context): Promise<void> {
-  const version = await storeVersion(ctx);
-  if (version === undefined || atLeast(version, PAGES_NEXT_SINCE)) return;
-  throw new OldStoreError(`置き場（${pagesUrl(ctx.env)}）の版は ${version || 'わからない'} で、新しい API（${PAGES_NEXT_SINCE} から）を持ちません。設定の api.pagetray を外すか、置き場を新しい版に替えてください（置き場を替えるのは、roster ask devops で頼む）`);
+async function requireStore(ctx: Context): Promise<void> {
+  const version = await healthVersion(ctx);
+  if (version === undefined || atLeast(version, STORE_API_SINCE)) return;
+  throw new TpmError(`置き場（${pagesUrl(ctx.env)}）の版は ${version || 'わからない'} で、この roster が話す API（${STORE_API_SINCE} から）を持ちません。何も頼んでいません。置き場を ${STORE_API_SINCE} から後の版で起こしてください（roster ask devops）。置き場を 0.8.x に戻したのなら、roster も切り替えの前の版に戻す（pagetray の docs の release.html の「切り替え」）`);
 }
 
 /** 版の字（`0.10.1`。後ろの `-dev` などは読まない）が since 以上か。頭が `<数>.<数>.<数>` でなければ false。 */
@@ -322,7 +261,7 @@ export const down = (ctx: Context, what: string): TpmError =>
   new TpmError(`置き場（${pagesUrl(ctx.env)}）が応えません。${what}置き場を起こすよう roster ask devops で頼んでください`);
 
 /**
- * 置く人を指す付随する id（pagetray 0.6.0 の `actor_issuer`・`actor_ref`）。置き場は受けたその時に castlist に送り手を聞いて残す。
+ * 置く人を指す付随する id（要求の引数の `actor_issuer`・`actor_ref`。新しい API の actorIssuer・actorRef）。置き場は受けたその時に castlist に送り手を聞いて残す。
  * castlist の設定があり、$CLAUDE_CODE_SESSION_ID がある時だけ付ける（issuer と鍵は、session を登録する時と同じ）。どちらかが無ければ空（今までどおり付けない）。
  */
 export function sender(ctx: Context): Record<string, string> {
@@ -332,8 +271,8 @@ export function sender(ctx: Context): Record<string, string> {
 }
 
 /**
- * 送り手を付けて置いた要求を、置き場が castlist に聞いた答えで断った時の文（what はページか file）。断っていなければ（送り手を付けていない・503 でも 422 でもない）undefined。
- * 503 は置き場が castlist に聞けない、422（新しい API では fieldList に /actorRef のある 400。unknownSender）は castlist に登録の無い session。
+ * 送り手を付けて置いた要求を、置き場が castlist に聞いた答えで断った時の文（what はページか file）。断っていなければ（送り手を付けていない・503 でも unknownSender でもない）undefined。
+ * 503 は置き場が castlist に聞けない、unknownSender（fieldList に /actorRef のある 400）は castlist に登録の無い session。
  * どちらも置き場は何も置いていない。打ち直すのは担当で、roster は送り直さない。
  */
 export function senderRefused(ctx: Context, query: URLSearchParams, reply: Pick<Reply, 'code' | 'unknownSender'>, what: string): TpmError | undefined {
@@ -341,7 +280,7 @@ export function senderRefused(ctx: Context, query: URLSearchParams, reply: Pick<
   const ref = query.get('actor_ref');
   if (ref === null) return undefined;
   if (code === '503') return new TpmError(`置き場（${pagesUrl(ctx.env)}）が castlist に送り手を聞けませんでした（503）。${what}。castlist が起きてから打ち直してください。続く時は roster report incident で台帳に挙げてください`);
-  if (code === '422' || reply.unknownSender === true) return new TpmError(`この session（${ref}）は castlist に登録が無いと、置き場が答えました（${code}）。${what}。session は guard が Bash の前に登録するので、打ち直してください。続く時は roster report incident で台帳に挙げてください`);
+  if (reply.unknownSender === true) return new TpmError(`この session（${ref}）は castlist に登録が無いと、置き場が答えました（${code}）。${what}。session は guard が Bash の前に登録するので、打ち直してください。続く時は roster report incident で台帳に挙げてください`);
   return undefined;
 }
 
@@ -380,13 +319,15 @@ export function writeCopy(ctx: Context, path: string, body: Buffer): void {
 }
 
 /** 置き場の物（ページか file）を取り、控えの path に書く。200 のほかは書かず、途中の file も残さない。HTTP の code を返す。 */
+// 今は curl を spawnSync で打つので、待つ物は無い。形だけ非同期にしておく（呼ぶ側を替えずに、Promise を返す HTTP の client に替えられるように）。
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function fetchTo(ctx: Context, storePath: string, path: string): Promise<string> {
   mkdirSync(dirname(path), { recursive: true });
   const partial = `${path}.part-${process.pid}`;
   try {
-    const r = await call(ctx, ['-o', partial, `${pagesUrl(ctx.env)}${storePath}`]);
-    if (r.code === '200') renameSync(partial, path);
-    return r.code;
+    const code = fetchBody(ctx, storePath, partial);
+    if (code === '200') renameSync(partial, path);
+    return code;
   }
   finally {
     rmSync(partial, { force: true });
@@ -394,12 +335,13 @@ export async function fetchTo(ctx: Context, storePath: string, path: string): Pr
 }
 
 /** 取り込みで、置き場にもうある番号（409）の中身を、控えと比べる。消した番号（410）なら removed、同じなら same、違えば conflict。 */
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function compareStored(ctx: Context, storePath: string, file: string): Promise<'removed' | 'same' | 'conflict'> {
   const copy = `${file}.check-${process.pid}`;
   try {
-    const r = await call(ctx, ['-o', copy, `${pagesUrl(ctx.env)}${storePath}`]);
-    if (r.code === '410') return 'removed';
-    if (r.code !== '200') throw r.code === '000' ? down(ctx, '') : new TpmError(`置き場が ${storePath} に ${r.code} を返しました`);
+    const code = fetchBody(ctx, storePath, copy);
+    if (code === '410') return 'removed';
+    if (code !== '200') throw code === '000' ? down(ctx, '') : new TpmError(`置き場が ${storePath} に ${code} を返しました`);
     return readFileSync(copy).equals(readFileSync(file)) ? 'same' : 'conflict';
   }
   finally {

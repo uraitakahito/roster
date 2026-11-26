@@ -1,4 +1,4 @@
-// ページから参照する画像・PDF・字の file を、置き場（pagetray 0.4.0 から）に上げる・読む・探す・消す。
+// ページから参照する画像・PDF・字の file を、置き場に上げる・読む・探す・消す。
 // 番号は置き場が決める（`<語>-<番号>.<拡張子>`。同じ名で上げ直すと次の番号になり、前の物は残る）。
 // 上げた・読んだ file は、控えの folder の `<project>/<Key>/files/` にも写す。ページからの相対の参照（`files/…`・`../<Key>/files/…`）が、置き場でも控えでも同じ形で開くように。
 // 上げた file は model にも人にも見えるので、画像と PDF は人（担当）が中身を見た印（--reviewed）を、字の file は秘密の形の走査を、上げる前に求める。
@@ -69,9 +69,6 @@ const SECRETS = [
   /\bATATT[A-Za-z0-9_=-]{20,}/,
 ];
 
-/** 置き場が file を扱えない（0.4.0 より前の置き場は、file のエンドポイントに 404 を返す）時の文。 */
-const oldStore = (): TpmError => new TpmError('置き場（pagetray）の版が古く、file を扱えません。roster ask devops で置き場の版を上げるよう頼んでください');
-
 /** 置き場の file の名（`<語>-<番号>.<拡張子>`）を分ける。形でないか、受けない拡張子なら undefined。 */
 export function parseStoredName(name: string): { stem: string, n: string, ext: string } | undefined {
   const m = STORED.exec(name);
@@ -113,7 +110,6 @@ async function postFile(ctx: Context, file: string, ext: string, query: URLSearc
   const r = await pagesRequest(ctx, { op: 'CreateFile', query, file, contentType: FILE_TYPES[ext] ?? '' });
   if (r.code === '201') return JSON.parse(r.body) as FileRecord;
   if (r.code === '409') return 'taken';
-  if (r.code === '404') throw oldStore();
   if (r.code === '000') throw down(ctx, 'file は上げていません（番号は置き場が決めます）。');
   const refused = senderRefused(ctx, query, r, 'file は上げていません');
   if (refused !== undefined) throw refused;
@@ -187,8 +183,6 @@ async function fetchFile(ctx: Context, storePath: string, path: string): Promise
   if (code === '200') return;
   if (code === '000') throw down(ctx, `控え（${path}）もありません。`);
   if (code === '410') throw new TpmError(`置き場の file は消してあります（410）: ${url}`);
-  // 0.4.0 より前の置き場も、file の URL に 404 を返す。探すエンドポイントがあるかで分ける。
-  if (code === '404' && (await pagesRequest(ctx, { op: 'ListFiles', query: new URLSearchParams({ limit: '1' }) })).code === '404') throw oldStore();
   throw new TpmError(`置き場に file がありません（${code}）: ${url}`);
 }
 
@@ -235,10 +229,9 @@ export async function copyRefs(ctx: Context, project: string, key: string, page:
   return lines;
 }
 
-/** 置き場の file を探す。0.4.0 より前の置き場（探すエンドポイントが無い）なら undefined。 */
-export async function findFiles(ctx: Context, query: URLSearchParams): Promise<FileRecord[] | undefined> {
+/** 置き場の file を探す。 */
+export async function findFiles(ctx: Context, query: URLSearchParams): Promise<FileRecord[]> {
   const r = await pagesRequest(ctx, { op: 'ListFiles', query });
-  if (r.code === '404') return undefined;
   if (r.code === '000') throw down(ctx, '');
   if (r.code !== '200') throw new TpmError(`置き場が file の一覧を返しませんでした（${r.code}）: ${reason(r.body)}`);
   return (JSON.parse(r.body) as { files: FileRecord[] }).files;
@@ -264,17 +257,15 @@ export async function fileList(ctx: Context, options: FileListOptions): Promise<
     const value = options[name];
     if (value !== undefined) query.set(name, value);
   }
-  const files = (await findFiles(ctx, query))?.map(f => ({ ...f, url: `${pagesUrl(ctx.env)}${f.path}` }));
-  if (files === undefined) throw oldStore();
+  const files = (await findFiles(ctx, query)).map(f => ({ ...f, url: `${pagesUrl(ctx.env)}${f.path}` }));
   if (options.json) return [JSON.stringify(files, null, 2)];
   if (files.length === 0) return ['合う file は無い'];
   return files.map(f => [f.created_at, f.key, basename(f.path), f.role, f.workspace === '' ? '-' : f.workspace, f.url, `${f.size} byte`].join('  '));
 }
 
-/** 置き場の file を消す（DELETE /api/files。query は project と、key・name・n）。消した path を返す。 */
+/** 置き場の file を消す（DeleteFiles。query は project と、key・name・n）。消した path を返す。 */
 export async function removeFiles(ctx: Context, query: URLSearchParams): Promise<string[]> {
   const r = await pagesRequest(ctx, { op: 'DeleteFiles', query });
-  if (r.code === '404') throw oldStore();
   if (r.code === '000') throw down(ctx, 'file は消していません。');
   if (r.code !== '200') throw new TpmError(`置き場が file を消しませんでした（${r.code}）: ${reason(r.body)}`);
   return (JSON.parse(r.body) as { removed: string[] }).removed;
@@ -314,7 +305,6 @@ export async function fileDelete(ctx: Context, urls: string[], options: { yes?: 
   for (const t of targets) {
     const { stem, ext } = parseStoredName(t.name) ?? { stem: '', ext: '' };
     const found = await findFiles(ctx, new URLSearchParams({ project: t.project, key: t.key, q: `${stem}.${ext}`, limit: '1000' }));
-    if (found === undefined) throw oldStore();
     listed.push(...found.filter(f => f.path === t.storePath));
   }
   if (listed.length === 0) return ['置き場に、消す file は無い'];
