@@ -6,7 +6,7 @@
 #   cli/gen/gen.sh           定義を下の DEFS の tag から取り直し、client を作り直して置き換える
 #   cli/gen/gen.sh --check   取った定義（cli/gen/model/）が下の digest と合うか、作り直した client と入れてある物が同じかを見る（CI が流す）。
 #                            違えば exit 1。定義は取りに行かない（入れてある物を digest で見る）
-# 要る物: curl・unzip・shasum か sha256sum・node と cli/node_modules（pnpm install。tsc と、client が引く @smithy/* など）。
+# 要る物: curl・unzip・jq・shasum か sha256sum・node と cli/node_modules（pnpm install。tsc と、client が引く @smithy/* など）。
 # Smithy の CLI は JRE を同梱しているので、Java は要らない。
 # 生成器の版は cli/gen/smithy-build.json に書く。そこに名指した Maven の物は、公開から 2 日たっていなければ使わない
 # （pnpm の minimumReleaseAge に合わせた物。名指した物だけを見て、それが引く物は見ない）。
@@ -95,23 +95,32 @@ platform="$os-$arch"
 want=$(sha_for "$platform") || ng "Smithy の CLI の無い機械: $platform"
 cache="${XDG_CACHE_HOME:-$HOME/.cache}/roster-smithy/$SMITHY_VERSION-$platform"
 smithy="$cache/smithy-cli-$platform/bin/smithy"
-# digest は取りに行った時に見る。cache（CI の actions/cache。key は gen.sh の hash なので、版と digest を替えれば取り直す）から
-# 戻した CLI は、そのまま使う。
-if [ ! -x "$smithy" ]; then
+# cache（手元の folder と、CI の actions/cache）には、取った zip を残す。毎回 zip の digest を見てから、zip から開き直す
+# （開いた物を cache から戻してそのまま使うと、digest を見ないまま走らせることになるため）。
+zip="$cache/cli.zip"
+if [ ! -f "$zip" ] || [ "$(sha256 "$zip")" != "$want" ]; then
+  rm -rf "$cache"
   mkdir -p "$cache"
-  zip="$cache/cli.zip"
   curl -fsSL $CURL_RETRY -o "$zip" "https://github.com/smithy-lang/smithy/releases/download/$SMITHY_VERSION/smithy-cli-$platform.zip"
   got=$(sha256 "$zip")
   [ "$got" = "$want" ] || ng "Smithy の CLI の digest が違う（${got}。$want のはず）"
-  unzip -q -o "$zip" -d "$cache"
-  rm -f "$zip"
 fi
+rm -rf "$cache/smithy-cli-$platform"
+unzip -q -o "$zip" -d "$cache"
+[ -x "$smithy" ] || ng "Smithy の CLI の zip に bin/smithy が無い"
 
 # 3. 生成器（Maven の物）が、公開から 2 日たっているか。
+# 依存は JSON として読む（.maven.dependencies）。どれも group:artifact:版 の形でなければ断る。
+# 公開の時刻は増えないので、一度 2 日を越えたと見た物は、cache に印を置き、次からは Maven Central に聞かない
+# （CI の見張りの試しで何度も流すと、Maven Central が 429 で断ることがあった。#211）。
 now=$(date -u +%s)
-deps=$(sed -n 's/^ *"\([a-zA-Z0-9._-]*:[a-zA-Z0-9._-]*:[0-9][a-zA-Z0-9._-]*\)",\{0,1\}$/\1/p' "$gen/smithy-build.json")
+deps=$(jq -r '.maven.dependencies // [] | .[]' "$gen/smithy-build.json") || ng "cli/gen/smithy-build.json を JSON として読めない"
 [ -n "$deps" ] || ng "cli/gen/smithy-build.json に Maven の依存が無い"
+aged="$cache/maven-aged"
+mkdir -p "$aged"
 for dep in $deps; do
+  echo "$dep" | grep -Eqx '[a-zA-Z0-9._-]+:[a-zA-Z0-9._-]+:[0-9][a-zA-Z0-9._-]*' || ng "Maven の依存の形が違う: $dep"
+  [ -f "$aged/$dep" ] && continue
   group=${dep%%:*}
   rest=${dep#*:}
   artifact=${rest%%:*}
@@ -125,6 +134,7 @@ for dep in $deps; do
     published=$(LC_ALL=C date -u -j -f '%a, %d %b %Y %H:%M:%S GMT' "$modified" +%s)
   fi
   [ $((now - published)) -ge $MIN_AGE_SECONDS ] || ng "$dep は公開から 2 日たっていない（${modified}）"
+  : >"$aged/$dep"
 done
 
 # 4. 作る（cli/gen/build で。git は無視する）。client ごとに 1 つの projection にする（typescript-client-codegen は
