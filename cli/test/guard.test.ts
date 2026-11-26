@@ -299,6 +299,61 @@ describe('Audit の席を起こす命令', () => {
   });
 });
 
+describe('pattern で process に合図を送る命令（台帳 #89・#92）', () => {
+  // 試験は字を judge に渡すだけで、命令は打たない。
+  test.each([
+    'pkill -f "castlist-server" -n',
+    'pkill node',
+    'killall Finder',
+    '/usr/bin/pkill -9 -f x',
+    'sudo pkill -f x',
+    'nohup killall x',
+    'cd /w && pkill -f x',
+    'true; pkill -f x',
+    'sh -c "pkill -f x"',
+    'x=$(killall -s x)',
+    'ROSTER_RAW=1 pkill -f x',
+    // kill でも、的を名指さない物は、pattern で選んだ物にまとめて送るのと同じ。
+    'pgrep -f x | xargs kill',
+    'pgrep -f x | xargs kill -9',
+    'kill $(pgrep -f x)',
+    'kill -9 "$(pgrep -f x)"',
+    'kill `pgrep -f x`',
+    'kill 0',
+    'kill -9 -1',
+    'kill -- -123',
+    'kill',
+    'kill 123 x',
+  ])('止める: %s', (command) => {
+    for (const role of [undefined, 'software-engineer', 'devops-engineer', 'staff-engineer'] as const) {
+      expect(ask(command, role), String(role)).toEqual({ allow: false, reason: expect.stringContaining('pgrep -fl') as string });
+    }
+  });
+
+  test.each([
+    'kill 12345',
+    'kill -9 12345 12346',
+    'kill -TERM 12345',
+    'kill -s TERM 12345',
+    'kill -n 9 12345',
+    'kill %1',
+    'kill $pid',
+    'kill -9 "$PID"',
+    'kill ${PID}',
+    'kill -- 12345',
+    'kill -l',
+    'kill -l 15',
+    'pgrep -fl castlist-server',
+    'ps -o pid,command -p 12345',
+    'git commit -m "pkill と killall を止める"',
+    'grep -rn "pkill\\|killall" skill-sets',
+    'cat <<EOF\npkill -f x\nEOF',
+    'echo killall',
+  ])('通す: %s', (command) => {
+    expect(ask(command, 'software-engineer')).toEqual({ allow: true });
+  });
+});
+
 describe('Auditor は repo を変えない', () => {
   test.each<[string, boolean]>([
     ['git status', true],
