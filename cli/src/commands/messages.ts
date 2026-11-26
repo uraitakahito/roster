@@ -513,6 +513,8 @@ export async function askTpm(ctx: Context, options: { text: string, waitingFor: 
   if (review.verdict === undefined || review.page === undefined) throw new TpmError(`レビュー #${review.n} は、まだ判定が返っていません。送っていません`);
   // 上げるのは「直すべき」を受けない時だけ（ほかの判定は、受けるか・直すかを課題の担当が決めて進む）。
   if (review.verdict !== 'reject') throw new TpmError(`レビュー #${review.n} の判定は「${VERDICTS[review.verdict]}」です。--review で上げるのは「${VERDICTS.reject}」を受けない時だけです（ほかの判定は、指摘ごとに自分で決めて進む）。送っていません`);
+  // 送った後に置き場の印を書くので、置き場の版は送る前に見る（ask pm と同じ。review-66）。
+  await requireStore(ctx);
   const sent = toTpm(ctx, self, 'ask-tpm', `レビュー #${review.n}（判定: ${VERDICTS[review.verdict]}。${review.page}）を受けない: ${options.text}`, options.replyTo);
   // 2 度目に上げても、最初に上げた時刻を残す。
   if (review.escalatedAt === undefined) patchReview(ctx, review.n, { escalatedAt: ctx.now().toISOString() });

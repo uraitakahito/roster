@@ -44,7 +44,7 @@ export interface Context {
   sleep: (ms: number) => Promise<void>
   /** 今の時刻（試験で替える）。 */
   now: () => Date
-  /** 生成した client を作る関数（設定の api が next の server だけが使う）。 */
+  /** 生成した client を作る関数（castlist と pagetray に送る物は、みなこれで作った client で送る。試験は偽の HTTP を差し込む）。 */
   clients: Clients
 }
 

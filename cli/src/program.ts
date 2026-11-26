@@ -142,13 +142,13 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
     .option('--oldest', '古い順に出す')
     .option('--all-projects', 'ほかの project のページも出す')
     .option('--reply <状態>', '返事の状態で絞る（waiting は返事待ち、answered は答えた物）')
-    .option('--on <相手>', '--reply で絞る時の待ちの相手（pm＝既定・review はレビューの席・tpm は TPM 担当。置き場 0.8.0 から）')
+    .option('--on <相手>', '--reply で絞る時の待ちの相手（pm＝既定・review はレビューの席・tpm は TPM 担当）')
     .option('--json', '記録を JSON で出す')
     .action(async (options: PageListOptions) => print(await pageList(createContext(), options)));
   page.command('reply <urls...>').description('ページの返事の状態を手で直す（TPM 担当だけ。いつもは roster ask pm と roster answer が書く）')
     .option('--waiting', '返事待ちにする（既定は Product Manager の返事待ち）')
     .option('--answered', '答えたにする')
-    .option('--on <相手>', '待ちの相手（pm＝既定・review はレビューの席・tpm は TPM 担当。上げた件が決まったら --answered --on tpm。置き場 0.8.0 から）')
+    .option('--on <相手>', '待ちの相手（pm＝既定・review はレビューの席・tpm は TPM 担当。上げた件が決まったら --answered --on tpm）')
     .action(async (urls: string[], options: { waiting?: boolean, answered?: boolean, on?: string }) => print(await pageReply(createContext(), urls, options)));
   page.command('delete [urls...]').description('ページを置き場と控えから消す（TPM 担当だけ。戻せない。一覧を見せ、--yes で消す）')
     .option('--key <key>', 'この Key のページをみな消す')
@@ -246,7 +246,7 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
     .option('--order <asc|desc>', '並べる向き（既定は asc）')
     .option('--limit <件数>', '1 頁の数（castlist の既定は 100・1000 まで）')
     .option('--after <next>', '前の答えの next（続きの頁）')
-    .option('--json', 'castlist の答えをそのまま出す')
+    .option('--json', 'castlist の答えを、前の API の形（欄の名は snake_case）で出す')
     .action(async (options: FindOptions) => print(await castlistFind(createContext(), options)));
   castlist.command('show <名か-id>').description('1 つのアクター: ラベル・付随する id・今の状態・最新の model と effort・線の要約（名は、この project の roster が登録して控えた物だけ引ける）')
     .option('--json', 'castlist の答え（GET /api/actors/{id}）を、前の API の形（欄の名は snake_case）で出す')
@@ -255,7 +255,7 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
     .option('--direction <up|down|both>', '辿る向き（既定は both）')
     .option('--depth <段>', '辿る段（1〜20）')
     .option('--type <launched|continued>', 'その線だけを辿る')
-    .option('--json', 'castlist の答えをそのまま出す')
+    .option('--json', 'castlist の答えを、前の API の形（欄の名は snake_case）で出す')
     .action(async (target: string, options: LineageOptions) => print(await castlistLineage(createContext(), target, options)));
   castlist.command('events').description('出来事を、アクターをまたいで探す（GET /api/events。受けた順）')
     .option('--type <種類>', '出来事の種類（何度でも。どれか）', repeat)
@@ -267,7 +267,7 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
     .option('--skewed', '送り手の時計がずれた行')
     .option('--limit <件数>', '1 頁の数（1000 まで）')
     .option('--after <next>', '前の答えの next（続きの頁）')
-    .option('--json', 'castlist の答えをそのまま出す')
+    .option('--json', 'castlist の答えを、前の API の形（欄の名は snake_case）で出す')
     .action(async (options: EventsOptions) => print(await castlistEvents(createContext(), options)));
   castlist.command('settings').description('model と effort の行（--actor が無ければ GET /api/settings、あれば GET /api/actors/{id}/settings。--at も付ければ GET /api/actors/{id}/settings/at）')
     .option('--actor <名か id>', 'そのアクターの行（--at でその時に効いていた 1 行）')
@@ -281,7 +281,7 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
     .option('--skewed', '送り手の時計がずれた行')
     .option('--limit <件数>', '1 頁の数（1000 まで）')
     .option('--after <next>', '前の答えの next（続きの頁）')
-    .option('--json', 'castlist の答えをそのまま出す')
+    .option('--json', 'castlist の答えを、前の API の形（欄の名は snake_case）で出す')
     .action(async (options: SettingsOptions) => print(await castlistSettings(createContext(), options)));
   program.command('run-role <key>').description('（連携の道具が動かす）名簿を読んで担当の claude を起こす')
     .requiredOption('--project <folder>', 'TPM 担当を起こした folder')

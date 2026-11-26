@@ -436,6 +436,22 @@ describe('roster ask tpm --review（判定を受けずに上げる）', () => {
   });
 });
 
+describe('1.0.0 より前の置き場（0.8.x に戻した）', () => {
+  test('ask review・report review・ask tpm --review は、送る前に版を見て、1 通も送らずに止まる（送った後に印で落ちない。review-66）', async () => {
+    const w = await asked();
+    const page = await w.put(w.staff, 'review');
+    await reportReview(w.staff, { url: page, verdict: 'reject', summary: '依頼と違う' });
+    w.store.version = '0.8.0';
+    // 版は 1 つの命令で 1 度だけ見る（命令ごとの文脈で覚える）ので、命令ごとに新しい文脈で打つ。
+    const before = [texts(w, 'file:1').length, texts(w, 'file:2').length, texts(w, 'file:tpm').length];
+    const old = /の版は 0\.8\.0 で、この roster が話す API（1\.0\.0 から）を持ちません。何も頼んでいません。/;
+    await expect(askReview({ ...w.se }, { url: PR, wait: 0 })).rejects.toThrow(old);
+    await expect(reportReview({ ...w.staff }, { url: page, verdict: 'approve', summary: 'よい' })).rejects.toThrow(old);
+    await expect(askTpm({ ...w.se }, { text: '受けない', waitingFor: 'x', review: 1 })).rejects.toThrow(old);
+    expect([texts(w, 'file:1').length, texts(w, 'file:2').length, texts(w, 'file:tpm').length]).toEqual(before);
+  });
+});
+
 describe('roster review list', () => {
   test('頼みごとの行と、合わせた数を出す', async () => {
     const w = await asked();

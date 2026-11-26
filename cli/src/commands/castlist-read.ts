@@ -10,7 +10,7 @@ import type { Context } from '../context.ts';
 import { TpmError } from '../skill-sets.ts';
 import type { SessionRecord } from './castlist.ts';
 
-/** 出す形。json なら castlist の答えをそのまま出す。 */
+/** 出す形。json なら castlist の答えを、前の API の形に直して出す。 */
 export interface JsonOption {
   json?: boolean
 }

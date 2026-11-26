@@ -17,7 +17,7 @@ import { notAuditor, notRepeatToPeer, oneLine, record, sender, showWait, toPeer,
 import { putPage } from './page.ts';
 import { pageOwner } from './reply.ts';
 import { markBrief, markVerdict } from './review-marks.ts';
-import { isPageUrl } from './store.ts';
+import { isPageUrl, requireStore } from './store.ts';
 
 /** Staff Engineer 担当の役割の名。 */
 export const STAFF: RoleName = 'staff-engineer';
@@ -176,6 +176,8 @@ export async function askReview(ctx: Context, options: { url: string, focus?: st
   if (!isPageUrl(ctx.env, options.url) && !PR_URL.test(options.url)) throw new TpmError(`--url は、置き場のページか PR の URL にしてください（見る物）: ${options.url}`);
   const same = openReviews(ctx, self.key).find(r => r.url === options.url);
   if (same !== undefined) throw new TpmError(`同じ物のレビューを、もう頼んであります（#${same.n}。${same.askedAt} に頼んだ）。2 度目は送っていません。判定は Staff Engineer 担当から【review】で届きます`);
+  // 送った後に置き場の印（依頼書のレビュー待ち）を書くので、置き場の版は送る前に見る（ask pm と同じ。review-66）。
+  await requireStore(ctx);
   const subject = staffSubject(ctx, self.key);
   const seat = readRole(ctx, staffKey(self.key));
   const alive = seat?.address !== undefined && ctx.transport.seats().some(s => s.address === seat.address);
@@ -262,6 +264,8 @@ export async function reportReview(ctx: Context, options: ReviewOptions): Promis
   if (!isPageUrl(ctx.env, options.url) || !REVIEW_PAGE.test(options.url)) throw new TpmError(`--url は、roster page put --kind review で置いたレビューのページの URL にしてください: ${options.url}`);
   const subject = subjectOf(self);
   if (pageOwner(ctx, options.url)?.key !== subject) throw new TpmError(`--url は、${subject} のレビューのページにしてください（別の課題のページ）: ${options.url}`);
+  // 送った後に置き場の印（判定・見た物）を書くので、置き場の版は送る前に見る（ask pm と同じ。review-66）。
+  await requireStore(ctx);
   // 返すのは、いちばん古い依頼書の頼みだけ（依頼書は積まれた順にこなす。後ろに積まれた依頼書の頼みは、次の【review】で返す）。
   const briefed = openReviews(ctx, subject).filter(r => r.brief !== undefined);
   const asks = briefed.filter(r => r.brief === briefed[0]?.brief);

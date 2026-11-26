@@ -189,20 +189,20 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 - 時系列のページ（種類は `timeline`）は、`roster incident timeline` が state の記録から作って置く（下の「思わぬ出来事」）。手では置かない。
 - 探す: `roster page list`（今の project の新しい順）。`--key <Key>`・`--role <役割>`・`--workspace <宛先>`・`--kind <種類>`・`--q <語>`・`--reply <waiting|answered>`（返事の状態）・`--on <pm|review|tpm>`（`--reply` の待ちの相手。既定は Product Manager）で絞り、`--json` で記録を出す。Product Manager は、置き場の一覧の UI（`http://127.0.0.1:8801/`）で同じように絞って見る。
 - 開く: ページは自動では開かない（`roster ask pm`・`roster report done` も開かない）。Product Manager は、置き場の一覧の UI（`http://127.0.0.1:8801/`）を 1 つ開いておき、新着の印で気づいて読む。その場で開いて人に見せる時だけ `roster show <URL>`。
-- 返事の状態: Product Manager の返事が要るページ（確認のページ）には、置き場が「返事待ち」「答えた」の状態を持つ（pagetray 0.5.0 から）。**担当は手で書かない。**`roster ask pm` が、送った確認のページを返事待ちにし、TPM 担当の `roster answer` が答えたにする。Product Manager は、置き場の一覧の UI の「返事待ち N 件」と行の印で、返事が要るページを見分ける。
+- 返事の状態: Product Manager の返事が要るページ（確認のページ）には、置き場が「返事待ち」「答えた」の状態を持つ。**担当は手で書かない。**`roster ask pm` が、送った確認のページを返事待ちにし、TPM 担当の `roster answer` が答えたにする。Product Manager は、置き場の一覧の UI の「返事待ち N 件」と行の印で、返事が要るページを見分ける。
   - 置いただけの確認のページには印が付かない。`roster ask pm` で送って初めて返事待ちになる。
   - 前の確認を置き換える確認（計画を直して「進むか」を聞き直すなど）は、`roster ask pm --supersede <古い確認の URL>` で送る。送った後、古い確認の返事待ちが外れる（同じ Key の返事待ちの確認だけを受け、別の Key・答え済み・送っていない確認は送る前に断る）。
   - `roster answer` は、その Key の返事待ちのページが 1 枚なら、それを答えたにする。2 枚以上ある時は、送る前に止まって URL を並べるので、どのページへの答えかを `--url <確認の URL>`（何度でも）で書くか、みなへの答えなら `--all` を付けて打ち直す。
-  - 置き場が応えない・版が古い（0.5.0 より前）時は、印は付かないが、メッセージは送られる（`置き場の印: 付けていない` と出る）。
+  - 置き場が応えない時は、印は付かないが、メッセージは送られる（`置き場の印: 付けていない` と出る）。置き場の版が古い（1.0.0 より前）時は、送る前に「この roster が話す API（1.0.0 から）を持ちません」で止まり、メッセージも送られない。`roster ask devops` で知らせる（TPM 担当は、DevOps Engineer 担当に振る）。
   - 手で直すのは TPM 担当だけ: `roster page reply <URL>… --waiting|--answered`。`roster answer` を通らずに済んだ確認（取り下げた・次の依頼書で答えた）を答えたにする時と、置き場が応えない間に送った確認を返事待ちにする時に使う。`roster dismiss` は、その Key に返事待ちのページが残っていれば URL を出す。担当は `roster ask tpm` で頼む。
-- レビューの印（pagetray 0.8.0 から）: 置き場は、返事待ちの相手も持つ（Product Manager・レビューの席・TPM 担当）。**担当は手で書かない。**命令が書き、Product Manager の「返事待ち N 件」と `roster answer` の数には入らない。置き場に写すのは、判定の語・見た物の URL・時刻だけ（見てほしい所・判定の一言は写さない）。
+- レビューの印: 置き場は、返事待ちの相手も持つ（Product Manager・レビューの席・TPM 担当）。**担当は手で書かない。**命令が書き、Product Manager の「返事待ち N 件」と `roster answer` の数には入らない。置き場に写すのは、判定の語・見た物の URL・時刻だけ（見てほしい所・判定の一言は写さない）。
   - `roster ask review`（と、席の起こし直し）が、レビューの依頼書に見る物を書いて「レビュー待ち」にする（置き換えた前の依頼書の待ちは外す）。`roster report review` が、レビューのページに判定と見た物を書き、依頼書を「レビュー済み」にする。置き場の一覧の UI は、行に判定の印と「見た物:」の link を、見られたページの行に「レビュー: review-N 判定」を出す。
   - `roster ask tpm --review <番号>` が、レビューのページを「上げた」（TPM 担当の返事待ち）にする。TPM 担当は、決めたら `roster page reply <レビューのページの URL> --answered --on tpm` で「決まった」にする。今の上げた件は `roster page list --reply waiting --on tpm`。
-  - 手で直す時（置き場が応えない間に送った頼みなど）は、`roster page reply` に `--on review` か `--on tpm` を付ける（付けないと Product Manager の返事待ちになる）。置き場が 0.8.0 より前なら、命令は待ちの相手を送らず（`置き場の印: 付けていない（置き場の版が古く、レビューの印を持てない…）`）、`roster page reply --on` は止まる。
+  - 手で直す時（置き場が応えない間に送った頼みなど）は、`roster page reply` に `--on review` か `--on tpm` を付ける（付けないと Product Manager の返事待ちになる）。
 - 消す: **消してよいのは TPM 担当だけ**（戻せない。Auditor が置いたページは、Product Manager の言葉を添えなければ TPM 担当も消せない。上の「監査」）。試しに置いた・置き間違えたページは、担当は自分で消さず、`roster ask tpm` で URL と訳を送って頼む（担当の居場所からの `roster page delete` と、置き場に消す要求を直に送る `curl`、置き場の CLI の `pagetray page delete` は止まる）。TPM 担当は `roster page delete <URL>…`（Key ごとなら `--key <Key>`、project ごとなら `--project <名>`。その Key・project の file も一緒に消える）で消す物を見て、`--yes` を付けて消す。控えの file も消える。消したページの URL は 410 を返し、その番号は 2 度使われない。
 - 送り手: project に castlist の設定があれば、`roster page put`・`roster file put` は、自分の session を指す付随する id を付けて置く（置き場が castlist に聞き、ページと file の記録に送り手として残す。担当は何も足さない）。置き場が断ると、ページも file も置かれていない（`roster` は送り直さない）。
   - 「castlist に送り手を聞けませんでした（503）」: 置き場が castlist に届かない。castlist が起きてから打ち直す（止まっていれば、下の「アクターの台帳」のとおり guard も止まる）。castlist が起きているのに続く時は、`roster report incident` で台帳に挙げる。
-  - 「castlist に登録が無いと、置き場が答えました（422）」: この session が castlist にまだ無い。session は guard が Bash の前に登録するので、打ち直す。続く時は `roster report incident` で台帳に挙げる。
+  - 「castlist に登録が無いと、置き場が答えました（400）」: この session が castlist にまだ無い。session は guard が Bash の前に登録するので、打ち直す。続く時は `roster report incident` で台帳に挙げる。
 - 置き場が応えなければ、ページは置けない（`roster page put` が止まる。番号を置き場が決めるため）。控えにあるページは読める。`roster ask devops --what "置き場（pagetray）を起こす" --why "<何が置けないか>"` で頼む。自分では container を起こさない。
 - 図: Product Manager が読むページには、下の図を入れる。描く図はページの中に inline の SVG で描く（file に上げない。字で描くので、画面の写しのような写り込みが無い）。file で上げるのは画面の写しだけ。ひな形と描き方は、この folder の `figures.md`。
 
@@ -222,7 +222,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
   - ページには、出た `ページからの参照:` の形で相対に書く（同じ Key なら `<img src="files/<語>-<n>.<拡張子>">`、別の Key なら `../<Key>/files/…`）。置き場でも控えでも同じ形で開く。
   - 読む: `roster file path <URL>` で file の path にして Read tool で読む。`roster page path` も、ページが参照する file を控えに写し、`参照の file:` の行に path を出す。探すのは `roster file list`。
   - 消す: ページと同じく TPM 担当だけ。担当は `roster ask tpm` で URL と訳を送って頼む（秘密を上げてしまった時は、すぐ）。TPM 担当は `roster file delete <URL>…` で消す物と、それを参照しているページを見て、`--yes` を付けて消す。
-  - 「置き場（pagetray）の版が古く、file を扱えません」と出たら、`roster ask devops` で置き場の版を上げるよう頼む。
+  - 「置き場（…）の版は … で、この roster が話す API（1.0.0 から）を持ちません」と出たら（ページも file も同じ）、`roster ask devops` で置き場を 1.0.0 から後の版で起こすよう頼む。
 
 ## Product Manager に確かめる
 
