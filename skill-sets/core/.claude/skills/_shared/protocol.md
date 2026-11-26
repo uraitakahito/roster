@@ -1,6 +1,6 @@
 # 担当のあいだの決まり（どの担当も読む）
 
-TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・DevOps Engineer 担当（`/devops-engineer`）・Staff Engineer 担当（`/staff-engineer`）・Sustaining Engineer 担当（`/sustaining-engineer`）・Auditor（`/audit`）が共通に従う決まり。依頼主は Product Manager（利用者）。返答と報告は日本語で書く。
+TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・Tech Lead 担当（`/tech-lead`）・DevOps Engineer 担当（`/devops-engineer`）・Staff Engineer 担当（`/staff-engineer`）・Sustaining Engineer 担当（`/sustaining-engineer`）・Auditor（`/audit`）が共通に従う決まり。依頼主は Product Manager（利用者）。返答と報告は日本語で書く。
 
 担当どうしのやりとりは、すべて `roster` の命令でする。`roster` が、メッセージを送る・課題に記録を書く・状態を出す、を 1 度にする（相手が見たかは、送る時には見ない。後で roster が、hook が本文を渡した時刻と、roster が見せた時刻から引く）。連携の道具（cmux など）の命令と、課題管理の道具（Jira・GitHub の Issue）で記録を書く・状態を進める命令は直に打たない（直に打つと記録と状態が抜けるので、guard が止める）。課題管理の課題を読む命令は止めないが、読むときも `roster issue view` を使う（下の「課題を読む」）。どの道具を使うかは、TPM 担当を起こした folder と、その直下の folder の `.claude/roles/config.jsonc` を合わせた設定で決まる（下の repo をいくつも触る課題のため。課題の記録の先は、課題の Key の形で決まる）。
 
@@ -152,6 +152,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 - **レビューは助言で、課題の担当を縛らない。** 受けるか・直すかは課題の担当が決める。
 - **意見がぶつかった時だけ、TPM 担当に上げる。** 課題の担当が「直すべき」を受けない時は、自分で決めず、`roster ask tpm "<受けない訳・案とお勧め>" --waiting-for "<何を>" --review <頼みの番号>` で上げる（TPM 担当は判定を受け取っていないので、命令がレビューのページの URL を本文に足し、上げたことを頼みの記録に残す。`--review` が受けるのは、自分の課題の、判定が「直すべき」の頼みだけ）。決まるまで、その PR は merge しない。TPM 担当は、依頼書と Product Manager の言葉で決まる物は自分で決め、範囲・優先・設計の好みは Product Manager に聞く。レビューの担当に伝えることがあれば、TPM 担当が `roster notify <課題の Key>.staff` で伝える。
 - **Staff Engineer 担当は、直さない・決めない。** repo・PR・ページを変えず、merge もしない（書き込みと `git`・`gh` の変える命令は guard が止める）。merge するのは、今までどおり課題の担当。**じかに届くのは、頼みと判定だけ。**そのほかのこと（見る物が読めない・依頼書が足りない）を、課題の担当にじかに聞く道は無い: 判定「見られなかった」で返すか、`roster ask tpm` で TPM 担当に送る。
+- **分けた課題では**: repo の席の計画と PR は、その課題の Tech Lead 担当が見る（repo の席の `roster ask review` が、Tech Lead 担当へじかに届く。Staff Engineer 担当の席は起こさない）。Tech Lead 担当は、自分の計画と境の取り決めに照らして見て、Staff Engineer 担当と同じ `roster report review` で、頼まれた古い順に返す。Tech Lead 担当も、レビューでは直さない（直すのは頼んだ席。merge するのも頼んだ席）。Tech Lead 担当自身の計画と PR は、Staff Engineer 担当が見る。「直すべき」を受けない時に TPM 担当へ上げるのは、どちらも同じ。
 - **いつ頼むか**: 計画・提案を置く前と、PR を merge する前に、課題の担当が要ると見たら頼む（設計の判断がある・戻しにくい・広く触る、など）。**依頼書に「レビューを受ける」とあれば、計画と PR を必ず頼む。**文書の食い違いだけを直す PR は、頼まなくてよい。
 - **残す**: 課題の担当は、成果のページ（計画・結果）に「レビュー: 誰が・判定・どう扱ったか」を必ず書く（レビューのページの URL を添える）。頼まなかった時は「レビュー: 無し」と書く。TPM 担当と Product Manager は、メッセージを受けなくても、この行・課題の記録・置き場のレビューのページ・`roster review list` でレビューを見られる。
 - 頼んだ回数・判定・TPM 担当に上げた数は、命令が記録する。`roster review list [--key <Key>]` で読める（この記録も、roster を動かす機械の外に写さない）。
@@ -163,11 +164,11 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 
 | 形 | 誰と誰 | どの道 |
 |---|---|---|
-| 縦に任せる | Product Manager → TPM 担当 → 担当 | 依頼書と【brief】。成果は【done】で戻る。段を飛ばさない（担当は Product Manager に直接聞かない。TPM 担当は repo を調べず、実装しない） |
-| 横に相談する | 課題の担当 ⇄ その課題の Staff Engineer 担当 | 【ask-review】と【review】が、TPM 担当を通らずじかに届く。答えは助言で、相手を縛らない（上の「レビュー」） |
+| 縦に任せる | Product Manager → TPM 担当 → 担当（分けた課題では、Tech Lead 担当 → repo の席が続く） | 依頼書と【brief】。成果は【done】で戻る。段を飛ばさない（担当は Product Manager に直接聞かない。TPM 担当は repo を調べず、実装しない。repo の席は、Tech Lead 担当を飛ばして Product Manager への確認を送らない） |
+| 横に相談する | 課題の担当 ⇄ その課題の Staff Engineer 担当（repo の席のレビューは、Tech Lead 担当が見る） | 【ask-review】と【review】が、TPM 担当を通らずじかに届く。答えは助言で、相手を縛らない（上の「レビュー」） |
 | 食い違いを上げる | 課題の担当 → TPM 担当 →（要れば）Product Manager | 助言を受けない時は自分で決めず、`roster ask tpm --review <番号>` で上げる。決まるまで、ぶつかる所は進めない |
 
-別の課題の担当どうし・DevOps Engineer 担当との横の道は無い（TPM 担当を通る。【ask-tpm】【ask-devops】）。
+別の課題の担当どうし・DevOps Engineer 担当との横の道は無い（TPM 担当を通る。【ask-tpm】【ask-devops】）。同じ課題の repo の席どうしも、じかには話さない（Tech Lead 担当を通る。【ask-lead】）。
 
 ## 課題を読む
 
@@ -254,7 +255,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 |---|---|
 | TPM 担当 | 自分で直さず、課題として Software Engineer 担当に回す（`/tpm` の 2） |
 | Staff Engineer 担当 | **直さない。**レビューのページの指摘に挙げる。直すのは、課題の担当 |
-| Software Engineer 担当・DevOps Engineer 担当・Sustaining Engineer 担当 | お勧めの直し方で直し、PR を merge まで自分で進める（Product Manager の確認は要らない）。worktree で作業し、PR の題か本文に課題の Key を入れる。merge したら【doc-fix】で知らせ、成果のページにも一覧で載せる |
+| Software Engineer 担当・Tech Lead 担当・DevOps Engineer 担当・Sustaining Engineer 担当 | お勧めの直し方で直し、PR を merge まで自分で進める（Product Manager の確認は要らない）。worktree で作業し、PR の題か本文に課題の Key を入れる。merge したら【doc-fix】で知らせ、成果のページにも一覧で載せる |
 | Auditor | **直さない。**監査のページの「見つけた食い違い」に、file・今の文・コードの実際・お勧めの直し方を挙げる。Product Manager が通せば、TPM 担当が課題にして振る |
 
 文書とコードが食い違うときは、コードの方に合わせる。
@@ -288,8 +289,9 @@ project の設定に castlist（アクターの台帳）の URL があれば、`
 
 ## 終わり方
 
-- Software Engineer 担当と DevOps Engineer 担当は、依頼書 1 つが済むごとに【done】を送り、次の【brief】を待つ。同じ課題の続きは同じ担当が受ける。【dismiss】が来るまで自分から終えない（`roster report end` は【dismiss】の前には送れない）。
+- Software Engineer 担当・Tech Lead 担当・DevOps Engineer 担当は、依頼書 1 つが済むごとに【done】を送り、次の【brief】を待つ。同じ課題の続きは同じ担当が受ける。【dismiss】が来るまで自分から終えない（`roster report end` は【dismiss】の前には送れない）。
 - 自分の居場所（workspace）は自分で閉じない。【end】を送った後、TPM 担当が報告を受けてから閉じる。
+- 分けた課題: repo の席の【dismiss】は Tech Lead 担当が送り、repo の席の【end】は Tech Lead 担当へ届く（課題管理の課題は済みにならない）。席は Tech Lead 担当が `roster seat close` で閉じる。Tech Lead 担当は、repo の席をみな閉じてから【end】を送る（残っていれば、命令が断る）。課題が済みになるのは、Tech Lead 担当の【end】。
 - 自分で作った worktree と branch は、merge の後に消す（`git worktree list` に本体だけが残ること）。
 - Staff Engineer 担当は、レビューを【review】で課題の担当へ返し、次の頼み（【ask-review】）を待つ。【done】も【end】も送らない。席は、TPM 担当が課題の担当の席と一緒に閉じる（上の「レビュー」）。
 - Auditor の席は、Product Manager が起こし、閉じる。【done】も【end】も送らず、報告と決定の後は次の `/audit` を待つ。

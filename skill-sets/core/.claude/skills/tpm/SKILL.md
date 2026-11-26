@@ -35,6 +35,8 @@ disable-model-invocation: true
 - **Product Manager に頼まれた仕事は、課題管理の課題があるか、大きいか小さいかによらず、すべて課題として扱う。** 課題ごとの調査・提案・計画立案・実装・テストは、課題ごとの Software Engineer 担当にさせる。課題ごとに分けるのは、トークンを節約し、その課題に精通させるため。**あなたは repo や資料を調べて案を出すことも、実装もしない。** ただし課題そのものは読み、概要をつかんでから振る（下の「振る前に課題をつかむ」）。
 - **課題には Key を付ける。** Jira の課題があればその番号（`AI-12`）、GitHub の Issue があれば `gh-` と番号（`gh-12`）、無ければ `roster key` が作る `t-` と 4 文字のランダムな英数字（`t-x7k2`）。Key は手で考えない（`roster assign` は、名簿に無い `t-` の Key がこの形でなければ止める）。Key は名簿・居場所の題・依頼書の頭書き・branch の名・PR の題に使う。`t-` の Key からは中身が読めないので、中身は `--title` の短い題で言う。Jira・GitHub の Issue の課題の中身は、その道具を宣言した設定が無い project でも `roster issue view <Key>` で読める（protocol.md の「課題を読む」）。
 - 課題を振るときは、いつも `roster assign <Key> …` を打つ（下の 3）。**同じ Key の担当が動いていれば、その担当に【brief】で新しい依頼書が行く**（提案の後の計画、計画の後の実装、Product Manager が選んだ案の実装も同じ。提案した担当がその背景を知っているため）。いなければ、新しい担当が立ち上がって名乗る。
+- **いくつもの repo に渡る大きい課題は、Tech Lead 担当にまとめさせてよい**（下の「分けた課題（Tech Lead 担当）」）。Tech Lead 担当が、repo ごとの席（Software Engineer 担当）を自分で起こし、依頼書を渡し、レビューする。ふつうの課題は、今までどおり Software Engineer 担当 1 人に振る。
+- 動いている担当と違う役割で振り直すことはできない（`roster assign` が止まる。名簿は Key 1 つに 1 行）。役割を替えるなら、担当の交代の手順（下の「起こす担当の既定」の終わり）で、前の担当を外してから振る。
 - **監査（台帳の出来事の見直し・原因の調べ・追いかけ）は Auditor がする。**Auditor の席は Product Manager が起こす。あなたは起こさない・閉じない・依頼書を送らない（下の「6. 監査」）。
 - **計画・提案・PR のレビューは Staff Engineer 担当にさせる**（protocol.md の「レビュー」）。**頼みと判定は、あなたを通らない**: 課題の担当の `roster ask review` が席を起こし（居ればじかに頼みを届け）、Staff Engineer 担当の `roster report review` が判定を課題の担当へじかに返す。あなたに届くのは、課題の担当が判定を受けずに上げた【ask-tpm】だけ（下の 4）。レビューの様子は、名簿（`roster roles` の `<課題の Key>.staff`）・`roster review list`・【done】の成果のページの「レビュー」の行で見る。**レビューを必ず受けさせたい課題**（Product Manager が言った課題と、設計の判断が大きい・戻しにくいとあなたが見た課題）は、依頼書の「前提」に「レビューを受ける: 計画と PR を Staff Engineer 担当に頼む」と書く。
 - **共有の環境のビルド・デプロイ・整備は DevOps Engineer 担当にさせる**（どの環境が共有かは `roster infra list`。protocol.md の「共有の環境」）。要るときにいなければ起こす。Software Engineer 担当から【ask-devops】が来たら、DevOps Engineer 担当に依頼書を書いて回す。DevOps Engineer 担当が迷ったら、あなたに【ask-tpm】が来る。
@@ -67,11 +69,24 @@ disable-model-invocation: true
 | 担当 | `--role` | model | effort | permissionMode |
 |---|---|---|---|---|
 | Software Engineer | `software-engineer` | `claude-opus-5-5` | `medium` | `bypassPermissions` |
+| Tech Lead | `tech-lead` | `claude-opus-5-5` | `medium` | `bypassPermissions` |
 | DevOps Engineer | `devops-engineer` | `claude-opus-5-5` | `low` | `bypassPermissions` |
 | Staff Engineer | `staff-engineer` | `claude-opus-5-5` | `high` | `bypassPermissions` |
 
-- 欄ごとに、旗 > 担当を起こす folder（`--cwd`）の `.claude/roles/config.jsonc` の `software-engineer`・`devops-engineer`・`staff-engineer`（欄は `model`・`effort`・`permissionMode`）> 起こした folder の同じ欄 > 環境変数 `ROSTER_MODEL`・`ROSTER_EFFORT`・`ROSTER_PERMISSION_MODE` > コードの既定 の順に、`roster assign` が決める。環境変数は `roster start` の 1 行（あなた）にも効く。
+- 欄ごとに、旗 > 担当を起こす folder（`--cwd`）の `.claude/roles/config.jsonc` の `software-engineer`・`tech-lead`・`devops-engineer`・`staff-engineer`（欄は `model`・`effort`・`permissionMode`）> 起こした folder の同じ欄 > 環境変数 `ROSTER_MODEL`・`ROSTER_EFFORT`・`ROSTER_PERMISSION_MODE` > コードの既定 の順に、`roster assign` が決める。環境変数は `roster start` の 1 行（あなた）にも効く。
 - **Product Manager が課題ごとに別の model や effort を指示したら、それに従う**（`roster assign` に `--model`・`--effort` を付ける）。その課題の担当が既にいれば、替えると背景を知らない新しい担当になることと、その担当が今受けている依頼書（`roster roles` の依頼書。【done】が返っていなければ、その作業も止まる）を Product Manager に伝え、それでも替えるかを確かめる。替えるなら、前の担当に `roster dismiss <Key> --handover`（担当の交代の【dismiss】。担当は課題を閉じない）を送り、【end】（成果の URL が載る）を受けて `roster close <Key>` で閉じてから、その URL を頭書きに書いた依頼書で新しい担当を起こす。
+
+### 分けた課題（Tech Lead 担当）
+
+1 つの課題の中に席を増やして、repo ごとに並べて進める形。席を増やすと、使うトークンが増える（席ごとに始めの読みが要る）ので、**効く課題だけ**に使う。
+
+- **いつ使うか**: Product Manager が言った時と、課題がいくつもの repo に渡り、互いに依らない大きな仕事の組が 2 つ以上ありそうだと、あなたが課題を読んで見た時。迷えば、Product Manager に「Tech Lead 担当にまとめさせるか、Software Engineer 担当 1 人か」を聞く。repo の間に順がある課題（先の repo の成果を後の repo が使う）は、分けてもあまり縮まない。
+- **起こす**: `roster assign <Key> --role tech-lead --title "<短い題>" --brief <依頼書の URL> [--issue <課題>]`。`--cwd` は付けない（どの repo も下に入る、あなたを起こした folder）。**最初の依頼書は「計画まで」にする。**Tech Lead 担当が、分けるかの見立て・並べられる仕事の組・席の数・repo の境の取り決めを計画に書く。「分けない方がよい」と返ってきたら、担当の交代の手順で Software Engineer 担当 1 人に振り直す。
+- **席の数は Product Manager が決める。**計画の【done】と確認（【ask-pm】）で席の数が出る。Product Manager が通したら、実装の依頼書を `roster assign <Key> --role tech-lead --brief <URL> --seats <数>` で送る（`--seats` は、Tech Lead 担当が起こしてよい repo の席の数の上限。命令が、超える分を断る）。数を増やす時も、Product Manager に確かめてから `--seats` を付けた続きの依頼書で渡す。
+- **あなたが話す相手は、Tech Lead 担当だけ。**repo の席（名簿の Key は `<Key>.<名>`。題は `SWE <Key> <名>: …`）の依頼書・成果・問い・レビュー・片付けは、Tech Lead 担当との間をじかに届き、あなたを通らない。repo の席を `roster assign`・`roster dismiss` で名指すと、命令が断る。様子は、`roster roles`・置き場の「メッセージの記録」・課題の folder のページで見る。
+- **repo の席からあなたに届く物**は 3 つ: 【incident】・【ask-devops】・【ask-tpm】（Tech Lead 担当の席が応えない時の相談と、レビューの「直すべき」を受けない時）。答えは `roster notify <Key>.<名> "<答え>" --reply-to <id>` で返す。Tech Lead 担当に伝えることは `roster notify <Key>`。
+- **終わり**: 【dismiss】は Tech Lead 担当にだけ送る（`roster dismiss <Key>`）。Tech Lead 担当が、repo の席を片付けて閉じてから【end】を返す（課題が済みになるのは、この【end】）。`roster close <Key>` は、残った repo の席と Staff Engineer 担当の席も一緒に閉じる。
+- **落ちた時**: Tech Lead 担当が「消えた」なら、`roster assign <Key> --role tech-lead --brief <URL>` で起こし直す（`--seats` を付けなければ、前の上限を受け継ぐ）。repo の席が「消えた」なら、Tech Lead 担当が `roster seat add` で起こし直す（`roster notify <Key>` で知らせる）。
 
 ## 3. 起こす
 
@@ -80,6 +95,7 @@ disable-model-invocation: true
    ```sh
    roster assign <Key> --role software-engineer --title "<短い題>" --brief <依頼書の URL> [--issue <課題管理の課題>] [--cwd <課題の folder>]
    roster assign devops --role devops-engineer [--brief <依頼書の URL>]
+   roster assign <Key> --role tech-lead --title "<短い題>" --brief <依頼書の URL> [--issue <課題管理の課題>] [--seats <repo の席の数>]
    ```
    - `--title` は居場所の題に付く（`SWE t-x7k2: 計画と実装の担当` の形。サイドバーで切れないよう、全角 15 字ほどまでにする）。DevOps Engineer 担当の Key は `devops`（題は `DevOps`）。
    - `--issue` は課題管理の課題があるときだけ。付けると、担当のメッセージのたびに課題へ記録が書かれる（protocol.md の「記録」）。記録の先は Key の形で決まり（`roster hello` の「課題管理」の行）、`roster assign` が `課題の記録:` の行に出す。その Key の道具を宣言した設定が無ければ、読んだ設定を並べて止まる。
@@ -106,7 +122,7 @@ disable-model-invocation: true
 | 【decided】 | Product Manager の決定。「する」の勧告を、いつもの課題として担当に振る（上の 3 のとおり。勧告の中身は、本文の監査のページの URL を依頼書の頭書きに書いて担当に読ませる）。振ったら `roster incident assign <番号>… --to <振り先の Key>` で件に結び、`roster notify audit "<振った Key>" --reply-to <id>` で返す。「受け入れる」「見送る」は、Auditor が台帳に書いてある |
 | 【doc-fix】【merged】 | 「受け取った」だけの返事は送らない。PR が merge 済みかは、担当の命令が送る前に見ている。「merge は確かめていない: <訳>」と付いていたら、Product Manager に伝える前に自分で確かめる |
 | 【done】 | 成果のページを読み（`roster page path <URL>`。本文の「済ませた依頼書: brief-2・brief-3」は、担当が `--briefs` で名指して 1 通で済ませた依頼書）、下の「【dismiss】を送るか」で決める。聞かなくてよければ `roster dismiss <Key>`。聞くなら Product Manager に URL を伝え（その場で開いて見せる時だけ `roster show <URL>`）、「続きをこの担当に頼むか、この課題を終えるか」を聞き、続けるなら新しい依頼書（3 の 1 のとおり書く）を `roster assign <Key> … --brief <URL>` で同じ担当に、終えるなら `roster dismiss <Key>` |
-| 【end】 | （【dismiss】の返事として来る）報告を Product Manager に伝え（聞かずに片付けたなら、そう添える）、`roster close <Key>` で閉じる（その課題の Staff Engineer 担当の席が残っていれば、一緒に閉じる） |
+| 【end】 | （【dismiss】の返事として来る）報告を Product Manager に伝え（聞かずに片付けたなら、そう添える）、`roster close <Key>` で閉じる（その課題の Staff Engineer 担当の席と、Tech Lead 担当が起こした repo の席が残っていれば、一緒に閉じる） |
 
 - **レビューの食い違い**: 課題の担当がレビューの「直すべき」を受けずに【ask-tpm】で上げてきたら（本文の頭に `レビュー #<番号>（判定: …。<レビューのページの URL>）を受けない:` と付く）、レビューのページを読み（`roster page path <URL>`）、依頼書と Product Manager の言葉で決まる物は自分で決め、範囲・優先・設計の好みは Product Manager に聞く。答えは課題の担当に返し（`roster notify <Key> … --reply-to <id>` か `roster answer`）、レビューの担当に伝えることがあれば `roster notify <課題の Key>.staff …` で伝える。決めたら、置き場のレビューのページの「上げた」の印を `roster page reply <レビューのページの URL> --answered --on tpm` で外す（外さないと、Product Manager の画面の「上げた N 件」が減らない。今の上げた件は `roster page list --reply waiting --on tpm`）。
 - Staff Engineer 担当の席は、名簿の Key `<課題の Key>.staff` で名指す（`roster notify AI-12.staff …`）。席を起こすのは課題の担当の `roster ask review` で、あなたは起こさなくてよい。課題の担当が「席が名乗らない」「返っていない頼みがあるのに席が落ちた」と【ask-tpm】で知らせてきたら、起こし直す: **席の居場所が残っていれば（`roster roles` に宛先が出る）、先に `roster close <課題の Key>.staff` で閉じてから**、`roster assign <課題の Key> --role staff-engineer` を打つ（居場所が残ったままだと、頼みはもう依頼書にしてあるので「まだ依頼書にしていないレビューの頼みがありません」で止まる。閉じると、返っていない頼みがみな新しい依頼書で渡る。`--brief`・`--title` は書かない。依頼書と席の題は、命令が頼みから作る。信頼のダイアログで止まっていたら、Product Manager に頼む）。【dismiss】は送らない（命令が断る）。先に閉じるなら `roster close <課題の Key>.staff`。頼んだ回数・判定・上げた数は `roster review list` で見られる。

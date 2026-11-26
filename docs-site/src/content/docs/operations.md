@@ -21,7 +21,7 @@ roster time AI-36 --gap 30   # 長い空きとみなす長さ（分。既定は 
 
 ## 移す手順
 
-1. TPM 担当のほかに動いている担当（Software Engineer・DevOps Engineer・Staff Engineer・Sustaining Engineer・Auditor）が 0 のときに行う。
+1. TPM 担当のほかに動いている担当（Software Engineer・Tech Lead・DevOps Engineer・Staff Engineer・Sustaining Engineer・Auditor）が 0 のときに行う。
 2. `mv <今の folder> <新しい folder>`（git の履歴ごと移る）。
 3. 新しい folder で 1 度 Claude Code を対話で起こして信頼する（[信頼のダイアログ](/getting-started/#信頼のダイアログ)。信頼は path に付くので、移すたびに要る）。
 4. 新しい folder の `cli/` で `pnpm install --frozen-lockfile` を打つ（`cd <新しい folder>/cli && pnpm install --frozen-lockfile`）。`~/.local/bin/roster` の symlink を張っていれば張り直す（`ln -sf <新しい folder>/cli/bin/roster ~/.local/bin/roster`）。通知のバナーの hook（[設定](/configuration/#cmuxjson-に-hook-を足す)）を使っていれば、`roster banner setup` を打ち直して `~/.config/cmux/cmux.json` の命令を替え、`roster banner check` で確かめる（命令は repo の在り処を書いている。替えないと、古い在り処に入口が無いので hook は何もせず、バナーを選ばなくなる。`roster banner check` と TPM 担当の `roster hello` が在り処の違いを知らせる）。
@@ -57,6 +57,18 @@ roster time AI-36 --gap 30   # 長い空きとみなす長さ（分。既定は 
 
 - 打たないと、新しい依存を読む命令が「module が無い」で落ちる。`cli/bin/roster` が入口で見るのは `cli/` の下の `node_modules` の folder が在るかだけで（無ければ、`pnpm install --frozen-lockfile` を打つよう言って 2 で終わり、guard も起きないので担当の Bash がみな止まる）、folder が在って依存が 1 つ足りない時は、入口を通り、その依存を読む所で初めて落ちる。
 - 2026-11-27 に、NATS の client が入っておらず、メッセージキューに繋げなかった。NATS の client は、配りの口を作る時に初めて読むので、この時は、送る命令が「メッセージキューが応えません。送っていません」で止まり、括弧の中に module が見つからない訳が出る（NATS が動いていても出る）。
+
+## 分けた課題（Tech Lead 担当と repo の席）
+
+いくつもの repo に渡る大きい課題は、1 つの課題の中に席を増やして、repo ごとに並べて進められる。まとめるのは Tech Lead 担当で、repo を 1 つずつ受け持つのは Software Engineer 担当の席（repo の席）。決まりは `skill-sets/core/.claude/skills/_shared/protocol.md` の「分けた課題の中」、命令の作りは [決まりの実装](/protocol/#tech-lead-担当と-repo-の席)。
+
+- **頼み方**: TPM 担当に「この課題は Tech Lead 担当にまとめさせて」と言う。言わなくても、TPM 担当が課題を読んで勧めることがある。席を増やすと使うトークンが増えるので、互いに依らない大きな仕事の組が 2 つ以上ある課題に向く（repo の間に順がある課題は、分けてもあまり縮まない）。
+- **運び**: Tech Lead 担当が、まず計画（並べられる仕事の組・分けるかの見立て・席の数・repo の境の取り決め）を出す。**席の数は Product Manager が決める**（確認のページで聞かれる）。通した数が上限になり、超える席は命令が断る。
+- **画面**: cmux に `Lead <課題の Key>: <題>`（赤の帯）と、`SWE <課題の Key> <名>: <題>`（緑の帯。repo の席）が並ぶ。repo の席の依頼書・成果・問い・レビューは、Tech Lead 担当との間をじかに届き、TPM 担当を通らない。やりとりは、置き場の「メッセージの記録」（`http://127.0.0.1:8801/messages`）と、課題の folder のページ、課題管理の記録（repo の席の記録は `Software Engineer（<名>）` と出る）で見られる。
+- **Product Manager への確認**は、Tech Lead 担当がまとめて送る（repo の席は送れない）。
+- **レビュー**: repo の席の計画と PR は Tech Lead 担当が見る。Tech Lead 担当の計画と PR は Staff Engineer 担当が見る。
+- **終わり**: Tech Lead 担当が、repo の席を片付けて閉じてから終える。課題管理の課題が済みになるのは、Tech Lead 担当が終えた時。
+- model などを替えるなら、`.claude/roles/config.jsonc` の `tech-lead`（repo の席は `software-engineer`。席を起こす folder の設定が先に効く）に書く（[設定](/configuration/)）。
 
 ## レビュー（Staff Engineer 担当の席）
 

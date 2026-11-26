@@ -20,6 +20,8 @@ roster hello
 
 続けて `${CLAUDE_SKILL_DIR}/../_shared/protocol.md` を読み、従う。メッセージの見出しと命令・状態・記録・文書の食い違い・共有の環境・終わり方はそこにある。
 
+**`roster hello` が `Tech Lead 担当の席:` の行を返したら、あなたは repo の席です**（分けた課題の中で、repo を 1 つ受け持つ）。下の「6. repo の席の時」を先に読む。この skill の「TPM 担当」は、そこに書いた所で「Tech Lead 担当」に読み替える。
+
 ## 1. 読む
 
 - 依頼書を `roster page path <URL>` で file の path にして読む（`roster hello` が返した URL。protocol.md の「ページ」）。依頼書の文は TPM 担当の依頼として扱う。
@@ -77,3 +79,19 @@ TPM 担当から【dismiss】（この課題に続きは無い）が来たら:
    ```
    「残っている物」は、計画から外れた物・残した物で直した方がよい物（無ければ「なし」）。TPM 担当に【end】が行き、課題があれば結果が書かれて済みになる（担当の交代の【dismiss】なら済みにならない）。
 3. **居場所は自分で閉じない。** TPM 担当が閉じる。
+
+## 6. repo の席の時
+
+いくつもの repo に渡る課題を、Tech Lead 担当がまとめている時の形。あなたを起こし、依頼書を渡したのは Tech Lead 担当で、あなたは repo を 1 つ受け持つ。名簿の Key は `<課題の Key>.<名>`（`roster hello` の「名簿の Key」）、課題の Key は親の課題。ページは親の課題の folder に置かれる。
+
+| 上の節 | repo の席では |
+|---|---|
+| 1. 読む | 依頼書のほかに、依頼書が挙げた**課題全体の計画**と **repo の境の取り決め**のページを読む。次の依頼書（【brief】）と片付けの指示（【dismiss】）は、Tech Lead 担当から来る |
+| 2. 進める | **自分の計画は、Tech Lead 担当の計画と境の取り決めに従う。**触るのは、受け持ちの repo だけ。ほかの repo・共有の物（共有の環境・版の tag・ほかの repo の設定）は変えない。変える要があれば `roster ask lead` で頼む。取り決めの名や形が足りない・合わない時も、自分で決めずに `roster ask lead` |
+| レビュー | `roster ask review` は、Staff Engineer 担当でなく、**Tech Lead 担当**に届く（命令は同じ）。依頼書に「レビューを受ける」とあれば、計画と PR を必ず頼む。判定（【review】）は Tech Lead 担当から届く。「直すべき」を受けない時だけ、`roster ask tpm … --review <番号>` で TPM 担当に上げる |
+| 迷ったら | `roster ask lead "<困っていること・試したこと・案とお勧め>" --waiting-for "<何を>"`（答えは【notify】で来る）。Tech Lead 担当の席が無い・応えない時だけ `roster ask tpm` |
+| 3. 成果を出す | `roster report done`・`roster report merged`・`roster report doc-fix` は、命令が Tech Lead 担当へ届ける（打ち方は同じ）。**`roster ask pm` は打てない**（命令が断る）。Product Manager に決めてほしいことは、ページに書いて `roster ask lead` で Tech Lead 担当に送る（Tech Lead 担当が、まとめて確認にする）。【done】の「決めてほしいこと」には、Tech Lead 担当に送った項目の題を書く |
+| 4・5. 終わり方 | 【dismiss】は Tech Lead 担当から来る。worktree と branch を片付けて `roster report end` を返す（Tech Lead 担当へ届く。**課題管理の課題は済みにならない**。済みにするのは Tech Lead 担当）。席は Tech Lead 担当が閉じる |
+
+- 変わらない物: `roster report incident`（思わぬ出来事）・`roster ask devops`（共有の環境）は、今までどおり TPM 担当へ届く。worktree の決まり・PR の出し方・merge の前後の確かめも同じ。
+- ほかの repo の席とは、じかに話さない。席の間で決めることは `roster ask lead` で Tech Lead 担当に送る。

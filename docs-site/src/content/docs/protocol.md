@@ -325,7 +325,7 @@ sequenceDiagram
 
 ## Tech Lead 担当と repo の席
 
-Tech Lead 担当（役割 `tech-lead`。題は `Lead <課題の Key>: <短い題>`。skill は `/tech-lead`）は、いくつもの repo に渡る課題 1 つの全体をまとめる担当。TPM 担当が `roster assign <課題の Key> --role tech-lead --seats <数>` で起こす。Tech Lead 担当は、repo ごとの席（repo の席。役割は `software-engineer`）を自分で起こす。Tech Lead 担当と repo の席は、TPM 担当を通らず、じかに話す。repo の席の計画と PR は、Tech Lead 担当がレビューする。**作りかけ**: skill の手順は、これから足す。
+Tech Lead 担当（役割 `tech-lead`。題は `Lead <課題の Key>: <短い題>`。skill は `/tech-lead`）は、いくつもの repo に渡る課題 1 つの全体をまとめる担当。TPM 担当が `roster assign <課題の Key> --role tech-lead --seats <数>` で起こす。Tech Lead 担当は、repo ごとの席（repo の席。役割は `software-engineer`）を自分で起こす。Tech Lead 担当と repo の席は、TPM 担当を通らず、じかに話す。repo の席の計画と PR は、Tech Lead 担当がレビューする。手順は skill（`/tech-lead` と、`/software-engineer` の「repo の席の時」）、決まりは `_shared/protocol.md` の「分けた課題の中」。
 
 | 命令 | 打つ者 | すること |
 |---|---|---|
