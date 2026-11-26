@@ -10,7 +10,7 @@ import { deliveredLines, gateFile, waiterFile, type GateMark } from '../src/mail
 import { MemoryMailroom } from '../src/mailroom/memory.ts';
 import { TpmError } from '../src/skill-sets.ts';
 import type { World } from './helpers.ts';
-import { ALL, claim, down, left, natsWorld, patched, TPM_FROM } from './mail-helpers.ts';
+import { ALL, claim, down, left, natsWorld, patched, FROM_TPM } from './mail-helpers.ts';
 
 const ask = { text: '案 A と B で迷う', waitingFor: '案' };
 type W = World & { se: Context };
@@ -186,7 +186,7 @@ describe('人が入力した時に渡す（roster mail prompt）', () => {
     const id = left(w, 't-x7k2')[0]?.id ?? '';
     const out = JSON.parse(await mailPrompt(w.hook(), JSON.stringify({ session_id: 's-200', transcript_path: transcript(3) })) ?? '{}') as { hookSpecificOutput: { hookEventName: string, additionalContext: string } };
     expect(out.hookSpecificOutput.hookEventName).toBe('UserPromptSubmit');
-    expect(out.hookSpecificOutput.additionalContext).toBe(['roster: 人の入力の前に届いていたメッセージです（メッセージキューから渡した）。人の入力と合わせて扱ってください。', `--- ${TPM_FROM}（id ${id}）`, '【notify】入力の前に届いた物', '--- ここまで'].join('\n'));
+    expect(out.hookSpecificOutput.additionalContext).toBe(['roster: 人の入力の前に届いていたメッセージです（メッセージキューから渡した）。人の入力と合わせて扱ってください。', `--- ${FROM_TPM}（id ${id}）`, '【notify】入力の前に届いた物', '--- ここまで'].join('\n'));
     expect(deliveredLines(w.se)).toEqual([{ at: '2026-11-20T12:00:00.000Z', id, to: 't-x7k2', when: 'prompt', nth: 1, lines: 3, session: 's-200' }]);
     expect(w.office.work).toEqual([]);
   });
@@ -216,7 +216,7 @@ describe('手を止めている間に待つ（roster mail wait）', () => {
     await notify(w.tpm, 't-x7k2', { text: '手が空いたら読む物' });
     const id = left(w, 't-x7k2')[0]?.id ?? '';
     const r = await mailWait(w.hook(), JSON.stringify({ session_id: 's-200', transcript_path: transcript(5) }), new AbortController().signal);
-    expect(r).toEqual({ code: 2, stderr: ['roster: 手を止めている間に届いたメッセージです（メッセージキューから渡した）。', `--- ${TPM_FROM}（id ${id}）`, '【notify】手が空いたら読む物', '--- ここまで'].join('\n') });
+    expect(r).toEqual({ code: 2, stderr: ['roster: 手を止めている間に届いたメッセージです（メッセージキューから渡した）。', `--- ${FROM_TPM}（id ${id}）`, '【notify】手が空いたら読む物', '--- ここまで'].join('\n') });
     expect(deliveredLines(w.se)).toEqual([{ at: '2026-11-20T12:00:00.000Z', id, to: 't-x7k2', when: 'wake', nth: 1, lines: 5, session: 's-200' }]);
     expect(w.office.work).toEqual([]);
     expect(w.se.state.read(waiterFile('t-x7k2'))).toBeUndefined();

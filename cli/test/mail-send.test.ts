@@ -7,7 +7,7 @@ import { deliveredLines, gateFile, passedIds, type GateMark } from '../src/mail.
 import { MAILROOM_LIMITS } from '../src/mailroom/types.ts';
 import { MemoryMailroom } from '../src/mailroom/memory.ts';
 import { BRIEF } from './helpers.ts';
-import { ALL, claim, down, left, natsWorld, patched, SE_FROM, TPM_FROM } from './mail-helpers.ts';
+import { ALL, claim, down, left, natsWorld, patched, FROM_SE, FROM_TPM } from './mail-helpers.ts';
 
 const log = (w: { tpm: { state: { lines: <T>(name: string) => T[] } } }): Sent[] => w.tpm.state.lines<Sent>('log.jsonl');
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -21,9 +21,9 @@ describe('送り分け（名乗った受け手には NATS、名乗っていな�
     expect(await notify(w.tpm, 't-x7k2', { text: 'A で進める' })).toEqual(['送った: 【notify】→ file:1（相手の手が空いた時に届く。送り直さない）']);
     expect(w.wire.inbox('file:1')).toHaveLength(before);
     const sent = log(w).at(-1);
-    expect(sent).toMatchObject({ heading: 'notify', from: TPM_FROM, to: 'file:1', text: '【notify】A で進める', carrier: 'nats', box: 't-x7k2', sender: { key: 'tpm' }, recipient: { key: 't-x7k2' } });
+    expect(sent).toMatchObject({ heading: 'notify', from: FROM_TPM, to: 'file:1', text: '【notify】A で進める', carrier: 'nats', box: 't-x7k2', sender: { key: 'tpm' }, recipient: { key: 't-x7k2' } });
     expect(sent?.id).toMatch(UUID);
-    expect(left(w, 't-x7k2')).toEqual([{ id: sent?.id, from: TPM_FROM, to: 't-x7k2', text: '【notify】A で進める', at: '2026-11-20T12:00:00.000Z' }]);
+    expect(left(w, 't-x7k2')).toEqual([{ id: sent?.id, from: FROM_TPM, to: 't-x7k2', text: '【notify】A で進める', at: '2026-11-20T12:00:00.000Z' }]);
     await new Promise(resolve => setTimeout(resolve, 0));
     expect([...w.store.messages.values()].at(-1)).toMatchObject({ id: sent?.id, state: 'waiting', from: 'tpm', to: 't-x7k2' });
   });
@@ -54,13 +54,13 @@ describe('送り分け（名乗った受け手には NATS、名乗っていな�
     await expect(askTpm(w.se, ask)).rejects.toThrow(/まだ読んでいないメッセージが \d 件あります。送っていません。\n--- Technical Program Manager/);
   });
 
-  test('担当から TPM 担当へも、TPM 担当が名乗っていれば NATS（TPM 担当の受け手の名は tpm）', async () => {
+  test('担当から TPM 担当へも、TPM 担当が名乗っていれば NATS（受け手の名は、TPM 担当は tpm）', async () => {
     const w = await natsWorld();
     claim(w, w.tpm, 100);
     const before = w.wire.inbox('file:tpm').length;
     await askTpm(w.se, ask);
     expect(w.wire.inbox('file:tpm')).toHaveLength(before);
-    expect(left(w, 'tpm').map(s => [s.from, s.text])).toEqual([[SE_FROM, '【ask-tpm】案 A と B で迷う']]);
+    expect(left(w, 'tpm').map(s => [s.from, s.text])).toEqual([[FROM_SE, '【ask-tpm】案 A と B で迷う']]);
     expect(log(w).at(-1)).toMatchObject({ carrier: 'nats', box: 'tpm' });
   });
 

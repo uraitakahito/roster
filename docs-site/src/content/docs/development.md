@@ -36,7 +36,8 @@ build は無い。`cli/bin/roster` は `cli/src/cli.ts` を node で直に動か
 | `cli/src/commands/` | 決まりの命令（`tpm-side.ts`・`role-side.ts`・`messages.ts`・`launch.ts`・`staff.ts`・`infra.ts`・`page.ts`・`issue.ts`・`review.ts`） |
 | `cli/src/roster.ts`・`cli/src/state.ts`・`cli/src/reviews.ts` | 名簿と、状態の folder と、レビューの頼みの記録 |
 | `cli/src/transport/` | 連携の口（`types.ts`。メッセージの口 `MessagePort` と居場所の口 `SeatPort` の 2 つ）と adapter（`cmux.ts`・`file.ts`。どちらも両方の口を持つ） |
-| `cli/src/mailroom/` | 配りの口（`types.ts`。預ける・数える・取り置く・渡せたと返す、など）と adapter（`nats.ts`。試験用は `memory.ts`）。今は、まだ命令からは使っていない |
+| `cli/src/mailroom/` | 配りの口（`types.ts`。預ける・数える・取り置く・渡せたと返す、など）と adapter（`nats.ts`。試験用は `memory.ts`）。設定の `messages` が `nats` の時だけ、命令と hook が使う |
+| `cli/src/mail.ts`・`cli/src/commands/mail.ts` | メッセージを NATS で配る道の、手元の物（受け手の名・名乗り・印・渡した記録）と、hook の命令（`roster mail …`）・TPM 担当の側の片付け |
 | `cli/src/tracker/` | 課題管理の口（`types.ts`）と adapter（`jira.ts`・`github.ts`）、課題の Key の形で adapter を選ぶ `routed.ts` |
 | `cli/src/guard.ts` | guard |
 | `cli/src/run-role.ts` | 連携の道具が担当の居場所で動かす `roster run-role`（名簿を読んで claude を起こす） |
@@ -72,7 +73,15 @@ build は無い。`cli/bin/roster` は `cli/src/cli.ts` を node で直に動か
 - **castlist を上げる時**: castlist で release を出す（castlist の docs の「[release を出す](https://uraitakahito.github.io/castlist/release.html)」）→ この repo で `.castlist-version`・`CASTLIST_VERSION` と、それを名指す試験（`cli/test/castlist.test.ts` の `expect(CASTLIST_VERSION).toBe(…)`）を新しい版にする PR を出す。定義が替わった版なら、同じ PR で `DEFS` の castlist の行（tag と SHA-256）を替えて client を作り直し、偽の castlist（`/healthz` の `version` も）と `cli/src/castlist.ts`・`cli/src/castlist-query.ts` を合わせる。
 ## NATS JetStream（メッセージキュー）とのつなぎ
 
-担当どうしのメッセージを預かって配る段取り（取り置き・渡せたの確かめ・渡し直し・上限・期限）は、自前で作らず、[NATS](https://nats.io/) の JetStream に任せる。roster が持つのは、それを包む「配りの口」（`cli/src/mailroom/types.ts` の `Mailroom`）と、NATS の言葉（stream・consumer）に写す adapter（`cli/src/mailroom/nats.ts`。公式の client `@nats-io/transport-node`・`@nats-io/jetstream` を使う）。**今は、まだ命令からは使っていない**（メッセージは `ctx.messages` の cmux が運ぶ）。
+担当どうしのメッセージを預かって配る段取り（取り置き・渡せたの確かめ・渡し直し・上限・期限）は、自前で作らず、[NATS](https://nats.io/) の JetStream に任せる。roster が持つのは、それを包む「配りの口」（`cli/src/mailroom/types.ts` の `Mailroom`）と、NATS の言葉（stream・consumer）に写す adapter（`cli/src/mailroom/nats.ts`。公式の client `@nats-io/transport-node`・`@nats-io/jetstream` を使う）。**命令と hook が使うのは、project の設定の `messages` が `nats` の時だけ**（既定では、メッセージは `ctx.messages` の cmux が運び、配りの口は作られない）。
+
+- **命令からの使い方**（設定が `nats` の時。決まりは[担当のあいだの決まり](/protocol/#メッセージを-nats-で配る道設定で入れた時)）:
+  - 周り（`cli/src/context.ts` の `Context`）の `mailroom()` が、配りの口を要る時に 1 度だけ作る（NATS の client は、その時に初めて読む。使わない命令と guard の起動を遅くしない）。命令の終わり（`cli/src/program.ts` の `runProgram`）で閉じる。URL は `$ROSTER_NATS_URL`（既定 `nats://127.0.0.1:4222`）、箱を分ける名は状態の folder の名。
+  - 送る所（`cli/src/commands/messages.ts` の `deliver`）は、届く担当の名乗り（`cli/src/mail.ts` の `claimOf`）が効いていれば配りの口に置き、そうでなければ `ctx.messages` で送る。送る前の検査（`assertRead`）は、自分の名乗りが効いていれば `assertHandedOver`（配りの口の `lag`・`peek`・`counts` を聞く）に替わる。
+  - hook の命令は `cli/src/commands/mail.ts`（`mailClaim`・`mailRelease`・`mailGate`・`mailWait`・`mailPrompt`）。席に付けるのは `cli/src/guard.ts` の `guardSettings`（3 つ目の引数が true の時だけ足す。false なら、今までと 1 字も変わらない settings）。hook は、どの誤りでも exit 0 で終わる。exit 2 で終わるのは、待つ命令が本文を取り置いた時だけ。
+  - Claude Code の process の番号を知る道は `cli/src/mail.ts` の `claudePid` の 1 つ: 自分の親の process をたどり、環境変数（`CMUX_CLAUDE_PID`・`CLAUDE_PID`）の番号が親の列に居ればそれ、無ければ親の列で命令の名が `claude` の物。分からなければ名乗らない。process を見る・止めるのは `Context` の `procs`（試験は偽の表に替える）。
+  - 届いた時刻は、`cli/src/seen.ts` が、運んだ道が `nats` の行について、手元の渡した記録（`delivered.jsonl`）から決める。置き場の記録への書き足しは `cli/src/commands/message-record.ts`（`copyMessageRecord` の 3 つ目の引数）。
+  - 試験は、`cli/test/helpers.ts` の `world()` が渡す試験用の口で流す（`world().office` が預かる側で、周りごとに別の口＝別の process。`world().procs` が偽の process、`world().pass(ms)` が時計）。名乗った担当の居る世界は `cli/test/mail-helpers.ts`。本物の NATS と本物の Claude Code の hook での確かめは、ふだんの `pnpm test` には入っていない。
 
 - **NATS の中の作り**: 箱（stream）が 3 つと、受け手ごとの取り口（consumer）。箱の名は `roster-<状態の folder の名>-log`・`-work`・`-adv`。
   - 記録の箱（`-log`）: 置かれた物をみな残す（30 日）。同じ id の置き直しを 1 通にする窓（2 分）を持つ。

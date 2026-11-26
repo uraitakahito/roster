@@ -12,9 +12,9 @@ export const TPM = { model: 'claude-opus-5-5', effort: 'medium' };
 /** 1 度に取る量（hook と同じ）。 */
 export const ALL = { max: 20, chars: 9000 };
 /** TPM 担当の題。 */
-export const TPM_FROM = 'Technical Program Manager';
+export const FROM_TPM = 'Technical Program Manager';
 /** t-x7k2 の担当の題。 */
-export const SE_FROM = 'SWE t-x7k2: 計画と実装';
+export const FROM_SE = 'SWE t-x7k2: 計画と実装';
 
 /** その周りの session が「渡す hook を持つ」と名乗った事にする（pid の process を居る事にして、名乗りを書く）。 */
 export function claim(w: World, ctx: Context, pid: number): void {

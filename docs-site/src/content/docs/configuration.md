@@ -13,6 +13,7 @@ TPM 担当を起こした folder（project）に置くと、道具の選び方�
 |---|---|---|
 | `tracker` | 課題管理の道具。`jira`（acli）・`github`（その folder の repo の Issue。gh）・`none` | `none`（課題に記録を書かない） |
 | `transport` | 担当どうしの連携の道具。`cmux`（`file` は試験用） | `cmux` |
+| `messages` | 担当どうしのメッセージを配る道。`cmux`（連携の道具がそのまま運ぶ）か `nats`（NATS JetStream で配る。下の「[メッセージを配る道](#メッセージを配る道任意)」）。project の folder の設定だけが効く | `cmux`（今までどおり） |
 | `infra` | インフラの環境の宣言。環境の名前（英小文字・数字・`-`）ごとに `guard`（手続き）と `match`（その環境に触る命令が含む字の配列） | 宣言なし（guard は環境を見ない） |
 | `skill-sets` | core のほかに加える、追加の skill セットの名前の配列 | core だけ |
 | `folders` | 設定を集める folder（project の folder からの path）の配列。書くと、直下を探さずに書いた folder だけを集める。`[]` なら集めない | 直下の folder のうち、設定がある物を全部集める |
@@ -80,6 +81,7 @@ ai/                               ← ここで roster start（設定は任意�
 | `skill-sets` | 全部を足す（project の folder が先、次に直下の folder を名前の順。重なりは除く）。TPM 担当（`roster start`）にも、起こす担当にも効く |
 | `software-engineer`・`devops-engineer`・`staff-engineer`・`auditor` | 合わせない。**担当を起こす folder**（`roster assign --cwd`）の設定 > project の folder の設定 の順に、欄ごとに先に値がある物を使う。Auditor は project の folder で起きるので、project の folder の設定だけ |
 | `transport` | project の folder の設定だけ（直下の folder の値は読まない） |
+| `messages` | project の folder の設定だけ（直下の folder の値は読まない） |
 
 どの値がどの設定から来たかは、TPM 担当の `roster hello` が出す。上の図の folder で起こすと、次のように出る（直下に設定のある folder が無ければ、`設定: <file>` と `課題管理: …・連携: …` の 2 行。設定の file が無いための値には「（既定）」が付く）。
 
@@ -190,6 +192,18 @@ export ROSTER_EFFORT=medium
 - 起こす前（`roster start`・`roster assign`・`roster audit start`・`roster hello`）に `/healthz` を見て、castlist が応えなければ起こさずに止まる（[運用](/operations/#アクターの台帳castlist)）。
 - 送る物はどれも 1 度だけ送り（送り直さない）、書く要求と監査の検索は 6 秒まで、`/healthz` は 1 秒まで待つ。`AWS_MAX_ATTEMPTS` などの `AWS_*` の環境変数と `~/.aws/config` は読まない。
 - 前の版の設定の欄 `api`（生成した client で送るかの選び）は、もう無い。残っていても、どんな値でも読み飛ばす（消してよい）。
+
+## メッセージを配る道（任意）
+
+担当どうしのメッセージは、既定では連携の道具（cmux）がそのまま運ぶ。project の folder の `.claude/roles/config.jsonc` に `"messages": "nats"` と書くと、NATS JetStream（[運用](/operations/#メッセージキューnats)）で配る道が入る。書かなければ（か `"cmux"` なら）、`roster` の動きは今までと何も変わらない。
+
+- 設定が効くのは、**席を起こす時**。`roster start` の 1 行と `roster assign` が、起こす claude に、メッセージを渡す hook（`roster mail …`）を足して付ける。設定を書く前から動いている席は hook を持たないので、起こし直すまで、今までどおり cmux で届く。
+- 送り手は、受け手ごとに道を決める。受け手の session が「渡す hook を持つ」と名乗っていれば NATS に置き、名乗っていなければ cmux で送る。だから、hook を持つ席と持たない席が混ざっていてよい。
+- 届き方・送る前の検査・状態の folder の file は、[担当のあいだの決まり](/protocol/#メッセージを-nats-で配る道設定で入れた時)。入れ方と戻し方は、[運用](/operations/#メッセージを-nats-で配る道を入れる戻す)。
+
+| 環境変数 | 決める物 | 無いとき |
+|---|---|---|
+| `ROSTER_NATS_URL` | NATS の URL（container の port の publish と同じにする） | `nats://127.0.0.1:4222` |
 
 ## 通知のバナー（任意）
 
