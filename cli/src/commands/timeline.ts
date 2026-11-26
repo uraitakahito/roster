@@ -114,7 +114,7 @@ export function collect(ctx: Context, key: string, window?: { from: string, to: 
       if (crossed.length > 0) notes.push(`行き違い: これ${seen?.by === 'shown' ? 'を見る' : 'が届く'}前に、相手が ${crossed.length} 件送った（${crossed.map(o => `【${o.heading}】${hms(o.at)}`).join('・')}）`);
     }
     // 列は、送った担当で決める（Tech Lead 担当が repo の席へ送った【brief】【dismiss】を、TPM 担当の列に入れない）。
-    // 送り手の欄の無い前の版の行は、見出しの向きで決める（担当からなら行の Key、TPM 担当からなら tpm）。
+    // 送り手の欄の無い前の版の行は、見出しの向きで決める（担当からなら行の Key、TPM 担当からなら TPM 担当の列）。
     const from = direction(m.heading);
     const seat = m.sender?.key ?? (from === 'role' ? m.key : from === 'tpm' ? 'tpm' : undefined);
     return { at: m.at, kind: 'メッセージ', who: m.from, what: `${cut(m.text)}（id ${m.id}）`, notes, ...(m.id === triggerId ? { trigger: true } : {}), ...(seat === undefined ? {} : { seat }) };
