@@ -1051,7 +1051,7 @@ export async function reportEnd(ctx: Context, options: EndOptions): Promise<stri
   }
   // Tech Lead 担当は、起こした repo の席を片付けてから終える（閉じ忘れの席を残さない）。
   const seats = self.role === 'tech-lead' ? repoSeats(ctx, self.key) : [];
-  if (seats.length > 0) throw new TpmError(`repo の席が名簿に残っています（${seats.map(r => r.key).join('・')}）。【end】は送っていません。席ごとに roster seat dismiss <名> で片付けの指示を送り、【end】を受けて roster seat close <名> で閉じてから、打ち直してください`);
+  if (seats.length > 0) throw new TpmError(`repo の席が名簿に残っています（${seats.map(r => r.key).join('・')}）。【end】は送っていません。席ごとに roster seat dismiss <名> で片付けの指示を送り、【end】を受けて roster seat close <名> で閉じてから、打ち直してください（居場所の無い席は、そのまま roster seat close <名> で閉じる）`);
   const left = required(options.left, '--left（残っている物）');
   const checked = assertMerged(ctx, options.prs, options.prs.length === 0 ? undefined : options.unchecked);
   const body = `成果: ${options.url ?? 'なし'}／merge した PR: ${options.prs.join(' ') || 'なし'}／消した worktree: ${options.removed.join(' ') || 'なし'}／残っている物: ${left}${checked}`;
@@ -1258,6 +1258,8 @@ export async function dismiss(ctx: Context, key: string, options: { handover: bo
 /**
  * Tech Lead 担当が、自分の repo の席に、片付けの指示を送る（【dismiss】。seat.ts の seatDismiss）。席は worktree を片付けて【end】を Tech Lead 担当へ返す
  * （repo の席の【end】は、課題を済みにしない）。済んでいない依頼書・まだ見ていない物があれば止まる（--supersede で取り消す）。
+ * 置き場の返事待ちのページは出さない（TPM 担当の dismiss は出す）: repo の席のページは親の課題の Key で置かれ、席ごとには引けない。
+ * 親の課題の返事待ちは、TPM 担当が Tech Lead 担当に送る TPM 担当の命令（課題の Key を名指した roster dismiss）が、まとめて出す。
  */
 export async function dismissSeat(ctx: Context, lead: RoleRecord, seat: RoleRecord, options: { supersede?: boolean }): Promise<string[]> {
   const role = await receiver(ctx, seat.key);

@@ -98,6 +98,15 @@ function ownSeat(ctx: Context, self: RoleRecord, name: string): RoleRecord {
   return seat;
 }
 
+/** 送る相手の repo の席（居場所が在る物）。居場所が無ければ、Tech Lead 担当の打てる手を案内して止まる（送っていない）。 */
+function liveSeat(ctx: Context, self: RoleRecord, name: string): RoleRecord {
+  const seat = ownSeat(ctx, self, name);
+  if (seat.address === undefined || !ctx.seats.seats().some(s => s.address === seat.address)) {
+    throw new TpmError(`${seat.key} の席の居場所がありません（落ちた・名乗らなかった）。送っていません。起こし直すなら roster seat add ${name} --brief <URL>、要らなければ roster seat close ${name} で名簿から消す`);
+  }
+  return seat;
+}
+
 /** `roster seat brief` の旗。 */
 export interface SeatBriefOptions {
   brief: string
@@ -115,24 +124,29 @@ export interface SeatBriefOptions {
  */
 export async function seatBrief(ctx: Context, name: string, options: SeatBriefOptions): Promise<string[]> {
   const self = requireLead(ctx, 'roster seat brief');
-  const seat = ownSeat(ctx, self, name);
+  const seat = liveSeat(ctx, self, name);
   if (options.supersede === true && options.after === true) throw new TpmError('--supersede と --after は、どちらか 1 つにしてください');
   await assertRead(ctx, `${seat.key} の担当`, seat.title);
   const choice = options.supersede === true ? 'supersede' : options.after === true ? 'after' : undefined;
   const settled = assertSettled(ctx, seat, 'assign', choice, 'lead');
+  // 課題の写しは、Tech Lead 担当が今持っている物を渡す（TPM 担当の続きの依頼書で新しくなっていれば、新しい方。席ごとには作り直さない）。
+  if (self.issuePage === undefined) delete seat.issuePage;
+  else seat.issuePage = self.issuePage;
+  if (self.issueCopySkipped === undefined) delete seat.issueCopySkipped;
+  else seat.issueCopySkipped = self.issueCopySkipped;
   return await brief(ctx, seat, options.brief, options.note, settled === undefined || choice === undefined ? undefined : { text: settled, choice }, self.title);
 }
 
 /** Tech Lead 担当が、repo の席に、返事の要らないメッセージ（知らせ・【ask-lead】への答え）を送る（【notify】）。 */
 export async function seatNotify(ctx: Context, name: string, options: { text: string, replyTo?: string }): Promise<string[]> {
   const self = requireLead(ctx, 'roster seat notify');
-  return await notifySeat(ctx, self, ownSeat(ctx, self, name), options);
+  return await notifySeat(ctx, self, liveSeat(ctx, self, name), options);
 }
 
 /** Tech Lead 担当が、repo の席に、片付けの指示を送る（【dismiss】）。席は【end】を Tech Lead 担当へ返す。受けたら roster seat close で閉じる。 */
 export async function seatDismiss(ctx: Context, name: string, options: { supersede?: boolean }): Promise<string[]> {
   const self = requireLead(ctx, 'roster seat dismiss');
-  return await dismissSeat(ctx, self, ownSeat(ctx, self, name), options);
+  return await dismissSeat(ctx, self, liveSeat(ctx, self, name), options);
 }
 
 /**

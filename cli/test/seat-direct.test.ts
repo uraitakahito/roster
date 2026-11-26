@@ -4,6 +4,7 @@ import { describe, expect, test } from 'vitest';
 import { askDevops, askLead, askTpm, reportDone, reportEnd, reportIncident, reportMerged, type DoneOptions } from '../src/commands/messages.ts';
 import { hello } from '../src/commands/role-side.ts';
 import { seatAdd, seatBrief, seatClose, seatDismiss, seatNotify } from '../src/commands/seat.ts';
+import { collect } from '../src/commands/timeline.ts';
 import { assign } from '../src/commands/tpm-side.ts';
 import { readRole, writeRole } from '../src/roster.ts';
 import { BRIEF, world, type World } from './helpers.ts';
@@ -129,6 +130,33 @@ describe('Tech Lead 担当から下へ（roster seat brief・notify・dismiss）
     await reportDone(w.seat, DONE);
     await expect(seatBrief(w.lead, 'pagetray', { brief: BRIEF2 })).rejects.toThrow(/^AI-36\.pagetray の担当から、まだ読んでいないメッセージが 1 件あります。送っていません。/);
     expect((await seatBrief(w.lead, 'pagetray', { brief: BRIEF2 }))[0]).toMatch(/^送った: 【brief】/);
+  });
+
+  test('居場所の無い席には送らず、Tech Lead 担当の打てる手（起こし直す・閉じる）を案内する', async () => {
+    const w = await split();
+    w.wire.close('file:2');
+    for (const send of [() => seatBrief(w.lead, 'pagetray', { brief: BRIEF2 }), () => seatNotify(w.lead, 'pagetray', { text: 'x' }), () => seatDismiss(w.lead, 'pagetray', {})]) {
+      await expect(send()).rejects.toThrow(/^AI-36\.pagetray の席の居場所がありません（落ちた・名乗らなかった）。送っていません。起こし直すなら roster seat add pagetray --brief <URL>、要らなければ roster seat close pagetray で名簿から消す/);
+    }
+  });
+
+  test('続きの依頼書には、Tech Lead 担当が今持っている課題の写しを渡す', async () => {
+    const w = await split();
+    await reportDone(w.seat, DONE);
+    writeRole(w.tpm, { ...readRole(w.tpm, 'AI-36')!, issuePage: 'http://127.0.0.1:8801/p/AI-36/issue-9.html' });
+    await seatBrief({ ...w.lead }, 'pagetray', { brief: BRIEF2 });
+    expect(readRole(w.tpm, 'AI-36.pagetray')?.issuePage).toBe('http://127.0.0.1:8801/p/AI-36/issue-9.html');
+    expect(w.posted('file:2').at(-1)?.text).toBe(`【brief】${BRIEF2} 課題の写し: http://127.0.0.1:8801/p/AI-36/issue-9.html`);
+  });
+
+  test('時系列の列は、送った担当で決まる（Tech Lead 担当の【brief】は Tech Lead 担当の列。TPM 担当の列に入らない）', async () => {
+    const w = await split();
+    await reportDone(w.seat, DONE);
+    await seatBrief(w.lead, 'pagetray', { brief: BRIEF2 });
+    const events = collect(w.tpm, 'AI-36').filter(e => e.kind === 'メッセージ');
+    expect(events.find(e => e.what.startsWith('【brief】'))?.seat).toBe('AI-36');
+    expect(events.find(e => e.what.startsWith('【done】'))?.seat).toBe('AI-36.pagetray');
+    expect(events.some(e => e.seat === 'tpm')).toBe(false);
   });
 
   test('断る: 自分の課題の repo の席でない相手・Tech Lead 担当でない者', async () => {

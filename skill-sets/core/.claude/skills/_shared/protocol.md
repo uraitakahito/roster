@@ -11,7 +11,7 @@ TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・De
 - メッセージを送る命令は、送る前に、自分宛てでまだ渡っていないメッセージが無いかを見る（TPM 担当は、送る相手の担当から来た物だけ）。あれば 1 度止まる（送っていない。課題の記録も書いていない）。本文は、止まった直後に hook が渡す。渡された物を読んで、同じ命令を打ち直す。届いたメッセージで事情が変わっていたら、中身を変えて打つ。「直前に、hook がメッセージを渡しました」と止まった時も、渡された物を読んでから打ち直す。渡す hook を持たない session（名乗れなかった席・前の版で起こした席）では、検査と `roster inbox` が、本文を命令の結果に出す（打ち直しは通る）。`roster page put` も、確認・提案・計画・結果・レビューのページ（`--kind confirm|proposal|plan|result|review`）は、置く前に同じように見て 1 度止まる（置いていない）。事情が変わっていたら、ページを書き直して置く。
 - **打ち直しは、止まったのを見てから別の回に打つ。**`;` や `||` で 1 行に続けて書かない（止まらなかった時にも 2 度目が動く）。同じメッセージを 30 秒の内に 2 度送ろうとすると、命令は 2 度目を送らずに止まる。
 - 届いたメッセージには id が付いている。そのメッセージへの返事は `--reply-to <id>` を付けて送る。
-- 宛先は書かない。担当のメッセージは TPM 担当へ行き、TPM 担当は課題の Key で担当を名指す。**レビューの頼みと判定だけは、TPM 担当を通らない**: 命令が、課題の担当と、その課題の Staff Engineer 担当の席の間を、じかに届ける（下の「レビュー」）。
+- 宛先は書かない。担当のメッセージは TPM 担当へ行き、TPM 担当は課題の Key で担当を名指す。**レビューの頼みと判定だけは、TPM 担当を通らない**: 命令が、課題の担当と、その課題の Staff Engineer 担当の席の間を、じかに届ける（下の「レビュー」）。**分けた課題の中**（Tech Lead 担当と、その repo の席の間）も、TPM 担当を通らない（下の「分けた課題の中」）。
 - **Product Manager に直接聞かない。** Product Manager とのやりとりは、すべて TPM 担当を通す。例外は Auditor だけ: Product Manager が起こした `Audit` の席で、Product Manager とじかに話す（下の「監査」）。
 - **メッセージキューが応えない時**: 送る命令は、どれも「メッセージキューが応えません。送っていません」で止まり、席の状態にもそう出る（`roster ask devops` も同じ。ほかの道具で送らない）。`roster report incident` だけは、台帳に書いて「TPM 担当には送っていない」と出して終わる（打ち直さない。台帳に 2 件になる）。メッセージキュー（NATS）が動いているかを確かめてもらい（担当は送れないので、止まった事を返答に書く。TPM 担当は Product Manager に伝える）、動いてから同じ命令を打ち直す。
 - 命令の使い方は `roster <命令> --help`。命令が誤りで止まったら、出た文に従って直す（道具の命令に替えて先へ進まない）。
@@ -39,7 +39,7 @@ Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【
 
 Staff Engineer 担当は、【done】【end】【merged】【doc-fix】【ask-pm】【ask-review】を送らない（命令が断る）。成果は、下の【review】で課題の担当へじかに返す。
 
-### 担当から担当へ（レビューだけ。TPM 担当を通らない）
+### 担当から担当へ（レビュー。TPM 担当を通らない）
 
 | 見出し | 誰から誰へ | いつ | 命令 |
 |---|---|---|---|
@@ -84,7 +84,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
   - Tech Lead 担当の答えを待つ（repo の席）: `roster wait lead "<何を>"`（`回答待ち(Lead): <何を>`）
   - 待つ時間に限りがあれば添える: `roster wait tpm "merge（14:30 まで）"`
 - `roster wait` は打った時刻も覚える。Product Manager への通知のバナーは、TPM 担当が**その回に** `roster wait pm` を打って手を止めた時に出る（設定は docs の「設定」の「通知のバナー」）。
-- やりとりの命令は、メッセージを送った後の待ちも出す（`roster ask …` は回答待ち、`roster ask review` は `回答待ち(レビュー): <見る物>`、`roster report done` は `回答待ち(TPM): 次の依頼`、`roster report end` は `回答待ち(TPM): workspace を閉じる`）。答えが来たら `roster wait work "<段>"` に戻す。
+- やりとりの命令は、メッセージを送った後の待ちも出す（`roster ask …` は回答待ち、`roster ask review` は `回答待ち(レビュー): <見る物>`、`roster report done` は `回答待ち(TPM): 次の依頼`、`roster report end` は `回答待ち(TPM): workspace を閉じる`。repo の席では、`回答待ち(Lead): 次の依頼`・`回答待ち(Lead): 席を閉じる`）。答えが来たら `roster wait work "<段>"` に戻す。
 - **`/model`・`/effort` は打たない**（新しい session の既定まで書き換わる）。model と effort は起動の旗で決まる。
 
 ## 記録
