@@ -21,9 +21,9 @@ async function crossed(): Promise<World & { se: ReturnType<World['role']> }> {
   se.now = clock('12:00:10');
   await askTpm(se, { text: 'tag を打ってよいか', waitingFor: '答え' });
   w.tpm.now = clock('12:01:00');
-  notify(w.tpm, 't-x7k2', { text: 'まだ打たないで待つこと', replyTo: 'm1-file-tpm' });
+  await notify(w.tpm, 't-x7k2', { text: 'まだ打たないで待つこと', replyTo: 'm1-file-tpm' });
   se.now = clock('12:02:00');
-  reportMerged(se, { pr: PR, note: '入れた' });
+  await reportMerged(se, { pr: PR, note: '入れた' });
   se.now = clock('12:02:30');
   wait(se, 'work', 'tag を打つ');
   w.tpm.state.append('deliveries.jsonl', { id: 'm1-file-tpm', sentAt: '2026-11-20T12:00:10.000Z', deliveredAt: '2026-11-20T12:00:11.000Z' } satisfies MessageTrace);
@@ -73,11 +73,11 @@ describe('時系列を集める', () => {
     const w = await crossed();
     w.prs.set(PR, 'OPEN');
     w.se.now = clock('12:03:00');
-    expect(() => reportMerged(w.se, { pr: PR, note: '2 本目' })).toThrow(/merge されていません/);
+    await expect(reportMerged(w.se, { pr: PR, note: '2 本目' })).rejects.toThrow(/merge されていません/);
     w.tpm.state.append('guard.jsonl', { at: '2026-11-20T12:03:10.000Z', by: 't-x7k2', role: 'software-engineer', command: 'acli jira workitem transition', reason: '直に打たない' });
     w.tpm.state.append('tracker.jsonl', { at: '2026-11-20T12:03:20.000Z', by: 't-x7k2', role: 'software-engineer', issue: 'AI-8', op: 'close', ok: true });
     w.se.now = clock('12:03:30');
-    reportIncident(w.se, { text: 'tag を「待て」の前に打った', type: 'reliability', tags: [], severe: false });
+    await reportIncident(w.se, { text: 'tag を「待て」の前に打った', type: 'reliability', tags: [], severe: false });
     expect(collect(w.tpm, 't-x7k2').filter(e => e.at >= '2026-11-20T12:03').map(e => [e.kind, e.what])).toEqual([
       ['入口の検査', '送るのを止めた（not-merged）'],
       ['guard', '止めた: acli jira workitem transition'],

@@ -98,7 +98,7 @@ describe('roster audit start', () => {
     await expect(dismiss(w.tpm, 'audit', { handover: true })).rejects.toThrow(/Auditor の席に【dismiss】は送れません/);
     await expect(close(w.tpm, 'audit')).rejects.toThrow(/roster close では閉じられません/);
     expect(w.wire.seats()).toEqual([{ address: 'file:1', title: 'Audit' }]);
-    expect(notify(w.tpm, 'audit', { text: '受け取った' })).toEqual(['送った: 【notify】→ file:1（相手の手が空いた時に届く。送り直さない）']);
+    expect(await notify(w.tpm, 'audit', { text: '受け取った' })).toEqual(['送った: 【notify】→ file:1（相手の手が空いた時に届く。送り直さない）']);
   });
 });
 
@@ -144,13 +144,13 @@ describe('監査の 1 周（始める → 報告 → 決定）', () => {
       '台帳: 未決 1（出来事 1・残りと PM の手 0）・振った 0',
       '見直す: roster incident review／追いかける: roster incident follow',
     ]);
-    expect(reportAudit(w.auditor, { url: PAGE, summary: '権限の件は仕組みが止めていない', items: ['R1 をするか', 'R2 を受け入れるか'] })).toEqual([
+    expect(await reportAudit(w.auditor, { url: PAGE, summary: '権限の件は仕組みが止めていない', items: ['R1 をするか', 'R2 を受け入れるか'] })).toEqual([
       '送った: 【audit】→ file:tpm（相手の手が空いた時に届く。送り直さない）',
       '状態: 回答待ち(PM): 監査の報告',
       'この席に、要点と決めてほしいことを書いて、Product Manager の答えを待つ',
     ]);
     expect(w.wire.inbox('file:tpm').at(-1)).toMatchObject({ from: 'Audit', text: `【audit】${PAGE} 要点: 権限の件は仕組みが止めていない／決めてほしいこと: (1) R1 をするか (2) R2 を受け入れるか（写し。Product Manager には Audit の席でじかに報告した。伝え直さなくてよい）` });
-    expect(reportDecided(w.auditor, { url: PAGE, adopted: ['R1'], accepted: ['R2'], later: [] })).toEqual(['送った: 【decided】→ file:tpm（相手の手が空いた時に届く。送り直さない）', '状態: 回答待ち(PM): 次の /audit']);
+    expect(await reportDecided(w.auditor, { url: PAGE, adopted: ['R1'], accepted: ['R2'], later: [] })).toEqual(['送った: 【decided】→ file:tpm（相手の手が空いた時に届く。送り直さない）', '状態: 回答待ち(PM): 次の /audit']);
     expect(w.wire.inbox('file:tpm').at(-1)?.text).toBe(`【decided】${PAGE} する: R1／受け入れる: R2`);
     expect(readAudits(w.tpm).map(e => e.kind)).toEqual(['start', 'fresh', 'begin', 'report', 'decided']);
     expect(readAudits(w.tpm).at(-2)).toMatchObject({ kind: 'report', url: PAGE, items: ['R1 をするか', 'R2 を受け入れるか'], copied: true });
@@ -160,7 +160,7 @@ describe('監査の 1 周（始める → 報告 → 決定）', () => {
     const w = await seated();
     auditFresh(w.auditor, hook('startup'));
     auditBegin(w.auditor, []);
-    reportAudit(w.auditor, { url: PAGE, summary: '要点', items: ['R1 をするか'] });
+    await reportAudit(w.auditor, { url: PAGE, summary: '要点', items: ['R1 をするか'] });
     at(w, '2026-11-23T12:00:00.000Z');
     expect(() => auditBegin(w.auditor, [])).toThrow(new RegExp(`前の監査の報告（${PAGE}・11-20 12:00）の後に、/clear していません。監査は始めていません`));
     // 文脈の要約と、続きから開いた時は、新しい文脈に数えない。
@@ -189,16 +189,16 @@ describe('監査の 1 周（始める → 報告 → 決定）', () => {
 
   test('TPM 担当が起きていなくても報告はできる（写しは送らない）。決定は、起きるまで送らない', async () => {
     const w = await seated(false);
-    expect(reportAudit(w.auditor, { url: PAGE, summary: '要点', items: [] })[0]).toBe('TPM 担当が起きていないので、写しは送っていない（報告は、この席とページで Product Manager に出す）');
+    expect((await reportAudit(w.auditor, { url: PAGE, summary: '要点', items: [] }))[0]).toBe('TPM 担当が起きていないので、写しは送っていない（報告は、この席とページで Product Manager に出す）');
     expect(readAudits(w.tpm).at(-1)).toMatchObject({ kind: 'report', copied: false });
-    expect(() => reportDecided(w.auditor, { url: PAGE, adopted: ['R1'], accepted: [], later: [] })).toThrow(/TPM 担当が起きていません。決定は送っていません・記録していません/);
+    await expect(reportDecided(w.auditor, { url: PAGE, adopted: ['R1'], accepted: [], later: [] })).rejects.toThrow(/TPM 担当が起きていません。決定は送っていません・記録していません/);
     expect(readAudits(w.tpm).some(e => e.kind === 'decided')).toBe(false);
   });
 
   test('旗の誤り: 置き場の外の URL・決定が 1 つも無い', async () => {
     const w = await seated();
-    expect(() => reportAudit(w.auditor, { url: 'https://example.com/a.html', summary: 's', items: [] })).toThrow(/監査のページの URL/);
-    expect(() => reportDecided(w.auditor, { url: PAGE, adopted: [], accepted: [], later: [] })).toThrow(/--do・--accept・--later のどれか/);
+    await expect(reportAudit(w.auditor, { url: 'https://example.com/a.html', summary: 's', items: [] })).rejects.toThrow(/監査のページの URL/);
+    await expect(reportDecided(w.auditor, { url: PAGE, adopted: [], accepted: [], later: [] })).rejects.toThrow(/--do・--accept・--later のどれか/);
     expect(readAudits(w.tpm).map(e => e.kind)).toEqual(['start']);
   });
 });
@@ -210,8 +210,8 @@ describe('誰が打てるか', () => {
     await hello(w.se);
     expect(() => auditBegin(w.se, [])).toThrow(/roster audit begin は Auditor（Audit の席）が打ちます/);
     expect(() => auditBegin(w.tpm, [])).toThrow(/Auditor（Audit の席）が打ちます/);
-    expect(() => reportAudit(w.se, { url: PAGE, summary: 's', items: [] })).toThrow(/roster report audit は Auditor（Audit の席）が打ちます/);
-    expect(() => reportDecided(w.se, { url: PAGE, adopted: ['R1'], accepted: [], later: [] })).toThrow(/roster report decided は Auditor/);
+    await expect(reportAudit(w.se, { url: PAGE, summary: 's', items: [] })).rejects.toThrow(/roster report audit は Auditor（Audit の席）が打ちます/);
+    await expect(reportDecided(w.se, { url: PAGE, adopted: ['R1'], accepted: [], later: [] })).rejects.toThrow(/roster report decided は Auditor/);
     auditFresh(w.se, hook('clear'));
     auditFresh(w.tpm, hook('startup'));
     expect(readAudits(w.tpm).map(e => e.kind)).toEqual(['start']);
@@ -228,7 +228,7 @@ describe('誰が打てるか', () => {
     ] as const) await expect(async () => await run(), command).rejects.toThrow(`Auditor は ${command} を打ちません`);
     expect(w.wire.inbox('file:tpm')).toEqual([]);
     expect((await askTpm(w.auditor, { text: 'この件の依頼書の URL を教えてほしい', waitingFor: '依頼書の URL' }))[0]).toBe('送った: 【ask-tpm】→ file:tpm（相手の手が空いた時に届く。送り直さない）');
-    expect(reportIncident(w.auditor, { text: '監査のページに誤りを書いた', type: 'reliability', tags: ['監査の誤り'], severe: false })[0]).toMatch(/^台帳に書いた: #1 信頼性 audit /);
+    expect((await reportIncident(w.auditor, { text: '監査のページに誤りを書いた', type: 'reliability', tags: ['監査の誤り'], severe: false }))[0]).toMatch(/^台帳に書いた: #1 信頼性 audit /);
   });
 });
 
@@ -239,7 +239,7 @@ describe('TPM 担当の名簿の「前の監査」の 1 行', () => {
     expect(await roles(fresh.tpm)).toEqual(['名簿: 担当はいない']);
     const w = await seated();
     expect((await roles(w.tpm)).at(-1)).toBe('前の監査: まだ無い（目安は週 1。Product Manager が Audit の席で /audit を呼ぶ）');
-    reportAudit(w.auditor, { url: PAGE, summary: '要点', items: [] });
+    await reportAudit(w.auditor, { url: PAGE, summary: '要点', items: [] });
     at(w, '2026-11-26T11:59:00.000Z');
     expect((await roles(w.tpm)).at(-1)).toBe('前の監査: 2026-11-20（5 日前。目安は週 1）');
     at(w, '2026-11-28T12:00:00.000Z');

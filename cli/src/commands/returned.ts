@@ -67,7 +67,7 @@ export interface CheckOutput {
  * 届け違いを見る。無ければ undefined（hook は何も出さない）。
  * 順は 台帳 → 返す → 控え（返せなかった物は控えに書かず、次の始まりでもう 1 度試す）。
  */
-export function checkStart(ctx: Context): CheckOutput | undefined {
+export async function checkStart(ctx: Context): Promise<CheckOutput | undefined> {
   const me = selfParty(ctx.env);
   const address = ctx.seats.whoami();
   const now = ctx.now().getTime();
@@ -108,7 +108,7 @@ export function checkStart(ctx: Context): CheckOutput | undefined {
     try {
       const self = readRole(ctx, me.key);
       if (self === undefined) throw new TpmError(`名簿に ${me.key} がいません`);
-      returnToTpm(ctx, self, [
+      await returnToTpm(ctx, self, [
         `この居場所（${address}）に、前の session 宛てのメッセージが ${wrong.length} 通届きました。扱っていません。`,
         `宛先: ${whom}／受けた: ${who(me)}／台帳 #${incident.n}`,
         ...wrong.map(s => `${line(s)}: 「${s.text.slice(0, HEAD)}」`),

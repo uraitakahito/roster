@@ -236,8 +236,8 @@ describe('roster ask review（席が居る時: じかに届ける）', () => {
     const w = await asked();
     const self = requireRole(w.tpm, 'AI-8');
     const seat = requireRole(w.tpm, 'AI-8.staff');
-    toPeer(w.se, self, seat, 'ask-review', '同じ本文');
-    expect(() => toPeer(w.se, self, seat, 'ask-review', '同じ本文')).toThrow(/同じ【ask-review】を、.+ にもう送っています/);
+    await toPeer(w.se, self, seat, 'ask-review', '同じ本文');
+    await expect(toPeer(w.se, self, seat, 'ask-review', '同じ本文')).rejects.toThrow(/同じ【ask-review】を、.+ にもう送っています/);
     expect(texts(w, 'file:2').filter(t => t === '【ask-review】同じ本文')).toHaveLength(1);
   });
 });
@@ -375,7 +375,7 @@ describe('時系列の行き違いの印（じかの 2 通）', () => {
     await reportReview(w.staff, { url: await w.put(w.staff, 'review'), verdict: 'approve', summary: 'よい' });
     const judged = id('file:1');
     at(w.tpm, '12:13:00');
-    notify(w.tpm, 'AI-8', { text: 'A で進める' });
+    await notify(w.tpm, 'AI-8', { text: 'A で進める' });
     const answered = id('file:1');
     arrive(asking, '12:15:00');
     arrive(judged, '12:12:01');
@@ -458,8 +458,8 @@ describe('roster review list', () => {
     await assign(w.tpm, 't-x7k2', { role: 'software-engineer', title: '小さい直し', brief: BRIEF, wait: 0 });
     const other = { ...w.role('t-x7k2', 'file:3'), env: { ...w.role('t-x7k2', 'file:3').env, ROSTER_ROLE: 'software-engineer' } };
     await hello(other);
-    reportDone(other, { url: await w.put(other, 'result'), kind: 'result', summary: '直した', remaining: 'なし', decisions: 'なし', points: [] });
-    reportDone(w.se, { url: await w.put(w.se, 'result'), kind: 'result', summary: '入れた', remaining: 'なし', decisions: 'なし', points: [] });
+    await reportDone(other, { url: await w.put(other, 'result'), kind: 'result', summary: '直した', remaining: 'なし', decisions: 'なし', points: [] });
+    await reportDone(w.se, { url: await w.put(w.se, 'result'), kind: 'result', summary: '入れた', remaining: 'なし', decisions: 'なし', points: [] });
     expect(reviewList(w.tpm, {}).at(-1)).toBe('結果の【done】を出した課題 2 件のうち、レビューを頼んでいない課題: 1 件（t-x7k2）');
     // 初めての頼みより前に出た【done】は数えない（レビューの仕組みが入る前の課題）
     w.tpm.state.append('log.jsonl', { at: '2026-11-19T10:00:00.000Z', key: 't-old1', heading: 'done', from: 'SWE t-old1', to: 'file:tpm', text: '【done】http://127.0.0.1:8801/p/t-old1/result-1.html 要点: 前の課題', id: 'old', delivered: true });

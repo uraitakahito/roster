@@ -171,7 +171,7 @@ export const ASK_REVIEW_WAIT = 90;
  * wait は、起こした席の名乗りを待つ秒（0 なら待たない）。
  */
 export async function askReview(ctx: Context, options: { url: string, focus?: string, wait?: number }): Promise<string[]> {
-  const self = sender(ctx);
+  const self = await sender(ctx);
   notAuditor(self, 'roster ask review');
   if (!isPageUrl(ctx.env, options.url) && !PR_URL.test(options.url)) throw new TpmError(`--url は、置き場のページか PR の URL にしてください（見る物）: ${options.url}`);
   const same = openReviews(ctx, self.key).find(r => r.url === options.url);
@@ -198,7 +198,7 @@ export async function askReview(ctx: Context, options: { url: string, focus?: st
         ...(focus === undefined ? [] : [`見てほしい所: ${focus}`]),
         ...(before.length === 0 ? [] : [`${before.map(r => `#${r.n}`).join('・')}を済ませてから、これをする`]),
       ].join(' ');
-      sent = toPeer(ctx, self, seat, 'ask-review', body);
+      sent = await toPeer(ctx, self, seat, 'ask-review', body);
     }
     catch (e) {
       // 送る前に止まった頼みを残すと、打ち直しが「もう頼んであります」で止まる。送った後の失敗では消さない（席にはもう届いている）。
@@ -255,7 +255,7 @@ const WAIT_NEXT_REVIEW = WAIT.review('次の頼み');
  * 課題の担当の居場所が無ければ、送らず・記録も書かずに止まる（TPM 担当に知らせる）。
  */
 export async function reportReview(ctx: Context, options: ReviewOptions): Promise<string[]> {
-  const self = sender(ctx);
+  const self = await sender(ctx);
   if (self.role !== 'staff-engineer') throw new TpmError('roster report review は Staff Engineer 担当（Staff の席）が打ちます。レビューを頼むのは roster ask review');
   if (!Object.hasOwn(VERDICTS, options.verdict)) throw new TpmError(`--verdict は ${Object.keys(VERDICTS).join('・')} のどれかにしてください（${Object.entries(VERDICTS).map(([id, label]) => `${id}＝${label}`).join('・')}）`);
   const verdict = options.verdict as Verdict;
@@ -271,9 +271,9 @@ export async function reportReview(ctx: Context, options: ReviewOptions): Promis
   const label = VERDICTS[verdict];
   const body = `${options.url} 判定: ${label}（${verdict}）／一言: ${options.summary}／頼み: ${asks.map(r => `#${r.n}`).join(' ')}`;
   // 相手の居場所と 2 度送りを、課題に記録を書く前に見る。
-  notRepeatToPeer(ctx, self, owner, 'review', body);
+  await notRepeatToPeer(ctx, self, owner, 'review', body);
   const recorded = record(ctx, self, { kind: 'レビュー', role: ROLES[self.role].label, summary: oneLine(`${label}: ${options.summary}`), links: [{ label: 'レビュー', url: options.url }], points: [] });
-  const sent = toPeer(ctx, self, owner, 'review', body);
+  const sent = await toPeer(ctx, self, owner, 'review', body);
   const reviewedAt = ctx.now().toISOString();
   for (const r of asks) patchReview(ctx, r.n, { verdict, page: options.url, summary: options.summary, reviewedAt });
   const marks = await markVerdict(ctx, options.url, verdict, asks);

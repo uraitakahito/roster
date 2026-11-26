@@ -213,14 +213,14 @@ async function assignSeat(ctx: Context, subjectKey: string, options: AssignOptio
     if (options.brief === undefined && subject === undefined) throw new TpmError(`${key} の担当はもう動いています（${existing.address}）。新しい依頼書を --brief で渡してください`);
     if (options.supersede === true && options.after === true) throw new TpmError('--supersede と --after は、どちらか 1 つにしてください');
     // 写しを置く前に、送る前の検査を通す（止まった回に写しだけが増えないように）。
-    assertRead(ctx, `${existing.key} の担当`, existing.title);
+    await assertRead(ctx, `${existing.key} の担当`, existing.title);
     const choice = options.supersede === true ? 'supersede' : options.after === true ? 'after' : undefined;
     const settled = assertSettled(ctx, existing, 'assign', choice);
     // 続きのときも写しを作り直す（コメントが増えているため）。
     Object.assign(existing, await issueCopy(ctx, existing.issue ?? subjectKey, subjectKey, options.noIssueCopy));
     // 送る前の検査を通ってから、頼みを依頼書にする（止まった回に、渡した事にしない）。
     const url = subject === undefined ? options.brief ?? '' : await putStaffBrief(ctx, subject, asks);
-    const sent = brief(ctx, existing, url, options.note, settled === undefined || choice === undefined ? undefined : { text: settled, choice });
+    const sent = await brief(ctx, existing, url, options.note, settled === undefined || choice === undefined ? undefined : { text: settled, choice });
     const previous = markBriefed(ctx, asks, url);
     return subject === undefined ? sent : [...sent, ...relabelStaff(ctx, existing, subjectKey, asks), ...await markBrief(ctx, url, asks, previous)];
   }

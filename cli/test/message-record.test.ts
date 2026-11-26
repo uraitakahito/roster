@@ -46,7 +46,7 @@ const seated = (ctx: Context): Context => ({ ...ctx, env: { ...ctx.env, ROSTER_C
 describe('送った記録を置き場に写す', () => {
   test('TPM 担当 → 担当: 1 件を carried で置く。送り手は TPM 担当の名（TPM_PARTY）、受け手は担当の Key、id と時刻は送った記録の物', async () => {
     const w = await started();
-    notify(w.tpm, 't-x7k2', { text: 'A で進める' });
+    await notify(w.tpm, 't-x7k2', { text: 'A で進める' });
     const [sent] = log(w);
     expect(await records(w.store)).toEqual([{
       project: w.project,
@@ -69,7 +69,7 @@ describe('送った記録を置き場に写す', () => {
 
   test('担当 → TPM 担当: 送り手は担当の Key（居場所の題でない）、受け手は TPM 担当の名（TPM_PARTY）。返事の先も写す', async () => {
     const w = await started();
-    notify(w.tpm, 't-x7k2', { text: 'どちらにするか' });
+    await notify(w.tpm, 't-x7k2', { text: 'どちらにするか' });
     const asked = log(w)[0]?.id ?? '';
     await askTpm(w.se, { text: '案 A にする', waitingFor: '案の選択', replyTo: asked });
     expect((await records(w.store))[1]).toMatchObject({ key: 't-x7k2', heading: 'ask-tpm', from: 't-x7k2', to: TPM_PARTY, text: '【ask-tpm】案 A にする', state: 'carried', replyTo: asked });
@@ -90,14 +90,14 @@ describe('送った記録を置き場に写す', () => {
 
   test('castlist の設定と session の id があれば、ページを置く時と同じ送り手の付随する id を付ける', async () => {
     const w = await started();
-    notify(seated(w.tpm), 't-x7k2', { text: '送り手を付ける' });
+    await notify(seated(w.tpm), 't-x7k2', { text: '送り手を付ける' });
     expect((await records(w.store))[0]?.sender).toEqual({ issuer: castlistIssuer(w.tpm.state.dir), ref: 'claude.session:s-1' });
   });
 
   test('8000 字を超える本文は、頭の 7990 字に「…（長いので切った）」を付ける。log.jsonl の本文は切らない', async () => {
     const w = await started();
     const body = `${'あ'.repeat(7000)}${'😀'.repeat(2000)}`;
-    notify(w.tpm, 't-x7k2', { text: body });
+    await notify(w.tpm, 't-x7k2', { text: body });
     const [record] = await records(w.store);
     const chars = [...record?.text ?? ''];
     expect(chars).toHaveLength(8000);
@@ -105,7 +105,7 @@ describe('送った記録を置き場に写す', () => {
     expect(log(w)[0]?.text).toBe(`【notify】${body}`);
     // ちょうど 8000 字は切らない。
     const fit = 'い'.repeat(8000 - '【notify】'.length);
-    notify(w.tpm, 't-x7k2', { text: fit });
+    await notify(w.tpm, 't-x7k2', { text: fit });
     expect((await records(w.store))[1]?.text).toBe(`【notify】${fit}`);
   });
 });
@@ -147,7 +147,7 @@ describe('置き場が送り手を確かめられない時は、送り手を外�
   ] as const)('%s: 送り手が空の記録が置かれ、その事が 1 行残る', async (_name, how, reason) => {
     const w = await started();
     w.store.sender = how;
-    notify(seated(w.tpm), 't-x7k2', { text: 'A で進める' });
+    await notify(seated(w.tpm), 't-x7k2', { text: 'A で進める' });
     const [sent] = log(w);
     const [record, ...rest] = await records(w.store);
     expect(rest).toEqual([]);
@@ -160,7 +160,7 @@ describe('置き場が送り手を確かめられない時は、送り手を外�
   test('外しても落ちれば、写せなかった行（置き直しは 1 度だけ）', async () => {
     const w = await started();
     w.store.messageError = 503;
-    notify(seated(w.tpm), 't-x7k2', { text: 'A で進める' });
+    await notify(seated(w.tpm), 't-x7k2', { text: 'A で進める' });
     expect(await records(w.store)).toEqual([]);
     expect(w.store.messagePuts).toHaveLength(2);
     expect(notes(w)).toEqual([{ at: NOW, id: log(w)[0]?.id, reason: '503 castlist に送り手を聞けない。送り手を外しても置けない（503 castlist に送り手を聞けない）' }]);
@@ -169,10 +169,10 @@ describe('置き場が送り手を確かめられない時は、送り手を外�
   test('送り手を付けていない時の 503 と、送り手のほかの訳の 400 では、置き直さない', async () => {
     const w = await started();
     w.store.messageError = 503;
-    notify(w.tpm, 't-x7k2', { text: '付けていない' });
+    await notify(w.tpm, 't-x7k2', { text: '付けていない' });
     await messageRecordsSettled();
     w.store.messageError = 400;
-    notify(seated(w.tpm), 't-x7k2', { text: '形の誤り' });
+    await notify(seated(w.tpm), 't-x7k2', { text: '形の誤り' });
     await messageRecordsSettled();
     expect(w.store.messagePuts).toHaveLength(2);
     expect(notes(w).map(n => n.placed)).toEqual([undefined, undefined]);
@@ -190,7 +190,7 @@ describe('写せなくても、送りは止めない', () => {
   ])('%s: 今までどおり送り、log.jsonl に行があり、写せなかった記録が 1 行残る', async (_name, breakStore, reason) => {
     const w = await started();
     breakStore(w.store);
-    expect(notify(w.tpm, 't-x7k2', { text: 'A で進める' })).toEqual(SENT);
+    expect(await notify(w.tpm, 't-x7k2', { text: 'A で進める' })).toEqual(SENT);
     expect(w.wire.inbox('file:1').map(m => m.text)).toEqual(['【notify】A で進める']);
     const [sent] = log(w);
     expect(sent).toMatchObject({ heading: 'notify', text: '【notify】A で進める' });
@@ -203,7 +203,7 @@ describe('写せなくても、送りは止めない', () => {
     const w = await started();
     const { handler } = nextHandler(() => ({ status: 200, raw: '<html>別の物</html>' }));
     const tpm: Context = { ...w.tpm, clients: { ...w.tpm.clients, pagetray: url => pagetrayClient(url, handler) } };
-    expect(notify(tpm, 't-x7k2', { text: 'A で進める' })).toEqual(SENT);
+    expect(await notify(tpm, 't-x7k2', { text: 'A で進める' })).toEqual(SENT);
     await messageRecordsSettled();
     expect(notes(w)).toEqual([{ at: NOW, id: log(w)[0]?.id, reason: '置き場が 200 を返したが、答えを読めない（置けたかは分からない）' }]);
   });
@@ -212,8 +212,8 @@ describe('写せなくても、送りは止めない', () => {
     const w = await started();
     w.store.down = true;
     const program = new Command().name('roster');
-    program.command('boom').action(() => {
-      notify(w.tpm, 't-x7k2', { text: 'A で進める' });
+    program.command('boom').action(async () => {
+      await notify(w.tpm, 't-x7k2', { text: 'A で進める' });
       throw new Error('思わぬ誤り');
     });
     await expect(runProgram(['node', 'roster', 'boom'], program)).rejects.toThrow('思わぬ誤り');
@@ -224,7 +224,7 @@ describe('写せなくても、送りは止めない', () => {
   test('id の形が置き場の決まりに合わない時は、字を替えずに、写さない（置き場には頼まない）', async () => {
     const w = await started();
     const messages = Object.assign(Object.create(w.tpm.messages) as Context['messages'], { send: () => ({ id: 'workspace:1/7' }) });
-    expect(notify({ ...w.tpm, messages }, 't-x7k2', { text: 'A で進める' })).toEqual(SENT);
+    expect(await notify({ ...w.tpm, messages }, 't-x7k2', { text: 'A で進める' })).toEqual(SENT);
     expect(log(w).map(l => l.id)).toEqual(['workspace:1/7']);
     expect(await records(w.store)).toEqual([]);
     expect(w.store.messagePuts).toEqual([]);
