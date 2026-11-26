@@ -1,6 +1,6 @@
 // TPM 担当の側の片付け（渡せない・期限切れ・席を閉じる・名簿に無い取り口）と、roster inbox の NATS の形の試験。
 import { describe, expect, test } from 'vitest';
-import { mailPrompt, tidyMail } from '../src/commands/mail.ts';
+import { mailLeft, mailPrompt, tidyMail } from '../src/commands/mail.ts';
 import { messageRecordsSettled } from '../src/commands/message-record.ts';
 import { askTpm, dismiss, notify, reportDone } from '../src/commands/messages.ts';
 import { hello, inbox, inboxNow } from '../src/commands/role-side.ts';
@@ -216,5 +216,36 @@ describe('roster inbox（設定が nats で、名乗っている session）', ()
     await notify(w.tpm, 't-x7k2', { text: 'cmux で待っている物' });
     expect(await inboxNow(w.se)).toEqual(inbox(w.se));
     expect((await inboxNow(w.se))[1]).toBe('【notify】cmux で待っている物');
+  });
+});
+
+describe('roster mail left（NATS に残っている物を見る）', () => {
+  test('残っている物を、受け手ごとに数と、見出し・送り手・置いた時刻で出す。取り置かない。設定を cmux に戻した後も出る', async () => {
+    const w = await natsWorld();
+    expect(await mailLeft(w.tpm)).toEqual(['メッセージキューに、残っている物は無い']);
+    claim(w, w.se, 200);
+    claim(w, w.tpm, 100);
+    await notify(w.tpm, 't-x7k2', { text: '1 通目' });
+    w.pass(60_000);
+    await notify(w.tpm, 't-x7k2', { text: '2 通目' });
+    await askTpm(w.se, { text: '相談', waitingFor: '案' }).catch(() => undefined);
+    const ids = left(w, 't-x7k2').map(s => s.id);
+    const expected = [
+      't-x7k2: 2 通',
+      `- 【notify】Technical Program Manager（2026-11-20T12:00:00.000Z に置いた。id ${ids[0]}）`,
+      `- 【notify】Technical Program Manager（2026-11-20T12:01:00.000Z に置いた。id ${ids[1]}）`,
+      '中身は、受け手の席の roster inbox か、送った記録（log.jsonl）の同じ id の行で読む',
+    ];
+    expect(await mailLeft(w.tpm)).toEqual(expected);
+    expect(w.office.work.map(i => i.deliveries)).toEqual([0, 0]);
+    // 設定を cmux に戻した後（取り口が無くても、送った記録の受け手の名から引ける）。
+    w.office.consumers.clear();
+    expect(await mailLeft({ ...w.tpm, config: { ...w.tpm.config, messages: 'cmux' } })).toEqual(expected);
+  });
+
+  test('NATS が応えなければ、そう出す。担当の席からは打てない', async () => {
+    const w = await natsWorld();
+    expect(await mailLeft(down(w.tpm))).toEqual([expect.stringMatching(/^メッセージキューが応えません（.*）。残りは分かりません$/) as string]);
+    await expect(mailLeft(w.se)).rejects.toThrow(/roster mail left は TPM 担当の命令です/);
   });
 });

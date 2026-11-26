@@ -15,7 +15,7 @@ import { issueView } from './commands/issue.ts';
 import { messageRecordsSettled } from './commands/message-record.ts';
 import { fileDelete, fileList, filePath, filePut, type FileListOptions, type FilePutOptions } from './commands/file.ts';
 import { PAGE_KINDS, pageDelete, pageImport, pageList, pagePath, pagePut, pageReply, type PageDeleteOptions, type PageListOptions } from './commands/page.ts';
-import { mailClaim, mailGate, mailPrompt, mailRelease, mailWait, type WaitResult } from './commands/mail.ts';
+import { mailClaim, mailGate, mailLeft, mailPrompt, mailRelease, mailWait, type WaitResult } from './commands/mail.ts';
 import { registerMessages } from './commands/register.ts';
 import { registerReview } from './commands/review.ts';
 import { hello, inboxNow } from './commands/role-side.ts';
@@ -255,6 +255,8 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
       if (text !== undefined) await new Promise<void>(resolve => void process.stderr.write(`${text}\n`, () => resolve()));
       process.exit(text === undefined ? 0 : 2);
     });
+  mail.command('left').description('（TPM 担当が打つ）メッセージキュー（NATS）に残っている物を、受け手ごとに出す（読むだけ。設定の messages に依らない。設定を戻す前後に見る）')
+    .action(async () => print(await mailLeft(createContext())));
   const castlist = program.command('castlist').description('アクターの台帳（castlist）: session の始まりと終わりを送る（hook が呼ぶ。castlist を設定していなければ何もしない）・監査の検索を読む（find・show・lineage・events・settings。読むだけ）');
   castlist.command('session-start').description('（SessionStart の hook が呼ぶ）session を登録し、登場・再登場・要約・分身と、起こした・継いだ線を送る')
     .action(async () => {

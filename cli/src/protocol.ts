@@ -72,6 +72,7 @@ export const COMMANDS = [
   'mail gate',
   'mail wait',
   'mail prompt',
+  'mail left',
   'castlist session-start',
   'castlist session-end',
   'castlist find',

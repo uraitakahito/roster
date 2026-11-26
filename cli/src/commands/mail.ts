@@ -6,7 +6,7 @@ import type { Context } from '../context.ts';
 import { sendsMessage, type Verdict } from '../guard.ts';
 import { allClaims, claimNamed, claudePid, deliveredKey, deliveredLines, effective, ENDED_FILE, endedLines, recipientName, removeClaim as dropClaim, type EndedHow, type EndedLine, guardedKeys, markGuarded, gateFile, lineCount, ownName, readClaim, recordDelivered, removeClaim, stopWaiter, usesNats, waiterFile, writeClaim, type DeliveredWhen, type GateMark, type WaiterMark } from '../mail.ts';
 import { MAILROOM_LIMITS, type Mailroom, type Recipient, type Stored, type TakeLimit, type Taken } from '../mailroom/types.ts';
-import { allRoles, type RoleRecord } from '../roster.ts';
+import { allRoles, requireTpmSide, type RoleRecord } from '../roster.ts';
 import { envOf } from '../env.ts';
 import { selfParty } from '../party.ts';
 import { copyMessageRecord } from './message-record.ts';
@@ -514,4 +514,37 @@ export async function peekInbox(ctx: Context, name: Recipient): Promise<string[]
   const letters = await (await ctx.mailroom()).peek(name);
   if (letters.length === 0) return [];
   return [...letters.flatMap(m => [`--- ${m.from}（id ${m.id}）`, m.text]), '--- ここまで（出しただけ。届いたとは記録していない。hook が、この後で渡す）'];
+}
+
+/**
+ * roster mail left（TPM 担当だけ。設定の messages が cmux でも nats でも動く）: メッセージキュー（NATS）に残っている物（まだ渡っていない物）を、
+ * 受け手ごとに、数と、1 通ごとの見出し・送り手・置いた時刻で出す。取り置かない（読むだけ）。
+ * 設定を cmux に戻す前と後に、残りを見るための物（戻した後は、送り手が NATS に置かず、hook を持たない席は受け取らない）。
+ * 見る受け手は、取り口のある受け手・名簿の担当・名乗りのある受け手・送った記録で NATS に置いた受け手・TPM 担当。応えなければ、そう出す。
+ */
+export async function mailLeft(ctx: Context): Promise<string[]> {
+  requireTpmSide(ctx, 'roster mail left');
+  try {
+    const room = await ctx.mailroom();
+    const names = new Set<string | undefined>([
+      ...await room.recipients(),
+      nameOfRole(selfParty(ctx.env)),
+      ...allRoles(ctx).map(nameOfRole),
+      ...allClaims(ctx).map(c => c.name),
+      ...ctx.state.lines<Sent>('log.jsonl').map(l => l.box),
+    ]);
+    const out: string[] = [];
+    for (const name of [...names].filter(n => n !== undefined).sort()) {
+      const letters = await room.peek(name);
+      if (letters.length === 0) continue;
+      out.push(`${name}: ${letters.length} 通`, ...letters.map((m) => {
+        const sent = sentFrom(m);
+        return `- 【${sent.heading}】${m.from}（${m.at} に置いた。id ${m.id}）`;
+      }));
+    }
+    return out.length === 0 ? ['メッセージキューに、残っている物は無い'] : [...out, '中身は、受け手の席の roster inbox か、送った記録（log.jsonl）の同じ id の行で読む'];
+  }
+  catch (e) {
+    return [`メッセージキューが応えません（${e instanceof Error ? e.message : String(e)}）。残りは分かりません`];
+  }
 }
