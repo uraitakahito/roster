@@ -14,6 +14,7 @@ import { TpmError } from '../skill-sets.ts';
 import { MAX_POINTS, type Note, type NoteKind, type NoteLink } from '../tracker/types.ts';
 import type { Incoming } from '../transport/types.ts';
 import { isStorePage, pageOwner, replyLine, samePage, waitingByParty, waitingUrls, WAITING_PAGES } from './reply.ts';
+import { copyMessageRecord } from './message-record.ts';
 import { markEscalated } from './review-marks.ts';
 import { isPageUrl } from './store.ts';
 import { readShown, returnedIds, seenTimes, shownFile, type SeenAt } from '../seen.ts';
@@ -97,13 +98,16 @@ function assertNotRepeat(ctx: Context, id: HeadingId, from: string, to: string, 
 /** 担当が TPM 担当へ送る物の 2 度送りを見る（課題に記録を書く前に呼ぶ）。 */
 const notRepeatToTpm = (ctx: Context, self: RoleRecord, id: HeadingId, body: string): void => assertNotRepeat(ctx, id, self.title, requireTpm(ctx).address, body);
 
-/** メッセージを送り、送った記録を log.jsonl に足す。recipient は届く担当（返事の形なら元の行の送り手に替える）、extra は記録の行に足す欄。 */
+/**
+ * メッセージを送り、送った記録を log.jsonl に足す。recipient は届く担当（返事の形なら元の行の送り手に替える）、extra は記録の行に足す欄。
+ * 足した行は、置き場にも写す（message-record.ts。待たない。写せなくても、送った事と log.jsonl は変わらない）。
+ */
 function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: string, body: string, recipient: Party, replyTo?: string, extra: Pick<Sent, 'settle' | 'peer' | 'briefs'> = {}): string {
   assertNotRepeat(ctx, id, from, to, body, replyTo);
   const text = message(id, body);
   const receiving = replyTo === undefined ? recipient : ctx.state.lines<Sent>('log.jsonl').findLast(l => l.id === replyTo)?.sender;
   const d = ctx.messages.send(to, from, text, replyTo);
-  ctx.state.append('log.jsonl', {
+  const sent: Sent = {
     at: ctx.now().toISOString(),
     key,
     heading: id,
@@ -115,7 +119,9 @@ function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: str
     ...extra,
     sender: selfParty(ctx.env),
     ...(receiving === undefined ? {} : { recipient: receiving }),
-  } satisfies Sent);
+  };
+  ctx.state.append('log.jsonl', sent);
+  copyMessageRecord(ctx, sent);
   return `送った: 【${id}】→ ${to}（${SENT_NOTE}）`;
 }
 

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SetReplyState$ = exports.ListPages$ = exports.ListFiles$ = exports.GetHealth$ = exports.DeletePages$ = exports.DeleteFiles$ = exports.CreatePage$ = exports.CreateFile$ = exports.AddReviewMarks$ = exports.ValidationExceptionField$ = exports.SetReplyStateOutput$ = exports.SetReplyStateInput$ = exports.Sender$ = exports.Page$ = exports.ListPagesOutput$ = exports.ListPagesInput$ = exports.ListFilesOutput$ = exports.ListFilesInput$ = exports.GetHealthOutput$ = exports.GetHealthInput$ = exports.File$ = exports.DeletePagesOutput$ = exports.DeletePagesInput$ = exports.DeleteFilesOutput$ = exports.DeleteFilesInput$ = exports.CreatePageOutput$ = exports.CreatePageInput$ = exports.CreateFileOutput$ = exports.CreateFileInput$ = exports.AddReviewMarksOutput$ = exports.AddReviewMarksInput$ = exports.ActorSummary$ = exports.errorTypeRegistries = exports.ValidationException$ = exports.UnsupportedMediaType$ = exports.Unavailable$ = exports.PayloadTooLarge$ = exports.NotFound$ = exports.InternalError$ = exports.Forbidden$ = exports.Conflict$ = exports.PagetrayServiceException$ = void 0;
+exports.SetReplyState$ = exports.PutMessage$ = exports.ListPages$ = exports.ListMessages$ = exports.ListFiles$ = exports.GetHealth$ = exports.DeletePages$ = exports.DeleteFiles$ = exports.CreatePage$ = exports.CreateFile$ = exports.AddReviewMarks$ = exports.ValidationExceptionField$ = exports.SetReplyStateOutput$ = exports.SetReplyStateInput$ = exports.Sender$ = exports.PutMessageOutput$ = exports.PutMessageInput$ = exports.Page$ = exports.Message$ = exports.ListPagesOutput$ = exports.ListPagesInput$ = exports.ListMessagesOutput$ = exports.ListMessagesInput$ = exports.ListFilesOutput$ = exports.ListFilesInput$ = exports.GetHealthOutput$ = exports.GetHealthInput$ = exports.File$ = exports.DeletePagesOutput$ = exports.DeletePagesInput$ = exports.DeleteFilesOutput$ = exports.DeleteFilesInput$ = exports.CreatePageOutput$ = exports.CreatePageInput$ = exports.CreateFileOutput$ = exports.CreateFileInput$ = exports.AddReviewMarksOutput$ = exports.AddReviewMarksInput$ = exports.ActorSummary$ = exports.errorTypeRegistries = exports.ValidationException$ = exports.UnsupportedMediaType$ = exports.Unavailable$ = exports.PayloadTooLarge$ = exports.NotFound$ = exports.InternalError$ = exports.Forbidden$ = exports.Conflict$ = exports.PagetrayServiceException$ = void 0;
 const _ARM = "AddReviewMarks";
 const _ARMI = "AddReviewMarksInput";
 const _ARMO = "AddReviewMarksOutput";
@@ -31,11 +31,19 @@ const _L = "Location";
 const _LF = "ListFiles";
 const _LFI = "ListFilesInput";
 const _LFO = "ListFilesOutput";
+const _LM = "ListMessages";
+const _LMI = "ListMessagesInput";
+const _LMO = "ListMessagesOutput";
 const _LP = "ListPages";
 const _LPI = "ListPagesInput";
 const _LPO = "ListPagesOutput";
+const _M = "Message";
+const _Me = "Messages";
 const _NF = "NotFound";
 const _P = "Page";
+const _PM = "PutMessage";
+const _PMI = "PutMessageInput";
+const _PMO = "PutMessageOutput";
 const _PTL = "PayloadTooLarge";
 const _Pa = "Pages";
 const _S = "Sender";
@@ -56,14 +64,18 @@ const _b = "body";
 const _c = "client";
 const _cA = "createdAt";
 const _cT = "contentType";
+const _d = "deliveries";
+const _dA = "deliveredAt";
 const _e = "error";
 const _ex = "ext";
 const _f = "files";
 const _fL = "fieldList";
-const _h = "http";
+const _fr = "from";
+const _h = "heading";
 const _hE = "httpError";
 const _hH = "httpHeader";
 const _hQ = "httpQuery";
+const _ht = "http";
 const _i = "id";
 const _is = "issuer";
 const _k = "kind";
@@ -72,6 +84,7 @@ const _l = "location";
 const _m = "message";
 const _mR = "maxResults";
 const _mT = "mediaType";
+const _me = "messages";
 const _n = "name";
 const _nT = "nextToken";
 const _n_ = "n";
@@ -82,10 +95,12 @@ const _pag = "pages";
 const _q = "q";
 const _r = "role";
 const _rA = "resolvedAt";
+const _rT = "replyTo";
 const _re = "removed";
 const _ref = "ref";
 const _rep = "reply";
 const _s = "smithy.ts.sdk.synthetic.ai.pagetray";
+const _sA = "sentAt";
 const _se = "server";
 const _sen = "sender";
 const _sh = "sha256";
@@ -95,11 +110,15 @@ const _st = "status";
 const _sta = "state";
 const _t = "text/html";
 const _ta = "targets";
+const _te = "text";
 const _ti = "title";
+const _to = "to";
 const _ty = "type";
 const _u = "url";
+const _uA = "updatedAt";
 const _v = "verdict";
 const _ve = "version";
+const _vi = "via";
 const _w = "workspace";
 const _wO = "waitsOn";
 const n0 = "ai.common";
@@ -256,6 +275,16 @@ exports.ListFilesOutput$ = [3, n1, _LFO,
     [_f, _nT],
     [() => Files, 0], 1
 ];
+exports.ListMessagesInput$ = [3, n1, _LMI,
+    0,
+    [_p, _ke, _to, _fr, _sta, _h, _q, _so, _mR, _nT],
+    [[0, { [_hQ]: _p }], [0, { [_hQ]: _ke }], [0, { [_hQ]: _to }], [0, { [_hQ]: _fr }], [0, { [_hQ]: _sta }], [0, { [_hQ]: _h }], [0, { [_hQ]: _q }], [0, { [_hQ]: _so }], [1, { [_hQ]: _mR }], [0, { [_hQ]: _nT }]]
+];
+exports.ListMessagesOutput$ = [3, n1, _LMO,
+    0,
+    [_me, _nT],
+    [() => Messages, 0], 1
+];
 exports.ListPagesInput$ = [3, n1, _LPI,
     0,
     [_p, _ke, _k, _r, _w, _q, _rep, _o, _v, _a, _so, _mR, _nT],
@@ -266,10 +295,25 @@ exports.ListPagesOutput$ = [3, n1, _LPO,
     [_pag, _nT],
     [() => Pages, 0], 1
 ];
+exports.Message$ = [3, n1, _M,
+    0,
+    [_p, _i, _h, _fr, _to, _te, _sA, _sta, _cA, _uA, _ke, _dA, _vi, _d, _rT, _sen],
+    [0, 0, 0, 0, 0, 0, 5, 0, 5, 5, 0, 5, 0, 1, 0, () => exports.Sender$], 10
+];
 exports.Page$ = [3, n1, _P,
     0,
     [_p, _ke, _k, _n_, _ti, _r, _w, _cA, _si, _pa, _sen, _aA, _aAn, _wO, _v, _ta],
     [0, 0, 0, 0, 0, 0, 0, 5, 1, 0, () => exports.Sender$, 5, 5, 0, 0, 64 | 0], 10
+];
+exports.PutMessageInput$ = [3, n1, _PMI,
+    0,
+    [_p, _i, _h, _fr, _to, _te, _sA, _sta, _aI, _aR, _ke, _dA, _vi, _d, _rT],
+    [[0, 1], [0, 1], 0, 0, 0, 0, 5, 0, [0, { [_hQ]: _aI }], [0, { [_hQ]: _aR }], 0, 5, 0, 1, 0], 8
+];
+exports.PutMessageOutput$ = [3, n1, _PMO,
+    0,
+    [_p, _i, _h, _fr, _to, _te, _sA, _sta, _cA, _uA, _st, _ke, _dA, _vi, _d, _rT, _sen],
+    [0, 0, 0, 0, 0, 0, 5, 0, 5, 5, [1, 32], 0, 5, 0, 1, 0, () => exports.Sender$], 11
 ];
 exports.Sender$ = [3, n1, _S,
     0,
@@ -294,6 +338,9 @@ exports.ValidationExceptionField$ = [3, n2, _VEF,
 var Files = [1, n1, _Fil,
     0, () => exports.File$
 ];
+var Messages = [1, n1, _Me,
+    0, () => exports.Message$
+];
 var Pages = [1, n1, _Pa,
     0, () => exports.Page$
 ];
@@ -303,29 +350,35 @@ var ValidationExceptionFieldList = [1, n2, _VEFL,
     0, () => exports.ValidationExceptionField$
 ];
 exports.AddReviewMarks$ = [9, n1, _ARM,
-    { [_h]: ["POST", "/api/projects/{project}/keys/{key}/kinds/{kind}/pages/{n}/review", 200] }, () => exports.AddReviewMarksInput$, () => exports.AddReviewMarksOutput$
+    { [_ht]: ["POST", "/api/projects/{project}/keys/{key}/kinds/{kind}/pages/{n}/review", 200] }, () => exports.AddReviewMarksInput$, () => exports.AddReviewMarksOutput$
 ];
 exports.CreateFile$ = [9, n1, _CF,
-    { [_h]: ["POST", "/api/projects/{project}/keys/{key}/files", 201] }, () => exports.CreateFileInput$, () => exports.CreateFileOutput$
+    { [_ht]: ["POST", "/api/projects/{project}/keys/{key}/files", 201] }, () => exports.CreateFileInput$, () => exports.CreateFileOutput$
 ];
 exports.CreatePage$ = [9, n1, _CP,
-    { [_h]: ["POST", "/api/projects/{project}/keys/{key}/kinds/{kind}/pages", 201] }, () => exports.CreatePageInput$, () => exports.CreatePageOutput$
+    { [_ht]: ["POST", "/api/projects/{project}/keys/{key}/kinds/{kind}/pages", 201] }, () => exports.CreatePageInput$, () => exports.CreatePageOutput$
 ];
 exports.DeleteFiles$ = [9, n1, _DF,
-    { [_h]: ["DELETE", "/api/files", 200] }, () => exports.DeleteFilesInput$, () => exports.DeleteFilesOutput$
+    { [_ht]: ["DELETE", "/api/files", 200] }, () => exports.DeleteFilesInput$, () => exports.DeleteFilesOutput$
 ];
 exports.DeletePages$ = [9, n1, _DP,
-    { [_h]: ["DELETE", "/api/pages", 200] }, () => exports.DeletePagesInput$, () => exports.DeletePagesOutput$
+    { [_ht]: ["DELETE", "/api/pages", 200] }, () => exports.DeletePagesInput$, () => exports.DeletePagesOutput$
 ];
 exports.GetHealth$ = [9, n1, _GH,
-    { [_h]: ["GET", "/healthz", 200] }, () => exports.GetHealthInput$, () => exports.GetHealthOutput$
+    { [_ht]: ["GET", "/healthz", 200] }, () => exports.GetHealthInput$, () => exports.GetHealthOutput$
 ];
 exports.ListFiles$ = [9, n1, _LF,
-    { [_h]: ["GET", "/api/files", 200] }, () => exports.ListFilesInput$, () => exports.ListFilesOutput$
+    { [_ht]: ["GET", "/api/files", 200] }, () => exports.ListFilesInput$, () => exports.ListFilesOutput$
+];
+exports.ListMessages$ = [9, n1, _LM,
+    { [_ht]: ["GET", "/api/messages", 200] }, () => exports.ListMessagesInput$, () => exports.ListMessagesOutput$
 ];
 exports.ListPages$ = [9, n1, _LP,
-    { [_h]: ["GET", "/api/pages", 200] }, () => exports.ListPagesInput$, () => exports.ListPagesOutput$
+    { [_ht]: ["GET", "/api/pages", 200] }, () => exports.ListPagesInput$, () => exports.ListPagesOutput$
+];
+exports.PutMessage$ = [9, n1, _PM,
+    { [_ht]: ["PUT", "/api/projects/{project}/messages/{id}", 200] }, () => exports.PutMessageInput$, () => exports.PutMessageOutput$
 ];
 exports.SetReplyState$ = [9, n1, _SRS,
-    { [_h]: ["PUT", "/api/projects/{project}/keys/{key}/kinds/{kind}/pages/{n}/reply", 200] }, () => exports.SetReplyStateInput$, () => exports.SetReplyStateOutput$
+    { [_ht]: ["PUT", "/api/projects/{project}/keys/{key}/kinds/{kind}/pages/{n}/reply", 200] }, () => exports.SetReplyStateInput$, () => exports.SetReplyStateOutput$
 ];

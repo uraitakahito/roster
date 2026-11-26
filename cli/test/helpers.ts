@@ -40,10 +40,40 @@ function pageOf<T>(rows: T[], q: URLSearchParams): { items: T[], nextToken?: str
   return { items: rows.slice(from, to), ...(to < rows.length ? { nextToken: String(to) } : {}) };
 }
 
+/** 偽の置き場が持つメッセージの記録（新しい API の答えの形のまま。時刻は UTC・ミリ秒までの字）。 */
+export interface MessageRecord {
+  project: string
+  id: string
+  key?: string
+  heading: string
+  from: string
+  to: string
+  text: string
+  sentAt: string
+  state: string
+  deliveredAt?: string
+  via?: string
+  deliveries?: number
+  replyTo?: string
+  createdAt: string
+  updatedAt: string
+  /** 送り手の付随する id（「送った側」の書き込みに付いていた時だけ）。 */
+  sender?: { issuer: string, ref: string }
+}
+
+/** メッセージの状態の強さ（書き足しは、今より強い時だけ替える）。 */
+const STATE_RANK: Readonly<Record<string, number>> = { waiting: 0, carried: 0, expired: 1, undeliverable: 1, delivered: 2 };
+
+/** 道の 1 段（project・Key）に置ける字か。 */
+const isSegment = (v: string): boolean => /^[A-Za-z0-9._-]{1,255}$/.test(v) && v !== '.' && v !== '..';
+/** メッセージの id の形か。 */
+const isMessageId = (v: string): boolean => /^[A-Za-z0-9._-]{1,128}$/.test(v);
+
 /**
- * 偽の置き場: 生成した pagetray の client が送る新しい API（restJson1）の要求と、本文を取る curl（GET /<project>/<Key>/…）を受け、本物（pagetray 1.0.0）と同じ決まりで答える。
+ * 偽の置き場: 生成した pagetray の client が送る新しい API（restJson1）の要求と、本文を取る curl（GET /<project>/<Key>/…）を受け、本物（pagetray 1.1.0）と同じ決まりで答える。
  * 番号は種類ごとに今の最大＋1（消した番号も数える）、名指した番号が使われているか消した番号なら 409。消した URL は 410。本物との揃いは、CI のつなぎの段が見る。
  * file（/api/projects/<project>/keys/<Key>/files・/api/files）も同じ決まり。番号は名と拡張子ごと。world は client（{@link FakeStore.client}）を Context に差し込む。
+ * メッセージの記録（PutMessage・ListMessages）は、初めての id は 201・もうある id は 200 の書き足し（状態は前へだけ進む）。
  */
 export class FakeStore {
   /** 置かれたページ（置き場の中の path → 記録と本文）。 */
@@ -62,8 +92,19 @@ export class FakeStore {
   markError: number | undefined;
   /** 置く要求（CreatePage・CreateFile）の引数（新しい API の名）。送った順。 */
   posts: URLSearchParams[] = [];
-  /** 受けた新しい API の要求（つながらない間の物も）。送った順。 */
+  /**
+   * 受けた新しい API の要求（つながらない間の物も）。送った順。メッセージの記録を置く要求（PutMessage）は入れず、{@link FakeStore.messagePuts} に入れる
+   * （送る命令のたびに、命令を待たせずに出るので、ページと file の要求の並びを見る試験に混ぜない）。
+   */
   requests: NextSeen[] = [];
+  /** 置かれたメッセージの記録（`<project>/<id>` → 記録。置いた順）。 */
+  messages = new Map<string, MessageRecord>();
+  /** 受けた、メッセージの記録を置く要求（PutMessage。つながらない間の物も）。送った順。 */
+  messagePuts: NextSeen[] = [];
+  /** 置けば、メッセージの記録を置く要求に、この code で誤りを返す（503 は、置き場が castlist に聞けない時）。 */
+  messageError: number | undefined;
+  /** true の間、メッセージの記録の操作を持たない（pagetray 1.0.2 までの置き場。知らない道の 404 を返す）。 */
+  noMessages = false;
   /**
    * 送り手（actorIssuer・actorRef）を書いた置く要求に、castlist が何と答えたことにするか（pagetray の「送り手」）。
    * known は登録のあるアクター（置く）、unregistered は登録が無い（400 の fieldList に /actorRef）、unreachable は castlist に聞けない（503）。どちらも何も置かない。
@@ -72,6 +113,8 @@ export class FakeStore {
 
   /** 返事の状態を書いた回数（時刻をずらすため）。 */
   private replies = 0;
+  /** メッセージの記録を置いた・書き足した回数（createdAt・updatedAt を、書くたびに 1 秒進めるため）。 */
+  private messageWrites = 0;
 
   /** 生成した client に差し込む偽の HTTP の handler。 */
   private readonly handler = nextHandler(seen => this.answer(seen)).handler;
@@ -81,7 +124,9 @@ export class FakeStore {
 
   /** 新しい API の要求に答える。知らない道は undefined（型の無い 404 でなく、偽の handler の UnknownOperationException）。 */
   private answer(seen: NextSeen): NextAnswer | undefined {
-    this.requests.push(seen);
+    const message = /^\/api\/projects\/([^/]+)\/messages\/([^/]+)$/.exec(seen.path)?.slice(1).map(decodeURIComponent);
+    const putsMessage = seen.method === 'PUT' && message !== undefined;
+    (putsMessage ? this.messagePuts : this.requests).push(seen);
     if (this.down) return { throws: Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:8801'), { code: 'ECONNREFUSED' }) };
     const q = new URLSearchParams(Object.entries(seen.query).flatMap(([k, v]) => typeof v === 'string' ? [[k, v]] : []));
     const at = (re: RegExp): string[] | undefined => re.exec(seen.path)?.slice(1).map(decodeURIComponent);
@@ -100,7 +145,92 @@ export class FakeStore {
     if (seen.path === '/api/pages' && seen.method === 'DELETE') return this.deletePages(q);
     if (seen.path === '/api/files' && seen.method === 'GET') return this.listFiles(q);
     if (seen.path === '/api/files' && seen.method === 'DELETE') return this.deleteFiles(q);
+    if (this.noMessages) return undefined;
+    if (putsMessage) return this.putMessage(q, message, seen.body ?? {});
+    if (seen.path === '/api/messages' && seen.method === 'GET') return this.listMessages(q);
     return undefined;
+  }
+
+  /**
+   * PutMessage（本文は記録の欄）。初めての id は作る（201）。もうある id は書き足す（200）: 状態は強い時だけ替え、deliveries は大きい方、
+   * deliveredAt は初めの時刻、via は状態を替えた時か今が空の時だけ。key・heading・from・to・text・sentAt・replyTo は初めの値を保つ（形は書き足す時も見る）。
+   * 送り手は「送った側」の書き込み（waiting・carried）の物だけを castlist に聞いて残す（もう入っていれば替えない）。
+   */
+  private putMessage(q: URLSearchParams, [project = '', id = '']: string[], body: Record<string, unknown>): NextAnswer {
+    if (this.messageError !== undefined) return failed(this.messageError, this.messageError === 503 ? 'castlist に送り手を聞けない' : '置き場の中の誤り');
+    const text = (name: string): string | undefined => typeof body[name] === 'string' ? body[name] : undefined;
+    // 時刻は UTC・ミリ秒まで（細かい時刻は 400）。
+    const time = (name: string): string | undefined => /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d{1,3})?Z$/.test(text(name) ?? '') && !Number.isNaN(Date.parse(text(name) ?? '')) ? new Date(text(name) ?? '').toISOString() : undefined;
+    const bad = (path: string): NextAnswer => failed(400, '引数が決まりに合わない', [{ path, message: '決まりに合わない' }]);
+    const [key, heading, from, to, content, state, via, replyTo] = ['key', 'heading', 'from', 'to', 'text', 'state', 'via', 'replyTo'].map(text);
+    const sentAt = time('sentAt');
+    const deliveries = typeof body.deliveries === 'number' ? body.deliveries : undefined;
+    const length = (v: string): number => [...v].length;
+    if (!isSegment(project) || project === 'api') return bad('/project');
+    if (!isMessageId(id) || id === '.' || id === '..') return bad('/id');
+    if (key !== undefined && !isSegment(key)) return bad('/key');
+    if (heading === undefined || !/^[a-z][a-z0-9-]{0,31}$/.test(heading)) return bad('/heading');
+    if (from === undefined || length(from) < 1 || length(from) > 200) return bad('/from');
+    if (to === undefined || length(to) < 1 || length(to) > 200) return bad('/to');
+    if (content === undefined || length(content) < 1 || length(content) > 8000) return bad('/text');
+    if (sentAt === undefined) return bad('/sentAt');
+    if (state === undefined || !Object.hasOwn(STATE_RANK, state)) return bad('/state');
+    if (body.deliveredAt !== undefined && time('deliveredAt') === undefined) return bad('/deliveredAt');
+    if (via !== undefined && !/^[a-z][a-z0-9-]{0,31}$/.test(via)) return bad('/via');
+    if (body.deliveries !== undefined && (deliveries === undefined || !Number.isInteger(deliveries) || deliveries < 1)) return bad('/deliveries');
+    if (replyTo !== undefined && !isMessageId(replyTo)) return bad('/replyTo');
+    // 送り手は「送った側」の書き込みだけ castlist に聞く。ほかは、組（片方だけは 400）だけを見る。
+    const sending = STATE_RANK[state] === 0;
+    if (q.has('actorIssuer') !== q.has('actorRef')) return failed(400, 'actorIssuer と actorRef は両方書くか、両方書かない', [{ path: '/actorIssuer', message: '両方書くか、両方書かない' }]);
+    const refusal = sending ? this.senderRefusal(q) : undefined;
+    if (refusal !== undefined) return refusal;
+    const sender = sending && q.has('actorRef') ? { issuer: q.get('actorIssuer') ?? '', ref: q.get('actorRef') ?? '' } : undefined;
+    const deliveredAt = time('deliveredAt');
+    const now = new Date(Date.parse('2026-11-20T14:00:00.000Z') + (this.messageWrites += 1) * 1000).toISOString();
+    const name = `${project}/${id}`;
+    const had = this.messages.get(name);
+    if (had === undefined) {
+      const record: MessageRecord = {
+        project,
+        id,
+        ...(key === undefined ? {} : { key }),
+        heading,
+        from,
+        to,
+        text: content,
+        sentAt,
+        state,
+        ...(deliveredAt === undefined ? {} : { deliveredAt }),
+        ...(via === undefined ? {} : { via }),
+        ...(deliveries === undefined ? {} : { deliveries }),
+        ...(replyTo === undefined ? {} : { replyTo }),
+        createdAt: now,
+        updatedAt: now,
+        ...(sender === undefined ? {} : { sender }),
+      };
+      this.messages.set(name, record);
+      return { status: 201, body: record };
+    }
+    const stronger = (STATE_RANK[state] ?? 0) > (STATE_RANK[had.state] ?? 0);
+    if (stronger) had.state = state;
+    if (via !== undefined && (stronger || had.via === undefined)) had.via = via;
+    if (deliveries !== undefined) had.deliveries = Math.max(had.deliveries ?? 0, deliveries);
+    if (deliveredAt !== undefined) had.deliveredAt ??= deliveredAt;
+    if (sender !== undefined) had.sender ??= sender;
+    had.updatedAt = now;
+    return { status: 200, body: had };
+  }
+
+  /** ListMessages（送った時刻の新しい順が既定。同じ時刻は置いた順で、新しい順なら後に置いた物が先）。 */
+  private listMessages(q: URLSearchParams): NextAnswer {
+    const word = (q.get('q') ?? '').trim();
+    const found = [...this.messages.values()].map((r, i) => ({ r, i }))
+      .filter(({ r }) => (['project', 'key', 'to', 'from', 'state', 'heading'] as const).every(f => !q.has(f) || q.get(f) === r[f]))
+      .filter(({ r }) => word === '' || [r.text, r.from, r.to].some(v => v.includes(word)))
+      .sort((a, b) => (q.get('sort') === 'sentAt' ? 1 : -1) * (a.r.sentAt.localeCompare(b.r.sentAt) || a.i - b.i))
+      .map(({ r }) => r);
+    const { items, nextToken } = pageOf(found, q);
+    return { status: 200, body: { messages: items, ...(nextToken === undefined ? {} : { nextToken }) } };
   }
 
   /** 置く要求の送り手を見る。置いてよければ undefined、断るなら誤りの答え。片方だけ書いた時は 400（castlist には聞かない）。 */

@@ -66,7 +66,9 @@ import type { DeleteFilesCommandInput, DeleteFilesCommandOutput } from "./comman
 import type { DeletePagesCommandInput, DeletePagesCommandOutput } from "./commands/DeletePagesCommand";
 import type { GetHealthCommandInput, GetHealthCommandOutput } from "./commands/GetHealthCommand";
 import type { ListFilesCommandInput, ListFilesCommandOutput } from "./commands/ListFilesCommand";
+import type { ListMessagesCommandInput, ListMessagesCommandOutput } from "./commands/ListMessagesCommand";
 import type { ListPagesCommandInput, ListPagesCommandOutput } from "./commands/ListPagesCommand";
+import type { PutMessageCommandInput, PutMessageCommandOutput } from "./commands/PutMessageCommand";
 import type { SetReplyStateCommandInput, SetReplyStateCommandOutput } from "./commands/SetReplyStateCommand";
 import {
   type ClientInputEndpointParameters,
@@ -90,7 +92,9 @@ export type ServiceInputTypes =
   | DeletePagesCommandInput
   | GetHealthCommandInput
   | ListFilesCommandInput
+  | ListMessagesCommandInput
   | ListPagesCommandInput
+  | PutMessageCommandInput
   | SetReplyStateCommandInput;
 
 /**
@@ -104,7 +108,9 @@ export type ServiceOutputTypes =
   | DeletePagesCommandOutput
   | GetHealthCommandOutput
   | ListFilesCommandOutput
+  | ListMessagesCommandOutput
   | ListPagesCommandOutput
+  | PutMessageCommandOutput
   | SetReplyStateCommandOutput;
 
 /**

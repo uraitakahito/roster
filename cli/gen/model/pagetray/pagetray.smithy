@@ -1,6 +1,6 @@
 $version: "2"
 
-// pagetray（ページの置き場）の API。決まりは docs/src/next.md。共通の形（ai.common）は castlist の release の tag で固めて取った
+// pagetray（ページの置き場）の API。決まりは docs/src/api.md。共通の形（ai.common）は castlist の release の tag で固めて取った
 // model/castlist/common.smithy（ci/gen.sh が版と digest を見る）。
 // 例（@httpRequestTests・@httpResponseTests）の id は、castlist の定義と 1 つの model に入って重なれないので、頭に Pagetray を付ける。
 namespace ai.pagetray
@@ -36,6 +36,8 @@ service Pagetray {
         CreateFile
         ListFiles
         DeleteFiles
+        PutMessage
+        ListMessages
     ]
 
     // 操作の前の守りの層（server の生成した骨の外）が返す誤り。どの操作の答えにもなり得る。
@@ -1014,6 +1016,330 @@ operation DeleteFiles {
     ]
 }
 
+/// メッセージの記録を 1 件置く・書き足す（同じ project と id に、何度打ってもよい）。pagetray は、ほかの道具（roster）が配った
+/// メッセージの記録を写して見せるだけで、配らず、状態を自分で決めず、期限を持たない。
+/// - 初めての id なら作る（201。状態は来たまま）。もうある id なら書き足す（200）。書き足しは、届く順に依らない
+///   （「渡した」の記録が「送った」の記録より先に届いても、同じ記録になる）:
+///   - `state` は前へだけ進む。強さは `waiting`＝`carried` ＜ `expired`＝`undeliverable` ＜ `delivered` で、今より強い時だけ替える。
+///   - `deliveries` は大きい方を保つ。`via` は、`state` を替えた時か、今が空の時だけ入れる（どちらも、書かなければ前のまま）。
+///   - `deliveredAt` は、まだ無い時だけ入れる（初めの時刻を保つ）。
+/// - `key`・`heading`・`from`・`to`・`text`・`sentAt`・`replyTo` は、初めに置いた値を保つ（違う値が来ても変えず、
+///   誤りにもしない）。形は、書き足す時も見る。
+/// - 送り手として残すのは、「送った側」の書き込み（`state` が `waiting` か `carried`）の物だけ。その書き込みに付随する id
+///   （`actorIssuer`・`actorRef`）があれば、CreatePage と同じく castlist に聞き、登録の無い送り手は 400、聞けなければ 503
+///   （どちらも何も替えない）。記録の送り手がまだ空なら入れ、もう入っていれば替えない。ほかの `state` の書き込みは、
+///   付随する id が付いていても castlist に聞かず、送り手として残さない（組と形は見る。片方だけは 400）。
+/// - 時刻（`sentAt`・`deliveredAt`）は UTC・ミリ秒まで（細かい時刻は 400）。
+@idempotent
+@http(method: "PUT", uri: "/api/projects/{project}/messages/{id}")
+@httpRequestTests([
+    {
+        id: "PagetrayPutMessageRequest"
+        documentation: "道に project と id、本文（JSON）にメッセージの中身と状態"
+        protocol: restJson1
+        method: "PUT"
+        uri: "/api/projects/ai/messages/m-1"
+        headers: { "Content-Type": "application/json" }
+        body: """
+            {"key":"AI-25","heading":"request","from":"t-1.swe.1","to":"tpm","text":"本文","sentAt":"2026-11-24T00:00:00Z","state":"delivered","deliveredAt":"2026-11-24T00:00:01Z","via":"prompt","deliveries":2,"replyTo":"m-0"}"""
+        bodyMediaType: "application/json"
+        params: {
+            project: "ai"
+            id: "m-1"
+            key: "AI-25"
+            heading: "request"
+            from: "t-1.swe.1"
+            to: "tpm"
+            text: "本文"
+            sentAt: 1795478400
+            state: "delivered"
+            deliveredAt: 1795478401
+            via: "prompt"
+            deliveries: 2
+            replyTo: "m-0"
+        }
+    }
+    {
+        id: "PagetrayPutMessageSenderRequest"
+        documentation: "送り手の付随する id は引数。本文は要る欄だけでもよい"
+        protocol: restJson1
+        method: "PUT"
+        uri: "/api/projects/ai/messages/m-1"
+        queryParams: ["actorIssuer=tpm", "actorRef=claude.session%3As-1"]
+        headers: { "Content-Type": "application/json" }
+        body: """
+            {"heading":"request","from":"t-1.swe.1","to":"tpm","text":"本文","sentAt":"2026-11-24T00:00:00Z","state":"waiting"}"""
+        bodyMediaType: "application/json"
+        params: {
+            project: "ai"
+            id: "m-1"
+            actorIssuer: "tpm"
+            actorRef: "claude.session:s-1"
+            heading: "request"
+            from: "t-1.swe.1"
+            to: "tpm"
+            text: "本文"
+            sentAt: 1795478400
+            state: "waiting"
+        }
+    }
+])
+@httpResponseTests([
+    {
+        id: "PagetrayPutMessageCreated"
+        documentation: "初めての id なら 201 で、その記録（任意の欄は、ある時だけ）"
+        protocol: restJson1
+        code: 201
+        headers: { "Content-Type": "application/json" }
+        body: """
+            {"project":"ai","id":"m-1","heading":"request","from":"t-1.swe.1","to":"tpm","text":"本文","sentAt":"2026-11-24T00:00:00Z","state":"waiting","createdAt":"2026-11-24T00:00:01Z","updatedAt":"2026-11-24T00:00:01Z"}"""
+        bodyMediaType: "application/json"
+        params: {
+            status: 201
+            project: "ai"
+            id: "m-1"
+            heading: "request"
+            from: "t-1.swe.1"
+            to: "tpm"
+            text: "本文"
+            sentAt: 1795478400
+            state: "waiting"
+            createdAt: 1795478401
+            updatedAt: 1795478401
+        }
+    }
+    {
+        id: "PagetrayPutMessageAppended"
+        documentation: "もうある id なら 200 で、書き足した後の記録"
+        protocol: restJson1
+        code: 200
+        headers: { "Content-Type": "application/json" }
+        body: """
+            {"project":"ai","id":"m-1","key":"AI-25","heading":"request","from":"t-1.swe.1","to":"tpm","text":"本文","sentAt":"2026-11-24T00:00:00Z","state":"delivered","deliveredAt":"2026-11-24T00:00:02Z","via":"prompt","deliveries":2,"replyTo":"m-0","createdAt":"2026-11-24T00:00:01Z","updatedAt":"2026-11-24T00:00:02Z","sender":{"issuer":"tpm","ref":"claude.session:s-1"}}"""
+        bodyMediaType: "application/json"
+        params: {
+            status: 200
+            project: "ai"
+            id: "m-1"
+            key: "AI-25"
+            heading: "request"
+            from: "t-1.swe.1"
+            to: "tpm"
+            text: "本文"
+            sentAt: 1795478400
+            state: "delivered"
+            deliveredAt: 1795478402
+            via: "prompt"
+            deliveries: 2
+            replyTo: "m-0"
+            createdAt: 1795478401
+            updatedAt: 1795478402
+            sender: { issuer: "tpm", ref: "claude.session:s-1" }
+        }
+    }
+])
+operation PutMessage {
+    input := {
+        /// 状態の folder の名（ページの project と同じ）。`api`・`.`・`..` は置けない（server が 400）。
+        @required
+        @httpLabel
+        project: Segment
+
+        /// メッセージの id（呼ぶ側が付ける。project の中で 1 つ）。`.`・`..` は置けない（server が 400）。
+        @required
+        @httpLabel
+        id: MessageId
+
+        /// 付随する id を出した物（`actorRef` と組。片方だけは 400）。
+        @httpQuery("actorIssuer")
+        actorIssuer: Issuer
+
+        /// 付随する id（`種類:値`。`actorIssuer` と組。片方だけは 400）。
+        @httpQuery("actorRef")
+        actorRef: ActorRef
+
+        /// Key（課題の名）。`.`・`..` は置けない（server が 400）。
+        key: Segment
+
+        /// メッセージの見出しの名。
+        @required
+        heading: MessageHeading
+
+        /// 送り手の名。
+        @required
+        from: MessageParty
+
+        /// 受け手の名。
+        @required
+        to: MessageParty
+
+        /// 本文。字のまま持つ（HTML として解釈しない）。
+        @required
+        text: MessageText
+
+        /// 送った時刻（UTC・ミリ秒まで）。
+        @required
+        sentAt: DateTime
+
+        /// 状態。書き足す時は、今の状態より強い時だけ替わる。
+        @required
+        state: MessageState
+
+        /// 届いた時刻（UTC・ミリ秒まで）。まだ無い時だけ入る。
+        deliveredAt: DateTime
+
+        /// どの時に渡したかの名。
+        via: MessageVia
+
+        /// 受け手に本文を出した回数（呼ぶ側が数えて書く）。書き足す時は、大きい方を保つ。
+        deliveries: MessageDeliveries
+
+        /// 返事の先のメッセージの id。
+        replyTo: MessageId
+    }
+
+    output := with [MessageFields] {
+        /// 新しく作れば 201、もうある id に書き足せば 200。
+        @required
+        @httpResponseCode
+        status: Integer
+    }
+
+    errors: [
+        ValidationException
+        Unavailable
+        InternalError
+    ]
+}
+
+/// メッセージの記録を探す（送った時刻の新しい順が既定）。どの条件も、書いた物だけで絞る（重ねれば、どれにも合う物）。
+/// - `to`・`from`・`state`・`heading`・`project`・`key` は、同じ値の物。
+/// - `q` は前後の空白を落とし、空なら絞らない。本文か `from` か `to` に、`q` を含む物（大小を分ける）。
+/// - 頁は `sentAt` と行の順で続ける（ListPages と同じ作り）。`nextToken` は同じ `sort` の答えの物を渡す（違えば 400）。
+@readonly
+@paginated(inputToken: "nextToken", outputToken: "nextToken", pageSize: "maxResults", items: "messages")
+@http(method: "GET", uri: "/api/messages")
+@httpRequestTests([
+    {
+        id: "PagetrayListMessagesRequest"
+        documentation: "どの条件も引数"
+        protocol: restJson1
+        method: "GET"
+        uri: "/api/messages"
+        queryParams: [
+            "project=ai"
+            "key=AI-25"
+            "to=tpm"
+            "from=t-1.swe.1"
+            "state=waiting"
+            "heading=request"
+            "q=%E6%9C%AC%E6%96%87"
+            "sort=sentAt"
+            "maxResults=10"
+            "nextToken=abc"
+        ]
+        params: {
+            project: "ai"
+            key: "AI-25"
+            to: "tpm"
+            from: "t-1.swe.1"
+            state: "waiting"
+            heading: "request"
+            q: "本文"
+            sort: "sentAt"
+            maxResults: 10
+            nextToken: "abc"
+        }
+    }
+])
+@httpResponseTests([
+    {
+        id: "PagetrayListMessagesResponse"
+        documentation: "メッセージの記録。任意の欄は、ある時だけ。次の頁があれば nextToken"
+        protocol: restJson1
+        code: 200
+        headers: { "Content-Type": "application/json" }
+        body: """
+            {"messages":[{"project":"ai","id":"m-1","key":"AI-25","heading":"request","from":"t-1.swe.1","to":"tpm","text":"本文","sentAt":"2026-11-24T00:00:00Z","state":"delivered","deliveredAt":"2026-11-24T00:00:02Z","via":"prompt","deliveries":2,"replyTo":"m-0","createdAt":"2026-11-24T00:00:01Z","updatedAt":"2026-11-24T00:00:02Z"}],"nextToken":"abc"}"""
+        bodyMediaType: "application/json"
+        params: {
+            messages: [
+                {
+                    project: "ai"
+                    id: "m-1"
+                    key: "AI-25"
+                    heading: "request"
+                    from: "t-1.swe.1"
+                    to: "tpm"
+                    text: "本文"
+                    sentAt: 1795478400
+                    state: "delivered"
+                    deliveredAt: 1795478402
+                    via: "prompt"
+                    deliveries: 2
+                    replyTo: "m-0"
+                    createdAt: 1795478401
+                    updatedAt: 1795478402
+                }
+            ]
+            nextToken: "abc"
+        }
+    }
+])
+operation ListMessages {
+    input := {
+        @httpQuery("project")
+        project: Segment
+
+        @httpQuery("key")
+        key: Segment
+
+        /// 受け手の名（同じ値の物）。
+        @httpQuery("to")
+        to: MessageParty
+
+        /// 送り手の名（同じ値の物）。
+        @httpQuery("from")
+        from: MessageParty
+
+        @httpQuery("state")
+        state: MessageState
+
+        @httpQuery("heading")
+        heading: MessageHeading
+
+        /// 本文と `from`・`to` に含まれる字。
+        @httpQuery("q")
+        q: String
+
+        /// `-sentAt`（新しい順。既定）か `sentAt`（古い順）。同じ時刻は置いた順（新しい順なら後に置いた物が先）。
+        @httpQuery("sort")
+        sort: MessageSort
+
+        /// 1 頁の数（既定 100）。
+        @httpQuery("maxResults")
+        maxResults: MaxResults
+
+        /// 前の答えの `nextToken`。
+        @httpQuery("nextToken")
+        nextToken: NextToken
+    }
+
+    output := {
+        @required
+        messages: Messages
+
+        /// 次の頁の印。終わりなら無い。
+        nextToken: NextToken
+    }
+
+    errors: [
+        ValidationException
+        Unavailable
+        InternalError
+    ]
+}
+
 /// file の種類を受けない: 受けない拡張子・拡張子と合わない `Content-Type`・頭が拡張子の形でない中身（CreateFile）。
 /// 生成した層が返す `UnsupportedMediaTypeException`（操作の決めた `Content-Type` でない要求）とは別。
 @error("client")
@@ -1161,6 +1487,105 @@ structure Page with [PageFields, PageState] {}
 list Pages {
     member: Page
 }
+
+/// メッセージの記録の欄。
+@mixin
+structure MessageFields {
+    @required
+    project: Segment
+
+    @required
+    id: MessageId
+
+    /// Key（課題の名）。書いて置いた時だけ。
+    key: Segment
+
+    /// メッセージの見出しの名。
+    @required
+    heading: MessageHeading
+
+    /// 送り手の名。
+    @required
+    from: MessageParty
+
+    /// 受け手の名。
+    @required
+    to: MessageParty
+
+    /// 本文（字のまま）。
+    @required
+    text: MessageText
+
+    /// 送った時刻。
+    @required
+    sentAt: DateTime
+
+    @required
+    state: MessageState
+
+    /// 届いた時刻（初めに書かれた物）。まだ無ければ無い。
+    deliveredAt: DateTime
+
+    /// どの時に渡したかの名。書いていなければ無い。
+    via: MessageVia
+
+    /// 受け手に本文を出した回数（呼ぶ側が数えて書く）。書いていなければ無い。
+    deliveries: MessageDeliveries
+
+    /// 返事の先のメッセージの id。書いて置いた時だけ。
+    replyTo: MessageId
+
+    /// pagetray が初めて受けた時刻。
+    @required
+    createdAt: DateTime
+
+    /// 最後に書き足された時刻（置いただけなら `createdAt` と同じ）。
+    @required
+    updatedAt: DateTime
+
+    /// 送り手（castlist で確かめた物）。「送った側」の書き込み（`waiting`・`carried`）に、付随する id を書いた時だけ。
+    sender: Sender
+}
+
+/// 一覧のメッセージの記録。
+structure Message with [MessageFields] {}
+
+list Messages {
+    member: Message
+}
+
+/// メッセージの id: 英数字と `.`・`_`・`-` で 128 字まで。
+@pattern("^[A-Za-z0-9._-]{1,128}$")
+string MessageId
+
+/// メッセージの見出しの名: 英小文字で始まり、英小文字・数字・`-` で 32 字まで（名の一覧は持たない）。
+@pattern("^[a-z][a-z0-9-]{0,31}$")
+string MessageHeading
+
+/// どの時に渡したかの名: 英小文字で始まり、英小文字・数字・`-` で 32 字まで（名の一覧は持たない）。
+@pattern("^[a-z][a-z0-9-]{0,31}$")
+string MessageVia
+
+/// 送り手・受け手の名: 1〜200 字。
+@length(min: 1, max: 200)
+string MessageParty
+
+/// メッセージの本文: 1〜8000 字。
+@length(min: 1, max: 8000)
+string MessageText
+
+/// 受け手に本文を出した回数（呼ぶ側が数えて書く）: 1 以上。
+@range(min: 1)
+integer MessageDeliveries
+
+/// メッセージの状態: `waiting`（まだ届いていない）・`delivered`（届いた）・`undeliverable`（渡せない）・`expired`（期限切れ）・
+/// `carried`（ほかの道具で運んだ）。
+@pattern("^(waiting|delivered|undeliverable|expired|carried)$")
+string MessageState
+
+/// メッセージの一覧の並べ方: `-sentAt`（新しい順）か `sentAt`（古い順）。
+@pattern("^-?sentAt$")
+string MessageSort
 
 /// ページの path の並び。
 list Paths {

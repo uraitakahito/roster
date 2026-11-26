@@ -1,7 +1,7 @@
 // 置き場（別の repo の pagetray。127.0.0.1 で待つ、ページと file を DB に持つサーバー）に頼む足場と、roster を動かす機械の控えの folder。
 // roster page と roster file が使う。置き場は roster を動かす機械に 1 つで、project をまたいで同じなので、控えの folder と URL は設定（config.jsonc）でなく環境変数で替える。
 // 置き場を起こす・止めるのは DevOps Engineer 担当（docs-site の運用のページの「ページの置き場（pagetray）」）。
-// 置き場の API（ページと file を置く・探す・消す・返事の状態・レビューの印）は、いつも生成した pagetray の client で新しい API（pagetray 1.0.0 から）に送る（pagesRequest）。
+// 置き場の API（ページと file を置く・探す・消す・返事の状態・レビューの印・送った記録の写し）は、いつも生成した pagetray の client で新しい API（pagetray 1.0.0 から。送った記録は 1.1.0 から）に送る（pagesRequest）。
 // 答えは Reply の形（本文は記録を snake_case にした JSON の字・code は状態の数の字）にそろえ、呼ぶ側（page.ts）は替えない。
 // ページと file の本文は URL の手の道なので、fetchTo・compareStored は curl で取る（curl で打つのは、この 2 つだけ）。
 import type { HttpHandler } from '@smithy/core/protocols';
@@ -32,6 +32,8 @@ export const PROJECT = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
 const WORKSPACE = /^[A-Za-z0-9:._-]{0,64}$/;
 /** 置き場の答えを待つ秒数。 */
 const TIMEOUT = '10';
+/** 送った記録を写す要求（PutMessage）だけの、答えを待つミリ秒。送る命令のたびに出るので、置き場が応えない時に命令を長く待たせない。 */
+const MESSAGE_WAIT = 2000;
 
 /** 控えの folder。$ROSTER_PAGES_DIR、無ければ $XDG_DATA_HOME（それも無ければ ~/.local/share）の `roster/pages`（古い在り処の扱いは rosterHome）。 */
 export function pagesDir(env: NodeJS.ProcessEnv): string {
@@ -61,6 +63,8 @@ export interface Reply {
   code: string
   /** 置き場が、送り手（actorRef）を castlist に登録の無い物として断った（400 の fieldList に /actorRef）。 */
   unknownSender?: boolean
+  /** 置き場が 2xx を返したのに、本文を読めなかった時の状態の数（code は 000。応えない時と分けたい呼ぶ側が見る）。 */
+  unreadable?: number
 }
 
 /** 置き場の物（ページか file）の本文を、URL で curl で取り、out の path に書く。HTTP の code を返す（つながらなければ 000）。 */
@@ -92,13 +96,13 @@ const unknownSender = (sent: { message: string, fields: string[] }): boolean => 
 const OUTDATED = '置き場が、この roster の呼ぶ操作を持たない（置き場（pagetray）の版が、この roster の .pagetray-version より古い。置き場の版を上げるよう roster ask devops で頼む）';
 
 /**
- * 生成した pagetray の client で 1 つ送り（clients.ts の sendOnce。送る 1 回は TIMEOUT で切る）、答えを Reply の形にする
+ * 生成した pagetray の client で 1 つ送り（clients.ts の sendOnce。送る 1 回は wait ミリ秒（既定は TIMEOUT）で切る）、答えを Reply の形にする
  * （本文は shape で JSON の形にした字、code は状態の数）。答えの無い物と、2xx なのに本文を読めない答えは 000（つながらない時と同じ）。
  * 誤りの答えの本文は `{"error": <message>}`（reason が読む形）にする。送り手を断った 400（fieldList に /actorRef）には unknownSender を付ける。
  */
-async function viaPagetray<O extends { $metadata: { httpStatusCode?: number } }>(ctx: Context, send: (client: Pagetray.PagetrayClient, api: typeof Pagetray, options: { abortSignal: AbortSignal }) => Promise<O>, shape: (out: O) => unknown): Promise<Reply> {
-  const sent = await sendOnce(() => ctx.clients.pagetray(pagesUrl(ctx.env)), (client, options) => send(client, pagetrayApi(), options), { server: 'pagetray', wait: Number(TIMEOUT) * 1000, outdated: OUTDATED });
-  if (sent.kind === 'down') return { body: '', code: '000' };
+async function viaPagetray<O extends { $metadata: { httpStatusCode?: number } }>(ctx: Context, send: (client: Pagetray.PagetrayClient, api: typeof Pagetray, options: { abortSignal: AbortSignal }) => Promise<O>, shape: (out: O) => unknown, wait = Number(TIMEOUT) * 1000): Promise<Reply> {
+  const sent = await sendOnce(() => ctx.clients.pagetray(pagesUrl(ctx.env)), (client, options) => send(client, pagetrayApi(), options), { server: 'pagetray', wait, outdated: OUTDATED });
+  if (sent.kind === 'down') return { body: '', code: '000', ...(sent.status === undefined ? {} : { unreadable: sent.status }) };
   if (sent.kind === 'failed') return { body: JSON.stringify({ error: sent.message }), code: String(sent.code), ...(unknownSender(sent) ? { unknownSender: true } : {}) };
   return { body: JSON.stringify(shape(sent.out)), code: String(sent.out.$metadata.httpStatusCode ?? 200) };
 }
@@ -116,12 +120,14 @@ function recordOf(record: object): Record<string, unknown> {
 /**
  * 置き場の API の要求（引数は snake_case の名で書く。inputOf が新しい API の名にする）。返事の状態（state・on）とレビューの印は、ページ 1 枚（project・key・kind・n）を引数で名指す。
  * file を置く時の contentType は、file.ts の拡張子の表の Content-Type。
+ * PutMessage（送った記録の写し。pagetray 1.1.0 から）は、project・id と送り手を引数で、記録の欄を message で渡す。
  */
 export type PagesRequest =
   | { op: 'CreatePage', query: URLSearchParams, source: { file: string } | { text: string } }
   | { op: 'ListPages' | 'DeletePages' | 'ListFiles' | 'DeleteFiles' | 'SetReplyState', query: URLSearchParams }
   | { op: 'CreateFile', query: URLSearchParams, file: string, contentType: string }
-  | { op: 'AddReviewMarks', query: URLSearchParams, marks: { verdict?: string, targets: string[] } };
+  | { op: 'AddReviewMarks', query: URLSearchParams, marks: { verdict?: string, targets: string[] } }
+  | { op: 'PutMessage', query: URLSearchParams, message: Omit<Pagetray.PutMessageCommandInput, 'project' | 'id' | 'actorIssuer' | 'actorRef'> };
 
 /** 要求の引数の名 → 新しい API の名（ここに無い名は、どちらも同じ）。 */
 const RENAMED: Record<string, string> = { created_at: 'createdAt', actor_issuer: 'actorIssuer', actor_ref: 'actorRef' };
@@ -173,7 +179,7 @@ async function listAll(ctx: Context, op: 'ListPages' | 'ListFiles', query: URLSe
 }
 
 /**
- * 置き場の API に頼む（ページと file を置く・探す・消す・返事の状態とレビューの印を書く）。生成した pagetray の client で送る。
+ * 置き場の API に頼む（ページと file を置く・探す・消す・返事の状態とレビューの印を書く・送った記録を写す）。生成した pagetray の client で送る。
  * 答えは Reply の形（記録は snake_case の欄の名。誤りは `{"error": …}` の本文）。
  */
 export async function pagesRequest(ctx: Context, request: PagesRequest): Promise<Reply> {
@@ -198,6 +204,11 @@ export async function pagesRequest(ctx: Context, request: PagesRequest): Promise
     case 'AddReviewMarks': {
       const { marks } = request;
       return viaPagetray(ctx, (client, api, options) => client.send(new api.AddReviewMarksCommand({ ...input, ...marks } as unknown as Pagetray.AddReviewMarksCommandInput), options), recordOf);
+    }
+    case 'PutMessage': {
+      const { message } = request;
+      // 答えの記録は使わない（呼ぶ側は、置けたか（201・200）だけを見る）。
+      return viaPagetray(ctx, (client, api, options) => client.send(new api.PutMessageCommand({ ...input, ...message } as unknown as Pagetray.PutMessageCommandInput), options), () => ({}), MESSAGE_WAIT);
     }
   }
 }
