@@ -227,7 +227,7 @@ project の設定に `"messages": "nats"` と書いた時だけの決まり（[�
 
 **受け手の名と名乗り**
 
-- 配りの受け手の名は、担当の組（名簿の Key と、起こした回）から作る（`cli/src/mail.ts` の `recipientName`）。Key の英数字と `-` はそのまま、ほかの字は UTF-8 の byte ごとに `_` と 16 進 2 桁にし、起こした回があれば `__` と続ける（64 字まで）。違う組は同じ名にならない。TPM 担当も、TPM 担当の組で同じに作る（Key に当たる所は、TPM 担当は `tpm`）。置き場の記録の `from`・`to`（担当の Key）とは別の物。
+- 配りの受け手の名は、担当の組（名簿の Key と、起こした回）から作る（`cli/src/mail.ts` の `recipientName`）。Key の英数字と `-` はそのまま、ほかの字は UTF-8 の byte ごとに `_` と 16 進 2 桁にし、起こした回があれば `__` と続ける（64 字まで）。違う組は同じ名にならない。TPM 担当だけは、起こした回を付けず、Key だけから作る（Key に当たる所は、TPM 担当は `tpm`）。TPM 担当の席は project に 1 つなので、起こし直した TPM 担当が、前の TPM 担当宛てで届いていなかった物を受け取る（前の session と今の session は、名乗りの process の番号と始まった時刻で見分ける）。置き場の記録の `from`・`to`（担当の Key）とは別の物。
 - 席を起こす時に付く hook が、session の始めに「渡す hook を持つ」と名乗る（`roster mail claim`）。名乗りは、状態の folder に、Claude Code の process の番号と、その process が始まった時刻を書いた物。**効いているのは、その番号の process が居て、始まった時刻が合う間だけ**（時刻には頼らない）。session の終わりに消す（`roster mail release`）。Claude Code の process の番号が分からない時は名乗らず、その席には今までどおり cmux で届く。
 
 **届き方**

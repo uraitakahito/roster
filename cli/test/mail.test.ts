@@ -48,6 +48,11 @@ describe('受け手の名', () => {
     expect(recipientName({ key: 't-1', launch: '5F0C2B8E-1111-4222-8333-444455556666' })).toBe('t-1__5F0C2B8E-1111-4222-8333-444455556666');
   });
 
+  test('TPM 担当だけは、起こした回を付けない（起こし直した TPM 担当が、前の TPM 担当宛ての物を受け取る）', () => {
+    expect(recipientName({ key: 'tpm', launch: '5F0C2B8E-1111-4222-8333-444455556666' })).toBe('tpm');
+    expect(recipientName({ key: 'tpm', launch: 'L2' })).toBe(recipientName({ key: 'tpm' }));
+  });
+
   test('違う組は、同じ名にならない。64 字を超える組は誤り', () => {
     const parties = [{ key: 'a' }, { key: 'a', launch: 'b' }, { key: 'a_' }, { key: 'a_5f' }, { key: 'a__b' }, { key: 'a', launch: '_b' }, { key: 'a.b' }, { key: 'a-b' }, { key: 'a_2eb' }];
     expect(new Set(parties.map(recipientName)).size).toBe(parties.length);
@@ -104,7 +109,8 @@ describe('名乗り（roster mail claim・release）', () => {
     expect(readClaim(se, 't-1__L1')).toEqual({ name: 't-1__L1', party: { key: 't-1', launch: 'L1' }, session: 's-1', pid: 200, started: 'started-200', from: 'CMUX_CLAUDE_PID', at: '2026-11-20T12:00:00.000Z' });
     expect(ownClaim(se)?.pid).toBe(200);
     expect(claimOf(w.tpm, { key: 't-1', launch: 'L1' })?.name).toBe('t-1__L1');
-    expect(claimOf(w.tpm, { key: 't-1' })?.name).toBe('t-1__L1');
+    // 起こした回の違う組・無い組は、別の受け手。
+    expect(claimOf(w.tpm, { key: 't-1' })).toBeUndefined();
     expect(claimOf(w.tpm, { key: 't-1', launch: 'L2' })).toBeUndefined();
     expect(claimOf(w.tpm, { key: 't-2' })).toBeUndefined();
     mailRelease(se, JSON.stringify({ session_id: 's-1' }));
@@ -164,6 +170,16 @@ describe('名乗り（roster mail claim・release）', () => {
     w.procs.add(200, 1, 'claude');
     mailClaim(w.tpm, JSON.stringify({ session_id: 's-t' }));
     expect(claimOf(w.role('t-1', 'file:t-1'), { key: 'tpm' })?.name).toBe('tpm');
+    // 起こした回があっても、TPM 担当の名は 1 つ。起こし直した session の名乗りが、前の物を書き替える。
+    w.procs.add(300, 1, 'claude');
+    const again = { ...w.tpm, env: { ...w.tpm.env, ROSTER_LAUNCH: 'L2', CMUX_CLAUDE_PID: '300' } };
+    w.procs.add(4242, 300, 'node');
+    mailClaim(again, JSON.stringify({ session_id: 's-t2' }));
+    expect(readClaim(w.tpm, 'tpm')).toMatchObject({ party: { key: 'tpm', launch: 'L2' }, session: 's-t2', pid: 300 });
+    expect(claimOf(w.tpm, { key: 'tpm', launch: 'L1' })?.pid).toBe(300);
+    // 前の session の終わりの hook は、新しい session の名乗りを消さない。
+    mailRelease(w.tpm, JSON.stringify({ session_id: 's-t' }));
+    expect(readClaim(w.tpm, 'tpm')?.session).toBe('s-t2');
   });
 });
 

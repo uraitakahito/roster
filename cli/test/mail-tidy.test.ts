@@ -155,6 +155,30 @@ describe('席を閉じる時・名簿に無い取り口（N1）', () => {
   });
 });
 
+describe('起こし直した TPM 担当', () => {
+  test('前の TPM 担当宛てで届いていなかった物を受け取る。名乗る時に、自分の取り口は掃かない', async () => {
+    const w = await natsWorld();
+    const first = { ...w.tpm, env: { ...w.tpm.env, ROSTER_LAUNCH: 'L1' } };
+    claim(w, first, 100);
+    await askTpm(w.se, { text: '前の TPM 担当に送った相談', waitingFor: '案' });
+    expect(left(w, 'tpm')).toHaveLength(1);
+    await (await first.mailroom()).counts('tpm');
+    // 前の session が落ち、起こした回の違う TPM 担当が起きた。
+    w.procs.alive.delete(100);
+    const second = { ...w.role('t-x7k2', 'file:tpm'), env: { ...w.tpm.env, ROSTER_LAUNCH: 'L2' } };
+    const out = await hello(second, TPM);
+    expect(out.filter(l => /取り口|期限切れ/.test(l))).toEqual([]);
+    expect(w.office.consumers.has('tpm')).toBe(true);
+    expect(left(w, 'tpm')).toHaveLength(1);
+    claim(w, second, 300);
+    expect(await mailPrompt(second, '{}')).toContain('【ask-tpm】前の TPM 担当に送った相談');
+    expect(left(w, 'tpm')).toEqual([]);
+    // 前の TPM 担当に宛てた物への返事も、今の TPM 担当の名乗りで道が決まる（担当 → TPM 担当は NATS）。
+    await askTpm(w.se, { text: '次の相談', waitingFor: '案' });
+    expect(left(w, 'tpm').map(s => s.text)).toEqual(['【ask-tpm】次の相談']);
+  });
+});
+
 describe('roster inbox（設定が nats で、名乗っている session）', () => {
   test('自分宛てを出すだけ。取り置かず、届いたにも、見せたにもしない（送る前の検査は、その後も止める）', async () => {
     const w = await natsWorld();

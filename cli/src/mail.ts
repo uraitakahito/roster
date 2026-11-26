@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import type { Context } from './context.ts';
 import type { Recipient } from './mailroom/types.ts';
-import { selfParty, type Party } from './party.ts';
+import { selfParty, TPM_PARTY, type Party } from './party.ts';
 import { TpmError } from './skill-sets.ts';
 
 /** 設定で、メッセージを NATS で配る道を入れているか。 */
@@ -24,9 +24,11 @@ const encode = (part: string): string =>
 /**
  * 担当の組（Key と起こした回）から、配りの受け手の名を作る。違う組は、同じ名にならない
  * （節の中の `_` の後ろは必ず 16 進 2 桁なので、`__` は Key と起こした回の境にしか出ない）。64 字を超える組は誤り。
+ * TPM 担当だけは、起こした回を付けず、Key だけから作る: TPM 担当の席は project に 1 つで、起こし直した TPM 担当が、
+ * 前の TPM 担当宛てで届いていなかった物を受け取る（cmux で運ぶ時と同じ）。前の session と今の session は、名乗りの pid と始まった時刻で見分ける。
  */
 export function recipientName(party: Party): Recipient {
-  const name = party.launch === undefined ? encode(party.key) : `${encode(party.key)}__${encode(party.launch)}`;
+  const name = party.launch === undefined || party.key === TPM_PARTY ? encode(party.key) : `${encode(party.key)}__${encode(party.launch)}`;
   if (name === '' || name.length > NAME_MAX) throw new TpmError(`受け手の名が作れません（${NAME_MAX} 字まで。Key と起こしの id が長い）: ${party.key}`);
   return name;
 }
@@ -155,13 +157,17 @@ export function claimNamed(ctx: Context, name: Recipient): Claim | undefined {
 }
 
 /**
- * その担当の、効いている名乗り（送り手が、運ぶ道を決めるのに引く）。起こした回が分かっていれば、その回の物だけ。
- * 分からない時（TPM 担当宛て。送り手は TPM 担当の起こした回を知らない）は、Key が合う物のうち、いちばん新しい物。
+ * その担当の、効いている名乗り（送り手が、運ぶ道を決めるのに引く）。受け手の名（recipientName）の file を読む。
+ * 起こした回の分からない担当（castlist を設定していない project の席）は、Key だけの名。TPM 担当は、起こした回に依らず 1 つの名。
  */
 export function claimOf(ctx: Context, party: Party): Claim | undefined {
-  return allClaims(ctx)
-    .filter(c => c.party.key === party.key && (party.launch === undefined || c.party.launch === party.launch) && effective(ctx, c))
-    .sort((a, b) => b.at.localeCompare(a.at))[0];
+  try {
+    return claimNamed(ctx, recipientName(party));
+  }
+  catch (e) {
+    if (e instanceof TpmError) return undefined;
+    throw e;
+  }
 }
 
 /** 自分の受け手の名。作れない組（長い）なら undefined。 */
