@@ -135,7 +135,7 @@ repo ごとの実装が済んだら、またぐ合わせ（切り替え・版を
 
 ## 8. 成果を出す・終える
 
-- 計画・結果は HTML の file に書き、`roster page put <file> --kind <plan|result>` で置く（図は protocol.md の「ページ」の図の項と、`${CLAUDE_SKILL_DIR}/../_shared/figures.md`）。結果のページには、席ごとの成果のページと merge した PR の一覧・「レビュー: 誰が・判定・どう扱ったか」（あなたの計画と PR の分。repo の席の分は、席の成果のページにある）を書く。
+- 計画・結果は HTML の file に書き、`roster page put <file> --kind <plan|result>` で置く（図は protocol.md の「ページ」の図の項と、`${CLAUDE_SKILL_DIR}/../_shared/figures.md`）。結果のページには、席ごとの成果のページと merge した PR の一覧・時間の分け（`roster time <課題の Key>` の出力。席を分けて縮んだかを、後から数で見るため）・「レビュー: 誰が・判定・どう扱ったか」（あなたの計画と PR の分。repo の席の分は、席の成果のページにある）を書く。
 - Product Manager に決めてほしいことは、席の分もまとめて、確認のページと `roster ask pm` で送る。
 - 置いたら `roster report done --url <URL> --kind <plan|result> --summary "<要点>" --remaining "<残り>" --decisions "<決めてほしいこと>"`。次の【brief】か【dismiss】を待つ。**自分から【end】を送らない。**
 - 【dismiss】が来たら:
