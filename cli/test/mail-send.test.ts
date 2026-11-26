@@ -1,14 +1,15 @@
 // 送る所（deliver）と送る前の検査（assertRead）の、NATS の形の試験（設定の messages が nats）。hook が渡す所は mail-hooks.test.ts。
 import { describe, expect, test } from 'vitest';
-import { answer, askTpm, assertRead, notify, type Sent } from '../src/commands/messages.ts';
+import { answer, askDevops, askTpm, assertRead, notify, reportDone, reportIncident, type Sent } from '../src/commands/messages.ts';
+import { messageRecordsSettled } from '../src/commands/message-record.ts';
 import { assign } from '../src/commands/tpm-side.ts';
 import { hello } from '../src/commands/role-side.ts';
 import { deliveredLines, gateFile, passedIds, recordDelivered, type GateMark } from '../src/mail.ts';
 import { MAILROOM_LIMITS } from '../src/mailroom/types.ts';
 import { readShown } from '../src/seen.ts';
 import { MemoryMailroom } from '../src/mailroom/memory.ts';
-import { BRIEF } from './helpers.ts';
-import { ALL, claim, down, left, natsWorld, patched, FROM_SE, FROM_TPM } from './mail-helpers.ts';
+import { BRIEF, world } from './helpers.ts';
+import { ALL, claim, down, left, natsWorld, patched, TPM, FROM_SE, FROM_TPM } from './mail-helpers.ts';
 
 const log = (w: { tpm: { state: { lines: <T>(name: string) => T[] } } }): Sent[] => w.tpm.state.lines<Sent>('log.jsonl');
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -313,5 +314,60 @@ describe('送る前の検査（自分が名乗っている session）', () => {
       w.pass(1000);
       expect(await askTpm(w.se, ask)).toHaveLength(2);
     });
+  });
+});
+
+describe('メッセージキューが応えない時', () => {
+  const devops = { what: 'メッセージキューを起こす', why: '応えない', urgent: true };
+  const incident = { text: 'メッセージキューが応えない', type: 'reliability', tags: [], severe: false };
+  const gates = (w: { tpm: { state: { lines: <T>(name: string) => T[] } } }): string[] => w.tpm.state.lines<{ gate: string, detail: string }>('gate.jsonl').map(l => `${l.gate} ${l.detail}`);
+
+  test('直してと頼む命令（ask devops・report incident）は、cmux の形に落として送る。ほかの送る命令は止まる', async () => {
+    const w = await natsWorld();
+    claim(w, w.se, 200);
+    claim(w, w.tpm, 100);
+    const se = down(w.se);
+    await expect(askTpm(se, ask)).rejects.toThrow(/メッセージキューが応えません。送っていません/);
+    const before = w.wire.inbox('file:tpm').length;
+    expect(await askDevops(se, devops)).toEqual(['送った: 【ask-devops】→ file:tpm（相手の手が空いた時に届く。送り直さない）']);
+    expect((await reportIncident(se, incident)).at(-1)).toBe('送った: 【incident】→ file:tpm（相手の手が空いた時に届く。送り直さない）');
+    expect(w.wire.inbox('file:tpm').slice(before).map(m => m.text.slice(0, 12))).toEqual(['【ask-devops】', expect.stringMatching(/^【incident】/) as string]);
+    expect(log(w).slice(-2).map(l => [l.heading, l.carrier, l.id.startsWith('m')])).toEqual([['ask-devops', undefined, true], ['incident', undefined, true]]);
+    expect(w.office.work).toEqual([]);
+    expect(gates(w).filter(g => g.startsWith('queue fallback（送る前の検査。cmux で送る）'))).toHaveLength(2);
+    await messageRecordsSettled();
+    expect([...w.store.messages.values()].slice(-2).map(m => m.state)).toEqual(['carried', 'carried']);
+  });
+
+  test('送り手が名乗っていなくても（検査は cmux の形）、置く所で応えなければ、直してと頼む命令は cmux で送る', async () => {
+    const w = await natsWorld();
+    claim(w, w.tpm, 100);
+    const before = w.wire.inbox('file:tpm').length;
+    await askDevops(down(w.se), devops);
+    expect(w.wire.inbox('file:tpm')).toHaveLength(before + 1);
+    expect(gates(w).at(-1)).toMatch(/^queue fallback（置く所。cmux で送る）/);
+    // 配りの口が応える時は、今までどおり NATS に置く。
+    w.pass(60_000);
+    await askDevops(w.se, devops);
+    expect(left(w, 'tpm').map(s => s.text.slice(0, 12))).toEqual(['【ask-devops】']);
+  });
+
+  test('課題に記録を書く命令は、記録を書く前に止まる（NATS で送ることになる時に、置けるかを先に確かめる）', async () => {
+    const w = world({ messages: 'nats', tracker: 'jira' });
+    await hello(w.tpm, TPM);
+    await assign(w.tpm, 't-x7k2', { role: 'software-engineer', title: '計画と実装', brief: BRIEF, issue: 'AI-1', noIssueCopy: '試験', wait: 0 });
+    const se = w.role('t-x7k2', 'file:1');
+    await hello(se);
+    claim(w, w.tpm, 100);
+    const done = { kind: 'result' as const, summary: '済んだ', remaining: 'なし', decisions: 'なし', points: [] };
+    const written = (): number => w.tpm.state.lines('tracker.jsonl').length;
+    const before = written();
+    await expect(reportDone(down(se), done)).rejects.toThrow(/メッセージキューが応えません。送っていません/);
+    expect(written()).toBe(before);
+    expect(w.wire.status('file:1')?.wait).toBe('メッセージキューが応えません');
+    // 応える時は、記録を書いて送る。
+    await reportDone(se, done);
+    expect(written()).toBe(before + 1);
+    expect(left(w, 'tpm')).toHaveLength(1);
   });
 });

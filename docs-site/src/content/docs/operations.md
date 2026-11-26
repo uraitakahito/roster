@@ -221,7 +221,9 @@ roster infra run nats -- container run -d --name roster-nats \
 
 ### 止める・roster を動かす機械を起こし直した後
 
-- 止めている間に、名乗っている席（メッセージを NATS で配る道を入れた project の、hook を持つ席）へ担当が送ろうとすると、「メッセージキューが応えません」で止まる（送っていない）。先に【ask-tpm】を送り、答えを待つ。止めるのは `roster infra run nats -- container stop roster-nats`。
+- 止めている間、メッセージを NATS で配る道を入れた project の、名乗っている席（hook を持つ席）は、**どこへも送れない**（送る前の検査が NATS に聞くため。「メッセージキューが応えません。送っていません」で止まり、居場所の状態に出る）。名乗っていない席も、名乗っている席へは送れない。課題に記録を書く命令は、記録を書く前に止まる。
+- 直してと頼む道だけは残る: `roster ask devops` と `roster report incident` は、NATS が応えない時、今までの cmux の形に落として送る（検査も cmux の形だけ。落とした事は `gate.jsonl` に `queue` の `fallback` と残る）。メッセージキューが止まった事を知らせる道が、メッセージキューに頼らないようにするため。受け手の席は cmux の hook も持っているので、cmux で届く。
+- だから、止める前に、止めると【ask-tpm】で知らせ、答えを待つ。止めるのは `roster infra run nats -- container stop roster-nats`。
 - roster を動かす機械を起こし直すと止まったままになる。`container system start` の後に `roster infra run nats -- container start roster-nats` を打つ。預かった物・取り置き・取り口の位置は volume から戻る（取り置き中だった物は、取った時から 30 秒の所で渡し直される）。
 - volume（`roster-nats-data`）は消さない。
 
@@ -242,7 +244,7 @@ roster infra run nats -- container run -d --name roster-nats \
 - 名乗りが出来ない席（Claude Code の process の番号が分からない起こし方）は、cmux で届き続ける。`mail/claims/` に file が無ければ、これ。
 - `delivered.jsonl` に `"when":"output"` の行が増えるのは、止めた後に渡す hook が働いていない印（送る前の検査が、本文を命令の結果に出して通した回）。
 - TPM 担当の命令の結果に「渡せない」「期限切れ」の行が出たら、その 1 通は届いていない。要る中身なら送り直す。
-- NATS を止めている間は、名乗っている席への送りが「メッセージキューが応えません。送っていません」で止まる。
+- NATS を止めている間は、名乗っている席はどこへも送れず、名乗っている席への送りも「メッセージキューが応えません。送っていません」で止まる。残るのは、直してと頼む `roster ask devops` と `roster report incident` だけ（cmux の形に落ちる。上の「止める・roster を動かす機械を起こし直した後」）。
 
 **戻す**
 
