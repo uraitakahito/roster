@@ -10,12 +10,19 @@ const cli = realpathSync(join(import.meta.dirname, '..'));
 const script = join(cli, 'bin', 'roster-mail-wait');
 const entry = join(cli, 'bin', 'roster');
 
-/** 偽の node: 引数を calls に 1 行で書き、stdin を stdin.<段> に写し、段ごとに決めた exit code で終わる。 */
+/** 偽の node: 引数を calls に 1 行で書き、stdin を stdin.<段> に写し、段ごとに決めた exit code で終わる。構える段は、待つ者の印も書く。 */
 const FAKE_NODE = `#!/bin/sh
 dir=$(dirname "$0")
 echo "$*" >> "$dir/calls"
+for last in "$@"; do :; done
 case "$*" in
-  *--arm*) cat > "$dir/stdin.arm"; cat "$dir/arm.out" 2>/dev/null; exit "$(cat "$dir/arm.code")" ;;
+  *--arm*)
+    cat > "$dir/stdin.arm"
+    # 本物の構える段と同じく、待つ者の印を、渡された pid で書く（arm.mark があれば、その字: 次の待つ命令が先に書き替えた形）。
+    if [ "$(cat "$dir/arm.code")" = 10 ]; then
+      if [ -e "$dir/arm.mark" ]; then cat "$dir/arm.mark" > "$dir/state/waiter.jsonc"; else printf '{\n  "pid": %s,\n  "started": "x"\n}\n' "$last" > "$dir/state/waiter.jsonc"; fi
+    fi
+    cat "$dir/arm.out" 2>/dev/null; exit "$(cat "$dir/arm.code")" ;;
   *--check*)
     cat > "$dir/stdin.check"
     n=$(cat "$dir/check.n" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$dir/check.n"
@@ -29,7 +36,7 @@ esac
 /** 偽の nats: 自分の pid と引数を書き、signal の file ができるまで待って 0 で終わる（fail の file があれば、すぐ 1 で終わる）。 */
 const FAKE_NATS = `#!/bin/sh
 dir=$(dirname "$0")
-echo "$$ $*" >> "$dir/nats.calls"
+echo "$$ $NATS_URL $*" >> "$dir/nats.calls"
 if [ -e "$dir/fail" ]; then exit 1; fi
 while [ ! -e "$dir/signal" ]; do sleep 0.05; done
 rm -f "$dir/signal"
@@ -61,7 +68,6 @@ function fake(options: { arm: number, checks?: number[], claude?: number, nats?:
   if (options.nats !== false) put('nats', FAKE_NATS);
   mkdirSync(join(dir, 'state'));
   const mark = join(dir, 'state', 'waiter.jsonc');
-  writeFileSync(mark, '{"pid":1}');
   writeFileSync(join(dir, 'arm.code'), String(options.arm));
   writeFileSync(join(dir, 'arm.out'), `${options.claude ?? process.pid}\t${mark}\tnats://127.0.0.1:1\troster.test.msg.t-x7k2\n`);
   writeFileSync(join(dir, 'check.codes'), `${(options.checks ?? [10]).join('\n')}\n`);
@@ -141,14 +147,12 @@ describe('軽い待ち方（roster-mail-wait）', () => {
 
   test('もう自分宛てがあれば、聞き始めた後の 1 度目の見るで渡して 2 で終わる（聞く process は残さない・印は消す）', async () => {
     const f = fake({ arm: 10, checks: [2] });
-    const { child, done } = start(f);
-    // 印は、構えた段（本物は node）が、この sh の pid で書く。
-    writeFileSync(f.mark, `{"pid":${child.pid ?? 0}}`);
-    const { code, stderr } = await done;
+    const { code, stderr } = await start(f).done;
     expect(code).toBe(2);
     expect(stderr).toBe('渡した本文\n');
     expect(f.natsCalls()).toHaveLength(1);
-    expect(f.natsCalls()[0]).toMatch(/ --server nats:\/\/127\.0\.0\.1:1 sub roster\.test\.msg\.t-x7k2 --count 1$/);
+    // URL は環境変数で渡す（引数に書かない。ps に出さない）。
+    expect(f.natsCalls()[0]).toMatch(/^\d+ nats:\/\/127\.0\.0\.1:1 sub roster\.test\.msg\.t-x7k2 --count 1$/);
     expect(alive(natsPid(f))).toBe(false);
     expect(existsSync(f.mark)).toBe(false);
     expect(readFileSync(join(f.dir, 'stdin.check'), 'utf8')).toBe('{"session_id":"s-1"}');
@@ -225,15 +229,46 @@ describe('軽い待ち方（roster-mail-wait）', () => {
     expect(f.natsCalls()).toHaveLength(3);
   });
 
-  test('合図が来たのに何も無い（空振り）が続いたら、5 度で 0 で終わる（回り続けない）', async () => {
+  test('合図が来たのに何も無い（空振り）が 5 度続いたら、Node.js の待つ命令に替わる（待つ者を居なくしない）', async () => {
     const f = fake({ arm: 10, checks: [10] });
+    writeFileSync(join(f.dir, 'heavy.code'), '2');
     // 偽の nats を、すぐ 0 で終わる物に替える（聞く process が、合図も無いのに終わってしまう形）。
     writeFileSync(join(f.dir, 'nats'), '#!/bin/sh\necho "$$ $*" >> "$(dirname "$0")/nats.calls"\nexit 0\n');
     const { code, stderr } = await start(f).done;
+    expect(code).toBe(2);
+    expect(stderr).toContain('Node.js で待った');
+    expect(f.calls().filter(c => c.includes('--check'))).toHaveLength(6);
+    expect(f.calls().at(-1)).toBe('/repo/cli/src/cli.ts mail wait');
+    expect(readFileSync(join(f.dir, 'stdin.heavy'), 'utf8').trim()).toBe('{"session_id":"s-1"}');
+  }, 20_000);
+
+  test('CLI だけが繋げない（見る段は通るのに、聞く process が誤りで終わる）が 3 度続いたら、Node.js の待つ命令に替わる', async () => {
+    const f = fake({ arm: 10, checks: [10] });
+    writeFileSync(join(f.dir, 'heavy.code'), '0');
+    writeFileSync(join(f.dir, 'fail'), '');
+    const { code } = await start(f).done;
+    expect(code).toBe(0);
+    expect(f.natsCalls()).toHaveLength(3);
+    expect(f.calls().at(-1)).toBe('/repo/cli/src/cli.ts mail wait');
+  }, 20_000);
+
+  test('構えた直後に、次の待つ命令が印を書き替えていたら、その印に触らずに 0 で終わる（待つ者を消し合わない）', async () => {
+    const f = fake({ arm: 10, checks: [2] });
+    writeFileSync(join(f.dir, 'arm.mark'), '{"pid":999999}');
+    const { code, stderr } = await start(f).done;
     expect(code).toBe(0);
     expect(stderr).toBe('');
-    expect(f.calls().filter(c => c.includes('--check'))).toHaveLength(6);
-  }, 20_000);
+    expect(f.calls().filter(c => c.includes('--check'))).toHaveLength(0);
+    expect(readFileSync(f.mark, 'utf8')).toBe('{"pid":999999}');
+  });
+
+  test('箱に取れない物が残っている時（13）は、合図が無くても、取り置きの長さの後に見直す', async () => {
+    const f = fake({ arm: 10, checks: [13, 2] });
+    // 見直しの間: 残っている時は 2 回、ふだんは 10,000 回（ふだんの見直しでは、この試験の間に来ない）。
+    const { code } = await start(f, { ROSTER_MAIL_SOON_TICKS: '2', ROSTER_MAIL_RECHECK_TICKS: '10000' }).done;
+    expect(code).toBe(2);
+    expect(f.calls().filter(c => c.includes('--check'))).toHaveLength(2);
+  });
 
   test('段が知らない code で終わったら、0 で終わる（回り続けない）', async () => {
     const f = fake({ arm: 10, checks: [1] });

@@ -345,9 +345,10 @@ async function pulled(ctx: Context, room: Mailroom, pulling: Promise<Taken[]>, l
 
 /**
  * 軽い待ち方の段の終わり方（exit code）。quit は何もせずに終わる、woke は本文を stderr に出して session を起こす（mailWait の code 2 と同じ）、
- * armed は待ってよい（自分宛ては今は無い）、retry は配りの口が応えない（間を空けて試し直す）、heavy は軽い待ち方ができない（mailWait に任せる）。
+ * armed は待ってよい（自分宛ては今は無い）、retry は配りの口が応えない（間を空けて試し直す）、heavy は軽い待ち方ができない（mailWait に任せる）、
+ * soon は待ってよいが、箱に今は取れない自分宛てが残っている（取り置き中・渡し直し待ち。合図は来ないので、sh が取り置きの長さの後に見直す）。
  */
-export const WAIT_STEP = { quit: 0, woke: 2, armed: 10, retry: 11, heavy: 12 } as const;
+export const WAIT_STEP = { quit: 0, woke: 2, armed: 10, retry: 11, heavy: 12, soon: 13 } as const;
 
 /** 軽い待ち方の段の結果。stdout は sh が読む 1 行、stderr は起こす時の本文。 */
 export interface StepResult {
@@ -393,6 +394,7 @@ export async function mailArm(ctx: Context, stdin: string, waiter: number): Prom
 
 /**
  * 軽い待ち方の 2 段目（見る）: 自分宛てがあれば取り置いて渡す（woke。本文は stderr）。無ければ armed（sh が、合図を待つ）。
+ * 取れなかったのに箱に残っていれば soon（sh が、取り置きの長さの後に見直す）。
  * 合図のすぐ後は、配る箱にまだ写されていないことがあるので、CHECK_WAIT_MS だけ待って取る。
  * 名乗りが効かない・待つ者の印が waiter でない（止められた・次の待つ命令に替わった）時は、取った物を返して quit。配りの口が応えなければ retry。
  */
@@ -412,7 +414,11 @@ export async function mailCheck(ctx: Context, stdin: string, waiter: number): Pr
   catch {
     return { code: WAIT_STEP.retry };
   }
-  if (taken.length === 0) return { code: WAIT_STEP.armed };
+  if (taken.length === 0) {
+    // 取れなかったが箱に残っている物（ほかの hook が取り置いている・返されて渡し直しを待っている）には、合図が来ない。
+    const left = await room.counts(name).catch(() => undefined);
+    return { code: left !== undefined && left.waiting + left.held > 0 ? WAIT_STEP.soon : WAIT_STEP.armed };
+  }
   // 取った所で止められていたら、渡さずに返す（T4。次の hook が取り直す）。
   if (leaving()) {
     await room.giveBack(taken).catch(() => undefined);

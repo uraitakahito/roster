@@ -512,6 +512,16 @@ describe('軽い待ち方の段（roster mail wait --arm・--check。cli/bin/ros
     expect((await new MemoryMailroom(w.office).take('t-x7k2', ALL)).map(t => t.deliveries)).toEqual([2]);
   });
 
+  test('見る: 取れないのに箱に残っている（ほかの口が取り置いている）なら soon（合図は来ないので、sh が取り置きの長さの後に見直す）', async () => {
+    const w = await seated();
+    await notify(w.tpm, 't-x7k2', { text: 'ほかの hook が取り置いている物' });
+    w.se.state.write(waiterFile('t-x7k2'), { pid: 900, started: 'started-900' });
+    // 人の入力の時の hook などが、先に取り置いた所。
+    expect(await new MemoryMailroom(w.office).take('t-x7k2', ALL)).toHaveLength(1);
+    expect(await mailCheck(w.hook(), '{}', 900)).toEqual({ code: WAIT_STEP.soon });
+    expect(deliveredLines(w.se)).toEqual([]);
+  });
+
   test('見る: 配りの口が応えなければ retry（起こさない）', async () => {
     const w = await seated();
     w.se.state.write(waiterFile('t-x7k2'), { pid: 900, started: 'started-900' });

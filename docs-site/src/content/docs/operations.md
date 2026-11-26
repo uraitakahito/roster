@@ -260,7 +260,8 @@ roster を動かす機械に NATS の CLI（`nats`。[nats-io/natscli](https://g
 - 入れるのは DevOps Engineer 担当（担当は【ask-devops】で頼む）。公式の release の binary を、checksum（`SHA256SUMS`）を照らして `~/.local/bin/nats` に置く（`PATH` に無い時も、roster は `~/.local/bin/nats`・`/opt/homebrew/bin/nats`・`/usr/local/bin/nats` を探す。ほかの所なら `$ROSTER_NATS_CLI` に path を書く）。2026-11-27 に v0.5.2 を入れた。
 - 入れた後・外した後に、席を起こし直す要は無い（次に手を止めた時の待つ命令から替わる）。
 - 使わせない時は、席を起こす環境に `ROSTER_NATS_CLI=none` を書く。
-- 確かめ: 手を止めている席があれば、`pgrep -fl 'nats --server'` に `nats --server … sub roster.<project>.msg.<受け手の名> --count 1` が、席の数だけ出る。
+- 確かめ: 手を止めている席があれば、`pgrep -fl 'nats sub roster\.'` に `nats sub roster.<project>.msg.<受け手の名> --count 1` が、席の数だけ出る（NATS の URL は環境変数で渡すので、ここには出ない）。
+- NATS の CLI の context（`nats context`。`~/.config/nats`）は作らない・選ばない。選んであると、CLI がその context の認証や TLS で繋ごうとして、roster の client と違う繋ぎ方になる（繋げない時は、3 度で Node.js の待ち方に替わる）。
 
 ### 版を上げる
 

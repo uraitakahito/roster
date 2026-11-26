@@ -254,7 +254,9 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
         }
         await messageRecordsSettled();
         await mailroomsClosed();
-        if (step.stdout !== undefined) console.log(step.stdout);
+        // sh が読む 1 行は、書き終えてから終わる（pipe への書き込みは、書き切る前に process が終わると欠ける）。
+        const line = step.stdout;
+        if (line !== undefined) await new Promise<void>(resolve => void process.stdout.write(`${line}\n`, () => resolve()));
         const woke = step.stderr;
         if (woke !== undefined) await new Promise<void>(resolve => void process.stderr.write(`${woke}\n`, () => resolve()));
         process.exit(step.code);
