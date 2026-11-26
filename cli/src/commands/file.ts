@@ -35,7 +35,7 @@ export interface FileRecord {
   path: string
 }
 
-/** 置き場が受ける file の種類（拡張子 → 送る Content-Type）。pagetray の crates/api の FILE_TYPES と揃える。 */
+/** 置き場が受ける file の種類（拡張子 → 送る Content-Type）。pagetray の定義（cli/gen/model/pagetray/pagetray.smithy の CreateFile）の一覧と揃える。 */
 export const FILE_TYPES: Readonly<Record<string, string>> = {
   png: 'image/png',
   jpg: 'image/jpeg',

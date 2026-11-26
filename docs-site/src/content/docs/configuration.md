@@ -1,6 +1,6 @@
 ---
 title: 設定
-description: 使う側の project に置く .claude/roles/config.jsonc（課題管理・連携・インフラの環境・担当の既定・アクターの台帳・生成した client への切り替え。直下の folder の設定も合わせる）、model などの既定を人ごとに決める環境変数、ページの置き場の環境変数、Dependabot の skill の設定
+description: 使う側の project に置く .claude/roles/config.jsonc（課題管理・連携・インフラの環境・担当の既定・アクターの台帳。直下の folder の設定も合わせる）、model などの既定を人ごとに決める環境変数、ページの置き場の環境変数、Dependabot の skill の設定
 ---
 
 ## `.claude/roles/config.jsonc`（任意）
@@ -17,7 +17,6 @@ TPM 担当を起こした folder（project）に置くと、道具の選び方�
 | `skill-sets` | core のほかに加える、追加の skill セットの名前の配列 | core だけ |
 | `folders` | 設定を集める folder（project の folder からの path）の配列。書くと、直下を探さずに書いた folder だけを集める。`[]` なら集めない | 直下の folder のうち、設定がある物を全部集める |
 | `castlist` | アクターの台帳（castlist）の URL（`http://127.0.0.1:<port>` か `http://localhost:<port>`）。project の folder の設定だけが効く（下の「[アクターの台帳（castlist）](#アクターの台帳castlist任意)」） | castlist に何も送らない |
-| `api` | server ごとに、生成した client（新しい API）で送るか。`{ "castlist": "next", "pagetray": "next" }` の形で、書いた server だけを替える。project の folder の設定だけが効く（下の「[生成した client への切り替え](#生成した-client-への切り替え任意)」） | どの server も今の client（curl） |
 | `software-engineer`・`devops-engineer`・`staff-engineer`・`auditor` | 起こす担当の `model`・`effort`・`permissionMode` | [環境変数](#model-などの既定の環境変数任意)、それも無ければ既定（Software Engineer 担当は Opus 5.5・medium、DevOps Engineer 担当は Opus 5.5・low、Staff Engineer 担当は Opus 5.5・high、Auditor は Fable 5.2・high、どれも `bypassPermissions`） |
 
 ```jsonc
@@ -171,6 +170,10 @@ export ROSTER_EFFORT=medium
 | `ROSTER_PAGES_DIR` | 控えの folder（置いた・読んだページと file を roster を動かす機械に写す所。前の置き場の folder と同じ） | `$XDG_DATA_HOME/roster/pages`（`$XDG_DATA_HOME` も無ければ `~/.local/share/roster/pages`） |
 | `ROSTER_PAGES_URL` | 置き場の URL（container の port の publish と同じにする） | `http://127.0.0.1:8801` |
 
+- `roster` は置き場に、pagetray 1.0.0 からの API（`/api/…`）で頼む。頼むのは、定義から生成した client（[開発](/development/#生成した-clientcastlistpagetray-の定義から)）。ページの本文と file の中身だけは URL の手の道なので、curl で取る（`roster page path`・`roster file path`・取り込みの見比べ）。
+- 置き場に頼む前に、1 つの命令で 1 度だけ `/healthz` の版を見る。`1.0.0` より前（切り替えの前の 0.8.x に戻した置き場）なら、何も頼まずに止まる（[運用](/operations/#版を上げる)）。`/healthz` が応えなければ止めず、頼む物の答えで「置き場が応えません」と出る。
+- 頼む物はどれも 1 度だけ送り（送り直さない）、10 秒まで待つ。`AWS_MAX_ATTEMPTS` などの `AWS_*` の環境変数と `~/.aws/config` は読まない。
+
 ## アクターの台帳（castlist）（任意）
 
 アクターの台帳（別の repo の [castlist](https://uraitakahito.github.io/castlist/)）は、Claude Code の session 1 つ（TPM 担当・担当・Auditor）と人の Product Manager を、それぞれアクターとして残す、roster を動かす機械の中だけのサーバー。誰が誰を起こしたか・どの model と effort で動いたかを、Auditor が後から引く。`roster` が何をいつ送るかは [担当のあいだの決まり](/protocol/#アクターの台帳castlist)。
@@ -183,35 +186,10 @@ export ROSTER_EFFORT=medium
 |---|---|---|
 | `ROSTER_CASTLIST_URL` | castlist の URL（`http://127.0.0.1:<port>` か `http://localhost:<port>`） | 設定の `castlist`。それも無ければ、castlist に何も送らない |
 
-## 生成した client への切り替え（任意）
-
-castlist と pagetray の作り直し（AI-36）の間だけの欄。`api` に server の名と `next` を書くと、`roster` はその server に、定義から生成した client（[開発](/development/#生成した-clientcastlistpagetray-の定義から)）で新しい API（`/api/…`）に送る。書かない server は今の client（curl で今の API）のまま。新しい server に替えた時に書き、切り替えが済んだら、今の client と共にこの欄を消す。
-
-```jsonc
-{
-  "castlist": "http://127.0.0.1:8802",
-  // castlist に書く物を、新しい API で送る
-  "api": { "castlist": "next" },
-}
-```
-
-- `castlist`: castlist に送る物をみな新しい API で送る。書く物（session の登録・出来事・線・model と effort・Product Manager の登録）も、読む物（起きているかの `/healthz`・落ちた session の突き合わせが引くアクター・`roster castlist find` などの監査の検索・`roster incident timeline` のアクターの欄）も。答えの見方（止まっている・混んでいる・断られた）は今の client と同じ。
-- `pagetray`: 置き場に頼む物をみな新しい API で送る。ページと file を置く・探す・消す（`roster page put`・`list`・`delete`・`import`・`roster file put`・`list`・`delete`。`roster assign` の課題の写しも）と、返事の状態とレビューの印（`roster ask pm`・`answer`・`page reply`・`ask review`・`report review`・`ask tpm --review`）。出す物（控えの path・URL・表・`--json`）は今と同じ形（`--json` の記録は今の API の欄の名で、番号 `n` は数）。
-  - ページの本文と file の中身は、新しい API でも同じ URL の手の道なので、`roster page path`・`roster file path`・取り込みの見比べは今までどおり curl で取る（next の時に curl で打つのは、この 2 つの道だけ）。
-  - `roster page list`・`roster file list` の `--limit` は、新しい API の頁の印（`nextToken`）で辿って読む数（今と同じく 1 から 1000 に丸める）。`--oldest` は `sort=createdAt`。
-  - 送り手（castlist に登録の無い session）を断る答えは、新しい API では 400（欄 `/actorRef`。訳が「castlist に登録の無い送り手」で始まる物）。訳は今の 422 と同じ文で、状態の数だけ 400 と出す。`/actorRef` の形の誤り（打ち直しても通らない）は、置き場が断った訳をそのまま出す。
-  - 置き場の版で分ける所（待ちの相手の `0.8.0` など）は、新しい API では `/healthz` の `version` を見る（新しい API に `/api/version` と頭の `Pagetray-Api` は無い。roster の API の版の検査も、新しい API には掛けない）。今の版の置き場の `/healthz`（字の `ok`）と `version` の無い答えは、版を答えない古い置き場とみなす。
-  - 置き場に頼む前に、1 つの命令で 1 度だけ `/healthz` の版を見る。`1.0.0` より前（新しい API を持たない今の置き場）なら、`api.pagetray` を外すか置き場を替えるよう言って止まる（castlist の版の見方と同じ。今の置き場に新しい API の道で頼むと、どれも断られるため）。`/healthz` が応えなければ止めず、頼む物の答えで「置き場が応えません」と出る。
-  - 置き場に頼む物がみな新しい API で働くのは、file と返事の状態とレビューの印も替えた版の roster から。それより前の roster（ページの道だけを替えた版）で `api.pagetray` を `next` にすると、file と返事は今の API の道のままなので、新しい置き場では断られる。
-- 生成した client も、今の curl と同じに 1 度だけ送り（送り直さない）、castlist に書く要求と監査の検索は 6 秒まで、castlist の `/healthz` は 1 秒まで、置き場の要求は 10 秒まで待つ。`AWS_MAX_ATTEMPTS` などの `AWS_*` の環境変数と `~/.aws/config` は読まない。
-- 値は `next` だけ。今の client にするなら、その server の欄を書かない。知らない server の名と `next` でない値は、設定の誤りで止まる。直下の folder の設定に書いた値は読まない（`castlist` と同じ）。
-
-`api.castlist` を `next` にした時の、今の client との違い:
-
-- **版**: 起こす前に見る `/healthz`（`roster start`・`roster assign`・`roster audit start`・`roster hello`）の `version` が `1.0.0` より前（新しい API を持たない今の castlist）なら、`api.castlist` を外すか castlist を替えるよう言って止まる（今の castlist に新しい API の道で書くと、どれも断られるため）。castlist が止まっている時に Product Manager へ出す `container run` の 1 行は、新しい API の版の image（`v1.0.0`）を新しい volume（`castlist-data-v1`）で起こす形にし、`castlist-data-v1` がまだ無い時だけ前の volume の記録を先に移す docs（castlist の「release を出す」の「rc を動かす時と切り替え」）を添える（container が在れば、今までどおり起こし直す 1 行）。
-- **監査の検索の旗**: 旗は今と同じ。`roster` が新しい API の引数に直す: `--active-from`・`--active-to`・`--launched-by` は `activeFrom`・`activeTo`・`launchedBy`、`--limit` は `maxResults`、`--after` は `nextToken`（答えの「続きがある: --after …」に出す字も、新しい API の頁の印）。時刻は UTC に直して送る（`+09:00` の時刻を書いてよい）。1 度に読むのは、今と同じく 1 頁（`--limit`。既定 100）。
-- **断る値**: 新しい API は知らない引数を読み飛ばすので、今の castlist が断る物（読めない時刻・`true` か `false` でない `--active`・範囲の外の `--limit` と `--depth`・`--actor` と一緒の `--at` のほかの旗）は、`roster` が送らずに今と同じ訳で断る。ほかの値（決まりの外の `--sort` など）は castlist が断り、訳は新しい API の物（引数の名も新しい名）になる。
-- **出す物**: 表は今と同じ字。`--json` は、新しい API の答えを今の API の形に直した物（欄の名は `snake_case`・無い値は `null`・頁の印は `next`・時刻は UTC のミリ秒まで）。今の API にあって新しい API に無い欄（model と effort の行の `model_id`・`effort_id` など）は無い。`roster castlist settings --actor` は、行にアクターの名を付けるため、先に 1 つのアクターを引く（聞くのが 1 度多い）。
+- `roster` は castlist に、castlist 1.0.0 からの API（`/api/…`）で送る。送るのは、定義から生成した client（[開発](/development/#生成した-clientcastlistpagetray-の定義から)）。
+- 起こす前に見る `/healthz`（`roster start`・`roster assign`・`roster audit start`・`roster hello`）の `version` が `1.0.0` より前（切り替えの前の 0.x に戻した castlist）なら、起こさずに止まる（[運用](/operations/#アクターの台帳castlist)）。
+- 送る物はどれも 1 度だけ送り（送り直さない）、書く要求と監査の検索は 6 秒まで、`/healthz` は 1 秒まで待つ。`AWS_MAX_ATTEMPTS` などの `AWS_*` の環境変数と `~/.aws/config` は読まない。
+- 前の版の設定の欄 `api`（生成した client で送るかの選び）は、もう無い。残っていても、どんな値でも読み飛ばす（消してよい）。
 
 ## 通知のバナー（任意）
 
