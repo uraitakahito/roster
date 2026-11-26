@@ -1,7 +1,7 @@
-// roster castlist find・show・lineage・events・settings: castlist の監査の検索（castlist の docs/src/api.md の「監査の検索」）を読むだけの命令。
+// roster castlist find・show・lineage・events・settings: castlist の監査の検索（castlist の Smithy の定義 cli/gen/model/castlist/castlist.smithy の ListActors などの操作）を読むだけの命令。
 // 送るのは GET だけで、castlist にも状態の folder にも書かない（Auditor の席から打つ物）。旗は castlist の引数の名にそのまま写し、値は確かめない（断るのは castlist）。
-// 設定の api.castlist が next なら、castlist-query.ts が新しい API の操作と引数に直して聞き（断る値は、そこで今と同じ訳で断る）、答えを今の道の形に直す。
-// 答えは 1 件 1 行の字にし、アクターにはプロフィールの画面の URL（<castlist>/actors/<id>）を添える。--json は castlist の答えの字をそのまま出す（next では、今の道の形に直した物）。
+// castlist-query.ts が新しい API の操作と引数に直して聞き（断る値は、そこで前の API と同じ訳で断る）、答えを前の API の形に直す。
+// 答えは 1 件 1 行の字にし、アクターにはプロフィールの画面の URL（<castlist>/actors/<id>）を添える。--json は、前の API の形に直した castlist の答えを出す。
 // castlist が断った（400・404）ら訳をそのまま、止まっていれば「castlist に聞けない」の 1 行で止まる。
 // castlist には名で引く道が無いので、名（t-23zs-swe.1 など）は、この project の roster が登録して控えた物（状態の folder の sessions/）から id にする。
 import { castlistUrl } from '../castlist.ts';
@@ -15,7 +15,7 @@ export interface JsonOption {
   json?: boolean
 }
 
-/** `roster castlist find` の旗（GET /v1/actors の引数）。 */
+/** `roster castlist find` の旗（ListActors の引数）。 */
 export interface FindOptions extends JsonOption {
   label?: string[]
   binding?: string
@@ -41,7 +41,7 @@ export interface LineageOptions extends JsonOption {
   type?: string
 }
 
-/** `roster castlist events` の旗（GET /v1/events の引数）。 */
+/** `roster castlist events` の旗（ListEvents の引数）。 */
 export interface EventsOptions extends JsonOption {
   type?: string[]
   actor?: string
@@ -54,7 +54,7 @@ export interface EventsOptions extends JsonOption {
   after?: string
 }
 
-/** `roster castlist settings` の旗。actor があれば GET /v1/actors/<id>/settings、無ければ GET /v1/settings の引数。 */
+/** `roster castlist settings` の旗。actor があれば ListActorSettings（at があれば GetActorSettingAt）、無ければ ListSettings の引数。 */
 export interface SettingsOptions extends JsonOption {
   actor?: string
   at?: string
@@ -69,7 +69,7 @@ export interface SettingsOptions extends JsonOption {
   after?: string
 }
 
-/** アクターの一覧の 1 行（GET /v1/actors の actors[] と、線の nodes[]。読む欄だけ）。 */
+/** アクターの一覧の 1 行（ListActors の actors[] と、線の nodes[]。読む欄だけ）。 */
 export interface ActorItem {
   id: string
   name: string
@@ -91,7 +91,7 @@ interface Edge {
   received_at: string
 }
 
-/** 出来事の行（GET /v1/events）。 */
+/** 出来事の行（ListEvents）。 */
 interface EventRow {
   actor_id: string
   actor_name: string
@@ -100,7 +100,7 @@ interface EventRow {
   received_at: string
 }
 
-/** model と effort の行（GET /v1/settings と /v1/actors/<id>/settings）。 */
+/** model と effort の行（ListSettings と ListActorSettings）。 */
 interface SettingRow {
   actor_id: string
   actor_name: string
@@ -110,7 +110,7 @@ interface SettingRow {
   received_at: string
 }
 
-/** 1 つのアクター（GET /v1/actors/<id>。読む欄だけ）。 */
+/** 1 つのアクター（GetActor。読む欄だけ）。 */
 interface ActorDetail {
   id: string
   name: string
@@ -183,7 +183,7 @@ function edgeLine(names: Map<string, string>, e: Edge): string {
 
 const settingLine = (url: string, s: SettingRow): string => [s.received_at, s.actor_name, `${s.model}・${s.effort}（${s.source}）`, profileUrl(url, s.actor_id)].join('  ');
 
-/** `roster castlist find`: アクターを探す（GET /v1/actors）。 */
+/** `roster castlist find`: アクターを探す（ListActors）。 */
 export async function castlistFind(ctx: Context, options: FindOptions): Promise<string[]> {
   const url = requireUrl(ctx);
   const { body, text } = must(await ask<{ as_of: string, actors: ActorItem[], next: unknown }>(ctx, url, { op: 'ListActors', params: [
@@ -207,7 +207,7 @@ export async function castlistFind(ctx: Context, options: FindOptions): Promise<
   return [head('アクター', body.actors.length, body.as_of), ...body.actors.map(a => actorLine(url, a)), ...more(body.next)];
 }
 
-/** `roster castlist show`: 1 つのアクター（GET /v1/actors/<id>）と、線の要約（GET /v1/actors/<id>/lineage。上は人まで・下は 1 段）。 */
+/** `roster castlist show`: 1 つのアクター（GetActor）と、線の要約（GetLineage。上は人まで・下は 1 段）。 */
 export async function castlistShow(ctx: Context, target: string, options: JsonOption): Promise<string[]> {
   const url = requireUrl(ctx);
   const id = actorId(ctx, target);
@@ -236,7 +236,7 @@ export async function castlistShow(ctx: Context, target: string, options: JsonOp
   ];
 }
 
-/** `roster castlist lineage`: 誰が起こしたか・誰を起こしたか（GET /v1/actors/<id>/lineage）。 */
+/** `roster castlist lineage`: 誰が起こしたか・誰を起こしたか（GetLineage）。 */
 export async function castlistLineage(ctx: Context, target: string, options: LineageOptions): Promise<string[]> {
   const url = requireUrl(ctx);
   const id = actorId(ctx, target);
@@ -256,7 +256,7 @@ export async function castlistLineage(ctx: Context, target: string, options: Lin
   ];
 }
 
-/** `roster castlist events`: 出来事を、アクターをまたいで（GET /v1/events）。 */
+/** `roster castlist events`: 出来事を、アクターをまたいで（ListEvents）。 */
 export async function castlistEvents(ctx: Context, options: EventsOptions): Promise<string[]> {
   const url = requireUrl(ctx);
   const { body, text } = must(await ask<{ as_of: string, events: EventRow[], next: unknown }>(ctx, url, { op: 'ListEvents', params: [
@@ -279,8 +279,8 @@ export async function castlistEvents(ctx: Context, options: EventsOptions): Prom
 }
 
 /**
- * `roster castlist settings`: model と effort の行。--actor があれば、そのアクターの行（GET /v1/actors/<id>/settings。--at でその時に効いていた 1 行）、
- * 無ければアクターをまたいで（GET /v1/settings）。どちらにも、ほかの旗をそのまま送る（受けない引数は castlist が断る）。
+ * `roster castlist settings`: model と effort の行。--actor があれば、そのアクターの行（ListActorSettings。--at なら GetActorSettingAt で、その時に効いていた 1 行）、
+ * 無ければアクターをまたいで（ListSettings）。どちらにも、ほかの旗をそのまま送る（受けない引数は castlist が断る）。
  */
 export async function castlistSettings(ctx: Context, options: SettingsOptions): Promise<string[]> {
   const url = requireUrl(ctx);

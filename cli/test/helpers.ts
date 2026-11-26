@@ -6,7 +6,7 @@ import { FILE_TYPES, type FileRecord } from '../src/commands/file.ts';
 import type { PageRecord } from '../src/commands/page.ts';
 import { DEFAULT_PAGES_URL } from '../src/commands/store.ts';
 import { createContext, type Context } from '../src/context.ts';
-import { exec as realExec, type Exec, type ExecOptions, type ExecResult } from '../src/exec.ts';
+import type { Exec, ExecOptions, ExecResult } from '../src/exec.ts';
 import { reportDone } from '../src/commands/messages.ts';
 import { hello } from '../src/commands/role-side.ts';
 import { FileTransport } from '../src/transport/file.ts';
@@ -270,8 +270,6 @@ export interface World {
   slept: () => number
   /** PR の URL → `gh pr view` が返す state（無い URL は MERGED）。値が undefined の URL は、gh が読めない（exit 1）。 */
   prs: Map<string, string | undefined>
-  /** castlist の URL（設定の castlist と $ROSTER_CASTLIST_URL）。この URL への curl は、偽の置き場でなく本当の curl で送る（試験の偽の castlist が受ける）。 */
-  castlist: string[]
   /** 外の命令の答えを替える（`<命令> <引数…>` の字 → 答え）。無い命令は今までどおり exit 0・`{}`。 */
   answers: Map<string, ExecResult>
 }
@@ -294,11 +292,8 @@ export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessE
   const calls: Call[] = [];
   const store = new FakeStore();
   const prs = new Map<string, string | undefined>();
-  const castlist = [config.castlist, env.ROSTER_CASTLIST_URL].filter((u): u is string => typeof u === 'string' && u !== '');
   const answers = new Map<string, ExecResult>();
   const exec: Exec = (cmd, args, options) => {
-    // castlist への curl は、試験が起こした偽の castlist（か、何も待っていない port）へ本当に送る。calls には数えない。
-    if (cmd === 'curl' && castlist.some(u => (args.at(-1) ?? '').startsWith(u))) return realExec(cmd, args, options);
     // gh pr view は、送る前に PR が merge 済みかを見る命令（calls には数えない。記録の gh と分けるため）。
     if (cmd === 'gh' && args[0] === 'pr' && args[1] === 'view') {
       const pr = args[2] ?? '';
@@ -331,7 +326,6 @@ export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessE
     wire: new FileTransport(tpm.state, 'file:tpm'),
     slept: () => slept,
     prs,
-    castlist,
     answers,
   };
 }

@@ -1,4 +1,4 @@
-// roster castlist …（hook が呼ぶ）と、ほかの命令（guard・hello・close）が castlist に送る物。送る物の形は castlist の docs/src/api.md（設定の api.castlist が next なら docs/src/next.md。どちらで送るかは castlist.ts の registerActor・putRecord が決める）。
+// roster castlist …（hook が呼ぶ）と、ほかの命令（guard・hello・close）が castlist に送る物。送る物の形は castlist の Smithy の定義（cli/gen/model/castlist/castlist.smithy。送るのは castlist.ts の registerActor・putRecord）。
 // session 1 つが castlist のアクター 1 つ。登録の答え（id と名）は状態の folder の sessions/<session の id>.jsonc に控え、
 // 起こし 1 回（$ROSTER_LAUNCH）ごとの session の並びを launches/<起こしの id>.jsonc に控える（/clear と fork の継ぐ線を、前の session から引くため）。
 // 出来事・線・model と effort の id は、issuer・session・種類（と、何度も起きる物は番号）で決める。送り直しても同じ id なので、castlist は 2 度足さない

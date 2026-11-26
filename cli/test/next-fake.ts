@@ -1,5 +1,6 @@
 // 偽の HTTP の handler: 生成した client（cli/gen/<server>-client/）に差し込み、受けた要求を記録して、決まりの形（restJson1）で答える。
 // どの server の client にも使える（本文は字のまま text に、JSON なら body にも入れる）。答えは試験が要求ごとに決める。socket は使わない。
+import { createServer } from 'node:net';
 import { Readable } from 'node:stream';
 import type { HttpRequest } from '@smithy/types';
 
@@ -45,4 +46,14 @@ export function nextHandler(answer: (seen: NextSeen) => NextAnswer | undefined, 
     },
   };
   return { handler, seen };
+}
+
+/** 何も待っていない 127.0.0.1 の URL（server が止まっている）。空いた port を 1 度取って閉じる。 */
+export async function deadUrl(): Promise<string> {
+  const server = createServer();
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  const port = typeof address === 'object' && address !== null ? address.port : 0;
+  await new Promise<void>(resolve => server.close(() => resolve()));
+  return `http://127.0.0.1:${port}`;
 }
