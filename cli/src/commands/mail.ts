@@ -5,6 +5,8 @@ import type { Context } from '../context.ts';
 import { claimNamed, claudePid, deliveredLines, effective, gateFile, lineCount, ownName, readClaim, recordDelivered, removeClaim, stopWaiter, usesNats, waiterFile, writeClaim, type DeliveredWhen, type GateMark, type WaiterMark } from '../mail.ts';
 import type { Mailroom, Recipient, TakeLimit, Taken } from '../mailroom/types.ts';
 import { selfParty } from '../party.ts';
+import { copyMessageRecord } from './message-record.ts';
+import type { Sent } from './messages.ts';
 
 /** hook の入力（stdin の JSON）のうち、読む欄。 */
 export interface HookInput {
@@ -107,14 +109,32 @@ async function batchOf(ctx: Context, room: Mailroom, name: Recipient, head: stri
   return batch;
 }
 
+/** メッセージの本文の頭の見出し（`【brief】…` の brief）。無ければ空。 */
+const headingOf = (text: string): string => /^【([^】]+)】/.exec(text)?.[1] ?? '';
+
+/**
+ * 配りの口の 1 通の、送った記録（log.jsonl）の行。置き場の記録に書き足す時の元。
+ * 行が無い時（送る命令が、置いた直後に落ちた）は、配りの口の中身から作る（Key は分からないので空。置き場には Key 無しで写る）。
+ */
+export function sentLineOf(log: Sent[], m: { id: string, from: string, to: string, text: string, at: string, replyTo?: string }): Sent {
+  return log.findLast(l => l.id === m.id)
+    ?? { at: m.at, key: '', heading: headingOf(m.text), from: m.from, to: m.to, text: m.text, id: m.id, ...(m.replyTo === undefined ? {} : { replyTo: m.replyTo }), carrier: 'nats', box: m.to };
+}
+
 /**
  * 束を渡す字を作り、手元の渡した記録を書いてから、「渡せた」（done）を返す。作った字を返す（呼ぶ側が、hook の出力に出す）。
+ * 渡した記録は、置き場の記録にも書き足す（状態 delivered・届いた時刻・道・回数）。
  * 記録を書いた後に done が誤りでも、字は返す（本文は出すので、記録は正しい。配りの口が後でもう 1 度渡し、その時は「渡し直し」と付く）。
  */
 async function handOver(ctx: Context, room: Mailroom, name: Recipient, when: DeliveredWhen, head: string[], batch: Taken[], input: HookInput): Promise<string> {
   const text = compose(ctx, name, head, batch);
   const lines = lineCount(input.transcript_path);
-  for (const m of batch) recordDelivered(ctx, m.id, name, when, lines);
+  const log = ctx.state.lines<Sent>('log.jsonl');
+  for (const m of batch) {
+    const line = recordDelivered(ctx, m.id, name, when, lines);
+    // 置き場の記録にも写す（待たない。写せなくても止めない）。
+    copyMessageRecord(ctx, sentLineOf(log, m), { state: 'delivered', deliveredAt: line.at, via: when, deliveries: line.nth });
+  }
   await room.done(batch).catch(() => undefined);
   return text;
 }

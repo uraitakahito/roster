@@ -1,6 +1,7 @@
 // 受け手がメッセージを見た時刻を決める口。送る前の検査（dismiss・続きの assign）・依頼書の数え・時系列は、みなこれを使う。
 // 「見たか」を所ごとに別の決め方で決めると、同じメッセージが所によって見た・見ていないになる（台帳 #110・#129）。
 import type { Context } from './context.ts';
+import { deliveredLines } from './mail.ts';
 import type { MessageTrace } from './transport/types.ts';
 
 /** 見せたメッセージの id と、初めて見せた時刻を覚える file（`shown/<宛先>.jsonc`）。 */
@@ -19,8 +20,9 @@ export function readShown(ctx: Context, address: string): Shown[] {
 
 /**
  * 見た時刻と、その出どころ。
- * - delivered: 連携の道具（cmux）が画面に配った時刻
- * - shown: roster が受け手に本文を見せた時刻（送る前の検査・roster inbox。時刻の無い前の版の項目は、検査用では送った時刻、記録用では使わない）
+ * - delivered: 連携の道具（cmux）が画面に配った時刻。NATS で運んだ行では、hook が本文を渡した時刻（手元の渡した記録。mail.ts）
+ * - shown: roster が受け手に本文を見せた時刻（送る前の検査・roster inbox。時刻の無い前の版の項目は、検査用では送った時刻、記録用では使わない）。
+ *   NATS で運んだ行では、送る前の検査が命令の結果に本文を出した時刻（渡した記録の output。届いたには数えない）
  * - legacy: 前の版が送った時に「届いた」と書いた行（送った時刻）
  * - assumed: 時刻がどこにも無く、受け手の「まだ配っていない」にも無いので、送った時刻に倒した物（道具が時刻を返さない時。止めすぎない側）
  */
@@ -44,6 +46,8 @@ export interface SentRef {
   to: string
   /** 前の版が送った時に書いた「届いたか」。 */
   delivered?: boolean
+  /** 運んだ道。NATS で運んだ行にだけ在る（無い行は、連携の道具が運んだ）。 */
+  carrier?: 'nats'
 }
 
 /** 送った記録の行 1 つの、受け手が見た時刻。undefined はまだ見ていない（検査用）か、分からない（記録用）。 */
@@ -62,6 +66,9 @@ const earliest = (candidates: (Seen | undefined)[]): Seen | undefined =>
  * 無ければ送った時刻に倒す（assumed）。
  * live でない（時系列）: queued は「今」の受信箱で過去の行には意味が薄く、閉じた居場所では引けないので見ない。どれも無ければ undefined（分からない）。
  * 道具と file は口を作る時に 1 度だけ読み、queued と shown/ は宛先ごとに 1 度だけ読む。
+ * NATS で運んだ行（carrier が nats）は、連携の道具には聞かず、手元の渡した記録（delivered.jsonl）だけで決める: hook が渡した行があれば、
+ * そのいちばん早い時刻に届いた。命令の結果に出した行（output）は、見せた時刻。どちらも無ければ undefined
+ * （配りの口にまだ残っているか、届かないまま終わった物。どちらも、受け手は見ていない）。
  */
 export function seenTimes(ctx: Context, options: { live: boolean }): SeenAt {
   const delivered = new Map<string, string>();
@@ -91,9 +98,15 @@ export function seenTimes(ctx: Context, options: { live: boolean }): SeenAt {
     }
     return q;
   };
+  const handed = new Map<string, Seen>();
+  for (const l of deliveredLines(ctx)) {
+    const seen: Seen = { at: l.at, by: l.when === 'output' ? 'shown' : 'delivered' };
+    handed.set(l.id, earliest([handed.get(l.id), seen]) ?? seen);
+  }
   return (sent) => {
     // 届け違いで返した物は、配られていても・同じ居場所で見せていても、宛先の担当は見ていない。
     if (returned.has(sent.id)) return undefined;
+    if (sent.carrier === 'nats') return handed.get(sent.id);
     const at = delivered.get(sent.id);
     const s = shownTo(sent.to);
     // 前の版の delivered:true は、道具の配った時刻が無い時だけ使う（同じ配りの写しで、道具の時刻の方が確か）。
