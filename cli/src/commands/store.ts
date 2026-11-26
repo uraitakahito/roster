@@ -88,7 +88,7 @@ const UNREGISTERED = 'castlist に登録の無い送り手';
  */
 const unknownSender = (sent: { message: string, fields: string[] }): boolean => sent.fields.includes('/actorRef') && sent.message.startsWith(UNREGISTERED);
 
-/** 誤りの型の無い 404 の訳: この roster の呼ぶ道を持たない置き場（定義より古い版）が答えた物。 */
+/** NotFound でない 404（UnknownOperationException・誤りの型の無い 404）の訳: この roster の呼ぶ操作を持たない置き場（定義より古い版）が答えた物。 */
 const OUTDATED = '置き場が、この roster の呼ぶ操作を持たない（置き場（pagetray）の版が、この roster の .pagetray-version より古い。置き場の版を上げるよう roster ask devops で頼む）';
 
 /**

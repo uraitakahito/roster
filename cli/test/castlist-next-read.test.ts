@@ -394,8 +394,10 @@ describe('前の castlist と同じに断る・答える（review-35）', () => 
     expect((JSON.parse(text) as { settings: Record<string, unknown>[] }).settings[0]).toHaveProperty('id', null);
   });
 
-  test('誤りの型の無い 404（この roster の呼ぶ道を持たない castlist）は、アクターが無いでなく、版が合わないと言う', async () => {
-    const { ctx } = nextWorld(() => ({ status: 404, raw: '' }));
-    expect(await thrown(() => castlistFind(ctx, { label: ['a:b'] }))).toMatch(/castlist が、この roster の呼ぶ操作を持たない/);
+  test('NotFound でない 404（UnknownOperationException・誤りの型の無い 404。この roster の呼ぶ操作を持たない castlist）は、アクターが無いでなく、版が合わないと言う', async () => {
+    for (const answer of [{ status: 404, type: 'UnknownOperationException', body: '知らない道' }, { status: 404, raw: '' }]) {
+      const { ctx } = nextWorld(() => answer);
+      expect(await thrown(() => castlistFind(ctx, { label: ['a:b'] }))).toMatch(/castlist が、この roster の呼ぶ操作を持たない/);
+    }
   });
 });

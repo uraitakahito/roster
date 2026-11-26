@@ -140,9 +140,11 @@ describe('pagetray の client の守り', () => {
     }
   }, 20_000);
 
-  test('誤りの型の無い 404（この roster の呼ぶ道を持たない置き場）は、版が合わないと言う', async () => {
-    const s = setup(() => ({ status: 404, raw: '' }));
-    expect(await thrown(() => pageList(s.tpm, {}))).toMatch(/^置き場が一覧を返しませんでした（404）: 置き場が、この roster の呼ぶ操作を持たない/);
+  test('NotFound でない 404（UnknownOperationException・誤りの型の無い 404。この roster の呼ぶ操作を持たない置き場）は、版が合わないと言う', async () => {
+    for (const answer of [{ status: 404, type: 'UnknownOperationException', body: '知らない道' }, { status: 404, raw: '' }]) {
+      const s = setup(() => answer);
+      expect(await thrown(() => pageList(s.tpm, {}))).toMatch(/^置き場が一覧を返しませんでした（404）: 置き場が、この roster の呼ぶ操作を持たない/);
+    }
   });
 });
 

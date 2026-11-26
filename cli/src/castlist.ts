@@ -133,7 +133,7 @@ export function castlistClient(url: string, requestHandler?: HttpHandler): Castl
   return withoutAwsMiddleware(new CastlistClient(clientConfig(url, REQUEST_TIMEOUT * 1000, requestHandler)));
 }
 
-/** 誤りの型の無い 404 の訳: この roster の呼ぶ道を持たない castlist（定義より古い版）が答えた物。 */
+/** NotFound でない 404（UnknownOperationException・誤りの型の無い 404）の訳: この roster の呼ぶ操作を持たない castlist（定義より古い版）が答えた物。 */
 const OUTDATED = 'castlist が、この roster の呼ぶ操作を持たない（castlist の版が、この roster の .castlist-version より古い。castlist の版を上げる。Product Manager に伝える）';
 
 /** castlist に送る要求の周り（状態の folder の issuer・時計・生成した client）。 */

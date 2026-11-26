@@ -171,7 +171,7 @@ export ROSTER_EFFORT=medium
 | `ROSTER_PAGES_URL` | 置き場の URL（container の port の publish と同じにする） | `http://127.0.0.1:8801` |
 
 - `roster` は置き場に、pagetray 1.0.0 からの API（`/api/…`）で頼む。頼むのは、定義から生成した client（[開発](/development/#生成した-clientcastlistpagetray-の定義から)）。ページの本文と file の中身だけは URL の手の道なので、curl で取る（`roster page path`・`roster file path`・取り込みの見比べ）。
-- 置き場が応えなければ、頼む物の答えで「置き場が応えません」と出る。呼ぶ操作を持たない古い版の置き場（誤りの型の無い 404）なら「置き場が、この roster の呼ぶ操作を持たない」と出る（[運用](/operations/#版を上げる)）。
+- 置き場が応えなければ、頼む物の答えで「置き場が応えません」と出る。呼ぶ操作を持たない古い版の置き場（`NotFound` でない 404。`UnknownOperationException` か誤りの型の無い 404）なら「置き場が、この roster の呼ぶ操作を持たない」と出る（[運用](/operations/#版を上げる)）。
 - 頼む物はどれも 1 度だけ送り（送り直さない）、10 秒まで待つ。`AWS_MAX_ATTEMPTS` などの `AWS_*` の環境変数と `~/.aws/config` は読まない。
 
 ## アクターの台帳（castlist）（任意）
