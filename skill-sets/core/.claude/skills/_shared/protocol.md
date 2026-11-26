@@ -193,7 +193,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
   - 置いただけの確認のページには印が付かない。`roster ask pm` で送って初めて返事待ちになる。
   - 前の確認を置き換える確認（計画を直して「進むか」を聞き直すなど）は、`roster ask pm --supersede <古い確認の URL>` で送る。送った後、古い確認の返事待ちが外れる（同じ Key の返事待ちの確認だけを受け、別の Key・答え済み・送っていない確認は送る前に断る）。
   - `roster answer` は、その Key の返事待ちのページが 1 枚なら、それを答えたにする。2 枚以上ある時は、送る前に止まって URL を並べるので、どのページへの答えかを `--url <確認の URL>`（何度でも）で書くか、みなへの答えなら `--all` を付けて打ち直す。
-  - 置き場が応えない時は、印は付かないが、メッセージは送られる（`置き場の印: 付けていない` と出る）。置き場の版が古い（1.0.0 より前）時は、送る前に「この roster が話す API（1.0.0 から）を持ちません」で止まり、メッセージも送られない。`roster ask devops` で知らせる（TPM 担当は、DevOps Engineer 担当に振る）。
+  - 置き場が応えない時は、印は付かないが、メッセージは送られる（`置き場の印: 付けていない` と出る）。`roster ask devops` で知らせる（TPM 担当は、DevOps Engineer 担当に振る）。
   - 手で直すのは TPM 担当だけ: `roster page reply <URL>… --waiting|--answered`。`roster answer` を通らずに済んだ確認（取り下げた・次の依頼書で答えた）を答えたにする時と、置き場が応えない間に送った確認を返事待ちにする時に使う。`roster dismiss` は、その Key に返事待ちのページが残っていれば URL を出す。担当は `roster ask tpm` で頼む。
 - レビューの印: 置き場は、返事待ちの相手も持つ（Product Manager・レビューの席・TPM 担当）。**担当は手で書かない。**命令が書き、Product Manager の「返事待ち N 件」と `roster answer` の数には入らない。置き場に写すのは、判定の語・見た物の URL・時刻だけ（見てほしい所・判定の一言は写さない）。
   - `roster ask review`（と、席の起こし直し）が、レビューの依頼書に見る物を書いて「レビュー待ち」にする（置き換えた前の依頼書の待ちは外す）。`roster report review` が、レビューのページに判定と見た物を書き、依頼書を「レビュー済み」にする。置き場の一覧の UI は、行に判定の印と「見た物:」の link を、見られたページの行に「レビュー: review-N 判定」を出す。
@@ -222,7 +222,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
   - ページには、出た `ページからの参照:` の形で相対に書く（同じ Key なら `<img src="files/<語>-<n>.<拡張子>">`、別の Key なら `../<Key>/files/…`）。置き場でも控えでも同じ形で開く。
   - 読む: `roster file path <URL>` で file の path にして Read tool で読む。`roster page path` も、ページが参照する file を控えに写し、`参照の file:` の行に path を出す。探すのは `roster file list`。
   - 消す: ページと同じく TPM 担当だけ。担当は `roster ask tpm` で URL と訳を送って頼む（秘密を上げてしまった時は、すぐ）。TPM 担当は `roster file delete <URL>…` で消す物と、それを参照しているページを見て、`--yes` を付けて消す。
-  - 「置き場（…）の版は … で、この roster が話す API（1.0.0 から）を持ちません」と出たら（ページも file も同じ）、`roster ask devops` で置き場を 1.0.0 から後の版で起こすよう頼む。
+  - 「置き場が、この roster の呼ぶ操作を持たない」と出たら（ページも file も同じ）、`roster ask devops` で置き場を `.pagetray-version` の版で起こし直すよう頼む。
 
 ## Product Manager に確かめる
 

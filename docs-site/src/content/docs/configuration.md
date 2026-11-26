@@ -76,7 +76,7 @@ ai/                               ← ここで roster start（設定は任意�
 | 欄 | 合わせ方 |
 |---|---|
 | `tracker` | 道具ごとに、宣言した設定を覚える（`none` は足さない）。記録を書く先は、課題の Key の形で選ぶ（下の「[課題の Key](#課題の-key)」）。`gh-12` の記録は、`github` を宣言した folder の repo の Issue に書く（`gh` をその folder で打つ）。`github` を宣言した設定が 2 つ以上あると、`gh-` の Key がどの repo の Issue かが決まらないので止まる（`folders` で 1 つに絞る） |
-| `infra` | 環境の名前ごとに合わせる。同じ名前がいくつもの設定にあれば、`match` は足し、`guard` は厳しい方（`pm-only` > `pm` > `roster` > `free`）にする。どこで打った命令にも効く。`roster infra list` と guard が止めた文に、宣言した設定が出る |
+| `infra` | 環境の名前ごとに合わせる。同じ名前がいくつもの設定にあれば、`match` は足し、`guard` は厳しい方（厳しい順に pm-only・pm・tpm・free）にする。どこで打った命令にも効く。`roster infra list` と guard が止めた文に、宣言した設定が出る |
 | `skill-sets` | 全部を足す（project の folder が先、次に直下の folder を名前の順。重なりは除く）。TPM 担当（`roster start`）にも、起こす担当にも効く |
 | `software-engineer`・`devops-engineer`・`staff-engineer`・`auditor` | 合わせない。**担当を起こす folder**（`roster assign --cwd`）の設定 > project の folder の設定 の順に、欄ごとに先に値がある物を使う。Auditor は project の folder で起きるので、project の folder の設定だけ |
 | `transport` | project の folder の設定だけ（直下の folder の値は読まない） |
@@ -171,7 +171,7 @@ export ROSTER_EFFORT=medium
 | `ROSTER_PAGES_URL` | 置き場の URL（container の port の publish と同じにする） | `http://127.0.0.1:8801` |
 
 - `roster` は置き場に、pagetray 1.0.0 からの API（`/api/…`）で頼む。頼むのは、定義から生成した client（[開発](/development/#生成した-clientcastlistpagetray-の定義から)）。ページの本文と file の中身だけは URL の手の道なので、curl で取る（`roster page path`・`roster file path`・取り込みの見比べ）。
-- 置き場に頼む前に、1 つの命令で 1 度だけ `/healthz` の版を見る。`1.0.0` より前（切り替えの前の 0.8.x に戻した置き場）なら、何も頼まずに止まる（[運用](/operations/#版を上げる)）。`/healthz` が応えなければ止めず、頼む物の答えで「置き場が応えません」と出る。
+- 置き場が応えなければ、頼む物の答えで「置き場が応えません」と出る。呼ぶ操作を持たない古い版の置き場（誤りの型の無い 404）なら「置き場が、この roster の呼ぶ操作を持たない」と出る（[運用](/operations/#版を上げる)）。
 - 頼む物はどれも 1 度だけ送り（送り直さない）、10 秒まで待つ。`AWS_MAX_ATTEMPTS` などの `AWS_*` の環境変数と `~/.aws/config` は読まない。
 
 ## アクターの台帳（castlist）（任意）
@@ -187,7 +187,7 @@ export ROSTER_EFFORT=medium
 | `ROSTER_CASTLIST_URL` | castlist の URL（`http://127.0.0.1:<port>` か `http://localhost:<port>`） | 設定の `castlist`。それも無ければ、castlist に何も送らない |
 
 - `roster` は castlist に、castlist 1.0.0 からの API（`/api/…`）で送る。送るのは、定義から生成した client（[開発](/development/#生成した-clientcastlistpagetray-の定義から)）。
-- 起こす前に見る `/healthz`（`roster start`・`roster assign`・`roster audit start`・`roster hello`）の `version` が `1.0.0` より前（切り替えの前の 0.x に戻した castlist）なら、起こさずに止まる（[運用](/operations/#アクターの台帳castlist)）。
+- 起こす前（`roster start`・`roster assign`・`roster audit start`・`roster hello`）に `/healthz` を見て、castlist が応えなければ起こさずに止まる（[運用](/operations/#アクターの台帳castlist)）。
 - 送る物はどれも 1 度だけ送り（送り直さない）、書く要求と監査の検索は 6 秒まで、`/healthz` は 1 秒まで待つ。`AWS_MAX_ATTEMPTS` などの `AWS_*` の環境変数と `~/.aws/config` は読まない。
 - 前の版の設定の欄 `api`（生成した client で送るかの選び）は、もう無い。残っていても、どんな値でも読み飛ばす（消してよい）。
 

@@ -11,9 +11,9 @@ import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from 'vite
 import { castlistIssuer } from '../src/castlist.ts';
 import { fileDelete, fileList, filePath, filePut } from '../src/commands/file.ts';
 import { pageDelete, pageImport, pageList, pagePath, pagePut, pageReply } from '../src/commands/page.ts';
-import { setReply, waitingByParty, waitingUrls } from '../src/commands/reply.ts';
+import { waitingUrls } from '../src/commands/reply.ts';
 import { markVerdict } from '../src/commands/review-marks.ts';
-import { atLeast, pagetrayClient } from '../src/commands/store.ts';
+import { pagetrayClient } from '../src/commands/store.ts';
 import type { Context } from '../src/context.ts';
 import { writeRole } from '../src/roster.ts';
 import { nextHandler, type NextAnswer, type NextSeen } from './next-fake.ts';
@@ -28,23 +28,14 @@ function page(project: string, key: string, kind: string, n: string, extra: Reco
   return { project, key, kind, n, title: `${kind} の題`, role: 'software-engineer', workspace: 'file:1', createdAt: `2026-11-20T12:00:0${n}.000Z`, size: 10, path: `/${project}/${key}/${kind}-${n}.html`, ...extra };
 }
 
-/** 新しい API の版の /healthz の答え。 */
-const HEALTHY: NextAnswer = { status: 200, body: { status: 'ok', version: '1.0.0-rc.1' } };
-
 /**
  * 置き場を偽の handler にした世界: 控えを一時の folder にし、t-x7k2 の Software Engineer 担当（居場所 file:1）と TPM 担当の周り。
  * 生成した client を作る関数は、偽の handler を持つ client を作る。made は作った数。
  */
-function setup(answer: (seen: NextSeen) => NextAnswer | undefined = () => undefined, config: Record<string, unknown> = {}, health: NextAnswer = HEALTHY) {
+function setup(answer: (seen: NextSeen) => NextAnswer | undefined = () => undefined, config: Record<string, unknown> = {}) {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'roster-pages-next-')));
   const w: World = world(config);
-  // /healthz（版を見る GetHealth）は health で答え、seen に入れずに数える（1 つの命令で 1 度だけ版を見てから頼む）。
-  let healths = 0;
-  const { handler, seen } = nextHandler((s) => {
-    if (s.path !== '/healthz') return answer(s);
-    healths += 1;
-    return health;
-  }, s => s.path !== '/healthz');
+  const { handler, seen } = nextHandler(answer);
   let made = 0;
   const wire = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({
     ...ctx,
@@ -66,7 +57,7 @@ function setup(answer: (seen: NextSeen) => NextAnswer | undefined = () => undefi
   writeFileSync(html, HTML);
   /** 偽の置き場への curl（本文を取る物）の引数。 */
   const curls = (): string[][] => w.calls.filter(c => c.cmd === 'curl').map(c => c.args);
-  return { dir, w, role, tpm, project, html, seen, made: () => made, healths: () => healths, curls, wire };
+  return { dir, w, role, tpm, project, html, seen, made: () => made, curls, wire };
 }
 
 /** 投げた誤りの字（投げなければ空）。 */
@@ -115,8 +106,8 @@ describe('pagetray の client を作る所（pagetrayClient）', () => {
     const s = setup();
     const ctx: Context = { ...s.role, env: { ...s.role.env, ROSTER_PAGES_URL: url }, clients: { ...s.role.clients, pagetray: (u: string) => pagetrayClient(u) } };
     expect(await thrown(() => pagePut(ctx, s.html, { kind: 'brief' }))).toMatch(/^置き場がページを受け取りませんでした（503）: 混んでいる$/);
-    // 版を見る /healthz（503 なので応えない扱いで、止めずに頼む）と、置く要求。どちらも 1 度だけ。
-    expect(seen.map(r => (r.url ?? '').split('?')[0])).toEqual(['/healthz', `/api/projects/${s.project}/keys/t-x7k2/kinds/brief/pages`]);
+    // 置く要求を 1 度だけ。
+    expect(seen.map(r => (r.url ?? '').split('?')[0])).toEqual([`/api/projects/${s.project}/keys/t-x7k2/kinds/brief/pages`]);
     expect(seen[0]?.headers.host).toBe(new URL(url).host);
     expect(seen[0]?.headers.origin).toBeUndefined();
   });
@@ -127,12 +118,7 @@ describe('pagetray の client の守り', () => {
     const stall = createServer((req, res) => {
       req.resume();
       req.on('end', () => {
-        // 版を見る /healthz には答え、置く要求には頭だけを返す。
-        if (req.url === '/healthz') {
-          res.writeHead(200, { 'content-type': 'application/json' });
-          res.end(JSON.stringify({ status: 'ok', version: '1.0.0-rc.1' }));
-          return;
-        }
+        // 置く要求には頭だけを返す。
         res.writeHead(201, { 'content-type': 'application/json' });
         res.write('{"project":');
       });
@@ -154,9 +140,9 @@ describe('pagetray の client の守り', () => {
     }
   }, 20_000);
 
-  test('誤りの型の無い 404（新しい API の道を持たない置き場）は、版が合わないと言う', async () => {
+  test('誤りの型の無い 404（この roster の呼ぶ道を持たない置き場）は、版が合わないと言う', async () => {
     const s = setup(() => ({ status: 404, raw: '' }));
-    expect(await thrown(() => pageList(s.tpm, {}))).toMatch(/^置き場が一覧を返しませんでした（404）: 置き場が新しい API を持たない/);
+    expect(await thrown(() => pageList(s.tpm, {}))).toMatch(/^置き場が一覧を返しませんでした（404）: 置き場が、この roster の呼ぶ操作を持たない/);
   });
 });
 
@@ -301,70 +287,14 @@ describe('roster page import（CreatePage の n と createdAt）と roster page 
   });
 });
 
-/** /healthz に新しい API の版で答える。 */
-const health = (s: NextSeen): NextAnswer | undefined => s.path === '/healthz' ? { status: 200, body: { status: 'ok', version: '1.0.0-rc.1' } } : undefined;
-
 /** 偽の置き場への curl のうち、置き場の API（/api/…）を呼んだ物。無いはず（本文と file の中身の手の道だけが残る）。 */
 const apiCurls = (s: { curls: () => string[][] }): string[] => s.curls().map(a => a.at(-1) ?? '').filter(u => u.includes('/api/'));
-
-describe('置き場の版の門（/healthz の GetHealth）', () => {
-  test('1 つの命令で 1 度だけ /healthz で版を見てから頼む', async () => {
-    const fresh = setup(r => r.path === '/api/pages' ? { status: 200, body: { pages: [] } } : r.path === '/api/files' ? { status: 200, body: { files: [] } } : undefined);
-    await pageDelete(fresh.tpm, [], { key: 't-x7k2' });
-    expect(fresh.seen.length).toBe(2);
-    expect(fresh.healths()).toBe(1);
-  });
-
-  test('1.0.0 より前（切り替えの前の 0.8.0 に戻した置き場）なら、送らずに止める。版を答えない（字の ok）置き場も同じ', async () => {
-    const old = setup(created, undefined, { status: 200, body: { status: 'ok', version: '0.8.0' } });
-    expect(await thrown(() => pagePut(old.role, old.html, { kind: 'plan' }))).toBe('置き場（http://127.0.0.1:8801）の版は 0.8.0 で、この roster が話す API（1.0.0 から）を持ちません。何も頼んでいません。置き場を 1.0.0 から後の版で起こしてください（roster ask devops）。置き場を 0.8.x に戻したのなら、roster も切り替えの前の版に戻す（pagetray の docs の release.html の「切り替え」）');
-    expect(old.seen).toEqual([]);
-    // 返事の状態・返事待ちの一覧も、黙って続けずに止める。
-    await expect(setReply(old.tpm, `${BASE}/${old.project}/t-x7k2/confirm-1.html`, 'waiting')).rejects.toThrow(/の版は 0\.8\.0 で/);
-    await expect(waitingByParty(old.tpm, 't-x7k2')).rejects.toThrow(/の版は 0\.8\.0 で/);
-    const text = setup(created, undefined, { status: 200, raw: 'ok' });
-    expect(await thrown(() => pagePut(text.role, text.html, { kind: 'plan' }))).toMatch(/^置き場（http:\/\/127\.0\.0\.1:8801）の版は わからない で、この roster が話す API（1\.0\.0 から）を持ちません。/);
-    const bare = setup(created, undefined, { status: 200, body: { status: 'ok' } });
-    expect(await thrown(() => pagePut(bare.role, bare.html, { kind: 'plan' }))).toMatch(/の版は わからない で/);
-  });
-
-  test('応えない置き場は止めず（頼む物の答えで応えないと出る）、1 つの命令の中で覚えて /healthz を待ち直さない', async () => {
-    const refused = { throws: Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }) };
-    const s = setup(() => refused, undefined, refused);
-    expect(await waitingUrls(s.tpm, 't-x7k2')).toBeUndefined();
-    expect(await waitingUrls(s.tpm, 't-x7k2')).toBeUndefined();
-    expect(s.healths()).toBe(1);
-    expect(await thrown(() => pageList(s.tpm, {}))).toMatch(/^置き場（http:\/\/127\.0\.0\.1:8801）が応えません/);
-  });
-
-  test('置き場が /healthz の頭を返して本文で止まれば、古いでなく応えない（止めずに頼む）', async () => {
-    const stall = createServer((req, res) => {
-      req.resume();
-      req.on('end', () => {
-        res.writeHead(200, { 'content-type': 'application/json' });
-        if (req.url === '/healthz') res.write('{"status":');
-        else res.end(JSON.stringify({ pages: [] }));
-      });
-    });
-    await new Promise<void>(resolve => stall.listen(0, '127.0.0.1', resolve));
-    const at = `http://127.0.0.1:${(stall.address() as AddressInfo).port}`;
-    try {
-      const s = setup();
-      const ctx: Context = { ...s.tpm, env: { ...s.tpm.env, ROSTER_PAGES_URL: at }, clients: { ...s.tpm.clients, pagetray: (u: string) => pagetrayClient(u) } };
-      expect(await pageList(ctx, {})).toEqual(['合うページは無い']);
-    }
-    finally {
-      stall.closeAllConnections();
-      await new Promise(resolve => stall.close(resolve));
-    }
-  }, 20_000);
-});
 
 describe('返事の状態（SetReplyState）と返事待ちの一覧（ListPages）', () => {
   const url = (s: { project: string }): string => `${BASE}/${s.project}/t-x7k2/plan-1.html`;
   const replied = (s: NextSeen): NextAnswer | undefined => {
     if (s.method === 'PUT' && s.path.endsWith('/reply')) return { status: 200, body: page(String(/\/api\/projects\/([^/]+)\//.exec(s.path)?.[1]), 't-x7k2', 'plan', '1', { askedAt: '2026-11-20T12:10:00.000Z' }) };
-    return health(s);
+    return undefined;
   };
 
   test('roster page reply --on review は、版を /healthz で見て、PUT …/pages/<番号>/reply に本文 {state, on} で送る。Product Manager の時は on を書かない', async () => {
@@ -397,7 +327,7 @@ describe('レビューの印（AddReviewMarks）', () => {
   const review = (s: { project: string }): string => `${BASE}/${s.project}/t-x7k2/review-1.html`;
 
   test('roster report review の判定は、POST …/pages/<番号>/review に本文 {verdict, targets} で書く', async () => {
-    const s = setup(r => r.path.endsWith('/review') ? { status: 200, body: page(s.project, 't-x7k2', 'review', '1', { verdict: 'approve' }) } : health(r));
+    const s = setup(r => r.path.endsWith('/review') ? { status: 200, body: page(s.project, 't-x7k2', 'review', '1', { verdict: 'approve' }) } : undefined);
     expect(await markVerdict(s.tpm, review(s), 'approve', [])).toEqual([`置き場の印: 判定と見た物を書いた ${review(s)}`]);
     expect(s.seen.map(r => [r.method, r.path, r.body])).toEqual([
       ['POST', `/api/projects/${s.project}/keys/t-x7k2/kinds/review/pages/1/review`, { verdict: 'approve', targets: [] }],
@@ -406,7 +336,7 @@ describe('レビューの印（AddReviewMarks）', () => {
   });
 
   test('置き場が断れば（400）、訳を 1 行にして止めない', async () => {
-    const s = setup(r => r.path.endsWith('/review') ? { status: 400, type: 'ValidationException', body: '種類が review のページだけ' } : health(r));
+    const s = setup(r => r.path.endsWith('/review') ? { status: 400, type: 'ValidationException', body: '種類が review のページだけ' } : undefined);
     expect(await markVerdict(s.tpm, review(s), 'approve', [])).toEqual(['置き場の印: 判定と見た物を書いていない（置き場が断った: 400 種類が review のページだけ）']);
   });
 });
@@ -494,16 +424,5 @@ describe('設定の api の欄', () => {
     await pageList(s.tpm, {});
     expect(s.made()).toBeGreaterThan(0);
     expect(s.curls()).toEqual([]);
-  });
-});
-
-describe('版の比べ（atLeast。castlist の requireUp と置き場の requireStore が使う）', () => {
-  test('数で比べ、後ろの -dev などは読まない。形の違う字は、より前とみなす', () => {
-    expect(atLeast('1.0.0', '1.0.0')).toBe(true);
-    expect(atLeast('1.10.0', '1.9.9')).toBe(true);
-    expect(atLeast('1.0.1-dev', '1.0.0')).toBe(true);
-    expect(atLeast('0.8.0', '1.0.0')).toBe(false);
-    expect(atLeast('0.10.1', '0.9.0')).toBe(true);
-    for (const garbage of ['', 'ok', '1.0', 'v1.0.0']) expect(atLeast(garbage, '1.0.0')).toBe(false);
   });
 });

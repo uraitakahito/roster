@@ -76,7 +76,7 @@ flowchart TB
   - `roster answer <Key> "<答え>"` が、【answer】を返した後に、その Key の返事待ちのページを答えたにする。返事待ちが 2 枚以上ある時は、送る前に止まって URL を並べる（別の確認まで答えたにしないため）。どのページへの答えかを `--url <確認の URL>`（何度でも）で書くか、みなへの答えなら `--all` を付ける。
   - `roster page reply <URL>… --waiting|--answered` が、状態を手で直す（TPM 担当だけ）。`roster answer` を通らずに済んだ確認と、置き場が応えない間に送った確認に使う。`roster page list --reply waiting` が、今の返事待ちを並べる。`roster dismiss` は、その Key に返事待ちのページが残っていれば URL を出す（止めない）。
   - 置き場が応えない時も、`roster ask pm`・`roster answer`・`roster dismiss` はメッセージを送り、`置き場の印: 付けていない` と訳を出す。`roster page reply` だけは誤りで止まる。
-  - 置き場の版が 1.0.0 より前（切り替えの前の版に戻した置き場）なら、置き場に頼む命令はどれも版の訳で止まる（[運用](/operations/#版を上げる)の 4）。`roster ask pm`・`roster answer`・`roster dismiss` は、送る前に版を見るので、メッセージも送らない。
+  - 置き場が `.pagetray-version` より古い版で、呼ぶ操作を持たない時は、置き場に頼む命令はどれも「置き場が、この roster の呼ぶ操作を持たない」で止まる（[運用](/operations/#版を上げる)の 4）。
   - `roster ask pm` で送っていないページは、状態を持たない（印は付かない）。
 - **レビューの印**: 置き場は、返事待ちの相手（Product Manager・レビューの席・TPM 担当）と、レビューの判定・見た物も持つ。TPM 担当を通らないレビューのやりとりを、Product Manager と TPM 担当が一覧の UI で追うための物。書くのは `roster` の命令で、担当は手で書かない。置き場に写すのは、判定の語・見た物の URL・時刻だけ。
   - `roster ask review` と、Staff Engineer 担当の席の起こし直し（`roster ask review`・`roster assign --role staff-engineer`）が、依頼書に見る物（置き場のページは path、PR は URL）を書いて「レビュー待ち」にする。起こし直しで置き換えた前の依頼書は、返っていない頼みがほかに無ければ待ちを外す。

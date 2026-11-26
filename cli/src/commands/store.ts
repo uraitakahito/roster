@@ -2,7 +2,6 @@
 // roster page と roster file が使う。置き場は roster を動かす機械に 1 つで、project をまたいで同じなので、控えの folder と URL は設定（config.jsonc）でなく環境変数で替える。
 // 置き場を起こす・止めるのは DevOps Engineer 担当（docs-site の運用のページの「ページの置き場（pagetray）」）。
 // 置き場の API（ページと file を置く・探す・消す・返事の状態・レビューの印）は、いつも生成した pagetray の client で新しい API（pagetray 1.0.0 から）に送る（pagesRequest）。
-// 送る前に、1 つの命令で 1 度だけ置き場の版を /healthz で見て、1.0.0 より前（切り替えの前の版に戻した置き場）なら止める（requireStore）。
 // 答えは Reply の形（本文は記録を snake_case にした JSON の字・code は状態の数の字）にそろえ、呼ぶ側（page.ts）は替えない。
 // ページと file の本文は URL の手の道なので、fetchTo・compareStored は curl で取る（curl で打つのは、この 2 つだけ）。
 import type { HttpHandler } from '@smithy/core/protocols';
@@ -89,8 +88,8 @@ const UNREGISTERED = 'castlist に登録の無い送り手';
  */
 const unknownSender = (sent: { message: string, fields: string[] }): boolean => sent.fields.includes('/actorRef') && sent.message.startsWith(UNREGISTERED);
 
-/** 誤りの型の無い 404 の訳: 新しい API の道を持たない置き場（1.0.0 より前の版）が答えた物。 */
-const OUTDATED = '置き場が新しい API を持たない（置き場（pagetray）の版が 1.0.0 より前に見える。置き場を 1.0.0 に替えるよう roster ask devops で頼む）';
+/** 誤りの型の無い 404 の訳: この roster の呼ぶ道を持たない置き場（定義より古い版）が答えた物。 */
+const OUTDATED = '置き場が、この roster の呼ぶ操作を持たない（置き場（pagetray）の版が、この roster の .pagetray-version より古い。置き場の版を上げるよう roster ask devops で頼む）';
 
 /**
  * 生成した pagetray の client で 1 つ送り（clients.ts の sendOnce。送る 1 回は TIMEOUT で切る）、答えを Reply の形にする
@@ -178,7 +177,6 @@ async function listAll(ctx: Context, op: 'ListPages' | 'ListFiles', query: URLSe
  * 答えは Reply の形（記録は snake_case の欄の名。誤りは `{"error": …}` の本文）。
  */
 export async function pagesRequest(ctx: Context, request: PagesRequest): Promise<Reply> {
-  await requireStore(ctx);
   const input = inputOf(request.query);
   switch (request.op) {
     case 'CreatePage': {
@@ -202,48 +200,6 @@ export async function pagesRequest(ctx: Context, request: PagesRequest): Promise
       return viaPagetray(ctx, (client, api, options) => client.send(new api.AddReviewMarksCommand({ ...input, ...marks } as unknown as Pagetray.AddReviewMarksCommandInput), options), recordOf);
     }
   }
-}
-
-/** この roster が話す置き場の API を持つ版（/healthz の version がこれより前なら止める）。 */
-export const STORE_API_SINCE = '1.0.0';
-
-/** 1 つの命令の中で、置き場の版を引いた答え（引くのは 1 度だけ）。null は応えなかった（覚えて、頼むたびに待ち直さない）。 */
-const healthVersions = new WeakMap<Context, string | null>();
-
-/**
- * 置き場の版の字（/healthz の GetHealth の version）。版を答えない置き場は ''。応えなければ undefined（応えなかったことも覚え、同じ命令の中では聞き直さない）。
- * 2xx で読めない答え（0.x の置き場の /healthz は字の ok）・version の無い答え・型の無い 404 は、新しい API を持たない置き場として ''。
- */
-async function healthVersion(ctx: Context): Promise<string | undefined> {
-  const known = healthVersions.get(ctx);
-  if (known !== undefined) return known ?? undefined;
-  let version: string | undefined;
-  const sent = await sendOnce(() => ctx.clients.pagetray(pagesUrl(ctx.env)), (client, options) => client.send(new (pagetrayApi().GetHealthCommand)({}), options), { server: 'pagetray', wait: Number(TIMEOUT) * 1000, outdated: OUTDATED });
-  if (sent.kind === 'ok') version = sent.out.version ?? '';
-  else if ((sent.kind === 'down' && sent.status !== undefined) || (sent.kind === 'failed' && sent.message === OUTDATED)) version = '';
-  healthVersions.set(ctx, version ?? null);
-  return version;
-}
-
-/**
- * 置き場が、この roster の話す API（1.0.0 から）を持つかを見る（1 つの命令で 1 度だけ。castlist の requireUp の版の見方と同じ）。
- * 古い版（切り替えの前の 0.x に戻した置き場）なら、送らずに止める（送ると、答えの形が違って黙って崩れるため）。応えなければ止めない（頼む物の答えで、応えないと出る）。
- */
-export async function requireStore(ctx: Context): Promise<void> {
-  const version = await healthVersion(ctx);
-  if (version === undefined || atLeast(version, STORE_API_SINCE)) return;
-  throw new TpmError(`置き場（${pagesUrl(ctx.env)}）の版は ${version || 'わからない'} で、この roster が話す API（${STORE_API_SINCE} から）を持ちません。何も頼んでいません。置き場を ${STORE_API_SINCE} から後の版で起こしてください（roster ask devops）。置き場を 0.8.x に戻したのなら、roster も切り替えの前の版に戻す（pagetray の docs の release.html の「切り替え」）`);
-}
-
-/** 版の字（`0.10.1`。後ろの `-dev` などは読まない）が since 以上か。頭が `<数>.<数>.<数>` でなければ false。 */
-export function atLeast(version: string, since: string): boolean {
-  const parse = (v: string): number[] | undefined => /^\d+\.\d+\.\d+/.exec(v)?.[0].split('.').map(Number);
-  const [a, b] = [parse(version), parse(since)];
-  if (a === undefined || b === undefined) return false;
-  for (let i = 0; i < 3; i++) {
-    if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) > (b[i] ?? 0);
-  }
-  return true;
 }
 
 /** 置き場の誤りの答え（`{"error": "…"}`）から文を取り出す。JSON でなければ本文のまま。 */

@@ -15,7 +15,7 @@ import { MAX_POINTS, type Note, type NoteKind, type NoteLink } from '../tracker/
 import type { Incoming } from '../transport/types.ts';
 import { isStorePage, pageOwner, replyLine, samePage, waitingByParty, waitingUrls, WAITING_PAGES } from './reply.ts';
 import { markEscalated } from './review-marks.ts';
-import { isPageUrl, requireStore } from './store.ts';
+import { isPageUrl } from './store.ts';
 import { readShown, returnedIds, seenTimes, shownFile, type SeenAt } from '../seen.ts';
 import { envOf } from '../env.ts';
 
@@ -513,8 +513,6 @@ export async function askTpm(ctx: Context, options: { text: string, waitingFor: 
   if (review.verdict === undefined || review.page === undefined) throw new TpmError(`レビュー #${review.n} は、まだ判定が返っていません。送っていません`);
   // 上げるのは「直すべき」を受けない時だけ（ほかの判定は、受けるか・直すかを課題の担当が決めて進む）。
   if (review.verdict !== 'reject') throw new TpmError(`レビュー #${review.n} の判定は「${VERDICTS[review.verdict]}」です。--review で上げるのは「${VERDICTS.reject}」を受けない時だけです（ほかの判定は、指摘ごとに自分で決めて進む）。送っていません`);
-  // 送った後に置き場の印を書くので、置き場の版は送る前に見る（ask pm と同じ。review-66）。
-  await requireStore(ctx);
   const sent = toTpm(ctx, self, 'ask-tpm', `レビュー #${review.n}（判定: ${VERDICTS[review.verdict]}。${review.page}）を受けない: ${options.text}`, options.replyTo);
   // 2 度目に上げても、最初に上げた時刻を残す。
   if (review.escalatedAt === undefined) patchReview(ctx, review.n, { escalatedAt: ctx.now().toISOString() });
@@ -556,8 +554,6 @@ export async function askPm(ctx: Context, options: { url: string, items: string[
   const self = sender(ctx);
   notAuditor(self, 'roster ask pm');
   if (options.items.length === 0) throw new TpmError('--item で、決めてほしい項目の題を 1 つ以上書いてください');
-  // 送った後に置き場の印を書くので、置き場の版は送る前に見る（古い版なら、送らずに止める。review-66）。
-  await requireStore(ctx);
   const supersede = options.supersede ?? [];
   const body = [
     `${options.url} 項目: ${options.items.map((item, i) => `(${i + 1}) ${item}`).join(' ')}`,
@@ -871,7 +867,6 @@ export async function answer(ctx: Context, key: string, options: AnswerOptions):
   requireTpmSide(ctx, 'roster answer');
   const role = receiver(ctx, key);
   if (role.address !== undefined) assertNotRepeat(ctx, 'answer', TPM_TITLE, role.address, options.text, options.replyTo);
-  await requireStore(ctx);
   const pages = await answeredPages(ctx, key, options);
   const recorded = record(ctx, role, { kind: '決定', role: 'TPM', summary: oneLine(options.text), links: [], points: [] });
   const sent = toRole(ctx, role, 'answer', options.text, options.replyTo);
@@ -893,7 +888,6 @@ export async function dismiss(ctx: Context, key: string, options: { handover: bo
   // Staff Engineer 担当は worktree も PR も持たないので、片付けのやりとり（【dismiss】と【end】）は要らない。
   if (readRole(ctx, key)?.role === 'staff-engineer') throw new TpmError(`Staff Engineer 担当の席に【dismiss】は送りません。roster close ${key} で閉じます（課題の席を roster close で閉じる時にも、一緒に閉じる）`);
   const role = receiver(ctx, key);
-  await requireStore(ctx);
   const settled = assertSettled(ctx, role, 'dismiss', options.supersede === true ? 'supersede' : undefined);
   const body = [options.handover
     ? '担当の交代のため（課題は続くので、課題は閉じない）。worktree を片付けて【end】を返す。'
