@@ -322,20 +322,23 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
 /**
  * 命令の木を動かす（cli.ts の入口）。命令は非同期に動くので、parseAsync で終わりまで待つ。
  * 決まりの誤り（TpmError）は、命令が同期に投げても非同期に投げても、`roster: <文>` の 1 行を stderr に出して exit 1。ほかの誤りはそのまま投げる。
- * 送った記録の置き場への写し（commands/message-record.ts。送る命令は待たずに始める）は、ここで済むのを待つ。
+ * 送った記録の置き場への写し（commands/message-record.ts。送る命令は待たずに始める）は、ここで済むのを待つ（どの誤りで終わる時も）。
  */
 export async function runProgram(argv: string[], program: Command = buildProgram()): Promise<void> {
+  let failed = false;
   try {
     await program.parseAsync(argv);
   }
   catch (e) {
     if (!(e instanceof TpmError)) throw e;
     process.stderr.write(`roster: ${e.message}\n`);
-    // 止まる前に送った物の、置き場への写しを待つ（process.exit は、途中の写しを切る）。
-    await messageRecordsSettled();
-    process.exit(1);
+    failed = true;
   }
-  await messageRecordsSettled();
+  finally {
+    // 止まる前に送った物の、置き場への写しを待つ（process.exit も、ほかの誤りで落ちる時も、途中の写しを切る）。
+    await messageRecordsSettled();
+  }
+  if (failed) process.exit(1);
 }
 
 /** 命令の木を「ask pm」のような名前の並びにする（下に命令を持つ物は、下の命令だけを数える）。 */

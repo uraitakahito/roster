@@ -63,6 +63,8 @@ export interface Reply {
   code: string
   /** 置き場が、送り手（actorRef）を castlist に登録の無い物として断った（400 の fieldList に /actorRef）。 */
   unknownSender?: boolean
+  /** 置き場が 2xx を返したのに、本文を読めなかった時の状態の数（code は 000。応えない時と分けたい呼ぶ側が見る）。 */
+  unreadable?: number
 }
 
 /** 置き場の物（ページか file）の本文を、URL で curl で取り、out の path に書く。HTTP の code を返す（つながらなければ 000）。 */
@@ -100,7 +102,7 @@ const OUTDATED = '置き場が、この roster の呼ぶ操作を持たない（
  */
 async function viaPagetray<O extends { $metadata: { httpStatusCode?: number } }>(ctx: Context, send: (client: Pagetray.PagetrayClient, api: typeof Pagetray, options: { abortSignal: AbortSignal }) => Promise<O>, shape: (out: O) => unknown, wait = Number(TIMEOUT) * 1000): Promise<Reply> {
   const sent = await sendOnce(() => ctx.clients.pagetray(pagesUrl(ctx.env)), (client, options) => send(client, pagetrayApi(), options), { server: 'pagetray', wait, outdated: OUTDATED });
-  if (sent.kind === 'down') return { body: '', code: '000' };
+  if (sent.kind === 'down') return { body: '', code: '000', ...(sent.status === undefined ? {} : { unreadable: sent.status }) };
   if (sent.kind === 'failed') return { body: JSON.stringify({ error: sent.message }), code: String(sent.code), ...(unknownSender(sent) ? { unknownSender: true } : {}) };
   return { body: JSON.stringify(shape(sent.out)), code: String(sent.out.$metadata.httpStatusCode ?? 200) };
 }

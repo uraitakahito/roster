@@ -9,7 +9,7 @@ import { describe, expect, test } from 'vitest';
 import { pagetrayApi } from '../src/clients.ts';
 import { fileDelete, fileList, filePath, filePut, type FileRecord } from '../src/commands/file.ts';
 import { MESSAGE_RECORDS_FILE, messageRecordsSettled } from '../src/commands/message-record.ts';
-import { askTpm, notify, type Sent } from '../src/commands/messages.ts';
+import { askTpm, notify, TPM_PARTY, type Sent } from '../src/commands/messages.ts';
 import { PAGE_KINDS, pageDelete, pageImport, pageList, pagePath, pagePut, pageReply, type PageRecord } from '../src/commands/page.ts';
 import { setReply, waitingUrls } from '../src/commands/reply.ts';
 import { hello } from '../src/commands/role-side.ts';
@@ -278,8 +278,8 @@ describe.skipIf(URL === '')('cli と pagetray のつなぎ（送った記録）'
     const list = async () => (await client.send(new api.ListMessagesCommand({ project: s.project, sort: 'sentAt' }))).messages ?? [];
     const found = await list();
     expect(found.map(m => [m.id, m.key, m.heading, m.from, m.to, m.state, m.sentAt?.toISOString()])).toEqual([
-      [log[0]?.id, 'K-40', 'notify', 'Technical Program Manager', 'K-40', 'carried', log[0]?.at],
-      [log[1]?.id, 'K-40', 'ask-tpm', 'SWE K-40: 計画と実装', 'tpm', 'carried', log[1]?.at],
+      [log[0]?.id, 'K-40', 'notify', TPM_PARTY, 'K-40', 'carried', log[0]?.at],
+      [log[1]?.id, 'K-40', 'ask-tpm', 'K-40', TPM_PARTY, 'carried', log[1]?.at],
     ]);
     expect(found[0]?.text).toBe('【notify】A で進める');
     expect([...found[1]?.text ?? '']).toHaveLength(8000);

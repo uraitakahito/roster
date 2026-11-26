@@ -113,6 +113,8 @@ export class FakeStore {
 
   /** 返事の状態を書いた回数（時刻をずらすため）。 */
   private replies = 0;
+  /** メッセージの記録を置いた・書き足した回数（createdAt・updatedAt を、書くたびに 1 秒進めるため）。 */
+  private messageWrites = 0;
 
   /** 生成した client に差し込む偽の HTTP の handler。 */
   private readonly handler = nextHandler(seen => this.answer(seen)).handler;
@@ -157,7 +159,8 @@ export class FakeStore {
   private putMessage(q: URLSearchParams, [project = '', id = '']: string[], body: Record<string, unknown>): NextAnswer {
     if (this.messageError !== undefined) return failed(this.messageError, this.messageError === 503 ? 'castlist に送り手を聞けない' : '置き場の中の誤り');
     const text = (name: string): string | undefined => typeof body[name] === 'string' ? body[name] : undefined;
-    const time = (name: string): string | undefined => text(name) === undefined || Number.isNaN(Date.parse(text(name) ?? '')) ? undefined : new Date(text(name) ?? '').toISOString();
+    // 時刻は UTC・ミリ秒まで（細かい時刻は 400）。
+    const time = (name: string): string | undefined => /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d{1,3})?Z$/.test(text(name) ?? '') && !Number.isNaN(Date.parse(text(name) ?? '')) ? new Date(text(name) ?? '').toISOString() : undefined;
     const bad = (path: string): NextAnswer => failed(400, '引数が決まりに合わない', [{ path, message: '決まりに合わない' }]);
     const [key, heading, from, to, content, state, via, replyTo] = ['key', 'heading', 'from', 'to', 'text', 'state', 'via', 'replyTo'].map(text);
     const sentAt = time('sentAt');
@@ -183,7 +186,7 @@ export class FakeStore {
     if (refusal !== undefined) return refusal;
     const sender = sending && q.has('actorRef') ? { issuer: q.get('actorIssuer') ?? '', ref: q.get('actorRef') ?? '' } : undefined;
     const deliveredAt = time('deliveredAt');
-    const now = `2026-11-20T14:00:${String(this.messagePuts.length % 60).padStart(2, '0')}.000Z`;
+    const now = new Date(Date.parse('2026-11-20T14:00:00.000Z') + (this.messageWrites += 1) * 1000).toISOString();
     const name = `${project}/${id}`;
     const had = this.messages.get(name);
     if (had === undefined) {
