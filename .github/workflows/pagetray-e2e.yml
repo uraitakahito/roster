@@ -45,14 +45,14 @@ jobs:
       - if: always()
         run: docker logs e2e-store
   next:
-    # 新しい API（AI-36 の作り直し）の rc の image に向けて流す。castlist は .castlist-next-version の、pagetray は .pagetray-next-version の版。
+    # 新しい API（AI-36 の作り直し）の image に向けて流す。castlist は .castlist-next-version の、pagetray は .pagetray-next-version の版（切り替えで動いている 1.0.0）。
     # pagetray は PAGETRAY_CASTLIST_URL で同じ docker の network の castlist に送り手を聞く（castlist の container の名でつなぐ）。
     # 設定の api の castlist と pagetray を next にした roster で、pagetray-e2e の試験と castlist-e2e の試験を流す（$ROSTER_E2E_API=next）。
-    # 今の版の image に向ける上の cli の job は、切り替え（AI-36 の段 8）まで残す。image は arm64 だけなので、arm64 の runner で流す。
+    # 古い版（.pagetray-version）の image に向ける上の cli の job は、片付け（AI-36 の段 9）で消す。image は arm64 だけなので、arm64 の runner で流す。
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
-      - name: rc の image を、digest で取って起こす（castlist は 127.0.0.1:8812、pagetray は 127.0.0.1:8811）
+      - name: 新しい API の image を、digest で取って起こす（castlist は 127.0.0.1:8812、pagetray は 127.0.0.1:8811）
         run: |
           pin() { pinned=$(cat "$1"); echo "${pinned%%@*} ${pinned#*@}"; }   # v<版> sha256:<digest>
           read -r castlist_version castlist_digest < <(pin .castlist-next-version)
