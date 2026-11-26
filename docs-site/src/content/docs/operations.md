@@ -112,12 +112,12 @@ cd <TPM 担当を起こした folder>
 
 | 物 | 値 |
 |---|---|
-| image | `ghcr.io/uraitakahito/pagetray:<版>`。版と digest は、この repo の `.pagetray-version`（`v<版>@<digest>`。この repo の cli と合わせてある版） |
+| image | `ghcr.io/uraitakahito/pagetray:<版>`。版と digest は、この repo の `.pagetray-next-version`（`v<版>@<digest>`。この repo の cli と合わせてある版。AI-36 の片付けで `.pagetray-version` に名を戻すまで、`.pagetray-version` は切り替えの前の版） |
 | container | `pagetray`（`127.0.0.1:8801` と `127.0.0.1:8800` → 中の 8080。メモリは Apple Container の下限の 200 MiB、CPU は 1） |
 | URL | `http://127.0.0.1:8801/`（一覧の UI。ページは `/<状態の folder の名>/<Key>/<種類>-<番号>.html`、ページが参照する file は `/<状態の folder の名>/<Key>/files/<語>-<番号>.<拡張子>`）。`http://127.0.0.1:8800/` は、前の置き場（Nginx。今は無い）の port。前に置いたページの URL と、ページの中の link を同じ path で開けるように、同じ container が待ち受ける |
 | CLI | `pagetray`（置き場を端末から操作する命令。release に macOS arm64 用の binary が付く。入れ方と命令は pagetray の docs の「[CLI](https://uraitakahito.github.io/pagetray/cli.html)」）。担当は `roster page` を使い、`pagetray` は人の手元と、`roster` を通さない場面で使う。担当の `pagetray page delete` は guard が止める |
 | 控えの folder | `~/.local/share/roster/pages/`（`roster` が、置いた・読んだページと file を roster を動かす機械に写す所。container には mount しない） |
-| DB | 名前つきの volume `pagetray-data`（中の `/data/pages.db`）。roster を動かす機械の folder は mount しない |
+| DB | 名前つきの volume `pagetray-data-v1`（中の `/data/pages.db`。1.0.0 から。切り替えの前の `pagetray-data` は、戻す時のために AI-36 の片付けまで残す）。roster を動かす機械の folder は mount しない |
 
 **手順は、pagetray の docs の「[動かす](https://uraitakahito.github.io/pagetray/run.html)」にある**（起こす・確かめる・DB の写しを取る・写しから戻す・止める・版を上げる）。そこの命令のうち、container と volume に触る物は、頭に `roster infra run pagetray --` を付けて打つ。下は、この repo の側の決まりだけを書く。
 
@@ -125,17 +125,17 @@ cd <TPM 担当を起こした folder>
 
 ```sh
 container image pull ghcr.io/uraitakahito/pagetray:<版>
-container volume create pagetray-data     # 初めての時だけ
+container volume create pagetray-data-v1     # 初めての時だけ
 roster infra run pagetray -- container run -d --name pagetray \
   -p 127.0.0.1:8801:8080 \
   -p 127.0.0.1:8800:8080 \
-  -v pagetray-data:/data \
+  -v pagetray-data-v1:/data \
   -m 200M -c 1 \
   -e PAGETRAY_CASTLIST_URL=http://castlist.box:8080 \
   ghcr.io/uraitakahito/pagetray:<版>
 ```
 
-- `<版>` は `.pagetray-version` の `@` の前（`v0.2.0` など）。pull した image の digest が `@` の後ろと同じかを見る（見方は pagetray の docs の「[起こす](https://uraitakahito.github.io/pagetray/run.html#起こす)」）。
+- `<版>` は `.pagetray-next-version` の `@` の前（`v1.0.0` など）。pull した image の digest が `@` の後ろと同じかを見る（見方は pagetray の docs の「[起こす](https://uraitakahito.github.io/pagetray/run.html#起こす)」）。pagetray の docs が「roster の `.pagetray-version`」と書く所は、AI-36 の片付けまでは `.pagetray-next-version` と読む（`.pagetray-version` は切り替えの前の 0.8.0）。
 - `-p` には必ず `127.0.0.1:` を書く。`-p 8801:8080` と書くと LAN に開く。
 - `PAGETRAY_CASTLIST_URL`（pagetray 0.6.0 から）は、置き場が送り手を castlist（[アクターの台帳](#アクターの台帳castlist)）に聞く先。`roster page put`・`roster file put` は、castlist の設定がある project では送り手（session の付随する id）を付けて置き、置き場が受けたその時に castlist に聞いて記録に残す（[担当のあいだの決まり](/protocol/#ページの置き場)）。container の中の `127.0.0.1` は container 自身なので、castlist の container `castlist.box` に名でつなぐ（Apple Container の DNS が domain `box` の名を答える）。一覧の UI の送り手の link の頭 `PAGETRAY_CASTLIST_LINK_URL` は、既定の `http://127.0.0.1:8802`（host の browser で開く castlist）のままにする。
 - `PAGETRAY_CASTLIST_URL` を書いた置き場は、castlist が止まっている・名で届かない間、送り手を付けた置く要求を `503` で断る（何も置かない。`roster page put` は「castlist に送り手を聞けませんでした」と出す）。castlist を起こすのは Product Manager（[アクターの台帳](#アクターの台帳castlist)）。castlist が起きているのに続く時は、置き場から `castlist.box` に届いていない（同じ network に居ない・名が違う）。
@@ -147,7 +147,7 @@ roster infra run pagetray -- container run -d --name pagetray \
 
 - 止めている間、担当はページを置けず、Product Manager は一覧の UI を開けない（番号をサーバーが決めるため。担当は、控えにあるページなら読める）。先に【ask-tpm】を送り、答えを待つ。止めるのは `roster infra run pagetray -- container stop pagetray`。DB は volume に残る。
 - roster を動かす機械を起こし直すと止まったままになる。`container system start` の後に `roster infra run pagetray -- container start pagetray` を打ち、「確かめる」をする。
-- volume（`pagetray-data`）は消さない。消す命令も「TPM に相談」の手続きに入れてある。
+- volume（`pagetray-data-v1`）は消さない。切り替えの前の `pagetray-data` も、戻す時のために AI-36 の片付けまで残す（消す日は Product Manager が決める）。消す命令も「TPM に相談」の手続きに入れてある。
 - **DB の写し**（`curl -fsS -o ~/pagetray-$(date +%Y%m%d-%H%M).db http://127.0.0.1:8801/api/backup`。CLI が入っていれば `pagetray backup -o ~/pagetray-$(date +%Y%m%d-%H%M).db` でも同じ）は、版を上げる前と volume に触る前に取る。本文は控えの folder にも残るが、置いた担当の役割と workspace の ID は DB にだけある。
 
 ### 控えから取り込む
@@ -165,7 +165,7 @@ roster page import
 
 ### 版を上げる
 
-pagetray の新しい版が出て、この repo の `.pagetray-version` が上がった時（上げ方は [開発](/development/#pagetrayページの置き場のサーバーとのつなぎ)の「pagetray を上げる時」）。
+pagetray の新しい版が出て、この repo の `.pagetray-next-version`（AI-36 の片付けで `.pagetray-version` に名を戻す）が上がった時（上げ方は [開発](/development/#pagetrayページの置き場のサーバーとのつなぎ)の「pagetray を上げる時」）。
 
 1. pagetray の `CHANGELOG.md` で、API の版が変わるか・移行の SQL が足されるかを見る。
 2. 【ask-tpm】で止める時を決める。
