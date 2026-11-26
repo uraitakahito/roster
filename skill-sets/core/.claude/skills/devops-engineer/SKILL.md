@@ -49,7 +49,7 @@ roster infra list
 - DB は名前つきの volume `pagetray-data-v1` にある。消さない。版を上げる前と volume に触る前に、DB の写しを取る。
 - image は pagetray の release の物を使い、自分では作らない。版は roster の repo の `.pagetray-version`。
 - 手順（起こす・確かめる・DB の写し・写しから戻す・取り込む・版を上げる）は、docs-site の運用のページ（`docs-site/src/content/docs/operations.md` の「ページの置き場」）と、そこが指す pagetray の docs（https://uraitakahito.github.io/pagetray/run.html の「動かす」）。命令は `roster infra run pagetray -- <命令>` で打つ。止める・作り直す・volume を変えるは「TPM に相談」の手続き。
-- 置き場を起こした後・版を上げた後の一覧の UI は、pagetray の docs の「確かめる」の読むだけの試験で見る（打ち方は運用のページ。向ける置き場は `PAGETRAY_E2E_URL` で決まる。置き場を v1.0.0 で動かしている間は、v1.0.0 の試験に `PAGETRAY_E2E_API=next` も付ける）。出力を結果のページに載せる。browser で見ることを Product Manager に頼まない。
+- 置き場を起こした後・版を上げた後の一覧の UI は、pagetray の docs の「確かめる」の読むだけの試験で見る（打ち方は運用のページ。向ける置き場は `PAGETRAY_E2E_URL` で決まる）。出力を結果のページに載せる。browser で見ることを Product Manager に頼まない。
 
 ## 2. 終わり
 
