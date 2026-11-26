@@ -393,7 +393,7 @@ describe('メッセージキューが応えない時', () => {
   const devops = { what: 'メッセージキューを起こす', why: '応えない', urgent: true };
   const incident = { text: 'メッセージキューが応えない', type: 'reliability', tags: [], severe: false };
   const gates = (w: { tpm: { state: { lines: <T>(name: string) => T[] } } }): string[] => w.tpm.state.lines<{ gate: string, detail: string }>('gate.jsonl').map(l => `${l.gate} ${l.detail}`);
-  const NOT_SENT = 'メッセージキューが応えないので、TPM 担当には送っていない（台帳には書いた。メッセージキュー（NATS）が動いているかを Product Manager に確かめる）';
+  const NOT_SENT = 'メッセージキューが応えないので、TPM 担当には送っていない（台帳には書いた。打ち直さない。TPM 担当にも送れないので、止まった事を返答に書く）';
 
   test('roster ask devops は、ほかの送る命令と同じく止まる（送っていない）', async () => {
     for (const claimed of [true, false]) {
@@ -402,7 +402,7 @@ describe('メッセージキューが応えない時', () => {
       const se = down(w.se);
       await expect(askTpm(se, ask)).rejects.toThrow(/メッセージキューが応えません。送っていません/);
       const lines = log(w).length;
-      await expect(askDevops(se, devops)).rejects.toThrow(/^メッセージキューが応えません。送っていません（.*）。メッセージキュー（NATS）が動いているかを TPM 担当か Product Manager に確かめ、動いてから同じ命令を打ち直してください$/);
+      await expect(askDevops(se, devops)).rejects.toThrow(/^メッセージキューが応えません。送っていません（.*）。TPM 担当にも送れないので、止まった事を返答に書き（メッセージキュー（NATS）が動いているかは、Product Manager が確かめる）、動いてから同じ命令を打ち直してください$/);
       expect(log(w)).toHaveLength(lines);
       expect(w.office.work).toEqual([]);
       expect(w.wire.status('file:1')?.wait).toBe('メッセージキューが応えません');
@@ -426,6 +426,19 @@ describe('メッセージキューが応えない時', () => {
       expect(w.wire.status('file:1')?.wait).toBe('メッセージキューが応えません');
       expect(gates(w)).toEqual([expect.stringMatching(/^queue down: /) as string]);
     }
+  });
+
+  test('roster report incident: 台帳に書いた後の送りが、ほかの訳（本文が長すぎる）で止まっても、誤りにせず、送っていない事と訳を出す', async () => {
+    const w = await natsWorld();
+    const out = await reportIncident(w.se, { ...incident, text: 'あ'.repeat(8100) });
+    expect(out).toEqual([expect.stringMatching(/^台帳に書いた: #1 /) as string, expect.stringMatching(/^TPM 担当には送っていない（台帳には書いた。打ち直さない）: 本文が長すぎます/) as string]);
+    expect(readIncidents(w.tpm)).toHaveLength(1);
+    expect(log(w).some(l => l.heading === 'incident')).toBe(false);
+  });
+
+  test('TPM 担当が送る時の字は、Product Manager に確かめる', async () => {
+    const w = await natsWorld();
+    await expect(notify(down(w.tpm), 't-x7k2', { text: 'x' })).rejects.toThrow(/メッセージキュー（NATS）が動いているかを Product Manager に確かめ、動いてから同じ命令を打ち直してください$/);
   });
 
   test('roster report incident: 検査は通り、置く所だけが応えない時も、台帳に書いて誤りにしない。応える時は、台帳に書いて送る', async () => {

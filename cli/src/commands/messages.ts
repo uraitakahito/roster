@@ -98,14 +98,22 @@ const notRepeatToTpm = async (ctx: Context, self: RoleRecord, id: HeadingId, bod
 const NATS_TEXT_MAX = 8000;
 
 /** メッセージキュー（NATS）が応えない時の誤り（queueDown が作る。roster report incident だけが、これを受けて台帳に書いて進む）。 */
-class QueueDownError extends TpmError {}
+export class QueueDownError extends TpmError {}
 
 /** メッセージキュー（NATS）が応えない時の誤り。居場所の状態にも出し、gate.jsonl（種類 queue）に残す。not は「送っていません」などの字。 */
-function queueDown(ctx: Context, not: string, e: unknown): QueueDownError {
+export function queueDown(ctx: Context, not: string, e: unknown): QueueDownError {
   ctx.seats.setStatus('wait', 'メッセージキューが応えません');
   recordGateStop(ctx, 'queue', `down: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200));
-  return new QueueDownError(`メッセージキューが応えません。${not}（${e instanceof Error ? e.message : String(e)}）。メッセージキュー（NATS）が動いているかを TPM 担当か Product Manager に確かめ、動いてから同じ命令を打ち直してください`);
+  return new QueueDownError(`メッセージキューが応えません。${not}（${e instanceof Error ? e.message : String(e)}）。${queueDownNext(ctx)}、動いてから同じ命令を打ち直してください`);
 }
+
+/**
+ * メッセージキューが応えない時に、次にする事の字。担当（$ROSTER_KEY がある）は、TPM 担当にも送れず、Product Manager にじかに聞かない決まりなので、
+ * 止まった事を返答に書く（決まりの文の「メッセージキューが応えない時」と同じ）。TPM 担当は、Product Manager に確かめる。
+ */
+const queueDownNext = (ctx: Pick<Context, 'env'>): string => envOf(ctx.env, 'KEY')
+  ? 'TPM 担当にも送れないので、止まった事を返答に書き（メッセージキュー（NATS）が動いているかは、Product Manager が確かめる）'
+  : 'メッセージキュー（NATS）が動いているかを Product Manager に確かめ';
 
 /**
  * メッセージを配りの口（NATS）に置き、作った id を返す。長すぎる本文は置かずに誤り。配りの口が誤りなら、置けていないとして止まる（queueDown）。
@@ -127,8 +135,10 @@ async function post(ctx: Context, box: Recipient, from: string, text: string, re
 /**
  * 課題に記録を書く前に、送れるかを確かめる: 配りの口へ軽い問いを 1 つ打つ。応えなければ「メッセージキューが応えません。送っていません」で止める
  * （記録を書いた後で、置けずに止まらないように）。受け手の名乗りは見ない（メッセージは、いつも配りの口に置く）。
+ * 受け手の名が作れない組（長い）も、ここで止める（recipientName の誤り。記録を書いた後に、置く所で止まらないように）。
  */
-async function assertReachable(ctx: Context): Promise<void> {
+async function assertReachable(ctx: Context, party: Party): Promise<void> {
+  recipientName(party);
   try {
     await (await ctx.mailroom()).lag();
   }
@@ -214,7 +224,7 @@ export async function toPeer(ctx: Context, self: RoleRecord, peer: RoleRecord, i
 /** 担当が担当へじかに送る物の 2 度送りを見る（課題に記録を書く前に呼ぶ。相手の宛先で数える）。配りの口に置けるかも確かめる。 */
 export async function notRepeatToPeer(ctx: Context, self: RoleRecord, peer: RoleRecord, id: HeadingId, body: string): Promise<void> {
   await assertNotRepeat(ctx, id, self.title, peerSeat(ctx, peer), body);
-  await assertReachable(ctx);
+  await assertReachable(ctx, partyOf(peer));
 }
 
 /** 課題に記録を書く。課題が無い・課題管理を使わない project なら書かない。 */
@@ -240,13 +250,30 @@ const READ_STOP = {
  * 自分の受け手の名が作れなければ（長い組）、検査を通す。
  * - 自分（この session）の名乗りが効いている時: 本文は出さず、すぐ後の hook に渡させる（assertHandedOver）。
  * - 名乗りが効いていない時（渡す hook を持たない session）: 本文を命令の結果に出して止まる（assertUnclaimed）。
+ *   これは、roster の席の session だけ（seated）。席でない session（$ROSTER_KEY が無く、TPM 担当の居場所でもない）では、検査をしない（印を付けない）。
  */
 export async function assertRead(ctx: Context, who: string, from?: string, action: keyof typeof READ_STOP = 'send'): Promise<void> {
   const name = ownName(ctx);
   if (name === undefined) return;
   const claim = claimNamed(ctx, name);
   if (claim !== undefined) await assertHandedOver(ctx, claim, who, from, action);
-  else await assertUnclaimed(ctx, name, who, from, action);
+  else if (seated(ctx)) await assertUnclaimed(ctx, name, who, from, action);
+}
+
+/**
+ * この session が、roster の席か: 担当（$ROSTER_KEY がある。roster が起こした席）か、TPM 担当が名乗った居場所（tpm.jsonc の宛先が自分）。
+ * 名乗りが効いていない時に「見せた」の印を付けてよいのは、席の session だけ。$ROSTER_KEY の無い session は、みな TPM 担当の受け手の名になるので、
+ * 席でない session（人の terminal など）が印を付けると、TPM 担当が読まないまま、その物が「見せた」になる。
+ */
+export function seated(ctx: Context): boolean {
+  if (envOf(ctx.env, 'KEY')) return true;
+  const address = ctx.state.read<TpmRecord>('tpm.jsonc')?.address;
+  try {
+    return address !== undefined && ctx.seats.whoami() === address;
+  }
+  catch {
+    return false;
+  }
 }
 
 /**
@@ -413,7 +440,7 @@ async function assertHandedOver(ctx: Context, claim: Claim, who: string, from: s
 export async function sender(ctx: Context): Promise<RoleRecord> {
   const self = requireSelf(ctx);
   await assertRead(ctx, '相手');
-  await assertReachable(ctx);
+  await assertReachable(ctx, { key: TPM_PARTY });
   return self;
 }
 
@@ -450,7 +477,7 @@ function tpmSeat(ctx: Context): string | undefined {
 async function receiver(ctx: Context, key: string): Promise<RoleRecord> {
   const role = requireRole(ctx, key);
   await assertRead(ctx, `${role.key} の担当`, role.title);
-  await assertReachable(ctx);
+  await assertReachable(ctx, partyOf(role));
   return role;
 }
 
@@ -676,7 +703,7 @@ export interface IncidentOptions {
 }
 
 /** メッセージキューが応えない時に、roster report incident が台帳に書いた後で出す行。 */
-const INCIDENT_NOT_SENT = 'メッセージキューが応えないので、TPM 担当には送っていない（台帳には書いた。メッセージキュー（NATS）が動いているかを Product Manager に確かめる）';
+const INCIDENT_NOT_SENT = 'メッセージキューが応えないので、TPM 担当には送っていない（台帳には書いた。打ち直さない。TPM 担当にも送れないので、止まった事を返答に書く）';
 
 /** f を動かす。メッセージキューが応えない誤り（QueueDownError）だけを受けて返し、ほかの誤りは投げる。 */
 async function unlessQueueDown<T>(f: () => Promise<T>): Promise<T | QueueDownError> {
@@ -685,6 +712,18 @@ async function unlessQueueDown<T>(f: () => Promise<T>): Promise<T | QueueDownErr
   }
   catch (e) {
     if (e instanceof QueueDownError) return e;
+    throw e;
+  }
+}
+
+/** 台帳に書いた後の送りの結果の行。送れなかった時（どの訳でも）は、誤りにせず、送っていない事と訳を出す（誤りで終わると、打ち直しで台帳に 2 件書かれる）。 */
+async function sentOrNot(send: () => Promise<string>): Promise<string> {
+  try {
+    return await send();
+  }
+  catch (e) {
+    if (e instanceof QueueDownError) return INCIDENT_NOT_SENT;
+    if (e instanceof TpmError) return `TPM 担当には送っていない（台帳には書いた。打ち直さない）: ${e.message}`;
     throw e;
   }
 }
@@ -703,8 +742,8 @@ export async function reportIncident(ctx: Context, options: IncidentOptions): Pr
   const incident = addIncident(ctx, { key: self.key, source: 'report', text: options.text, type, tags: options.tags, severe: options.severe });
   const tags = incident.tags.length === 0 ? '' : `（tag: ${incident.tags.join('・')}）`;
   const body = `#${incident.n}${incident.severe ? ' [重い]' : ''} ${INCIDENT_TYPES[type]}: ${options.text}${tags}`;
-  const sent = checked instanceof QueueDownError ? checked : await unlessQueueDown(() => toTpm(ctx, self, 'incident', body));
-  return [`台帳に書いた: ${incidentLine(incident)}`, ...tagLines(ctx, incident), sent instanceof QueueDownError ? INCIDENT_NOT_SENT : sent];
+  const sent = checked instanceof QueueDownError ? INCIDENT_NOT_SENT : await sentOrNot(() => toTpm(ctx, self, 'incident', body));
+  return [`台帳に書いた: ${incidentLine(incident)}`, ...tagLines(ctx, incident), sent];
 }
 
 /** 状態 wait の字を出し、移りを waits.jsonl に残す。自分の宛先を返す。 */

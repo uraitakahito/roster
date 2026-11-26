@@ -4,6 +4,7 @@ import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { missingCastlistWarning } from '../src/castlist.ts';
 import { hello, inboxNow } from '../src/commands/role-side.ts';
+import { assertRead } from '../src/commands/messages.ts';
 import { assign, close, configLines, newKey, recordingTo, roles } from '../src/commands/tpm-side.ts';
 import { createContext, type Context } from '../src/context.ts';
 import { buildCommand } from '../src/command.ts';
@@ -373,7 +374,32 @@ describe('inbox', () => {
     expect(await inboxNow(w.tpm)).toEqual(['まだ届いていないメッセージは無い']);
     w.hold('tpm');
     await w.send('tpm', 'Technical Program Manager', '【brief】u');
+    // TPM 担当が名乗る前（roster の席でない session）は、出すだけ（見せたとは覚えない）。
+    const peeked = ['--- Technical Program Manager（id m1）', '【brief】u', '--- ここまで（出しただけ。届いたとは記録していない。hook が、この後で渡す）'];
+    expect(await inboxNow(w.tpm)).toEqual(peeked);
+    expect(await inboxNow(w.tpm)).toEqual(peeked);
+    // 名乗った TPM 担当の居場所（渡す hook は持たない）では、出して、見せたと覚える。
+    await hello(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
     expect(await inboxNow(w.tpm)).toEqual(['--- Technical Program Manager（id m1）', '【brief】u', '--- ここまで']);
+    expect(await inboxNow(w.tpm)).toEqual(['まだ届いていないメッセージは無い']);
+  });
+
+  test('roster の席でない session（TPM 担当が名乗っていない居場所）では、送る前の検査をしない（TPM 担当宛ての物に、見せたの印を付けない）', async () => {
+    const w = world();
+    w.hold('tpm');
+    await w.send('tpm', 'SWE t-a3b4: x', '【ask-tpm】読んでほしい事');
+    await assertRead(w.tpm, '相手');
+    expect(w.tpm.state.lines('delivered.jsonl')).toEqual([]);
+    // 名乗った TPM 担当の居場所では、本文を出して 1 度止まる。
+    await hello(w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
+    await expect(assertRead(w.tpm, '相手')).rejects.toThrow(/まだ読んでいないメッセージが 1 件あります/);
+  });
+
+  test('配りの口が応えない時は、決まりの字で止まり、席の状態に出す', async () => {
+    const w = world();
+    const down = { ...w.tpm, mailroom: () => Promise.reject(new Error('timeout')) };
+    await expect(inboxNow(down)).rejects.toThrow(/^メッセージキューが応えません。見ていません（timeout）/);
+    expect(w.wire.status('file:tpm')?.wait).toBe('メッセージキューが応えません');
   });
 });
 

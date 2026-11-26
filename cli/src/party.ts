@@ -3,7 +3,7 @@ import { envOf } from './env.ts';
 
 /**
  * 送り手・受け手の担当: 名簿の Key（TPM 担当は tpm）と、起こしの id（$ROSTER_LAUNCH・名簿の launch。castlist を設定した時だけある）。
- * 届いた所で、宛先の担当と受けた session を比べるのに使う（roster returned check）。
+ * 配りの受け手の名（mail.ts の recipientName）は、この組から作る（起こしの id が入るので、前の session 宛ての物を、起こし直した担当は受け取らない）。
  */
 export interface Party {
   key: string

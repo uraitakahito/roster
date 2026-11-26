@@ -56,7 +56,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 |---|---|---|
 | 【brief】 | 新しい依頼書の URL（Staff Engineer 担当への依頼書は、レビューの頼みから命令が作る）。下の「ページ」のとおり読み、それに従う。「取り消す: brief-N」とあれば brief-N の作業をやめてこちらに従い、「brief-N を済ませてから、これをする」とあれば brief-N の【done】の後に始める | `roster assign <Key> --role <役割> --brief <URL> [--supersede\|--after]` |
 | 【answer】 | Product Manager の答え。待ちの表示を作業中に戻して続ける | `roster answer <Key> "<答え>" [--url <確認の URL>…\|--all]` |
-| 【notify】 | 知っておくこと・中身のある返事（決定・直し・次の手）。「受け取った」だけの返事は送られない。返事は要らない | `roster notify <Key> "<本文>"` |
+| 【notify】 | 知っておくこと・中身のある返事（決定・直し・次の手）。「受け取った」だけの返事は、TPM 担当は送らない。返事は要らない | `roster notify <Key> "<本文>"` |
 | 【dismiss】 | この課題に続きは無い（Product Manager が決めたか、TPM 担当が聞かなくてよいと決めた）。worktree を片付けて【end】を返す。担当の交代のためなら、そう書いてある。「取り消す: brief-N」とあれば brief-N の作業もやめる | `roster dismiss <Key> [--handover] [--supersede]` |
 
 この表の命令と `roster close` は、担当の session から打つと断られる（送り手の名は命令が付けるので、担当が打つと TPM 担当の名で届いてしまう）。TPM 担当に頼むことは `roster ask tpm` で送る。

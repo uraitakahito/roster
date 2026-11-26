@@ -571,7 +571,9 @@ export async function tidyMail(ctx: Context, options: { sweep: boolean }): Promi
       // 前に判じた時より後に期限を過ぎた物だけを読む（初めは、記録の箱の残す長さの分）。
       const since = new Date(checked === undefined ? now - MAILROOM_LIMITS.recordTtlMs : Date.parse(checked) - MAILROOM_LIMITS.undeliveredTtlMs - EXPIRED_CHECK_EVERY_MS);
       const outstanding = await room.outstanding();
-      const handed = new Set(deliveredLines(ctx).filter(l => l.when !== 'output').map(l => l.id));
+      // 命令の結果に見せた物（output。渡す hook を持たない session に、検査か roster inbox が出した）も、受け手は読んでいるので、期限切れに数えない
+      // （「要る中身なら、送り直す」と勧めると、読んで扱った物を 2 度送ることになる）。
+      const handed = new Set(deliveredLines(ctx).map(l => l.id));
       for (const m of await room.record(since)) {
         if (Date.parse(m.at) + MAILROOM_LIMITS.undeliveredTtlMs <= now && !outstanding.has(m.id) && !handed.has(m.id)) keep('expired', m);
       }

@@ -240,3 +240,15 @@ describe('roster mail left（NATS に残っている物を見る）', () => {
     await expect(mailLeft(w.se)).rejects.toThrow(/roster mail left は TPM 担当の命令です/);
   });
 });
+
+describe('命令の結果に見せた物（渡す hook を持たない session）', () => {
+  test('期限を過ぎても、期限切れに数えない（受け手は読んでいる。送り直しを勧めない）', async () => {
+    const w = await natsWorld();
+    await notify(w.tpm, 't-x7k2', { text: '見せた物' });
+    expect((await inboxNow(w.se))[1]).toBe('【notify】見せた物');
+    expect(deliveredLines(w.se).map(l => l.when)).toEqual(['output']);
+    w.pass(73 * HOURS);
+    expect((await hello(w.tpm, TPM)).filter(l => l.startsWith('期限切れ'))).toEqual([]);
+    expect(endedLines(w.tpm)).toEqual([]);
+  });
+});

@@ -7,7 +7,7 @@ import { castlistHello, sweep } from './castlist.ts';
 import { TpmError } from '../skill-sets.ts';
 import { issueTracker } from './issue.ts';
 import { paint } from './launch.ts';
-import { issueCopyLine, showUnread } from './messages.ts';
+import { issueCopyLine, queueDown, seated, showUnread } from './messages.ts';
 import { recordingTo, tpmHello } from './tpm-side.ts';
 import { envOf } from '../env.ts';
 import { claimNamed, ownName } from '../mail.ts';
@@ -66,10 +66,17 @@ export async function inboxNow(ctx: Context): Promise<string[]> {
   const none = ['まだ届いていないメッセージは無い'];
   const name = ownName(ctx);
   if (name === undefined) return none;
-  if (claimNamed(ctx, name) !== undefined) {
-    const left = await peekInbox(ctx, name);
-    return left.length === 0 ? none : left;
+  try {
+    // 名乗っている session と、roster の席でない session（$ROSTER_KEY が無く、TPM 担当の居場所でもない）は、出すだけ（印を付けない）。
+    if (claimNamed(ctx, name) !== undefined || !seated(ctx)) {
+      const left = await peekInbox(ctx, name);
+      return left.length === 0 ? none : left;
+    }
+    const unread = await showUnread(ctx, name);
+    return unread.length === 0 ? none : [...unread, '--- ここまで'];
   }
-  const unread = await showUnread(ctx, name);
-  return unread.length === 0 ? none : [...unread, '--- ここまで'];
+  catch (e) {
+    // 配りの口が応えない時は、決まりの字で止まる（席の状態と gate.jsonl にも出す）。
+    throw queueDown(ctx, '見ていません', e);
+  }
 }
