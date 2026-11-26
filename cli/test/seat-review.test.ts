@@ -3,16 +3,18 @@ import { mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { dismiss, reportDone } from '../src/commands/messages.ts';
+import { dismiss, reportDone, reportEnd } from '../src/commands/messages.ts';
 import { pagePut } from '../src/commands/page.ts';
 import { reviewList } from '../src/commands/review.ts';
 import { hello } from '../src/commands/role-side.ts';
-import { seatAdd } from '../src/commands/seat.ts';
+import { seatAdd, seatClose } from '../src/commands/seat.ts';
 import { askReview, reportReview } from '../src/commands/staff.ts';
+import { collect } from '../src/commands/timeline.ts';
 import { assign } from '../src/commands/tpm-side.ts';
 import type { Context } from '../src/context.ts';
+import { DELIVERED_FILE, type DeliveredLine } from '../src/mail.ts';
 import { readReviews } from '../src/reviews.ts';
-import { allRoles, readRole } from '../src/roster.ts';
+import { allRoles, readRole, writeRole } from '../src/roster.ts';
 import { BRIEF, staffRoot, world, type World } from './helpers.ts';
 
 const PR1 = 'https://github.com/o/pagetray/pull/7';
@@ -79,19 +81,65 @@ describe('repo の席の roster ask review', () => {
 });
 
 describe('Tech Lead 担当の roster report review', () => {
-  test('repo の席の頼みを古い順に返す。判定は頼んだ席へ届き、状態は替えない', async () => {
+  test('返していない頼みがいくつもあれば、--review で名指させる。名指した頼みの席へ届き、ほかの頼みは残る。状態は替えない', async () => {
     const w = await split();
     await askReview(w.castlist, { url: PR2 });
     await askReview(w.pagetray, { url: PR1 });
-    const first = await reportReview(w.lead, { url: await w.put(w.lead, 'review'), verdict: 'approve', summary: 'よい' });
-    expect(first).toContain('送った: 【review】→ file:3（相手の手が空いた時に届く。送り直さない）');
+    await expect(reportReview(w.lead, { url: await w.put(w.lead, 'review'), verdict: 'approve', summary: 'よい' })).rejects.toThrow(/^返していないレビューの頼みが、いくつもあります。どの頼みへの判定かを --review <番号> で名指してください。送っていません。\n#1 AI-36\.castlist \S+pull\/3\n#2 AI-36\.pagetray \S+pull\/7$/);
+    // 後の頼み（#2）を先に返す。
+    const first = await reportReview(w.lead, { url: await w.put(w.lead, 'review'), verdict: 'reject', summary: '欄の名が違う', review: 2 });
+    expect(first).toContain('送った: 【review】→ file:2（相手の手が空いた時に届く。送り直さない）');
+    expect(first).toContain(`届けた先: AI-36.pagetray（頼み #2 ${PR1}）`);
     expect(first.at(-1)).toBe('返していない頼みが、あと 1 件あります（roster review list）');
-    expect(w.texts('file:3').at(-1)).toMatch(/^【review】\S+\/AI-36\/review-1\.html 判定: よい（approve）／一言: よい／頼み: #1$/);
+    expect(w.texts('file:2').at(-1)).toMatch(/^【review】\S+\/AI-36\/review-\d+\.html 判定: 直すべき（reject）／一言: 欄の名が違う／頼み: #2$/);
+    expect(w.texts('file:3').some(t => t.startsWith('【review】'))).toBe(false);
     expect(w.wire.status('file:1')?.wait).not.toMatch(/回答待ち\(レビュー\)/);
-    const second = await reportReview(w.lead, { url: await w.put(w.lead, 'review'), verdict: 'concerns', summary: '欄の名が違う' });
-    expect(second).toContain('送った: 【review】→ file:2（相手の手が空いた時に届く。送り直さない）');
-    expect(readReviews(w.tpm).map(r => [r.key, r.verdict])).toEqual([['AI-36.castlist', 'approve'], ['AI-36.pagetray', 'concerns']]);
+    expect(readReviews(w.tpm).map(r => [r.key, r.verdict])).toEqual([['AI-36.castlist', undefined], ['AI-36.pagetray', 'reject']]);
+    // 残りが 1 つなら、名指さなくてよい。
+    const second = await reportReview(w.lead, { url: await w.put(w.lead, 'review'), verdict: 'approve', summary: 'よい' });
+    expect(second).toContain('送った: 【review】→ file:3（相手の手が空いた時に届く。送り直さない）');
     await expect(reportReview(w.lead, { url: await w.put(w.lead, 'review'), verdict: 'approve', summary: 'x' })).rejects.toThrow(/返していないレビューの頼みがありません/);
+  });
+
+  test('--review は、返していない頼みの番号だけ。Staff Engineer 担当には付けられない', async () => {
+    const w = await split();
+    await askReview(w.pagetray, { url: PR1 });
+    await expect(reportReview(w.lead, { url: await w.put(w.lead, 'review'), verdict: 'approve', summary: 'x', review: 9 })).rejects.toThrow(/^--review の #9 は、返していない頼みにありません。送っていません。\n#1 AI-36\.pagetray/);
+    await askReview(w.lead, { url: await w.put(w.lead, 'plan'), wait: 0 });
+    const staff = { ...w.role('AI-36.staff', 'file:4'), root: w.lead.root };
+    await hello(staff);
+    await expect(reportReview(staff, { url: await w.put(staff, 'review'), verdict: 'approve', summary: 'x', review: 2 })).rejects.toThrow(/^--review は、Tech Lead 担当が、返す頼みを名指す時だけに付ける/);
+  });
+
+  test('頼んだ席を閉じる: 居る席は、返っていない頼みがあれば閉じない。居場所の無い席の頼みは取り下げる', async () => {
+    const w = await split();
+    await askReview(w.pagetray, { url: PR1 });
+    writeRole(w.tpm, { ...readRole(w.tpm, 'AI-36.pagetray')!, dismissed: 'done' });
+    await reportEnd(w.pagetray, { prs: [], removed: [], left: 'なし' });
+    await expect(seatClose(w.lead, 'pagetray')).rejects.toThrow(/^AI-36\.pagetray の席が頼んだレビューが、まだ返っていません（#1）。閉じていません/);
+    w.wire.close('file:2');
+    const out = await seatClose(w.lead, 'pagetray');
+    expect(out).toContain('返っていなかったレビューの頼みを取り下げた: #1');
+    expect(readReviews(w.tpm)[0]).toMatchObject({ verdict: 'not-assessed', summary: '頼んだ席を閉じたので、返していない' });
+    await expect(reportReview(w.lead, { url: await w.put(w.lead, 'review'), verdict: 'approve', summary: 'x' })).rejects.toThrow(/返していないレビューの頼みがありません/);
+  });
+
+  test('時系列の行き違いは、送り手と受け手の組で見る（repo の席の頼みと、Tech Lead 担当の判定）', async () => {
+    const w = await split();
+    const at = (hms: string) => (): Date => new Date(`2026-11-20T${hms}.000Z`);
+    w.pagetray.now = at('12:00:00');
+    await askReview(w.pagetray, { url: PR1 });
+    w.lead.now = at('12:01:00');
+    await reportReview(w.lead, { url: await w.put(w.lead, 'review'), verdict: 'approve', summary: 'よい' });
+    const verdict = w.posted('file:2').find(m => m.text.startsWith('【review】'))?.id ?? '';
+    w.pagetray.now = at('12:02:00');
+    await askReview(w.pagetray, { url: PR1.replace('/7', '/8') });
+    // 渡した記録を書き直す: 判定は、repo の席が次の頼みを送った後の 12:05:00 に渡った（行き違い）。
+    const lines = w.tpm.state.lines<DeliveredLine>(DELIVERED_FILE);
+    w.tpm.state.remove(DELIVERED_FILE);
+    for (const l of lines) w.tpm.state.append(DELIVERED_FILE, l.id === verdict ? { ...l, at: '2026-11-20T12:05:00.000Z' } : l);
+    const review = collect(w.tpm, 'AI-36').find(e => e.what.startsWith('【review】'));
+    expect(review?.notes.at(-1)).toBe('行き違い: これが届く前に、相手が 1 件送った（【ask-review】12:02:00）');
   });
 
   test('Tech Lead 担当の【done】は TPM 担当の依頼書だけを、【review】はレビューの頼みだけを済ませる', async () => {
@@ -111,6 +159,8 @@ describe('Tech Lead 担当の roster report review', () => {
     const w = await split();
     await askReview(w.pagetray, { url: PR1 });
     expect(reviewList(w.tpm, { key: 'AI-36.pagetray' })[0]).toContain('まだ（Tech Lead 担当が見ている）');
+    // 課題の Key で引くと、その repo の席の頼みも出る。席を閉じた後も、見る者（Tech Lead 担当）の有無は変わらない。
+    expect(reviewList(w.tpm, { key: 'AI-36' })[0]).toMatch(/^#1 {2}AI-36\.pagetray {2}まだ（Tech Lead 担当が見ている）/);
   });
 
   test('repo の席は roster report review を打てない', async () => {

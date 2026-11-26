@@ -34,6 +34,8 @@ interface Sent {
   peer?: true
   /** 送った担当（TPM 担当は tpm）。前の版の行には無い。 */
   sender?: { key: string }
+  /** 届く担当。前の版の行には無い。 */
+  recipient?: { key: string }
 }
 
 /** infra.jsonl の 1 行（読む欄だけ）。 */
@@ -107,8 +109,13 @@ export function collect(ctx: Context, key: string, window?: { from: string, to: 
     // 担当と TPM 担当の間の物は、同じ Key で向きが逆の物。じかの物（レビューの頼みと判定）は、課題の担当と、その Staff Engineer 担当の席の間の、逆向きのじかの物。
     // じかの物を「同じ Key で向きが逆」で数えると、課題の担当が続けて TPM 担当へ送った物や、TPM 担当からの【notify】まで相手の物に数えてしまう。
     if (arrived !== undefined) {
+      // じかの物の相手は、送り手と受け手の担当の組で見る（repo の席 ⇄ Tech Lead 担当のレビューも、課題の担当 ⇄ Staff の席も）。
+      // 組の欄の無い前の版の行は、Key の形（<Key> ⇄ <Key>.staff）で見る。
+      const back = (o: Sent): boolean => m.sender !== undefined && m.recipient !== undefined && o.sender !== undefined && o.recipient !== undefined
+        ? o.sender.key === m.recipient.key && o.recipient.key === m.sender.key
+        : o.key === counterpart(m.key);
       const reply = (o: Sent): boolean => m.peer === true
-        ? o.peer === true && o.key === counterpart(m.key)
+        ? o.peer === true && back(o)
         : o.peer !== true && o.key === m.key && direction(o.heading) !== undefined && direction(o.heading) !== direction(m.heading);
       const crossed = messages.filter(o => reply(o) && o.at > m.at && o.at < arrived);
       if (crossed.length > 0) notes.push(`行き違い: これ${seen?.by === 'shown' ? 'を見る' : 'が届く'}前に、相手が ${crossed.length} 件送った（${crossed.map(o => `【${o.heading}】${hms(o.at)}`).join('・')}）`);

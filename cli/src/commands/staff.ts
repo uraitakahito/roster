@@ -8,7 +8,7 @@ import { requireUp, sessionRef } from '../castlist.ts';
 import type { Context } from '../context.ts';
 import { ROLES, WAIT, type RoleName } from '../protocol.ts';
 import { addReview, openReviews, patchReview, readReviews, removeReview, reviewLabel, VERDICTS, type Review, type Verdict } from '../reviews.ts';
-import { isRepoSeat, readRole, repoSeats, staffKey, subjectOf, writeRole, type RoleRecord } from '../roster.ts';
+import { isRepoSeat, readRole, staffKey, subjectOf, writeRole, type RoleRecord } from '../roster.ts';
 import { resolveSettings, type SettingsLayer } from '../settings.ts';
 import { skillSetDir, TpmError } from '../skill-sets.ts';
 import { issueCopy, launch, NotStartedError, roleDefaults } from './launch.ts';
@@ -254,7 +254,7 @@ async function askLeadReview(ctx: Context, self: RoleRecord, options: { url: str
   }
   const focus = options.focus?.trim() || undefined;
   const before = openReviews(ctx, self.key).filter(r => r.brief !== undefined);
-  const review = addReview(ctx, { key: self.key, url: options.url, ...(focus === undefined ? {} : { focus }), by: self.title, reviewer: 'tech-lead' });
+  const review = addReview(ctx, { key: self.key, url: options.url, ...(focus === undefined ? {} : { focus }), by: self.title, reviewer: 'tech-lead', lead: lead.key });
   let url: string;
   let sent: string;
   try {
@@ -283,6 +283,8 @@ export interface ReviewOptions {
   /** 判定（VERDICTS の語）。 */
   verdict: string
   summary: string
+  /** Tech Lead 担当だけ: 判定を返す頼みの番号。返していない頼みがいくつもある時は、名指す。 */
+  review?: number
 }
 
 /** 次のレビューの頼みを待つ（Staff Engineer 担当の【review】の後）。 */
@@ -303,11 +305,18 @@ export async function reportReview(ctx: Context, options: ReviewOptions): Promis
   const subject = subjectOf(self);
   if (pageOwner(ctx, options.url)?.key !== subject) throw new TpmError(`--url は、${subject} のレビューのページにしてください（別の課題のページ）: ${options.url}`);
   // 返すのは、いちばん古い依頼書の頼みだけ（依頼書は積まれた順にこなす。後ろに積まれた依頼書の頼みは、次の【review】で返す）。
-  // Tech Lead 担当は、自分の課題の repo の席の頼みを束ねて、古い順（頼みの番号の順）に返す。判定は、頼んだ席へ返す。
-  const askers = lead ? repoSeats(ctx, self.key).map(r => r.key) : [subject];
-  const briefed = readReviews(ctx).filter(r => r.verdict === undefined && r.brief !== undefined && askers.includes(r.key) && (r.reviewer === 'tech-lead') === lead);
-  const asks = briefed.filter(r => r.brief === briefed[0]?.brief);
-  if (asks.length === 0) throw new TpmError(`${subject} に、返していないレビューの頼みがありません（もう返したか、頼みがまだ来ていない）。送っていません`);
+  if (options.review !== undefined && !lead) throw new TpmError('--review は、Tech Lead 担当が、返す頼みを名指す時だけに付ける。送っていません');
+  // Tech Lead 担当は、自分の課題の repo の席の頼みを束ねて受ける（頼みの lead の欄。頼んだ席を閉じた後も引ける）。判定は、頼んだ席へ返す。
+  const briefed = readReviews(ctx).filter(r => r.verdict === undefined && r.brief !== undefined && (lead ? r.reviewer === 'tech-lead' && r.lead === self.key : r.reviewer === undefined && r.key === subject));
+  if (briefed.length === 0) throw new TpmError(`${subject} に、返していないレビューの頼みがありません（もう返したか、頼みがまだ来ていない）。送っていません`);
+  // Tech Lead 担当は、席いくつかの頼みを、ほかの仕事の合間に見る。どの頼みへの判定かを取り違えないよう、いくつもあれば名指させる。
+  const listed = briefed.map(r => `#${r.n} ${r.key} ${r.url}`);
+  if (lead && options.review === undefined && briefed.length > 1) {
+    throw new TpmError(['返していないレビューの頼みが、いくつもあります。どの頼みへの判定かを --review <番号> で名指してください。送っていません。', ...listed].join('\n'));
+  }
+  const named = options.review === undefined ? briefed[0] : briefed.find(r => r.n === options.review);
+  if (named === undefined) throw new TpmError([`--review の #${options.review ?? ''} は、返していない頼みにありません。送っていません。`, ...listed].join('\n'));
+  const asks = briefed.filter(r => r.brief === named.brief);
   const asker = asks[0]?.key ?? subject;
   const owner = readRole(ctx, asker);
   if (owner === undefined) throw new TpmError(`${asker} の担当が名簿にいません。送っていません・記録も書いていません。roster ask tpm で TPM 担当に知らせてください（レビューのページ: ${options.url}）`);
@@ -323,7 +332,7 @@ export async function reportReview(ctx: Context, options: ReviewOptions): Promis
   // Tech Lead 担当は、レビューのほかの仕事（TPM 担当の依頼書）も持つので、状態は替えない。
   if (lead) {
     const left = briefed.length - asks.length;
-    return [...recorded, sent, ...marks, ...(left === 0 ? [] : [`返していない頼みが、あと ${left} 件あります（roster review list）`])];
+    return [...recorded, sent, `届けた先: ${asker}（頼み ${asks.map(r => `#${r.n} ${r.url}`).join('・')}）`, ...marks, ...(left === 0 ? [] : [`返していない頼みが、あと ${left} 件あります（roster review list）`])];
   }
   showWait(ctx, WAIT_NEXT_REVIEW);
   return [...recorded, sent, ...marks, `状態: ${WAIT_NEXT_REVIEW}`];
