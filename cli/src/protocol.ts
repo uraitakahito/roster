@@ -44,6 +44,7 @@ export const COMMANDS = [
   'notify',
   'dismiss',
   'review list',
+  'time',
   'incident add',
   'incident review',
   'incident tag',

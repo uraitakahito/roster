@@ -20,6 +20,7 @@ import { registerMessages } from './commands/register.ts';
 import { registerReview } from './commands/review.ts';
 import { hello, inboxNow } from './commands/role-side.ts';
 import { seatAdd, seatBrief, seatClose, seatDismiss, seatNotify } from './commands/seat.ts';
+import { GAP_MINUTES, time } from './commands/time.ts';
 import { assign, close, newKey, roles, type AssignOptions } from './commands/tpm-side.ts';
 import { composeSkillSets, readConfigSources } from './config.ts';
 import { createContext, mailroomsClosed } from './context.ts';
@@ -129,6 +130,9 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
   program.command('inbox').description('自分宛てで、まだ届いていないメッセージを出す（段の区切りに見る）').action(async () => print(await inboxNow(createContext())));
   registerMessages(program, print);
   registerReview(program, print);
+  program.command('time <key>').description('課題にかかった時間を、状態の移りの記録から分けて出す（席ごとの作業中・待ちの時間と、どの席の記録も動かなかった長い空き）')
+    .option('--gap <分>', `長い空きとみなす長さ（分。既定は ${GAP_MINUTES}）`)
+    .action((key: string, options: { gap?: string }) => print(time(createContext(), key, options.gap === undefined ? {} : { gapMinutes: Number(options.gap) })));
   registerIncident(program, print);
   registerAudit(program, print, readStdin);
 

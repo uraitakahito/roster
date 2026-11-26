@@ -7,7 +7,7 @@ import { castlistHello, sweep } from './castlist.ts';
 import { TpmError } from '../skill-sets.ts';
 import { issueTracker } from './issue.ts';
 import { paint } from './launch.ts';
-import { issueCopyLine, queueDown, seated, showUnread } from './messages.ts';
+import { issueCopyLine, queueDown, seated, showUnread, showWait } from './messages.ts';
 import { recordingTo, tpmHello } from './tpm-side.ts';
 import { envOf } from '../env.ts';
 import { claimNamed, ownName } from '../mail.ts';
@@ -32,7 +32,8 @@ export async function hello(ctx: Context, options: { model?: string, effort?: st
   // 起こす時の塗り（launch）が落ちた席・前から居る席も、名乗れば役割の色になる。
   const painted = paint(ctx, record.address, ROLES[record.role].color);
   ctx.seats.setStatus('model', modelStatus(record.model, record.effort));
-  ctx.seats.setStatus('wait', WAIT.work('依頼書を読む'));
+  // 状態の移りの記録（waits.jsonl）にも残す（roster time が、名乗りから数え始められるように）。
+  showWait(ctx, WAIT.work('依頼書を読む'));
   writeRole(ctx, record);
   // 課題の Key が Jira か GitHub の Issue の形なら、課題管理の設定によらず中身を読める。
   const subject = subjectOf(record);

@@ -88,6 +88,8 @@ describe('wait の移り（waits.jsonl）', () => {
     await reportDone(w.se, { kind: 'result', summary: 's', remaining: 'なし', decisions: 'なし', points: [] });
     wait(w.tpm, 'pm', '指示');
     expect(w.tpm.state.lines<WaitChange>('waits.jsonl').map(l => [l.by, l.address, l.text])).toEqual([
+      // 担当の名乗り（roster hello）の状態も残す（roster time が、名乗りから数え始める）。
+      ['t-x7k2', 'file:1', '作業中: 依頼書を読む'],
       ['t-x7k2', 'file:1', '作業中: 実装'],
       ['t-x7k2', 'file:1', '回答待ち(TPM): 次の依頼'],
       ['tpm', 'file:tpm', '回答待ち(PM): 指示'],
