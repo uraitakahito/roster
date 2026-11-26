@@ -19,27 +19,12 @@ import { markEscalated } from './review-marks.ts';
 import { isPageUrl } from './store.ts';
 import { readShown, returnedIds, seenTimes, shownFile, type SeenAt } from '../seen.ts';
 import { envOf } from '../env.ts';
+import { selfParty, TPM_PARTY, type Party } from '../party.ts';
+
+export { selfParty, TPM_PARTY, type Party } from '../party.ts';
 
 /** 記録の 1 行目の一言に使う長さの上限（メッセージの本文から作るとき）。 */
 const SUMMARY_LIMIT = 80;
-
-/**
- * 送り手・受け手の担当: 名簿の Key（TPM 担当は tpm）と、起こしの id（$ROSTER_LAUNCH・名簿の launch。castlist を設定した時だけある）。
- * 届いた所で、宛先の担当と受けた session を比べるのに使う（roster returned check）。
- */
-export interface Party {
-  key: string
-  launch?: string
-}
-
-/** TPM 担当の担当の名（Party の key）。 */
-export const TPM_PARTY = 'tpm';
-
-/** 自分の担当（$ROSTER_KEY が無ければ TPM 担当）。 */
-export function selfParty(env: NodeJS.ProcessEnv): Party {
-  const launch = envOf(env, 'LAUNCH');
-  return { key: envOf(env, 'KEY') || TPM_PARTY, ...(launch ? { launch } : {}) };
-}
 
 /** 名簿の行の担当。 */
 const partyOf = (role: RoleRecord): Party => ({ key: role.key, ...(role.launch === undefined ? {} : { launch: role.launch }) });

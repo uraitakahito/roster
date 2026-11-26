@@ -67,6 +67,8 @@ export const COMMANDS = [
   'guard',
   'returned check',
   'returned show',
+  'mail claim',
+  'mail release',
   'castlist session-start',
   'castlist session-end',
   'castlist find',

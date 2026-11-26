@@ -18,6 +18,14 @@ export const TRANSPORTS = ['cmux', 'file'] as const;
 export type Transport = typeof TRANSPORTS[number];
 
 /**
+ * 担当どうしのメッセージを配る道。cmux は連携の道具がそのまま運ぶ（既定）。nats は NATS JetStream で配る:
+ * 席を起こす時に渡す hook を付け、名乗った受け手にだけ NATS で配る（名乗っていない受け手には、cmux で送る）。
+ */
+export const MESSAGE_ROUTES = ['cmux', 'nats'] as const;
+/** メッセージを配る道の名前。 */
+export type MessageRoute = typeof MESSAGE_ROUTES[number];
+
+/**
  * 環境の手続き（変える前に要ること）。触ると誰が困るかで決める。
  * free: 自分だけ（どの担当も断りなく）／tpm: 並べて動く担当（DevOps Engineer 担当だけ・TPM に相談）／
  * pm: ほかの人（DevOps Engineer 担当だけ・Product Manager の承認が要る）／
@@ -45,6 +53,8 @@ export interface FileConfig {
   roles: Partial<Record<RoleName, Partial<RoleSettings>>>
   /** アクターの台帳（castlist）の URL。書かなければ castlist に何も送らない。 */
   castlist?: string
+  /** メッセージを配る道（書いた時だけ。書かなければ cmux）。 */
+  messages?: MessageRoute
 }
 
 /** 集めた設定の file 1 つ。 */
@@ -78,6 +88,8 @@ export interface RolesConfig {
   roles: Partial<Record<RoleName, Partial<RoleSettings>>>
   /** アクターの台帳（castlist）の URL（project の folder の設定だけ。$ROSTER_CASTLIST_URL が勝つ。castlist.ts の castlistUrl）。 */
   castlist?: string
+  /** メッセージを配る道（project の folder の設定に書いた時だけ。書かなければ cmux）。 */
+  messages?: MessageRoute
   /** 集めた設定（project の folder 自身が先頭、次に直下の folder を名前の順）。 */
   sources: ConfigSource[]
 }
@@ -122,6 +134,7 @@ function fileConfig(config: Record<string, unknown>, configFile: string): FileCo
     infra: infraField(config.infra, configFile),
     roles: rolesField(config, configFile),
     ...castlistField(config.castlist, configFile),
+    ...(config.messages === undefined ? {} : { messages: oneOf(config.messages, MESSAGE_ROUTES, 'cmux', 'messages', configFile) }),
   };
 }
 
@@ -232,7 +245,7 @@ const strictest = (a: Guard, b: Guard): Guard => GUARDS.indexOf(a) >= GUARDS.ind
 /**
  * project の folder とその直下の folder の設定を合わせる。
  * 課題管理: 道具ごとに、宣言した設定を覚える（none は足さない）。infra: 環境の名前ごとに合わせ、同じ名前は match を足して厳しい方の手続きにする。
- * 連携・担当の既定・castlist: project の folder の設定だけ（直下の folder の値は読まない）。
+ * 連携・担当の既定・castlist・メッセージを配る道: project の folder の設定だけ（直下の folder の値は読まない）。
  */
 export function composeRolesConfig(project: string): RolesConfig {
   const sources = readConfigSources(project);
@@ -254,6 +267,7 @@ export function composeRolesConfig(project: string): RolesConfig {
     infra,
     roles: own.config.roles,
     ...(own.config.castlist === undefined ? {} : { castlist: own.config.castlist }),
+    ...(own.config.messages === undefined ? {} : { messages: own.config.messages }),
     sources,
   };
 }
