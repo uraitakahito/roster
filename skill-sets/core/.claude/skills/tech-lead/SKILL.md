@@ -53,7 +53,7 @@ roster hello
 5. **段ごとの試験と戻し方**。
 
 - 計画を置く前に、Staff Engineer 担当にレビューを頼む（`roster ask review --url <計画の URL>`。あなた自身の計画と PR は、Staff Engineer 担当が見る）。
-- **席の数は Product Manager が決める。**計画の【done】の「決めてほしいこと」に席の数を書き、確認のページ（protocol.md の「Product Manager に確かめる」）で送る。通ったら、TPM 担当が続きの依頼書で上限を渡す（`roster assign <Key> --role tech-lead --seats <数>`）。上限が渡る前の `roster seat add` は、命令が断る。
+- **席の数は Product Manager が決める。**計画の【done】の「決めてほしいこと」に席の数を書き、確認のページ（protocol.md の「Product Manager に確かめる」）で送る。通ったら、TPM 担当が続きの依頼書で上限を渡す（`roster assign <Key> --role tech-lead --brief <実装の依頼書の URL> --seats <数>`）。上限が渡る前の `roster seat add` は、命令が断る。
 
 ### 分けない時
 
