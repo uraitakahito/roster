@@ -115,4 +115,15 @@ export interface Mailroom {
   lag(): Promise<number>
   /** 道具との繋ぎを閉じる。 */
   close(): Promise<void>
+  /**
+   * 受け手宛てが置かれた事だけを、道具の小さい CLI で知るための合図の在り処（軽い待ち方。commands/mail.ts の mailArm）。
+   * 合図は「置かれた」だけを伝える（取り置かない・渡した回数にも数えない）。繋がない（聞くだけの値を返す）。持たない道具には無い。
+   */
+  beacon?(to: Recipient): Beacon
+}
+
+/** 合図の在り処: 道具の server の URL と、受け手宛てが置かれる宛名（道具の言葉。CLI にそのまま渡す）。 */
+export interface Beacon {
+  url: string
+  subject: string
 }

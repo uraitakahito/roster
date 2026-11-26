@@ -26,4 +26,9 @@ if ! command -v node >/dev/null 2>&1; then
 fi
 command -v cmux >/dev/null 2>&1 || PATH="$PATH:/Applications/cmux.app/Contents/Resources/bin"
 export PATH
+# 手を止めている間に待つ hook（roster mail wait。引数の無い形）は、機械に NATS の CLI があれば、待つ所だけを CLI に任せる
+# （Node.js の process を居続けさせない。無ければ、今までどおり Node.js で待つ）。
+if [ "$#" -eq 2 ] && [ "$1" = mail ] && [ "$2" = wait ]; then
+  exec "$cli/bin/roster-mail-wait" "$cli/src/cli.ts"
+fi
 exec node "$cli/src/cli.ts" "$@"

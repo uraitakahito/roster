@@ -253,6 +253,15 @@ roster infra run nats -- container run -d --name roster-nats \
 3. `config.jsonc` の `"messages": "nats"` を消す（か `"cmux"` にする）。これより後の送りは、どの席へも cmux で行く。送る前の検査も、今までの形に戻る。hook を持つ席は、設定を戻した後も、残っている自分宛てを hook で受け取る。
 4. 席を起こし直すと、hook の無い席になる。`roster close` が残りを片付けるのは、設定が `nats` の間だけなので、戻す前に閉じる席は先に閉じる。
 
+### NATS の CLI（待つ命令を軽くする。任意）
+
+roster を動かす機械に NATS の CLI（`nats`。[nats-io/natscli](https://github.com/nats-io/natscli) の公式の release）があると、手を止めている席の待つ命令が、Node.js の process を居続けさせずに、CLI で待つ（手を止めた席 1 つにつき、memory が 127MB ほど → 32MB ほど。届き方は[担当のあいだの決まり](/protocol/#メッセージを-nats-で配る道設定で入れた時)）。無くても動く（今までどおり Node.js で待つ）。
+
+- 入れるのは DevOps Engineer 担当（担当は【ask-devops】で頼む）。公式の release の binary を、checksum（`SHA256SUMS`）を照らして `~/.local/bin/nats` に置く（`PATH` に無い時も、roster は `~/.local/bin/nats`・`/opt/homebrew/bin/nats`・`/usr/local/bin/nats` を探す。ほかの所なら `$ROSTER_NATS_CLI` に path を書く）。2026-11-27 に v0.5.2 を入れた。
+- 入れた後・外した後に、席を起こし直す要は無い（次に手を止めた時の待つ命令から替わる）。
+- 使わせない時は、席を起こす環境に `ROSTER_NATS_CLI=none` を書く。
+- 確かめ: 手を止めている席があれば、`pgrep -fl 'nats --server'` に `nats --server … sub roster.<project>.msg.<受け手の名> --count 1` が、席の数だけ出る。
+
 ### 版を上げる
 
 NATS の release を見て、`.nats-version` を新しい版と digest にする PR を出す（つなぎの試験 `nats-e2e` が、その image に向けて通る）。merge の後に、container を新しい版で作り直す（volume はそのまま付ける）。

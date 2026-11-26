@@ -7,7 +7,7 @@ import { ROLE_NAMES, type RoleName } from '../protocol.ts';
 import { requireTpmSide } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
 import { castlistGuard } from './castlist.ts';
-import { mailGuard } from './mail.ts';
+import { mailGuard, settleWaiter } from './mail.ts';
 import { pagesDir } from './store.ts';
 import { envOf } from '../env.ts';
 
@@ -94,6 +94,13 @@ export async function guard(ctx: Context, stdin: string): Promise<Verdict> {
   }
   const command = commandOf(stdin);
   if (command === undefined) return { allow: true };
+  // 担当が Bash を使う＝作業中。残っている待つ命令を止める（作業の途中に、担当を起こさせない）。止められなくても、命令の見方は変えない。
+  try {
+    settleWaiter(ctx, stdin);
+  }
+  catch {
+    // 印の file が読めない時などは、見送る。
+  }
   const verdict = judge({ command, role: roleOf(ctx.env), config: ctx.config, approvals: readApprovals(ctx.state, ctx.config.infra), now: ctx.now() });
   const castlist = verdict.allow ? await castlistGuard(ctx, stdin) : verdict;
   // 設定の messages が nats の席だけ: 手伝いの中からの送る命令と、同じ返答の中で渡した物がある時の送る命令（mail.ts の mailGuard）。
