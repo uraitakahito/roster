@@ -2,7 +2,7 @@
 import type { Command } from 'commander';
 import { createContext, type Context } from '../context.ts';
 import { readReviews, VERDICTS, type Review, type Verdict } from '../reviews.ts';
-import { readRole, staffKey } from '../roster.ts';
+import { readRole, staffKey, subjectOf } from '../roster.ts';
 
 /** 時刻の字（ISO）を、月日と時分にする。 */
 const short = (iso: string): string => iso.slice(5, 16).replace('T', ' ');
@@ -10,7 +10,10 @@ const minutes = (from: string, to: string): number => Math.round((Date.parse(to)
 
 /** 頼み 1 件の行。 */
 function line(ctx: Context, r: Review): string {
-  const waiting = r.brief === undefined ? '席に渡していない' : readRole(ctx, staffKey(r.key)) === undefined ? '渡したが、席がもう無い' : '席が見ている';
+  // 見る席: repo の席の頼みは親の課題の Tech Lead 担当、ほかは、その課題の Staff Engineer 担当の席。
+  const asker = readRole(ctx, r.key);
+  const seat = r.reviewer === 'tech-lead' ? (asker === undefined ? undefined : readRole(ctx, subjectOf(asker))) : readRole(ctx, staffKey(r.key));
+  const waiting = r.brief === undefined ? '席に渡していない' : seat === undefined ? '渡したが、席がもう無い' : r.reviewer === 'tech-lead' ? 'Tech Lead 担当が見ている' : '席が見ている';
   const state = `${r.verdict !== undefined ? VERDICTS[r.verdict] : `まだ（${waiting}）`}${r.escalatedAt === undefined ? '' : '・TPM 担当に上げた'}`;
   const when = `${short(r.askedAt)} に頼んだ${r.reviewedAt === undefined ? '' : `・${minutes(r.askedAt, r.reviewedAt)} 分で返った`}`;
   return [`#${r.n}`, r.key, state, r.url, when, ...(r.page === undefined ? [] : [r.page])].join('  ');

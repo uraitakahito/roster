@@ -7,8 +7,8 @@ import { join } from 'node:path';
 import { requireUp, sessionRef } from '../castlist.ts';
 import type { Context } from '../context.ts';
 import { ROLES, WAIT, type RoleName } from '../protocol.ts';
-import { addReview, openReviews, patchReview, removeReview, reviewLabel, VERDICTS, type Review, type Verdict } from '../reviews.ts';
-import { readRole, staffKey, subjectOf, writeRole, type RoleRecord } from '../roster.ts';
+import { addReview, openReviews, patchReview, readReviews, removeReview, reviewLabel, VERDICTS, type Review, type Verdict } from '../reviews.ts';
+import { isRepoSeat, readRole, repoSeats, staffKey, subjectOf, writeRole, type RoleRecord } from '../roster.ts';
 import { resolveSettings, type SettingsLayer } from '../settings.ts';
 import { skillSetDir, TpmError } from '../skill-sets.ts';
 import { issueCopy, launch, NotStartedError, roleDefaults } from './launch.ts';
@@ -36,16 +36,22 @@ export function staffSubject(ctx: Context, key: string): RoleRecord {
 /** HTML に入れる字の escape。 */
 const escapeHtml = (text: string): string => text.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' })[c] ?? c);
 
-/** Staff Engineer 担当への依頼書（レビューの頼みから作る）。課題の概要の節を持つ。 */
+/**
+ * レビューの依頼書（レビューの頼みから作る）。課題の概要の節を持つ。文は、見る者の役割で分ける:
+ * Staff Engineer 担当には今までの文、Tech Lead 担当（repo の席の頼み）には、自分の計画と境の取り決めに照らす文。
+ */
 function staffBriefPage(subject: RoleRecord, asks: Review[]): string {
   const e = escapeHtml;
   const link = (url: string): string => `<a href="${e(url)}">${e(url)}</a>`;
+  const [who, how] = isRepoSeat(subject)
+    ? [`repo の席 ${e(subject.key)}`, '見る物を読み、この席の依頼書と、自分の計画・repo の境の取り決めに照らして、レビューのページを置き、roster report review で返す。レビューでは直さない（直すのは、頼んだ席）。']
+    : [`課題 ${e(subject.key)} の担当`, '見る物を読み、課題の担当の依頼書と照らして、レビューのページを置き、roster report review で返す。直さない・決めない（レビューは助言）。'];
   return [
     `<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>${e(subject.key)} レビューの依頼書</title></head><body>`,
     `<h1>${e(subject.key)}: レビューの依頼書</h1>`,
     '<section id="summary"><h2>課題の概要</h2>',
-    `<p>課題 ${e(subject.key)} の担当（${e(subject.title)}）が、下の物のレビューを頼んだ。見る物を読み、課題の担当の依頼書と照らして、レビューのページを置き、roster report review で返す。直さない・決めない（レビューは助言）。</p>`,
-    `<ul><li>課題の担当の依頼書: ${subject.brief === undefined ? '無し' : link(subject.brief)}</li></ul>`,
+    `<p>${who}（${e(subject.title)}）が、下の物のレビューを頼んだ。${how}</p>`,
+    `<ul><li>${isRepoSeat(subject) ? 'この席の依頼書' : '課題の担当の依頼書'}: ${subject.brief === undefined ? '無し' : link(subject.brief)}</li></ul>`,
     '</section>',
     '<h2>見る物</h2>',
     '<ul>',
@@ -55,8 +61,8 @@ function staffBriefPage(subject: RoleRecord, asks: Review[]): string {
   ].join('\n');
 }
 
-/** レビューの頼みから依頼書のページを作って置き、URL を返す。 */
-export const putStaffBrief = async (ctx: Context, subject: RoleRecord, asks: Review[]): Promise<string> => (await putPage(ctx, { text: staffBriefPage(subject, asks) }, 'brief', subject.key)).url;
+/** レビューの頼みから依頼書のページを作って置き、URL を返す。置く folder は、頼んだ担当の課題の Key（repo の席は、親の課題の folder）。 */
+export const putStaffBrief = async (ctx: Context, subject: RoleRecord, asks: Review[]): Promise<string> => (await putPage(ctx, { text: staffBriefPage(subject, asks) }, 'brief', subjectOf(subject))).url;
 
 /**
  * 頼みに、渡した依頼書の URL を書く（渡した後に呼ぶ。渡せなかった回に、依頼書にした事にしない）。
@@ -174,7 +180,9 @@ export async function askReview(ctx: Context, options: { url: string, focus?: st
   notAuditor(self, 'roster ask review');
   if (!isPageUrl(ctx.env, options.url) && !PR_URL.test(options.url)) throw new TpmError(`--url は、置き場のページか PR の URL にしてください（見る物）: ${options.url}`);
   const same = openReviews(ctx, self.key).find(r => r.url === options.url);
-  if (same !== undefined) throw new TpmError(`同じ物のレビューを、もう頼んであります（#${same.n}。${same.askedAt} に頼んだ）。2 度目は送っていません。判定は Staff Engineer 担当から【review】で届きます`);
+  if (same !== undefined) throw new TpmError(`同じ物のレビューを、もう頼んであります（#${same.n}。${same.askedAt} に頼んだ）。2 度目は送っていません。判定は ${isRepoSeat(self) ? 'Tech Lead 担当' : 'Staff Engineer 担当'}から【review】で届きます`);
+  // repo の席の頼みは、親の課題の Tech Lead 担当が見る（Staff Engineer 担当の席は起こさない）。
+  if (isRepoSeat(self)) return await askLeadReview(ctx, self, options);
   const subject = staffSubject(ctx, self.key);
   const seat = readRole(ctx, staffKey(self.key));
   const alive = seat?.address !== undefined && ctx.seats.seats().some(s => s.address === seat.address);
@@ -234,6 +242,40 @@ export async function askReview(ctx: Context, options: { url: string, focus?: st
   return [...out, ...wait(ctx, 'review', reviewLabel([review]).target)];
 }
 
+/**
+ * repo の席のレビューの頼み: 親の課題の Tech Lead 担当の席へ、じかに【ask-review】を送る。席が無い・応えない時は、送らずに止まる
+ * （Staff Engineer 担当の席は起こさない。TPM 担当への相談を案内する）。Tech Lead 担当は、TPM 担当の依頼書も受けているので、
+ * 席の依頼書（名簿の brief）と題は替えない。頼みは、Tech Lead 担当の依頼書の列には積まれない（messages.ts の openBriefs）。
+ */
+async function askLeadReview(ctx: Context, self: RoleRecord, options: { url: string, focus?: string }): Promise<string[]> {
+  const lead = self.subject === undefined ? undefined : readRole(ctx, self.subject);
+  if (lead === undefined || lead.address === undefined || !ctx.seats.seats().some(s => s.address === lead.address)) {
+    throw new TpmError(`${self.subject ?? ''} の Tech Lead 担当の席がありません。レビューは頼んでいません。roster ask tpm で TPM 担当に知らせてください`);
+  }
+  const focus = options.focus?.trim() || undefined;
+  const before = openReviews(ctx, self.key).filter(r => r.brief !== undefined);
+  const review = addReview(ctx, { key: self.key, url: options.url, ...(focus === undefined ? {} : { focus }), by: self.title, reviewer: 'tech-lead' });
+  let url: string;
+  let sent: string;
+  try {
+    url = await putStaffBrief(ctx, self, [review]);
+    const body = [
+      url,
+      `頼み: #${review.n} ${options.url}`,
+      ...(focus === undefined ? [] : [`見てほしい所: ${focus}`]),
+      ...(before.length === 0 ? [] : [`${before.map(r => `#${r.n}`).join('・')}を済ませてから、これをする`]),
+    ].join(' ');
+    sent = await toPeer(ctx, self, lead, 'ask-review', body);
+  }
+  catch (e) {
+    // 送る前に止まった頼みを残すと、打ち直しが「もう頼んであります」で止まる。
+    removeReview(ctx, review.n);
+    throw e;
+  }
+  const previous = markBriefed(ctx, [review], url);
+  return [sent, ...await markBrief(ctx, url, [review], previous), ...wait(ctx, 'review', reviewLabel([review]).target)];
+}
+
 /** `roster report review` の旗。 */
 export interface ReviewOptions {
   /** レビューのページ（roster page put --kind review で置いた URL）。 */
@@ -253,18 +295,22 @@ const WAIT_NEXT_REVIEW = WAIT.review('次の頼み');
  */
 export async function reportReview(ctx: Context, options: ReviewOptions): Promise<string[]> {
   const self = await sender(ctx);
-  if (self.role !== 'staff-engineer') throw new TpmError('roster report review は Staff Engineer 担当（Staff の席）が打ちます。レビューを頼むのは roster ask review');
+  const lead = self.role === 'tech-lead';
+  if (self.role !== 'staff-engineer' && !lead) throw new TpmError('roster report review は、Staff Engineer 担当（Staff の席）か、repo の席の頼みを受けた Tech Lead 担当が打ちます。レビューを頼むのは roster ask review');
   if (!Object.hasOwn(VERDICTS, options.verdict)) throw new TpmError(`--verdict は ${Object.keys(VERDICTS).join('・')} のどれかにしてください（${Object.entries(VERDICTS).map(([id, label]) => `${id}＝${label}`).join('・')}）`);
   const verdict = options.verdict as Verdict;
   if (!isPageUrl(ctx.env, options.url) || !REVIEW_PAGE.test(options.url)) throw new TpmError(`--url は、roster page put --kind review で置いたレビューのページの URL にしてください: ${options.url}`);
   const subject = subjectOf(self);
   if (pageOwner(ctx, options.url)?.key !== subject) throw new TpmError(`--url は、${subject} のレビューのページにしてください（別の課題のページ）: ${options.url}`);
   // 返すのは、いちばん古い依頼書の頼みだけ（依頼書は積まれた順にこなす。後ろに積まれた依頼書の頼みは、次の【review】で返す）。
-  const briefed = openReviews(ctx, subject).filter(r => r.brief !== undefined);
+  // Tech Lead 担当は、自分の課題の repo の席の頼みを束ねて、古い順（頼みの番号の順）に返す。判定は、頼んだ席へ返す。
+  const askers = lead ? repoSeats(ctx, self.key).map(r => r.key) : [subject];
+  const briefed = readReviews(ctx).filter(r => r.verdict === undefined && r.brief !== undefined && askers.includes(r.key) && (r.reviewer === 'tech-lead') === lead);
   const asks = briefed.filter(r => r.brief === briefed[0]?.brief);
   if (asks.length === 0) throw new TpmError(`${subject} に、返していないレビューの頼みがありません（もう返したか、頼みがまだ来ていない）。送っていません`);
-  const owner = readRole(ctx, subject);
-  if (owner === undefined) throw new TpmError(`${subject} の担当が名簿にいません。送っていません・記録も書いていません。roster ask tpm で TPM 担当に知らせてください（レビューのページ: ${options.url}）`);
+  const asker = asks[0]?.key ?? subject;
+  const owner = readRole(ctx, asker);
+  if (owner === undefined) throw new TpmError(`${asker} の担当が名簿にいません。送っていません・記録も書いていません。roster ask tpm で TPM 担当に知らせてください（レビューのページ: ${options.url}）`);
   const label = VERDICTS[verdict];
   const body = `${options.url} 判定: ${label}（${verdict}）／一言: ${options.summary}／頼み: ${asks.map(r => `#${r.n}`).join(' ')}`;
   // 相手の居場所と 2 度送りを、課題に記録を書く前に見る。
@@ -274,6 +320,11 @@ export async function reportReview(ctx: Context, options: ReviewOptions): Promis
   const reviewedAt = ctx.now().toISOString();
   for (const r of asks) patchReview(ctx, r.n, { verdict, page: options.url, summary: options.summary, reviewedAt });
   const marks = await markVerdict(ctx, options.url, verdict, asks);
+  // Tech Lead 担当は、レビューのほかの仕事（TPM 担当の依頼書）も持つので、状態は替えない。
+  if (lead) {
+    const left = briefed.length - asks.length;
+    return [...recorded, sent, ...marks, ...(left === 0 ? [] : [`返していない頼みが、あと ${left} 件あります（roster review list）`])];
+  }
   showWait(ctx, WAIT_NEXT_REVIEW);
   return [...recorded, sent, ...marks, `状態: ${WAIT_NEXT_REVIEW}`];
 }

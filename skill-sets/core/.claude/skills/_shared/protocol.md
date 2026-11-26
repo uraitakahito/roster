@@ -58,6 +58,7 @@ Staff Engineer 担当は、【done】【end】【merged】【doc-fix】【ask-pm
 | 【brief】【notify】【dismiss】 | Tech Lead 担当 → repo の席 | 次の依頼書・知らせと問いへの答え・片付けの指示（中身は、下の「TPM 担当から」と同じ） | `roster seat brief <名> --brief <URL> [--supersede\|--after]`・`roster seat notify <名> "<本文>"`・`roster seat dismiss <名> [--supersede]` |
 
 - repo の席の【done】【merged】【doc-fix】【end】は、命令が Tech Lead 担当へ届ける（命令は同じ。宛先を書かない）。【incident】【ask-devops】【ask-tpm】は、repo の席からも TPM 担当へ届く（Tech Lead 担当の席が応えない時の相談は【ask-tpm】）。
+- repo の席の【ask-review】は、Staff Engineer 担当の席でなく、Tech Lead 担当へ届く（命令は同じ `roster ask review`）。Tech Lead 担当は、Staff Engineer 担当と同じ `roster report review` で、頼まれた順に返す。Tech Lead 担当自身の計画と PR は、Staff Engineer 担当が見る。
 - repo の席を起こすのは `roster seat add <名> --brief <URL>`、片付けの終わった席を閉じるのは `roster seat close <名>`（どちらも Tech Lead 担当）。
 
 Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけが使う見出しは 2 つ。【audit】は、Product Manager へじかに出した監査の報告の写し（`roster report audit`）。【decided】は、Product Manager の決定（`roster report decided`）。Auditor は、【done】【end】【merged】【doc-fix】【ask-pm】【ask-review】を送らない（下の「監査」）。

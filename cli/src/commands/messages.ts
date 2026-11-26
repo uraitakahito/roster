@@ -570,7 +570,8 @@ function openBriefs(role: RoleRecord, address: string, log: Sent[], seenAt: Seen
   // file の末尾に入るので、file の順に読むと、足した【dismiss】・【brief】が、時刻と違う所で効く。
   for (const l of [...log].sort((a, b) => a.at.localeCompare(b.at))) {
     // 課題の担当がじかに送ったレビューの頼み（【ask-review】。記録の Key は送った課題の担当）も、Staff Engineer 担当の席の依頼書に積む。
-    if (l.peer === true && l.heading === 'ask-review' && l.to === address) {
+    // Tech Lead 担当に届く repo の席の頼みは、依頼書に積まない（Tech Lead 担当の【done】は、TPM 担当の依頼書だけを済ませる。頼みは reviews.ts の記録で数える）。
+    if (l.peer === true && l.heading === 'ask-review' && l.to === address && role.role === 'staff-engineer') {
       const at = seen(l);
       open.push({ url: l.text.slice('【ask-review】'.length).split(' ')[0] ?? '', id: l.id, ...(at === undefined ? {} : { seen: at }) });
       continue;
@@ -588,7 +589,7 @@ function openBriefs(role: RoleRecord, address: string, log: Sent[], seenAt: Seen
       // 前の居場所（担当の交代の前）が出した物は数えない。
       if (l.heading === 'end') open = [];
       // Staff Engineer 担当は、依頼書 1 つの成果を【review】で返す（【done】は送らない）。
-      if (l.heading !== 'done' && l.heading !== 'review') continue;
+      if (l.heading !== 'done' && !(l.heading === 'review' && role.role === 'staff-engineer')) continue;
       if (l.heading === 'done' && l.briefs !== undefined) {
         const named = l.briefs;
         open = open.filter(b => !named.includes(b.url));

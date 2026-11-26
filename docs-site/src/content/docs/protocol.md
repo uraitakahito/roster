@@ -43,7 +43,7 @@ flowchart TB
 | `tpm.jsonc` | TPM 担当の宛先。担当はメッセージを送るたびに読むので、TPM 担当を起こし直しても担当に知らせ直さなくてよい |
 | `roles/<Key>.jsonc` | 名簿。課題の Key → 役割・居場所の宛先・依頼書・課題管理の課題。Staff Engineer 担当の席は、課題の担当と並べるために名簿の Key を `<課題の Key>.staff` にし、見ている課題の Key を `subject` に持つ。Tech Lead 担当が起こした repo の席は、名簿の Key が `<課題の Key>.<名>` で、Tech Lead 担当の課題の Key を `subject` に持つ（下の「[Tech Lead 担当と repo の席](#tech-lead-担当と-repo-の席)」）。Tech Lead 担当の行は、起こしてよい repo の席の数の上限 `seats` を持つ |
 | `repo-seats.jsonl` | Tech Lead 担当が起こした repo の席の控え（時刻・Tech Lead 担当の課題の Key・repo の席の名簿の Key）。`roster seat add` が足し、席を閉じても消さない。出来事の時系列が、閉じた席の記録を親の課題にまとめるのに読む |
-| `reviews/<番号>.jsonc` | レビューの頼み 1 件（下の「Staff Engineer 担当の席」）。課題の Key・見る物・頼んだ担当と時刻・渡した依頼書・判定・レビューのページ・返った時刻・TPM 担当に上げた時刻。レビューを 1 度も頼んでいない project には無い |
+| `reviews/<番号>.jsonc` | レビューの頼み 1 件（下の「Staff Engineer 担当の席」。repo の席の頼みは、見る者 `reviewer` が `tech-lead`）。課題の Key・見る物・頼んだ担当と時刻・渡した依頼書・判定・レビューのページ・返った時刻・TPM 担当に上げた時刻。レビューを 1 度も頼んでいない project には無い |
 | `approvals/<環境>.jsonc` | Product Manager の承認と期限 |
 | `log.jsonl`・`infra.jsonl` | 送ったメッセージ（時刻・Key・見出し・本文・返事の先・送り手と届く担当。前の版の行には、送った後 2 秒の内に届いたかの `delivered` もある。今の版は書かず、運んだ道 `carrier: "nats"` と受け手の名を書く。見た時刻は `cli/src/seen.ts` の口が、手元の渡した記録 `delivered.jsonl` から引く。運んだ道の無い古い行は、`deliveries.jsonl`・`shown/`・`returned.jsonl` から引く）と、`roster infra run` で打った命令の記録 |
 | `message-records.jsonl` | 送った記録を置き場に写せなかった回と、送り手を付けずに置いた回（時刻・メッセージの id・訳の短い字。後の回には `placed` の欄が付く。下の「[ページの置き場](#ページの置き場)」の「送った記録の写し」）。写せた時は書かない。1 度も写しそこねていない project には無い |
@@ -325,7 +325,7 @@ sequenceDiagram
 
 ## Tech Lead 担当と repo の席
 
-Tech Lead 担当（役割 `tech-lead`。題は `Lead <課題の Key>: <短い題>`。skill は `/tech-lead`）は、いくつもの repo に渡る課題 1 つの全体をまとめる担当。TPM 担当が `roster assign <課題の Key> --role tech-lead --seats <数>` で起こす。Tech Lead 担当は、repo ごとの席（repo の席。役割は `software-engineer`）を自分で起こす。Tech Lead 担当と repo の席は、TPM 担当を通らず、じかに話す。**作りかけ**: レビューの宛先（repo の席の頼みを Tech Lead 担当へ届ける）と skill の手順は、これから足す。
+Tech Lead 担当（役割 `tech-lead`。題は `Lead <課題の Key>: <短い題>`。skill は `/tech-lead`）は、いくつもの repo に渡る課題 1 つの全体をまとめる担当。TPM 担当が `roster assign <課題の Key> --role tech-lead --seats <数>` で起こす。Tech Lead 担当は、repo ごとの席（repo の席。役割は `software-engineer`）を自分で起こす。Tech Lead 担当と repo の席は、TPM 担当を通らず、じかに話す。repo の席の計画と PR は、Tech Lead 担当がレビューする。**作りかけ**: skill の手順は、これから足す。
 
 | 命令 | 打つ者 | すること |
 |---|---|---|
@@ -344,6 +344,7 @@ Tech Lead 担当（役割 `tech-lead`。題は `Lead <課題の Key>: <短い題
 - **依頼書の数え**: repo の席では、「仕事を振る者が送った物」を、記録の行の送り手の担当の Key（`sender`）が親の課題の Key かで見分ける（Tech Lead 担当の題は替わりうるので、題の字では見ない。`fromAssigner`）。Tech Lead 担当が送る行の Key は、受け手の repo の席の Key（TPM 担当の送りと同じ）。ほかの担当は、今までどおり送り手の題が TPM 担当の題かで見る。届かないまま終わった物（渡せない・期限切れ）を記録するのは、TPM 担当の命令の片付けだけなので、Tech Lead 担当の検査に「届かないまま終わった」と出るのは、その後。
 - **終わり方**: Tech Lead 担当の【end】は、repo の席が名簿に残っていれば断る（席ごとに `roster seat dismiss` → 【end】 → `roster seat close`）。
 - **課題管理の課題**: repo の席の片付けの終わり（【end】）は、課題を済みにしない（「課題は閉じない」と出す）。済みにするのは、Tech Lead 担当の【end】だけ。repo の席が書く記録の 1 行目は、席の名を添える（`【結果】Software Engineer（pagetray）: …`）。ほかの担当の記録の形は変わらない。
+- **レビュー**: repo の席の `roster ask review` は、親の課題の Tech Lead 担当の席へ【ask-review】をじかに送る（`cli/src/commands/staff.ts` の `askLeadReview`。頼みの記録の `reviewer` が `tech-lead`）。Staff Engineer 担当の席は起こさず、Tech Lead 担当の席が無ければ、頼まずに止まって `roster ask tpm` を案内する。Tech Lead 担当は `roster report review` で返す: 自分の課題の repo の席の頼みを束ねて、頼みの番号の古い順に 1 つずつ返し、判定は頼んだ席へ届く。Staff Engineer 担当の席と違う所は 5 つ: (a) 頼みは Tech Lead 担当の依頼書の列に積まず、【review】は依頼書を済ませない（Tech Lead 担当の【done】は TPM 担当の依頼書だけを済ませる。頼みは `reviews/` の記録で数える）、(b) 頼みで席の依頼書（名簿の `brief`）と題を書き替えない、(c) 判定の後に状態を替えない、(d) 返す頼みと相手を repo の席の Key から引く、(e) レビューの依頼書の文（自分の計画と境の取り決めに照らす）。レビューの依頼書とレビューのページは、親の課題の folder に置かれる。Tech Lead 担当自身の頼みと、分けない課題の頼みは、今までどおり Staff Engineer 担当の席へ行く。`roster review list` は、repo の席の頼みに「Tech Lead 担当が見ている」と出す。
 - **Product Manager への確認**: repo の席の `roster ask pm` は断る（`roster ask lead` で Tech Lead 担当に送り、Tech Lead 担当がまとめて確認にする）。
 - **台帳での名**（castlist）: repo の席の名の接頭辞は、名簿の Key から作る（`ai-36-pagetray-swe`。課題の Key から作ると、同じ課題の repo の席がみな同じ名になる）。Tech Lead 担当は `ai-36-lead`。ラベル `tpm.subject` に親の課題の Key が入る。
 - **出来事の時系列**: `roster incident timeline <課題の Key>` は、その課題の repo の席（と、その席の Staff Engineer 担当の席）の記録も集める。repo の席は、`roster seat add` が起こすたびに足す控え（状態の folder の `repo-seats.jsonl`。席を閉じても消さない）と今の名簿で見分ける（Key の頭では見ない。点を含む別の課題の Key を混ぜないため）。

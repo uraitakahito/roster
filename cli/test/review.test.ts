@@ -323,7 +323,7 @@ describe('roster report review', () => {
   test('打てるのは Staff だけ。判定は 4 つの語、ページは置き場のレビューのページ、返す頼みが要る', async () => {
     const w = await asked();
     const page = await w.put(w.staff, 'review');
-    await expect(reportReview(w.se, { url: page, verdict: 'approve', summary: 'x' })).rejects.toThrow(/roster report review は Staff Engineer 担当（Staff の席）が打ちます/);
+    await expect(reportReview(w.se, { url: page, verdict: 'approve', summary: 'x' })).rejects.toThrow(/roster report review は、Staff Engineer 担当（Staff の席）か、repo の席の頼みを受けた Tech Lead 担当が打ちます/);
     await expect(reportReview(w.staff, { url: page, verdict: 'ok', summary: 'x' })).rejects.toThrow(/--verdict は approve・concerns・reject・not-assessed のどれかにしてください/);
     await expect(reportReview(w.staff, { url: w.plan, verdict: 'approve', summary: 'x' })).rejects.toThrow(/--url は、roster page put --kind review で置いたレビューのページの URL にしてください/);
     const other = page.replace('/AI-8/', '/AI-9/');

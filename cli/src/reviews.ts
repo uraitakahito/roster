@@ -34,6 +34,8 @@ export interface Review {
   /** 判定に添えた一言。 */
   summary?: string
   reviewedAt?: string
+  /** 見る者の役割。repo の席の頼みは tech-lead（その課題の Tech Lead 担当が見る）。無ければ Staff Engineer 担当（前の版の頼みも）。 */
+  reviewer?: 'tech-lead'
   /** 課題の担当が、判定を受けずに TPM 担当に上げた時刻（roster ask tpm --review）。 */
   escalatedAt?: string
 }
