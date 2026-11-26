@@ -326,6 +326,10 @@ describe('pattern で process に合図を送る命令（台帳 #89・#92）', (
     'kill',
     'kill 123 x',
     'kill foo',
+    // 的の後ろの -l は合図の一覧の旗でない（kill は先に的へ送る）。
+    'kill 0 -l',
+    'kill -9 0 -l',
+    'kill $(pgrep -f x) -l',
     'pgrep -f x | xargs -I{} kill {}',
     // 誤って止まる物（docs に書いた）。pid の file は読んで、数字を書く。
     'kill $(cat x.pid)',
@@ -346,6 +350,9 @@ describe('pattern で process に合図を送る命令（台帳 #89・#92）', (
     'kill $pid',
     'kill -9 "$PID"',
     'kill ${PID}',
+    'python3 -m http.server 8931 & sleep 1; kill $!',
+    'kill -9 $$',
+    'kill $1',
     'kill -- 12345',
     'kill -l',
     'kill -l 15',
@@ -362,6 +369,10 @@ describe('pattern で process に合図を送る命令（台帳 #89・#92）', (
     'pid=$(pgrep -f x -n); kill $pid',
   ])('通す: %s', (command) => {
     expect(ask(command, 'software-engineer')).toEqual({ allow: true });
+  });
+
+  test('止めた訳の命令の字に、$(…) の跡の空の語を残さない', () => {
+    expect(ask('kill $(pgrep -f x)', 'software-engineer')).toEqual({ allow: false, reason: expect.stringContaining('止めます（kill）') as string });
   });
 });
 

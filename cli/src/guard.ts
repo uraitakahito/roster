@@ -128,8 +128,8 @@ const AUDIT_START = /^roster audit start\b/;
 const PATTERN_KILLERS = new Set(['pkill', 'killall']);
 /** kill の、値を取る旗（`-s TERM`・`-n 9`）。 */
 const KILL_VALUE_FLAGS = new Set(['-s', '-n']);
-/** kill の的として通す字: pid（数字。0 は自分の process group なので外す）・job（`%1`）・変数（`$pid`・`${PID}`）。 */
-const KILL_TARGET = /^(?:[1-9]\d*|%\S+|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)$/;
+/** kill の的として通す字: pid（数字。0 は自分の process group なので外す）・job（`%1`）・変数（`$pid`・`${PID}`・`$!`・`$$`・`$1`）。 */
+const KILL_TARGET = /^(?:[1-9]\d*|%\S+|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?|\$[!$\d])$/;
 
 /**
  * 単純な命令（語の並び）が、pattern で選んだ process に合図を送る命令か。pkill・killall はいつも。
@@ -148,8 +148,9 @@ function killsByPattern(words: string[]): boolean {
       targets.push(...args.slice(i + 1));
       break;
     }
-    if (arg === '-l' || arg === '-L') return false;
     if (arg.startsWith('-') && targets.length === 0) {
+      // 合図の一覧。的の後ろの -l は旗でない（kill は先に的へ送る）ので、的の前だけで見る。
+      if (arg === '-l' || arg === '-L') return false;
       if (KILL_VALUE_FLAGS.has(arg)) i += 1;
       continue;
     }
@@ -209,7 +210,7 @@ export function judge(asked: Asked): Verdict {
   }
   const killer = commands.find(killsByPattern);
   if (killer !== undefined) {
-    return { allow: false, reason: `pattern で選んで process に合図を送る命令は止めます（${killer.slice(0, 3).join(' ')}）。思わぬ process に届くため（macOS の pkill は後ろの旗も pattern に読み、2026-11-22 に担当の session ごと 29 個を止めた）。pgrep -fl '<型>' で pid と command line を見て、当たった数を確かめてから、その数字を kill <pid> に書いてください（pgrep の出力を変数や $(…) で kill に渡すと、見る手が抜けます）。` };
+    return { allow: false, reason: `pattern で選んで process に合図を送る命令は止めます（${killer.filter(w => w !== '').slice(0, 3).join(' ')}）。思わぬ process に届くため（macOS の pkill は後ろの旗も pattern に読み、2026-11-23 の朝（JST）に担当の session ごと 29 個を止めた）。pgrep -fl '<型>' で pid と command line を見て、当たった数を確かめてから、その数字を kill <pid> に書いてください（pgrep の出力を変数や $(…) で kill に渡すと、見る手が抜けます）。` };
   }
   const reader = readOnly(asked.role);
   if (reader !== undefined) {
