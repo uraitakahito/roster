@@ -1,44 +1,11 @@
-// 連携の口。担当どうしがメッセージを送り、担当を起こし、状態を見せるための道具（cmux など）を、この形で包む。
-// 口は 2 つ: メッセージの口（MessagePort）と居場所の口（SeatPort）。上の層は、どちらの口かを名指して呼ぶ（別々の道具に替えられる）。
+// 連携の口。担当を起こし、状態を見せるための道具（cmux など）を、この形で包む。
+// 口は居場所の口（SeatPort）だけ。担当どうしのメッセージは、配りの口（mailroom/。NATS JetStream）が運ぶ。
 // 決まり（見出し・順番・名簿）はこの上の層が持ち、ここは道具の言葉を知らない。
 
-/** 動いている担当の居場所。address はメッセージの宛先で、道具ごとの形の字（cmux なら workspace:12）。 */
+/** 動いている担当の居場所。address は居場所の宛先で、道具ごとの形の字（cmux なら workspace:12）。 */
 export interface Seat {
   address: string
   title: string
-}
-
-/** 送ったメッセージ。届いたか・見たかは送る時には見ない（見た時刻は seen.ts の口が後で引く）。 */
-export interface Delivery {
-  id: string
-}
-
-/** 自分宛てのメッセージ。 */
-export interface Incoming {
-  id: string
-  from: string
-  text: string
-}
-
-/** 居場所の受信箱の 1 件（その居場所宛ての物。state は道具の言う状態、deliveredVia は配った道。時刻は ISO の字）。 */
-export interface MailboxEntry {
-  id: string
-  from: string
-  text: string
-  state: 'queued' | 'delivered' | 'read' | 'failed'
-  /** 配った道（cmux なら claude.wake は Claude が起きた時の hook、claude.prompt-submit は次の入力の時）。 */
-  deliveredVia?: string
-  deliveredAt?: string
-}
-
-/** メッセージ 1 件の、送った・届いた・読んだ時刻（道具が覚えている物。ISO の字）。 */
-export interface MessageTrace {
-  id: string
-  sentAt?: string
-  deliveredAt?: string
-  readAt?: string
-  /** 返事の先のメッセージの id。 */
-  replyTo?: string
 }
 
 /** 居場所を作るときに渡す物。title は居場所の題、cwd は命令を動かす folder。 */
@@ -59,22 +26,6 @@ export interface SeatLabel {
 
 /** サイドバーなどに出す状態の鍵。この 2 つだけを使う。 */
 export type StatusKey = 'model' | 'wait';
-
-/** メッセージの口。担当どうしのメッセージを運ぶ道具を、この形で包む（居場所の口と別の道具にできる）。 */
-export interface MessagePort {
-  /** メッセージを送り、id を返す（届いたかは見ない）。replyTo は、返事の先のメッセージの id。 */
-  send(to: string, from: string, text: string, replyTo?: string): Delivery
-  /** 自分宛てで、まだ届いていないメッセージ（手を動かしている間は届かない道具がある）。 */
-  pending(): Incoming[]
-  /** 宛先に送り、まだ届いていないメッセージの id（送る前の検査が、自分の送った物の届きを見る）。 */
-  queued(to: string): string[]
-  /** 居場所の受信箱（宛先がその居場所の物。状態を問わない）。 */
-  mailbox(address: string): MailboxEntry[]
-  /** 居場所の「まだ届いていない」物をみな既読にして、配らせない。既読にした物そのものを返す（道具は 1 通ずつは既読にできない）。 */
-  markQueuedRead(address: string): MailboxEntry[]
-  /** 道具が覚えているメッセージの時刻（宛先を問わない。閉じた居場所の分も）。道具が持たない・読めないなら空。 */
-  history(): MessageTrace[]
-}
 
 /** 居場所の口。担当の居場所を作り、題と状態を見せ、閉じる道具を、この形で包む。 */
 export interface SeatPort {
@@ -104,5 +55,5 @@ export interface SeatPort {
   close(address: string): void
 }
 
-/** 連携の口（メッセージの口と居場所の口の両方）。1 つの道具で両方を持つ adapter（`cmux.ts`・`file.ts`）がこの形を持つ。 */
-export interface Transport extends MessagePort, SeatPort {}
+/** 連携の口（居場所の口だけ）。道具ごとの adapter（`cmux.ts`・`file.ts`）がこの形を持つ。 */
+export type Transport = SeatPort;

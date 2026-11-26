@@ -1,16 +1,18 @@
-// メッセージを NATS で配る道（設定の messages が nats）の、手元の物の試験: 設定・受け手の名・Claude Code の pid・名乗り・席に付ける hook。
+// メッセージを NATS で配る道の、手元の物の試験: 設定・受け手の名・Claude Code の pid・名乗り・席に付ける hook。
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { buildCommand } from '../src/command.ts';
+import { buildCommand, startTpm } from '../src/command.ts';
 import { mailClaim, mailRelease } from '../src/commands/mail.ts';
+import { notify, type Sent } from '../src/commands/messages.ts';
 import { composeRolesConfig, readRolesConfig } from '../src/config.ts';
 import { guardSettings } from '../src/guard.ts';
-import { claimOf, claudePid, ownClaim, readClaim, recipientName, usesNats, waiterFile } from '../src/mail.ts';
+import { claimOf, claudePid, ownClaim, readClaim, recipientName, waiterFile } from '../src/mail.ts';
 import { claudeArgs } from '../src/run-role.ts';
 import type { RoleRecord } from '../src/roster.ts';
 import { FakeProcs, world } from './helpers.ts';
+import { left, natsWorld } from './mail-helpers.ts';
 
 describe('設定の messages', () => {
   const file = (body: string): string => {
@@ -20,13 +22,21 @@ describe('設定の messages', () => {
     return dir;
   };
 
-  test('書かなければ欄は無く（cmux）、nats と書けば入る。ほかの値は誤り', () => {
+  test('書かなければ欄は無く、nats と書けば入る（どちらも同じ動き）。cmux は外した事を伝える誤り。ほかの値も誤り', () => {
     expect(composeRolesConfig(file('{}')).messages).toBeUndefined();
-    expect(composeRolesConfig(file('{ "messages": "cmux" }')).messages).toBe('cmux');
     expect(composeRolesConfig(file('{ "messages": "nats" }')).messages).toBe('nats');
-    expect(() => readRolesConfig(join(file('{ "messages": "kafka" }'), '.claude', 'roles', 'config.jsonc'))).toThrow(/messages は cmux・nats のどれか/);
-    expect(usesNats(world().tpm)).toBe(false);
-    expect(usesNats(world({ messages: 'nats' }).tpm)).toBe(true);
+    expect(() => composeRolesConfig(file('{ "messages": "cmux" }'))).toThrow(/config\.jsonc の messages の cmux は外しました（メッセージは、いつも NATS JetStream で配ります）。この行を消してください$/);
+    expect(() => readRolesConfig(join(file('{ "messages": "kafka" }'), '.claude', 'roles', 'config.jsonc'))).toThrow(/messages は nats のどれか/);
+  });
+
+  test('nats と書いても書かなくても、メッセージは配りの口（NATS）に置かれ、席には渡す hook が付く', async () => {
+    for (const config of [{}, { messages: 'nats' }]) {
+      const w = await natsWorld(config);
+      await notify(w.tpm, 't-x7k2', { text: '知らせ' });
+      expect(left(w, 't-x7k2').map(m => m.text)).toEqual(['【notify】知らせ']);
+      expect(w.tpm.state.lines<Sent>('log.jsonl').at(-1)).toMatchObject({ carrier: 'nats', box: 't-x7k2' });
+      expect((await startTpm(w.tpm)).line).toContain('mail wait');
+    }
   });
 
   test('直下の folder の設定の messages は読まない（project の folder の設定だけ）', () => {
@@ -149,10 +159,7 @@ describe('名乗り（roster mail claim・release）', () => {
     expect(readClaim(se, 't-1__L1')).toBeUndefined();
   });
 
-  test('設定が cmux の席・手伝いの中では、名乗らない', () => {
-    const cmux = seat({});
-    mailClaim(cmux.se, '{}');
-    expect(readClaim(cmux.se, 't-1__L1')).toBeUndefined();
+  test('手伝いの中では、名乗らない', () => {
     const { se } = seat();
     mailClaim(se, JSON.stringify({ session_id: 's-1', agent_id: 'a-1' }));
     expect(readClaim(se, 't-1__L1')).toBeUndefined();
@@ -200,20 +207,11 @@ describe('席に付ける hook（guardSettings）', () => {
   const BIN = '/r/cli/bin/roster';
   const record = { key: 't-1', role: 'software-engineer', title: 't', cwd: '/w', addDirs: ['/s'], model: 'm', effort: 'e', permissionMode: 'p' } as RoleRecord;
 
-  test('設定が cmux の時は、今までと同じ字', () => {
-    expect(guardSettings(BIN, undefined, false)).toBe(guardSettings(BIN));
-    expect(guardSettings(BIN, 'auditor', false)).toBe(guardSettings(BIN, 'auditor'));
-    expect(Object.keys(hooks(guardSettings(BIN)))).toEqual(['PreToolUse', 'SessionStart', 'SessionEnd']);
-    expect(guardSettings(BIN)).not.toContain('mail');
-    expect(claudeArgs(record, '/r')[1]).toBe(guardSettings(BIN, 'software-engineer'));
-    expect(buildCommand('/w', '/r', [], {})).not.toContain('mail');
-  });
-
-  test('設定が nats の時は、今ある hook の後ろに、渡す hook が足される', () => {
-    const h = hooks(guardSettings(BIN, 'auditor', true));
+  test('どの席にも、渡す hook が付く。届け違いを見る hook（returned check）は付かない', () => {
+    const h = hooks(guardSettings(BIN, 'auditor'));
     const waiting = { type: 'command', async: true, asyncRewake: true, timeout: 86400, command: `${BIN} mail wait` };
-    expect(h.PreToolUse).toEqual(hooks(guardSettings(BIN, 'auditor')).PreToolUse);
-    expect(h.SessionStart?.[0]?.hooks.map(c => c.command)).toEqual([`${BIN} audit fresh`, `${BIN} castlist session-start`, `${BIN} returned check`, `${BIN} mail claim`, `${BIN} mail wait`]);
+    expect(Object.keys(h)).toEqual(['PreToolUse', 'SessionStart', 'SessionEnd', 'PostToolUse', 'PostToolUseFailure', 'Stop', 'UserPromptSubmit']);
+    expect(h.SessionStart?.[0]?.hooks.map(c => c.command)).toEqual([`${BIN} audit fresh`, `${BIN} castlist session-start`, `${BIN} mail claim`, `${BIN} mail wait`]);
     expect(h.SessionStart?.[0]?.hooks.at(-1)).toEqual(waiting);
     expect(h.SessionEnd?.[0]?.hooks.map(c => c.command)).toEqual([`${BIN} castlist session-end`, `${BIN} mail release`]);
     expect(h.PostToolUseFailure).toEqual([{ matcher: 'Bash', hooks: [{ type: 'command', command: `${BIN} mail gate` }] }]);
@@ -221,7 +219,10 @@ describe('席に付ける hook（guardSettings）', () => {
     expect(h.PostToolUse).toEqual(h.PostToolUseFailure);
     expect(h.Stop).toEqual([{ hooks: [waiting] }]);
     expect(h.UserPromptSubmit).toEqual([{ hooks: [{ type: 'command', command: `${BIN} mail prompt` }] }]);
-    expect(claudeArgs(record, '/r', true)[1]).toBe(guardSettings(BIN, 'software-engineer', true));
-    expect(buildCommand('/w', '/r', [], {}, [], true)).toContain('mail wait');
+    // TPM 担当の席（役割なし）・担当の席にも同じ hook が付く。
+    expect(hooks(guardSettings(BIN)).SessionStart?.[0]?.hooks.map(c => c.command)).toEqual([`${BIN} castlist session-start`, `${BIN} mail claim`, `${BIN} mail wait`]);
+    for (const settings of [guardSettings(BIN), guardSettings(BIN, 'auditor'), guardSettings(BIN, 'software-engineer')]) expect(settings).not.toContain('returned check');
+    expect(claudeArgs(record, '/r')[1]).toBe(guardSettings(BIN, 'software-engineer'));
+    expect(buildCommand('/w', '/r', [], {})).toContain('mail wait');
   });
 });

@@ -628,12 +628,12 @@ describe('hook の settings', () => {
   test.each<[string, RoleName | undefined]>([['TPM 担当', undefined], ['担当', 'software-engineer'], ['Auditor', 'auditor']])('%s: session の始まりと終わりに roster castlist を呼ぶ', (_label, role) => {
     const h = hooks(role);
     expect(h.SessionStart?.flatMap(g => g.hooks.map(x => x.command))).toContain('/r/cli/bin/roster castlist session-start');
-    expect(h.SessionEnd?.flatMap(g => g.hooks.map(x => x.command))).toEqual(['/r/cli/bin/roster castlist session-end']);
+    expect(h.SessionEnd?.flatMap(g => g.hooks.map(x => x.command))).toContain('/r/cli/bin/roster castlist session-end');
     expect(h.PreToolUse?.[0]?.hooks.map(x => x.command)).toEqual(['/r/cli/bin/roster guard']);
   });
 
   test('Auditor の席は、始まりに roster audit fresh も呼ぶ', () => {
-    expect(hooks('auditor').SessionStart?.flatMap(g => g.hooks.map(x => x.command))).toEqual(['/r/cli/bin/roster audit fresh', '/r/cli/bin/roster castlist session-start', '/r/cli/bin/roster returned check']);
+    expect(hooks('auditor').SessionStart?.flatMap(g => g.hooks.map(x => x.command))).toEqual(['/r/cli/bin/roster audit fresh', '/r/cli/bin/roster castlist session-start', '/r/cli/bin/roster mail claim', '/r/cli/bin/roster mail wait']);
   });
 });
 

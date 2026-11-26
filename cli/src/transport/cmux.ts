@@ -1,7 +1,7 @@
 // cmux の adapter。連携の口を cmux の命令に写す。cmux の言葉（workspace・surface・サイドバー）はこのファイルの外に出さない。
 import type { Exec, ExecResult } from '../exec.ts';
 import { TpmError } from '../skill-sets.ts';
-import type { Delivery, Incoming, MailboxEntry, MessageTrace, Seat, SeatLabel, SpawnOptions, StatusKey, Transport } from './types.ts';
+import type { Seat, SeatLabel, SpawnOptions, StatusKey, Transport } from './types.ts';
 
 /** 状態の鍵ごとの見た目（protocol の「サイドバー」）。 */
 const STATUS_STYLE: Record<StatusKey, string[]> = {
@@ -12,38 +12,7 @@ const STATUS_STYLE: Record<StatusKey, string[]> = {
 /** 起動の命令の上限（バイト）。超えると cmux は黙って実行しない。 */
 const COMMAND_LIMIT = 1024;
 
-/** cmux が覚えているメッセージの数の上限（これより古い物は捨てられる）。 */
-const HISTORY_LIMIT = 1000;
-
-/** cmux の受信箱の 1 件のうち、時刻に使う欄（時刻は UNIX の秒）。 */
-interface CmuxMessage {
-  id: string
-  sender_name?: string
-  body?: string
-  state?: string
-  delivered_via?: string | null
-  recipient_workspace_id?: string
-  created_at?: number | null
-  delivered_at?: number | null
-  read_at?: number | null
-  in_reply_to?: string | null
-}
-
-/** UNIX の秒を ISO の字にする。無ければ欄ごと落とす。 */
-const iso = <K extends string>(key: K, seconds: number | null | undefined): Partial<Record<K, string>> =>
-  typeof seconds === 'number' ? { [key]: new Date(seconds * 1000).toISOString() } as Record<K, string> : {};
-
-/** cmux の受信箱の 1 件を、受信箱の形にする。 */
-const entry = (m: CmuxMessage): MailboxEntry => ({
-  id: m.id,
-  from: m.sender_name ?? '',
-  text: m.body ?? '',
-  state: (['queued', 'delivered', 'read', 'failed'] as const).find(s => s === m.state) ?? 'failed',
-  ...(typeof m.delivered_via === 'string' ? { deliveredVia: m.delivered_via } : {}),
-  ...iso('deliveredAt', m.delivered_at),
-});
-
-/** cmux でメッセージを送り、居場所（workspace）を作り、状態をサイドバーに出す adapter。 */
+/** cmux で居場所（workspace）を作り、状態をサイドバーに出す adapter。 */
 export class CmuxTransport implements Transport {
   private readonly exec: Exec;
 
@@ -55,73 +24,6 @@ export class CmuxTransport implements Transport {
     const caller = (this.json(['identify']) as { caller?: { workspace_ref?: string } }).caller;
     if (!caller?.workspace_ref) throw new TpmError('cmux identify が自分の workspace を返しません（cmux の中で動かしてください）');
     return caller.workspace_ref;
-  }
-
-  send(to: string, from: string, text: string, replyTo?: string): Delivery {
-    // 本文は標準入力で渡す（- で始まる本文や長い本文でも引数の読み違いが起きない）。
-    const target = replyTo === undefined ? [to] : ['--reply-to', replyTo];
-    const out = this.run(['agent', 'message', ...target, '--from', from, '-'], text).stdout;
-    const id = /message ([0-9a-f-]{36})/i.exec(out)?.[1];
-    if (id === undefined) throw new TpmError(`cmux agent message の出力からメッセージの id を読めません: ${out.trim()}`);
-    // 届いたかは見張らない。cmux は相手の手が空くまで配らないので、送った後の短い見張りは「まだ届いていない」と出しやすく、
-    // その字が記録に固まって実際とずれた（台帳 #129）。見た時刻は、後で見た時刻の口（seen.ts）が history() と shown/ から引く。
-    return { id };
-  }
-
-  pending(): Incoming[] {
-    // --mark-read は付けない（付けると既読になり、hook が届けなくなる）。
-    const inbox = this.json(['agent', 'inbox', '--surface', this.whoami(), '--state', 'queued']) as { messages?: { id: string, sender_name: string, body: string }[] };
-    return (inbox.messages ?? []).map(m => ({ id: m.id, from: m.sender_name, text: m.body }));
-  }
-
-  queued(to: string): string[] {
-    const inbox = this.json(['agent', 'inbox', '--surface', to, '--state', 'queued']) as { messages?: { id: string }[] };
-    return (inbox.messages ?? []).map(m => m.id);
-  }
-
-  mailbox(address: string): MailboxEntry[] {
-    const id = this.workspaceId(address);
-    return this.inboxOf(['--surface', address, '--limit', String(HISTORY_LIMIT)]).filter(m => m.recipient_workspace_id === id).map(entry);
-  }
-
-  markQueuedRead(address: string): MailboxEntry[] {
-    // --surface の一覧は、その居場所宛ての物だけでなく、その居場所が送ってまだ相手に届いていない物も並べ、--mark-read は並べた物をみな既読にする。
-    // 自分の送った待ち（TPM 担当の【brief】・落ちた前の session が送った【done】など）を既読にすると相手に届かなくなるので、それがある時は既読にしない。
-    const id = this.workspaceId(address);
-    const queued = ['--surface', address, '--state', 'queued', '--limit', String(HISTORY_LIMIT)];
-    if (this.inboxOf(queued).some(m => m.recipient_workspace_id !== id)) return [];
-    return this.inboxOf([...queued, '--mark-read']).filter(m => m.recipient_workspace_id === id).map(entry);
-  }
-
-  /** 居場所の宛先（workspace:7）の UUID（受信箱の recipient_workspace_id と比べる）。居場所が無ければ止まる。 */
-  private workspaceId(address: string): string {
-    const id = [...this.seatsById()].find(([, seat]) => seat.address === address)?.[0];
-    if (id === undefined) throw new TpmError(`居場所 ${address} がありません`);
-    return id;
-  }
-
-  private inboxOf(args: string[]): CmuxMessage[] {
-    return (this.json(['agent', 'inbox', ...args]) as { messages?: CmuxMessage[] }).messages ?? [];
-  }
-
-  history(): MessageTrace[] {
-    // --surface を付けないと、閉じた居場所の分も含めて返る。記録のための読みなので、読めなくても命令は止めない。
-    const r = this.exec('cmux', ['--json', 'agent', 'inbox', '--limit', String(HISTORY_LIMIT)]);
-    if (r.status !== 0) return [];
-    let messages: CmuxMessage[];
-    try {
-      messages = (JSON.parse(r.stdout) as { messages?: CmuxMessage[] }).messages ?? [];
-    }
-    catch {
-      return [];
-    }
-    return messages.map(m => ({
-      id: m.id,
-      ...iso('sentAt', m.created_at),
-      ...iso('deliveredAt', m.delivered_at),
-      ...iso('readAt', m.read_at),
-      ...(typeof m.in_reply_to === 'string' ? { replyTo: m.in_reply_to } : {}),
-    }));
   }
 
   spawn(options: SpawnOptions): string {

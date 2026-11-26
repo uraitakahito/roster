@@ -13,15 +13,14 @@ import { readRole, requireRole, requireSelf, requireTpm, requireTpmSide, writeRo
 import { patchReview, readReviews, VERDICTS } from '../reviews.ts';
 import { TpmError } from '../skill-sets.ts';
 import { MAX_POINTS, type Note, type NoteKind, type NoteLink } from '../tracker/types.ts';
-import type { Incoming } from '../transport/types.ts';
 import { isStorePage, pageOwner, replyLine, samePage, waitingByParty, waitingUrls, WAITING_PAGES } from './reply.ts';
 import { tidyMail } from './mail.ts';
 import { copyMessageRecord } from './message-record.ts';
 import { markEscalated } from './review-marks.ts';
 import { isPageUrl } from './store.ts';
-import { readShown, returnedIds, seenTimes, shownFile, type SeenAt } from '../seen.ts';
+import { returnedIds, seenTimes, type SeenAt } from '../seen.ts';
 import { envOf } from '../env.ts';
-import { claimOf, deliveredLines, endedLines, gateFile, markPassed, ownClaim, passedIds, recordDelivered, usesNats, type Claim, type GateMark } from '../mail.ts';
+import { claimNamed, deliveredLines, endedLines, gateFile, markPassed, ownName, passedIds, recipientName, recordDelivered, type Claim, type GateMark } from '../mail.ts';
 import { MAILROOM_LIMITS, type Counts, type Recipient, type Stored } from '../mailroom/types.ts';
 import { selfParty, TPM_PARTY, type Party } from '../party.ts';
 
@@ -59,13 +58,12 @@ export interface Sent {
   /** 送った担当。前の版の行には無い。 */
   sender?: Party
   /**
-   * 届く担当。返事の形（--reply-to）では、cmux が元のメッセージの送り手の居場所へ届けるので、元の行の送り手にする（元の行が無ければ書かない）。
-   * 前の版の行には無い（届いた所で比べない）。
+   * 届く担当。前の版の行には無い。前の版の、返事の形（--reply-to）の行では、元の行の送り手（cmux が、返事を元のメッセージの送り手の居場所へ届けた）。
    */
   recipient?: Party
-  /** 運んだ道。NATS（配りの口）で運んだ行にだけ書く。無い行は、連携の道具（cmux）が運んだ。 */
+  /** 運んだ道。今の版の行は、いつも nats（配りの口）。無い行は、前の版で連携の道具（cmux）が運んだ古い行。 */
   carrier?: 'nats'
-  /** NATS で運んだ行だけ: 配りの受け手の名（受け手の担当の組から作った字）。 */
+  /** NATS で運んだ行: 配りの受け手の名（受け手の担当の組から作った字）。 */
   box?: Recipient
   /** 【done】の行だけ: 担当が --briefs で名指して済ませた依頼書の URL（渡された時の字のまま）。無ければ、見ていた依頼書のいちばん古い 1 つを済ませる。 */
   briefs?: string[]
@@ -99,19 +97,21 @@ const notRepeatToTpm = async (ctx: Context, self: RoleRecord, id: HeadingId, bod
  */
 const NATS_TEXT_MAX = 8000;
 
-/** メッセージキュー（NATS）が応えない時の誤り。居場所の状態にも出す。not は「送っていません」などの字。 */
-function queueDown(ctx: Context, not: string, e: unknown): TpmError {
+/** メッセージキュー（NATS）が応えない時の誤り（queueDown が作る。roster report incident だけが、これを受けて台帳に書いて進む）。 */
+class QueueDownError extends TpmError {}
+
+/** メッセージキュー（NATS）が応えない時の誤り。居場所の状態にも出し、gate.jsonl（種類 queue）に残す。not は「送っていません」などの字。 */
+function queueDown(ctx: Context, not: string, e: unknown): QueueDownError {
   ctx.seats.setStatus('wait', 'メッセージキューが応えません');
   recordGateStop(ctx, 'queue', `down: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200));
-  return new TpmError(`メッセージキューが応えません。${not}（${e instanceof Error ? e.message : String(e)}）。メッセージキュー（NATS）が動いているかを TPM 担当か Product Manager に確かめ、動いてから同じ命令を打ち直してください`);
+  return new QueueDownError(`メッセージキューが応えません。${not}（${e instanceof Error ? e.message : String(e)}）。メッセージキュー（NATS）が動いているかを TPM 担当か Product Manager に確かめ、動いてから同じ命令を打ち直してください`);
 }
 
 /**
- * メッセージを配りの口（NATS）に置き、作った id を返す。長すぎる本文は置かずに誤り。配りの口が誤りなら、置けていないとして止まる。
+ * メッセージを配りの口（NATS）に置き、作った id を返す。長すぎる本文は置かずに誤り。配りの口が誤りなら、置けていないとして止まる（queueDown）。
  * labels は、送った側の記録の欄（deliver の注）。
- * urgent（直してと頼む命令。fellBack の注）の時は、止まらずに undefined を返す（呼ぶ側が cmux で送る）。落とした事は gate.jsonl に残す。
  */
-async function post(ctx: Context, box: Recipient, from: string, text: string, replyTo: string | undefined, labels: Record<string, string>, urgent: boolean): Promise<string | undefined> {
+async function post(ctx: Context, box: Recipient, from: string, text: string, replyTo: string | undefined, labels: Record<string, string>): Promise<string> {
   const length = text.length;
   if (length > NATS_TEXT_MAX) throw new TpmError(`本文が長すぎます（${length} 字。メッセージキューで送れるのは ${NATS_TEXT_MAX} 字まで）。長い本文はページに書いて（roster page put）、URL を送ってください。送っていません`);
   const id = randomUUID();
@@ -119,29 +119,16 @@ async function post(ctx: Context, box: Recipient, from: string, text: string, re
     await (await ctx.mailroom()).put({ id, from, to: box, text, ...(replyTo === undefined ? {} : { replyTo }), labels });
   }
   catch (e) {
-    if (!urgent) throw queueDown(ctx, '送っていません', e);
-    fellBack(ctx, '置く所', e);
-    return undefined;
+    throw queueDown(ctx, '送っていません', e);
   }
   return id;
 }
 
 /**
- * 直してと頼む命令（roster ask devops・roster report incident）は、メッセージキュー（NATS）が応えない時に、止まらずに今の cmux の形で送る。
- * 訳: メッセージキューが止まった事を知らせる道が、メッセージキューに頼らないように。受け手の席は cmux の hook も持っている
- * （cmux の wrapper が付ける）ので、cmux で届く。ほかの送る命令は、応えなければ止まる。
- * ここは、cmux に落とした事を gate.jsonl（種類 queue）に残す。where は、応えなかった所。
+ * 課題に記録を書く前に、送れるかを確かめる: 配りの口へ軽い問いを 1 つ打つ。応えなければ「メッセージキューが応えません。送っていません」で止める
+ * （記録を書いた後で、置けずに止まらないように）。受け手の名乗りは見ない（メッセージは、いつも配りの口に置く）。
  */
-function fellBack(ctx: Context, where: string, e: unknown): void {
-  recordGateStop(ctx, 'queue', `fallback（${where}。cmux で送る）: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200));
-}
-
-/**
- * 課題に記録を書く前に、送れるかを確かめる: 設定の messages が nats で、届く担当の名乗りが効いている時（NATS に置くことになる時）に、
- * 配りの口へ軽い問いを 1 つ打つ。応えなければ「メッセージキューが応えません。送っていません」で止める（記録を書いた後で、置けずに止まらないように）。
- */
-async function assertReachable(ctx: Context, party: Party): Promise<void> {
-  if (!usesNats(ctx) || claimOf(ctx, party) === undefined) return;
+async function assertReachable(ctx: Context): Promise<void> {
   try {
     await (await ctx.mailroom()).lag();
   }
@@ -151,28 +138,25 @@ async function assertReachable(ctx: Context, party: Party): Promise<void> {
 }
 
 /**
- * メッセージを送り、送った記録を log.jsonl に足す。recipient は届く担当（返事の形なら元の行の送り手に替える）、extra は記録の行に足す欄。
+ * メッセージを送り、送った記録を log.jsonl に足す。recipient は届く担当、extra は記録の行に足す欄。
  * 足した行は、置き場にも写す（message-record.ts。待たない。写せなくても、送った事と log.jsonl は変わらない）。
- * 運ぶ道: 設定の messages が nats で、届く担当の名乗り（mail.ts）が効いていれば、配りの口（NATS）に置く（cmux では送らない。記録の行に carrier: nats）。
- * それ以外（設定が cmux・届く担当が名乗っていない・届く担当が分からない）は、今のとおり連携の道具（cmux）で送る。
- * cmux で送る返事の先が NATS で運んだ物（cmux の知らない id）の時は、cmux には返事の形を付けずに宛先へ送る（記録の replyTo は残す）。
- * NATS に置く物には、送った側の記録の欄（Key・見出し・送り手と受け手の Key・送った時刻）を持たせる（commands/mail.ts の sentFrom が読む）。
- * urgent は、直してと頼む命令（配りの口が応えなければ、cmux で送る。post の注）。
+ * 運ぶ道は、いつも配りの口（NATS）。受け手の名（mail.ts の recipientName）の箱に置く。受け手の名乗りが効いているかは見ない
+ * （名乗る前の席宛ても置く。席の hook が後で渡す）。名が作れない組（長い）は、誤りで止まる（送っていない）。
+ * 返事の形（replyTo）でも、届く担当は recipient のまま。replyTo は、記録の行と置く物に残す。
+ * 置く物には、送った側の記録の欄（Key・見出し・送り手と受け手の Key・送った時刻）を持たせる（commands/mail.ts の sentFrom が読む）。
+ * to は、記録の行に残す居場所の宛先（運ぶのには使わない）。
  */
-async function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: string, body: string, recipient: Party, replyTo?: string, extra: Pick<Sent, 'settle' | 'peer' | 'briefs'> = {}, urgent = false): Promise<string> {
+async function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: string, body: string, recipient: Party, replyTo?: string, extra: Pick<Sent, 'settle' | 'peer' | 'briefs'> = {}): Promise<string> {
   await assertNotRepeat(ctx, id, from, to, body, replyTo);
   const text = message(id, body);
-  const original = replyTo === undefined ? undefined : ctx.state.lines<Sent>('log.jsonl').findLast(l => l.id === replyTo);
-  const receiving = replyTo === undefined ? recipient : original?.sender;
-  const box = usesNats(ctx) && receiving !== undefined ? claimOf(ctx, receiving)?.name : undefined;
+  const box = recipientName(recipient);
   // 置く物に、置き場の記録に要る欄を持たせる（受け手の側が、この session の log.jsonl を読まずに、同じ値の記録を書き足せるように。
   // 受け手が待っていると、こちらが log.jsonl に書く前に、受け手の書き足しが置き場に先に着くことがある）。
   const at = ctx.now().toISOString();
-  const labels = { key, heading: id, from: selfParty(ctx.env).key, at, ...(receiving === undefined ? {} : { to: receiving.key }) };
-  const posted = box === undefined ? undefined : await post(ctx, box, from, text, replyTo, labels, urgent);
-  const sentId = posted ?? ctx.messages.send(to, from, text, original?.carrier === 'nats' ? undefined : replyTo).id;
+  const labels = { key, heading: id, from: selfParty(ctx.env).key, at, to: recipient.key };
+  const sentId = await post(ctx, box, from, text, replyTo, labels);
   const sent: Sent = {
-    at: posted === undefined ? ctx.now().toISOString() : at,
+    at,
     key,
     heading: id,
     from,
@@ -182,26 +166,18 @@ async function deliver(ctx: Context, id: HeadingId, key: string, from: string, t
     ...(replyTo === undefined ? {} : { replyTo }),
     ...extra,
     sender: selfParty(ctx.env),
-    ...(receiving === undefined ? {} : { recipient: receiving }),
-    ...(box === undefined || posted === undefined ? {} : { carrier: 'nats' as const, box }),
+    recipient,
+    carrier: 'nats',
+    box,
   };
   ctx.state.append('log.jsonl', sent);
   copyMessageRecord(ctx, sent);
   return `送った: 【${id}】→ ${to}（${SENT_NOTE}）`;
 }
 
-/** 担当から TPM 担当へ。urgent は、直してと頼む命令（配りの口が応えなければ、cmux で送る）。 */
-async function toTpm(ctx: Context, self: RoleRecord, id: HeadingId, body: string, replyTo?: string, extra: Pick<Sent, 'briefs'> = {}, urgent = false): Promise<string> {
-  return deliver(ctx, id, self.key, self.title, requireTpm(ctx).address, body, { key: TPM_PARTY }, replyTo, extra, urgent);
-}
-
-/**
- * 届け違いのメッセージを、担当から TPM 担当へ【returned】で返す（roster returned check が呼ぶ。送る前の検査は通さない: hook の中なので止まれない）。
- * TPM 担当の居場所が無ければ送らずに止まる。
- */
-export async function returnToTpm(ctx: Context, self: RoleRecord, body: string): Promise<string> {
-  if (tpmSeat(ctx) === undefined) throw new TpmError('TPM 担当の居場所がありません');
-  return toTpm(ctx, self, 'returned', body);
+/** 担当から TPM 担当へ。 */
+async function toTpm(ctx: Context, self: RoleRecord, id: HeadingId, body: string, replyTo?: string, extra: Pick<Sent, 'briefs'> = {}): Promise<string> {
+  return deliver(ctx, id, self.key, self.title, requireTpm(ctx).address, body, { key: TPM_PARTY }, replyTo, extra);
 }
 
 /** 担当の居場所が今あるかを見て、宛先を返す。無ければ止まる。 */
@@ -215,7 +191,7 @@ function seatOf(ctx: Context, role: RoleRecord): string {
 
 /** TPM 担当から担当へ。居場所が無ければ止まる。 */
 async function toRole(ctx: Context, role: RoleRecord, id: HeadingId, body: string, replyTo?: string, extra: Pick<Sent, 'settle'> = {}): Promise<string> {
-  // メッセージを NATS で配る設定の時だけ: 渡せない物・期限切れを記録し、命令の結果に 1 通につき 1 度だけ出す（設定が cmux なら何も出ない）。
+  // 渡せない物・期限切れを記録し、命令の結果に 1 通につき 1 度だけ出す。
   const ended = await tidyMail(ctx, { sweep: false });
   if (ended.length > 0) ctx.print(ended);
   return deliver(ctx, id, role.key, TPM_TITLE, seatOf(ctx, role), body, partyOf(role), replyTo, extra);
@@ -235,10 +211,10 @@ export async function toPeer(ctx: Context, self: RoleRecord, peer: RoleRecord, i
   return deliver(ctx, id, self.key, self.title, peerSeat(ctx, peer), body, partyOf(peer), undefined, { peer: true });
 }
 
-/** 担当が担当へじかに送る物の 2 度送りを見る（課題に記録を書く前に呼ぶ。相手の宛先で数える）。NATS に置くことになる時は、置けるかも確かめる。 */
+/** 担当が担当へじかに送る物の 2 度送りを見る（課題に記録を書く前に呼ぶ。相手の宛先で数える）。配りの口に置けるかも確かめる。 */
 export async function notRepeatToPeer(ctx: Context, self: RoleRecord, peer: RoleRecord, id: HeadingId, body: string): Promise<void> {
   await assertNotRepeat(ctx, id, self.title, peerSeat(ctx, peer), body);
-  await assertReachable(ctx, partyOf(peer));
+  await assertReachable(ctx);
 }
 
 /** 課題に記録を書く。課題が無い・課題管理を使わない project なら書かない。 */
@@ -251,20 +227,6 @@ export function record(ctx: Context, role: RoleRecord, note: Note): string[] {
 
 // ---- 入口の検査（送る前に見る。どちらも、課題への記録などを書く前に通す） ----
 
-/** 見せたメッセージの id を覚える数（居場所ごと）。 */
-const SHOWN_KEEP = 200;
-
-/** メッセージを「見せた」と、初めて見せた時刻とともに覚える（`roster inbox` と、送る前の検査が呼ぶ。`roster hello` は未読を出さないので、覚えない）。覚えた物では、送る前の検査は止まらない。 */
-export function markShown(ctx: Context, messages: Incoming[]): void {
-  const address = ctx.seats.whoami();
-  const shown = readShown(ctx, address);
-  const known = new Set(shown.map(e => e.id));
-  const at = ctx.now().toISOString();
-  const added = [...new Set(messages.map(m => m.id))].filter(id => !known.has(id)).map(id => ({ id, at }));
-  if (added.length === 0) return;
-  ctx.state.write(shownFile(address), [...shown, ...added].slice(-SHOWN_KEEP));
-}
-
 /** 未読で止まったときの字（送る命令と、ページを置く命令）。 */
 const READ_STOP = {
   send: { not: '送っていません', retry: '同じ命令を打ち直せば送ります（事情が変わっていたら、中身を変えて打つ）' },
@@ -272,44 +234,72 @@ const READ_STOP = {
 } as const;
 
 /**
- * 送る前の検査。自分宛てでまだ届いていないメッセージのうち、まだ見せていない物があれば、それを出して 1 度だけ止まる（行き違いを減らす）。
+ * 送る前の検査。自分宛てで、配りの口（NATS）にまだ残っている物（まだ渡っていない物）があれば、1 度だけ止まる（行き違いを減らす）。
  * from は相手の題（TPM 担当が担当に送るとき。ほかの担当からのメッセージでは止まらない）。担当が受けるのは TPM 担当と、レビューの相手（課題の担当と Staff Engineer 担当の席）からだけなので、付けずにどれでも止まる。
- * 見せた物は覚えるので、同じ命令を打ち直せば送る。action は止まった時の字（put は roster page put が置く前に呼ぶとき）。
- * 自分が送った物は数えない: cmux は、自分の受信箱の「まだ届いていない物」に、自分が送ってまだ相手に届いていない物も返す
- * （送った直後の次の命令が、自分のメッセージを未読として出して止まった。台帳 #97・#100）。送った記録（log.jsonl）の、送り手が自分の行の id を除く。
- * 送り手は、担当なら「Key が自分で、TPM 担当の名でない行」、TPM 担当なら「TPM 担当の名の行」で見る（宛先では見ない。返事の形（--reply-to）は、
- * 記録の宛先と本当の受け手がずれることがある。題でも見ない。居場所の題は替わることがある）。
- * 設定の messages が nats で、自分（この session）の名乗りが効いている時は、これを通した後に、配りの口（NATS）に聞く形の検査（assertHandedOver）も通す。
+ * action は止まった時の字（put は roster page put が置く前に呼ぶとき）。
+ * 自分の受け手の名が作れなければ（長い組）、検査を通す。
+ * - 自分（この session）の名乗りが効いている時: 本文は出さず、すぐ後の hook に渡させる（assertHandedOver）。
+ * - 名乗りが効いていない時（渡す hook を持たない session）: 本文を命令の結果に出して止まる（assertUnclaimed）。
  */
-export async function assertRead(ctx: Context, who: string, from?: string, action: keyof typeof READ_STOP = 'send', urgent = false): Promise<void> {
-  // 名乗っている席にも、cmux で届く時がある（席を起こしてから名乗るまでに送られた【brief】・/clear の間・名乗りが一時に効かない間）。
-  // だから、cmux の形の検査はいつも先に通し、名乗りが効いていれば、続けて NATS の形の検査をする。
-  assertShown(ctx, who, from, action);
-  const claim = ownClaim(ctx);
-  if (claim !== undefined) await assertHandedOver(ctx, claim, who, from, action, urgent);
+export async function assertRead(ctx: Context, who: string, from?: string, action: keyof typeof READ_STOP = 'send'): Promise<void> {
+  const name = ownName(ctx);
+  if (name === undefined) return;
+  const claim = claimNamed(ctx, name);
+  if (claim !== undefined) await assertHandedOver(ctx, claim, who, from, action);
+  else await assertUnclaimed(ctx, name, who, from, action);
 }
 
-/** 送る前の検査の、cmux の形（連携の道具の受信箱と shown/）。中身は assertRead の注のとおり。 */
-function assertShown(ctx: Context, who: string, from: string | undefined, action: keyof typeof READ_STOP): void {
-  const incoming = ctx.messages.pending().filter(m => from === undefined || m.from === from);
-  if (incoming.length === 0) return;
-  const self = ctx.seats.whoami();
-  const key = envOf(ctx.env, 'KEY');
-  const mine = (l: Sent): boolean => key ? l.key === key && l.from !== TPM_TITLE : l.from === TPM_TITLE;
-  const sent = new Set(ctx.state.lines<Sent>('log.jsonl').filter(mine).map(l => l.id));
-  const pending = incoming.filter(m => !sent.has(m.id));
-  if (pending.length === 0) return;
-  const shown = new Set(readShown(ctx, self).map(e => e.id));
-  const unread = pending.filter(m => !shown.has(m.id));
+/**
+ * 名乗りが効いていない session に見せた物を覚え、出す行（送り手・id・本文）を返す: 「検査では止めない」の印を付け（次の検査では止まらない）、
+ * 渡した記録に output と残す（届いたには数えないが、見た時刻の口（seen.ts）は「見せた」と読む）。箱の物は消さない（期限で消える）。
+ */
+function shownLines(ctx: Context, name: Recipient, unread: Stored[]): string[] {
+  const ids = unread.map(m => m.id);
+  markPassed(ctx, name, ids);
+  for (const id of ids) recordDelivered(ctx, id, name, 'output');
+  return unread.flatMap(m => [`--- ${m.from}（id ${m.id}）`, m.text]);
+}
+
+/**
+ * roster inbox の、名乗りが効いていない session の分: 配りの口に残っている自分宛てのうち、まだ見せていない物（印の無い物）を出す行を返す。無ければ空。
+ * 見せた物は覚える（shownLines）ので、ここで見せた物では、送る前の検査は止まらない。
+ */
+export async function showUnread(ctx: Context, name: Recipient): Promise<string[]> {
+  const passed = passedIds(ctx, name);
+  const unread = (await (await ctx.mailroom()).peek(name)).filter(m => !passed.has(m.id));
+  return unread.length === 0 ? [] : shownLines(ctx, name, unread);
+}
+
+/**
+ * 送る前の検査の、名乗りが効いていない session の形（渡す hook を持たない: Claude Code の pid が分からなかった session・試験）。
+ * 配りの口の自分宛てのうち、「検査では止めない」の印の無い物があれば、本文を出して 1 度止まる。見せた物は覚える（shownLines）ので、打ち直しは通る。
+ * 写しの遅れと、配りの口が応えない時の扱いは、名乗っている時（assertHandedOver）と同じ。from で絞る決まりも同じ。
+ */
+async function assertUnclaimed(ctx: Context, name: Recipient, who: string, from: string | undefined, action: keyof typeof READ_STOP): Promise<void> {
+  const not = READ_STOP[action].not;
+  const asked = await askQueue(ctx, name).catch((e: unknown) => {
+    throw queueDown(ctx, not, e);
+  });
+  assertNoLag(ctx, asked.lag, not);
+  const passed = passedIds(ctx, name);
+  const unread = asked.letters.filter(m => (from === undefined || m.from === from) && !passed.has(m.id));
   if (unread.length === 0) return;
-  markShown(ctx, unread);
+  const lines = shownLines(ctx, name, unread);
   recordGateStop(ctx, 'unread', unread.map(m => m.id).join(' '));
   throw new TpmError([
-    `${who}から、まだ読んでいないメッセージが ${unread.length} 件あります。${READ_STOP[action].not}。`,
-    ...unread.flatMap(m => [`--- ${m.from}（id ${m.id}）`, m.text]),
+    `${who}から、まだ読んでいないメッセージが ${unread.length} 件あります。${not}。`,
+    ...lines,
     '--- ここまで',
     `読んだうえで、${READ_STOP[action].retry}。`,
   ].join('\n'));
+}
+
+/** 写しの遅れ（N4）が、待っても残っていれば止める。居場所の状態にも出す。 */
+function assertNoLag(ctx: Context, lag: number, not: string): void {
+  if (lag === 0) return;
+  ctx.seats.setStatus('wait', 'メッセージキューの写しが遅れています');
+  recordGateStop(ctx, 'queue', `lag: ${lag}`);
+  throw new TpmError(`メッセージキューの写しが遅れています（まだ写されていない物が ${lag} 通）。${not}。少し待って、同じ命令を打ち直してください`);
 }
 
 /** T8 の (a)「渡している途中」と見る間に足す、取り置きの長さの後の少しの間（ミリ秒）。 */
@@ -360,7 +350,7 @@ async function askQueue(ctx: Context, name: Recipient): Promise<{ lag: number, l
 }
 
 /**
- * 送る前の検査の、NATS の形（設定の messages が nats で、自分の名乗りが効いている時。claim は自分の名乗り）。
+ * 送る前の検査の、自分の名乗りが効いている時の形（claim は自分の名乗り）。
  * 先に、hook が自分宛てを渡した直後でないかを見る（assertNotFresh。配りの口には聞かない）。
  * 自分宛てで、配りの口にまだ残っている物（まだ渡っていない物）があれば止める。**本文は出さない**: 止めた事を印（mail.ts の GateMark）に書き、
  * すぐ後の hook（roster mail gate）が本文を渡す。渡された後の打ち直しは通る。
@@ -371,24 +361,15 @@ async function askQueue(ctx: Context, name: Recipient): Promise<{ lag: number, l
  *   (b) そうでなければ（取り置き中が無い・その間を過ぎた）、hook が働いていないと見て、本文を命令の結果に出して通す。出した id には「検査では止めない」の印を付ける。
  *       届いたとは記録せず（渡した記録に output と残す）、配りの口にも残す（hook が後で渡せる）。
  * from（相手の題）で絞る決まりは、今までと同じ（TPM 担当が担当に送る時は、その担当からの物だけで止まる）。
- * urgent（直してと頼む命令）の時は、配りの口が応えなければ、止めずに通す（fellBack の注）。
  */
-async function assertHandedOver(ctx: Context, claim: Claim, who: string, from: string | undefined, action: keyof typeof READ_STOP, urgent: boolean): Promise<void> {
+async function assertHandedOver(ctx: Context, claim: Claim, who: string, from: string | undefined, action: keyof typeof READ_STOP): Promise<void> {
   const name = claim.name;
   const not = READ_STOP[action].not;
   assertNotFresh(ctx, claim, not);
   const asked = await askQueue(ctx, name).catch((e: unknown) => {
-    if (!urgent) throw queueDown(ctx, not, e);
-    fellBack(ctx, '送る前の検査', e);
-    return undefined;
+    throw queueDown(ctx, not, e);
   });
-  // 直してと頼む命令は、配りの口が応えなければ、cmux の形の検査（もう通した）だけで進む。
-  if (asked === undefined) return;
-  if (asked.lag > 0) {
-    ctx.seats.setStatus('wait', 'メッセージキューの写しが遅れています');
-    recordGateStop(ctx, 'queue', `lag: ${asked.lag}`);
-    throw new TpmError(`メッセージキューの写しが遅れています（まだ写されていない物が ${asked.lag} 通）。${not}。少し待って、同じ命令を打ち直してください`);
-  }
+  assertNoLag(ctx, asked.lag, not);
   const mark = ctx.state.read<GateMark>(gateFile(name));
   // 印の物が、もう 1 つも残っていなければ（hook のほかの道で渡った）、印を消す。
   if (mark !== undefined && !asked.letters.some(m => mark.ids.includes(m.id))) ctx.state.remove(gateFile(name));
@@ -426,13 +407,13 @@ async function assertHandedOver(ctx: Context, claim: Claim, who: string, from: s
 }
 
 /**
- * メッセージを送る担当の、自分の名簿の行。送る前の検査（assertRead）を通し、TPM 担当へ NATS で送ることになる時は、置けるかを確かめる
- * （課題に記録を書く前に止めるため。assertReachable）。urgent は、直してと頼む命令（配りの口が応えなくても止めない。fellBack の注）。
+ * メッセージを送る担当の、自分の名簿の行。送る前の検査（assertRead）を通し、配りの口に置けるかを確かめる
+ * （課題に記録を書く前に止めるため。assertReachable）。
  */
-export async function sender(ctx: Context, urgent = false): Promise<RoleRecord> {
+export async function sender(ctx: Context): Promise<RoleRecord> {
   const self = requireSelf(ctx);
-  await assertRead(ctx, '相手', undefined, 'send', urgent);
-  if (!urgent) await assertReachable(ctx, { key: TPM_PARTY });
+  await assertRead(ctx, '相手');
+  await assertReachable(ctx);
   return self;
 }
 
@@ -465,11 +446,11 @@ function tpmSeat(ctx: Context): string | undefined {
   return address !== undefined && ctx.seats.status(address) !== undefined ? address : undefined;
 }
 
-/** TPM 担当がメッセージを送る先の、名簿の行。送る前の検査（assertRead）を通し、NATS で送ることになる時は、置けるかを確かめる（assertReachable）。 */
+/** TPM 担当がメッセージを送る先の、名簿の行。送る前の検査（assertRead）を通し、配りの口に置けるかを確かめる（assertReachable）。 */
 async function receiver(ctx: Context, key: string): Promise<RoleRecord> {
   const role = requireRole(ctx, key);
   await assertRead(ctx, `${role.key} の担当`, role.title);
-  await assertReachable(ctx, partyOf(role));
+  await assertReachable(ctx);
   return role;
 }
 
@@ -493,8 +474,8 @@ interface OpenBrief {
  * - Staff Engineer 担当の席には、課題の担当がじかに送った【ask-review】（頭が依頼書の URL）も積む。
  * - 【done】は、その時刻までに担当が見ていた依頼書のうち、いちばん古い物を 1 つ済ませる（担当は積まれた順にこなす）。まだ見ていない依頼書の分には数えない（行き違いで出た、前の依頼書の分）。【end】は全部を済ませる。
  * - 担当が --briefs で名指した【done】は、名指した依頼書をみな済ませる（見た時刻は問わない。名指したことが見た証し。1 通で依頼書いくつかを済ませた時。台帳 #110）。
- * 見た時刻は、見た時刻の口（seen.ts の seenTimes）が決める: 画面に届いた時刻と、roster inbox・送る前の検査が見せた時刻（shown/）の早い方。
- * 担当は画面に届く前に roster inbox で読んで済ませることがあるので、届いた時刻だけでは【done】が依頼書より前に見える（台帳 #36）。
+ * 見た時刻は、見た時刻の口（seen.ts の seenTimes）が決める: hook が渡した時刻と、roster inbox・送る前の検査が見せた時刻の早い方。
+ * 担当は hook が渡す前に roster inbox で読んで済ませることがあるので、届いた時刻だけでは【done】が依頼書より前に見える（台帳 #36）。
  * 前の版が時刻を書かずに覚えた物（shown/ の id だけの項目）は、送った時刻に見せた物とする。見せたのは確かで、担当の送る命令は未読をすべて見せてからでないと送れないので、
  * その後の【done】は見た後に出た物（時刻を使わないと、画面に届くのが【done】より後なら済まないまま残る。台帳 #58）。
  */
@@ -694,14 +675,36 @@ export interface IncidentOptions {
   severe: boolean
 }
 
-/** 担当が、気づいた出来事（起きた事実）を台帳に書き、TPM 担当に知らせる（【incident】）。課題管理には書かない。 */
+/** メッセージキューが応えない時に、roster report incident が台帳に書いた後で出す行。 */
+const INCIDENT_NOT_SENT = 'メッセージキューが応えないので、TPM 担当には送っていない（台帳には書いた。メッセージキュー（NATS）が動いているかを Product Manager に確かめる）';
+
+/** f を動かす。メッセージキューが応えない誤り（QueueDownError）だけを受けて返し、ほかの誤りは投げる。 */
+async function unlessQueueDown<T>(f: () => Promise<T>): Promise<T | QueueDownError> {
+  try {
+    return await f();
+  }
+  catch (e) {
+    if (e instanceof QueueDownError) return e;
+    throw e;
+  }
+}
+
+/**
+ * 担当が、気づいた出来事（起きた事実）を台帳に書き、TPM 担当に知らせる（【incident】）。課題管理には書かない。
+ * 順は、送る前の検査 → 台帳に書く → TPM 担当に送る。まだ渡っていない物があって検査が止めた時は、台帳にも書かない（打ち直しで書く）。
+ * メッセージキュー（NATS）が応えない時（検査の問い・置く所のどちらでも）は、止めずに台帳に書き、送っていない事を結果に出して、誤りにせず終わる
+ * （誤りで終わると、打ち直しで台帳に 2 件書かれる。応えない事は、queueDown が居場所の状態と gate.jsonl に残してある）。
+ * メッセージキューが止まった事を、メッセージキューに頼らずに台帳に残すための、この命令だけの扱い。
+ */
 export async function reportIncident(ctx: Context, options: IncidentOptions): Promise<string[]> {
   const type = incidentType(options.type);
-  const self = await sender(ctx, true);
+  const checked = await unlessQueueDown(() => sender(ctx));
+  const self = checked instanceof QueueDownError ? requireSelf(ctx) : checked;
   const incident = addIncident(ctx, { key: self.key, source: 'report', text: options.text, type, tags: options.tags, severe: options.severe });
   const tags = incident.tags.length === 0 ? '' : `（tag: ${incident.tags.join('・')}）`;
   const body = `#${incident.n}${incident.severe ? ' [重い]' : ''} ${INCIDENT_TYPES[type]}: ${options.text}${tags}`;
-  return [`台帳に書いた: ${incidentLine(incident)}`, ...tagLines(ctx, incident), await toTpm(ctx, self, 'incident', body, undefined, {}, true)];
+  const sent = checked instanceof QueueDownError ? checked : await unlessQueueDown(() => toTpm(ctx, self, 'incident', body));
+  return [`台帳に書いた: ${incidentLine(incident)}`, ...tagLines(ctx, incident), sent instanceof QueueDownError ? INCIDENT_NOT_SENT : sent];
 }
 
 /** 状態 wait の字を出し、移りを waits.jsonl に残す。自分の宛先を返す。 */
@@ -787,8 +790,8 @@ export async function askPm(ctx: Context, options: { url: string, items: string[
 
 /** 共有の環境で DevOps Engineer 担当の手が要ることを、TPM 担当に送る（【ask-devops】）。 */
 export async function askDevops(ctx: Context, options: { what: string, why: string, urgent: boolean }): Promise<string[]> {
-  const self = await sender(ctx, true);
-  return [await toTpm(ctx, self, 'ask-devops', `何を: ${options.what}／なぜ: ${options.why}／急ぎ: ${options.urgent ? 'はい' : 'いいえ'}`, undefined, {}, true)];
+  const self = await sender(ctx);
+  return [await toTpm(ctx, self, 'ask-devops', `何を: ${options.what}／なぜ: ${options.why}／急ぎ: ${options.urgent ? 'はい' : 'いいえ'}`)];
 }
 
 /** 自分の PR を 1 本 merge したと知らせる（【merged】）。 */

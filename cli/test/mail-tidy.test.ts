@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest';
 import { mailLeft, mailPrompt, tidyMail } from '../src/commands/mail.ts';
 import { messageRecordsSettled } from '../src/commands/message-record.ts';
 import { askTpm, dismiss, notify, reportDone } from '../src/commands/messages.ts';
-import { hello, inbox, inboxNow } from '../src/commands/role-side.ts';
+import { hello, inboxNow } from '../src/commands/role-side.ts';
 import { close } from '../src/commands/tpm-side.ts';
 import { deliveredLines, endedLines, readClaim } from '../src/mail.ts';
 import { MemoryMailroom } from '../src/mailroom/memory.ts';
@@ -43,11 +43,11 @@ describe('渡し直しの上限を超えた物（T2）', () => {
     await expect(dismiss(w.tpm, 't-x7k2', { handover: false })).rejects.toThrow(/--- 届かないまま終わった（渡せない・期限切れ。/);
   });
 
-  test('担当の命令は片付けない。配りの口が応えなくても、呼んだ命令は止まらない', async () => {
+  test('担当の命令は片付けない。配りの口が応えなくても、片付けは呼んだ命令を止めない（送る命令は、置けないので止まる）', async () => {
     const w = await natsWorld();
     expect(await tidyMail(w.se, { sweep: true })).toEqual([]);
     expect(await tidyMail(down(w.tpm), { sweep: true })).toEqual([]);
-    expect(await notify(down(w.tpm), 't-x7k2', { text: '担当は名乗っていないので cmux で届く' })).toHaveLength(1);
+    await expect(notify(down(w.tpm), 't-x7k2', { text: '置けない物' })).rejects.toThrow(/^メッセージキューが応えません。送っていません/);
     expect((await hello(down(w.tpm), TPM)).some(l => l.startsWith('TPM 担当の宛先'))).toBe(true);
   });
 });
@@ -127,11 +127,14 @@ describe('席を閉じる時・名簿に無い取り口（N1）', () => {
   test('担当の交代（dismiss --handover）の後の close では、残りを消さない。配りの口が応えなくても、close は済む', async () => {
     const w = await natsWorld();
     await reportDone(w.se, { kind: 'result', summary: '済んだ', remaining: 'なし', decisions: 'なし', points: [] });
+    // TPM 担当は渡す hook を持たない（名乗っていない）ので、送る前の検査が【done】を見せて 1 度止まる。打ち直しで送る。
+    await expect(dismiss(w.tpm, 't-x7k2', { handover: true })).rejects.toThrow(/まだ読んでいないメッセージが 1 件/);
     await dismiss(w.tpm, 't-x7k2', { handover: true });
     claim(w, w.se, 200);
     await notify(w.tpm, 't-x7k2', { text: '次の担当が継ぐ物' });
     expect((await close(w.tpm, 't-x7k2')).some(l => l.startsWith('期限切れ'))).toBe(false);
-    expect(left(w, 't-x7k2')).toHaveLength(1);
+    // 【dismiss】と、その後の【notify】（どちらも、次の担当が継ぐ）。
+    expect(left(w, 't-x7k2')).toHaveLength(2);
 
     const v = await natsWorld();
     const out = await close(down(v.tpm), 't-x7k2');
@@ -193,34 +196,22 @@ describe('roster inbox（設定が nats で、名乗っている session）', ()
     await expect(inboxNow(down(w.se))).rejects.toThrow(/応えません/);
   });
 
-  test('名乗っている session にも cmux で届いた物があれば、両方を出す（cmux の分は、今のとおり見せたと覚える）', async () => {
+  test('名乗りが効いていない session では、残っている物を出し、見せたと覚える（次の送る前の検査は止まらない。届いたには数えない）', async () => {
     const w = await natsWorld();
-    w.wire.hold('file:1');
-    await notify(w.tpm, 't-x7k2', { text: 'cmux で待っている物' });
-    claim(w, w.se, 200);
-    expect(await inboxNow(w.se)).toEqual(['--- Technical Program Manager（id m1-file-1）', '【notify】cmux で待っている物']);
-    await notify(w.tpm, 't-x7k2', { text: 'NATS に残っている物' });
+    await notify(w.tpm, 't-x7k2', { text: '区切りに見る物' });
     const id = left(w, 't-x7k2')[0]?.id ?? '';
-    expect(await inboxNow(w.se)).toEqual([
-      '--- Technical Program Manager（id m1-file-1）',
-      '【notify】cmux で待っている物',
-      `--- Technical Program Manager（id ${id}）`,
-      '【notify】NATS に残っている物',
-      '--- ここまで（出しただけ。届いたとは記録していない。hook が、この後で渡す）',
-    ]);
-  });
-
-  test('名乗っていない session・設定が cmux の session では、今のとおり', async () => {
-    const w = await natsWorld();
-    w.wire.hold('file:1');
-    await notify(w.tpm, 't-x7k2', { text: 'cmux で待っている物' });
-    expect(await inboxNow(w.se)).toEqual(inbox(w.se));
-    expect((await inboxNow(w.se))[1]).toBe('【notify】cmux で待っている物');
+    expect(await inboxNow(w.se)).toEqual([`--- Technical Program Manager（id ${id}）`, '【notify】区切りに見る物', '--- ここまで']);
+    // 箱には残る（期限で消える）。渡した記録には output と残る（届いたには数えない）。
+    expect(left(w, 't-x7k2').map(m => m.id)).toEqual([id]);
+    expect(deliveredLines(w.se)).toMatchObject([{ id, to: 't-x7k2', when: 'output', nth: 0 }]);
+    // 見せた物は、もう 1 度は出さない。送る前の検査も止まらない。
+    expect(await inboxNow(w.se)).toEqual(['まだ届いていないメッセージは無い']);
+    expect((await askTpm(w.se, { text: '相談', waitingFor: '案' }))[0]).toMatch(/^送った: 【ask-tpm】/);
   });
 });
 
 describe('roster mail left（NATS に残っている物を見る）', () => {
-  test('残っている物を、受け手ごとに数と、見出し・送り手・置いた時刻で出す。取り置かない。設定を cmux に戻した後も出る', async () => {
+  test('残っている物を、受け手ごとに数と、見出し・送り手・置いた時刻で出す。取り置かない。取り口が無くても出る', async () => {
     const w = await natsWorld();
     expect(await mailLeft(w.tpm)).toEqual(['メッセージキューに、残っている物は無い']);
     claim(w, w.se, 200);
@@ -238,9 +229,9 @@ describe('roster mail left（NATS に残っている物を見る）', () => {
     ];
     expect(await mailLeft(w.tpm)).toEqual(expected);
     expect(w.office.work.map(i => i.deliveries)).toEqual([0, 0]);
-    // 設定を cmux に戻した後（取り口が無くても、送った記録の受け手の名から引ける）。
+    // 取り口が無くても、送った記録の受け手の名から引ける。
     w.office.consumers.clear();
-    expect(await mailLeft({ ...w.tpm, config: { ...w.tpm.config, messages: 'cmux' } })).toEqual(expected);
+    expect(await mailLeft(w.tpm)).toEqual(expected);
   });
 
   test('NATS が応えなければ、そう出す。担当の席からは打てない', async () => {

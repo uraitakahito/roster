@@ -6,7 +6,6 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { requireUp, sessionRef } from '../castlist.ts';
 import type { Context } from '../context.ts';
-import { syncDeliveries } from '../evidence.ts';
 import { ROLES, WAIT, type RoleName } from '../protocol.ts';
 import { addReview, openReviews, patchReview, removeReview, reviewLabel, VERDICTS, type Review, type Verdict } from '../reviews.ts';
 import { readRole, staffKey, subjectOf, writeRole, type RoleRecord } from '../roster.ts';
@@ -232,8 +231,6 @@ export async function askReview(ctx: Context, options: { url: string, focus?: st
       throw new TpmError(`${message}\n頼み #${review.n} は残してあります。Staff Engineer 担当の席が名乗らないことを、roster ask tpm で TPM 担当に知らせてください（TPM 担当が、残った居場所を roster close ${staffKey(self.key)} で閉じてから起こし直す）。`);
     }
   }
-  // じかのメッセージは TPM 担当の命令を通らないので、届いた時刻をここで写す。
-  syncDeliveries(ctx);
   return [...out, ...wait(ctx, 'review', reviewLabel([review]).target)];
 }
 
@@ -277,7 +274,6 @@ export async function reportReview(ctx: Context, options: ReviewOptions): Promis
   const reviewedAt = ctx.now().toISOString();
   for (const r of asks) patchReview(ctx, r.n, { verdict, page: options.url, summary: options.summary, reviewedAt });
   const marks = await markVerdict(ctx, options.url, verdict, asks);
-  syncDeliveries(ctx);
   showWait(ctx, WAIT_NEXT_REVIEW);
   return [...recorded, sent, ...marks, `状態: ${WAIT_NEXT_REVIEW}`];
 }

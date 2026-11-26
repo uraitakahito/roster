@@ -15,8 +15,10 @@ import { assign, close } from '../src/commands/tpm-side.ts';
 import type { Context } from '../src/context.ts';
 import { readReviews, reviewLabel, type Review } from '../src/reviews.ts';
 import { requireRole } from '../src/roster.ts';
-import type { MessageTrace } from '../src/transport/types.ts';
+import { DELIVERED_FILE, type DeliveredLine } from '../src/mail.ts';
+import type { MessageTrace } from '../src/seen.ts';
 import { BRIEF, staffRoot, world, type World } from './helpers.ts';
+import { patched } from './mail-helpers.ts';
 
 const TPM = { model: 'claude-opus-5-5', effort: 'medium' };
 const STAFF = { role: 'staff-engineer', wait: 0 } as const;
@@ -52,7 +54,7 @@ async function asked(config: Record<string, unknown> = {}, issue?: string): Prom
   return { ...w, staff };
 }
 
-const texts = (w: World, address: string): string[] => w.wire.inbox(address).map(m => m.text);
+const texts = (w: World, address: string): string[] => w.posted(address).map(m => m.text);
 
 describe('roster ask review（席が無い時: 命令が席を起こす）', () => {
   test('頼みから依頼書を作って置き、それで席を起こす。TPM 担当には何も届かない', async () => {
@@ -145,7 +147,7 @@ describe('roster ask review（席が居る時: じかに届ける）', () => {
     await reportReview(w.staff, { url: await w.put(w.staff, 'review'), verdict: 'approve', summary: 'このままでよい' });
     w.se.now = () => new Date('2026-11-20T12:10:00.000Z');
     expect(await askReview(w.se, { url: PR })).toEqual(['送った: 【ask-review】→ file:2（相手の手が空いた時に届く。送り直さない）', expect.stringMatching(/^置き場の印: レビュー待ちにした http:\/\/127\.0\.0\.1:8801\/.+\/AI-8\/brief-2\.html$/) as string, '状態: 回答待ち(レビュー): PR #7']);
-    const got = w.wire.inbox('file:2').at(-1);
+    const got = w.posted('file:2').at(-1);
     expect(got?.from).toBe(SE_TITLE);
     expect(got?.text).toMatch(new RegExp(`^【ask-review】http://127\\.0\\.0\\.1:8801/.+/AI-8/brief-2\\.html 頼み: #2 ${PR}$`));
     expect(texts(w, 'file:tpm')).toEqual([]);
@@ -156,7 +158,7 @@ describe('roster ask review（席が居る時: じかに届ける）', () => {
     // Staff の次のメッセージは、新しい題で課題の担当に届く
     w.staff.now = () => new Date('2026-11-20T12:30:00.000Z');
     await reportReview(w.staff, { url: await w.put(w.staff, 'review'), verdict: 'approve', summary: 'よい' });
-    expect(w.wire.inbox('file:1').at(-1)?.from).toBe('レビュー AI-8: PR #7');
+    expect(w.posted('file:1').at(-1)?.from).toBe('レビュー AI-8: PR #7');
   });
 
   test('前の頼みが返っていなければ、後ろに積む。席は古い依頼書の頼みから返す', async () => {
@@ -181,13 +183,10 @@ describe('roster ask review（席が居る時: じかに届ける）', () => {
     const w = await asked();
     await reportReview(w.staff, { url: await w.put(w.staff, 'review'), verdict: 'approve', summary: 'よい' });
     w.se.now = () => new Date('2026-11-20T12:10:00.000Z');
-    const send = w.se.messages.send.bind(w.se.messages);
-    w.se.messages.send = () => {
-      throw new Error('送れない');
-    };
-    await expect(askReview(w.se, { url: PR })).rejects.toThrow('送れない');
+    // 置く所で、配りの口が誤りを返す。
+    const failing = await patched(w.se, { put: () => Promise.reject(new Error('送れない')) });
+    await expect(askReview(failing, { url: PR })).rejects.toThrow(/^メッセージキューが応えません。送っていません（送れない）/);
     expect(readReviews(w.tpm).map(r => r.n)).toEqual([1]);
-    w.se.messages.send = send;
     expect((await askReview(w.se, { url: PR }))[0]).toBe('送った: 【ask-review】→ file:2（相手の手が空いた時に届く。送り直さない）');
   });
 
@@ -299,7 +298,7 @@ describe('roster report review', () => {
       expect.stringMatching(/^置き場の印: レビュー済みにした http:\/\/127\.0\.0\.1:8801\/.+\/AI-8\/brief-1\.html$/) as string,
       '状態: 回答待ち(レビュー): 次の頼み',
     ]);
-    expect(w.wire.inbox('file:1').at(-1)).toMatchObject({ from: 'レビュー AI-8: 計画 plan-1', text: `【review】${page} 判定: 気になる所あり（concerns）／一言: Key の形に抜けが 1 つ／頼み: #1` });
+    expect(w.posted('file:1').at(-1)).toMatchObject({ from: 'レビュー AI-8: 計画 plan-1', text: `【review】${page} 判定: 気になる所あり（concerns）／一言: Key の形に抜けが 1 つ／頼み: #1` });
     expect(texts(w, 'file:tpm')).toEqual([]);
     expect(readReviews(w.tpm)[0]).toMatchObject({ n: 1, verdict: 'concerns', page, summary: 'Key の形に抜けが 1 つ', reviewedAt: '2026-11-20T12:07:00.000Z' });
     expect(w.wire.status('file:2')?.wait).toBe('回答待ち(レビュー): 次の頼み');
@@ -335,36 +334,15 @@ describe('roster report review', () => {
   });
 });
 
-describe('じかの 2 通の、届いた時刻の写し', () => {
-  test('roster ask review と roster report review の後に、deliveries.jsonl にじかの 2 通が載る', async () => {
-    const w = await asked();
-    await reportReview(w.staff, { url: await w.put(w.staff, 'review'), verdict: 'approve', summary: 'よい' });
-    w.wire.hold('file:2');
-    w.se.now = () => new Date('2026-11-20T12:10:00.000Z');
-    expect((await askReview(w.se, { url: PR }))[0]).toMatch(/相手の手が空いた時に届く/);
-    const asking = w.wire.inbox('file:2').at(-1)?.id ?? '';
-    w.wire.release('file:2', '2026-11-20T12:12:00.000Z');
-    w.wire.hold('file:1');
-    w.staff.now = () => new Date('2026-11-20T12:20:00.000Z');
-    await reportReview(w.staff, { url: await w.put(w.staff, 'review'), verdict: 'approve', summary: 'よい' });
-    const traces = (): MessageTrace[] => w.tpm.state.lines<MessageTrace>('deliveries.jsonl');
-    expect(traces().find(t => t.id === asking)).toMatchObject({ deliveredAt: '2026-11-20T12:12:00.000Z' });
-    const judged = w.wire.inbox('file:1').at(-1)?.id ?? '';
-    w.wire.release('file:1', '2026-11-20T12:21:00.000Z');
-    w.se.now = () => new Date('2026-11-20T12:30:00.000Z');
-    await askReview(w.se, { url: await w.put(w.se, 'plan') });
-    expect(traces().find(t => t.id === judged)).toMatchObject({ deliveredAt: '2026-11-20T12:21:00.000Z' });
-  });
-});
-
 describe('時系列の行き違いの印（じかの 2 通）', () => {
   test('課題の担当と Staff の席の間の、逆向きのじかの物だけを相手に数える', async () => {
     const w = await asked();
     const at = (ctx: Context, hhmmss: string): void => {
       ctx.now = () => new Date(`2026-11-20T${hhmmss}.000Z`);
     };
-    const id = (address: string): string => w.wire.inbox(address).at(-1)?.id ?? '';
-    const arrive = (message: string, hhmmss: string): void => w.tpm.state.append('deliveries.jsonl', { id: message, deliveredAt: `2026-11-20T${hhmmss}.000Z` } satisfies MessageTrace);
+    const id = (address: string): string => w.posted(address).at(-1)?.id ?? '';
+    // hook が渡した時刻（渡した記録）。足場は、置いた時に渡した事にするので、この幕の時刻に書き直す。
+    const arrive = (message: string, hhmmss: string): void => w.tpm.state.append(DELIVERED_FILE, { at: `2026-11-20T${hhmmss}.000Z`, id: message, to: w.posted('file:1').some(m => m.id === message) ? 'AI-8' : 'AI-8_2estaff', when: 'wake', nth: 1 } satisfies DeliveredLine);
     // 12:10 課題の担当が PR のレビューを頼む（席に届くのは 12:15）。その前に、12:11 課題の担当が TPM 担当へ問い、12:12 席が前の頼みの判定を返し、12:13 TPM 担当が答える（届くのは 12:20）。
     at(w.se, '12:10:00');
     await askReview(w.se, { url: PR });
@@ -377,6 +355,7 @@ describe('時系列の行き違いの印（じかの 2 通）', () => {
     at(w.tpm, '12:13:00');
     await notify(w.tpm, 'AI-8', { text: 'A で進める' });
     const answered = id('file:1');
+    w.tpm.state.remove(DELIVERED_FILE);
     arrive(asking, '12:15:00');
     arrive(judged, '12:12:01');
     arrive(answered, '12:20:00');

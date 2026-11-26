@@ -13,17 +13,6 @@ beforeEach(() => {
 });
 
 describe('FileTransport', () => {
-  test('送ったメッセージは、相手の inbox に届いた順に並ぶ', () => {
-    const first = at('file:1').send('file:tpm', 'SE t-x7k2', '【done】a');
-    at('file:1').send('file:tpm', 'SE t-x7k2', '【end】b', first.id);
-    expect(first).toEqual({ id: expect.any(String) as string });
-    expect(at('file:tpm').inbox('file:tpm')).toEqual([
-      { id: first.id, sender: 'file:1', from: 'SE t-x7k2', text: '【done】a' },
-      { id: expect.any(String) as string, sender: 'file:1', from: 'SE t-x7k2', text: '【end】b', replyTo: first.id },
-    ]);
-    expect(at('file:tpm').inbox('file:1')).toEqual([]);
-  });
-
   test('spawn は別々の宛先を返し、命令は動かさずに覚える', () => {
     const tpm = at('file:tpm');
     const a = tpm.spawn({ title: 'SWE t-a3b4: 題', cwd: '/w', command: 'roster run-role t-a3b4' });

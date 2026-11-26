@@ -1,8 +1,8 @@
-// メッセージを NATS で配る道（設定の messages が nats）の試験の足場: 名乗った担当の居る世界と、誤りを返す配りの口。
+// メッセージを渡す hook の試験の足場: 名乗った担当の居る世界（置かれた物は、試験が hook の命令を呼ぶまで箱に残る）と、誤りを返す配りの口。
 import type { Context } from '../src/context.ts';
 import { hello } from '../src/commands/role-side.ts';
 import { assign } from '../src/commands/tpm-side.ts';
-import { ownName, writeClaim } from '../src/mail.ts';
+import { ownName, recordDelivered, writeClaim } from '../src/mail.ts';
 import type { Mailroom, Stored } from '../src/mailroom/types.ts';
 import { selfParty } from '../src/party.ts';
 import { TpmError } from '../src/skill-sets.ts';
@@ -22,9 +22,12 @@ export function claim(w: World, ctx: Context, pid: number): void {
   writeClaim(ctx, { name: ownName(ctx) ?? '', party: selfParty(ctx.env), session: `s-${pid}`, pid, started: `started-${pid}`, from: 'CLAUDE_PID', at: ctx.now().toISOString() });
 }
 
-/** 設定が nats で、TPM 担当が名乗り、t-x7k2 の Software Engineer 担当を起こして名乗らせた世界（どちらも、まだ「渡す hook を持つ」とは名乗っていない）。 */
+/**
+ * TPM 担当が名乗り、t-x7k2 の Software Engineer 担当を起こして名乗らせた世界（どちらも、まだ「渡す hook を持つ」とは名乗っていない）。
+ * 置かれた物を、席がすぐ受け取った事にはしない（world の handOver: false）。
+ */
 export async function natsWorld(config: Record<string, unknown> = { messages: 'nats' }): Promise<World & { se: Context }> {
-  const w = world(config);
+  const w = world(config, {}, {}, { handOver: false });
   await hello(w.tpm, TPM);
   await assign(w.tpm, 't-x7k2', { role: 'software-engineer', title: '計画と実装', brief: BRIEF, wait: 0 });
   const se = w.role('t-x7k2', 'file:1');
@@ -43,3 +46,12 @@ export async function patched(ctx: Context, patch: Partial<Mailroom>): Promise<C
 
 /** 配る箱に残っている物（受け手の名ごと）。 */
 export const left = (w: World, box: string): Stored[] => w.office.work.filter(i => i.stored.to === box).map(i => i.stored);
+
+/** その周りの session 宛てで残っている物を、hook が渡した事にする（渡した記録に wake と残し、箱から外す）。名乗りは要らない。 */
+export async function handed(ctx: Context): Promise<void> {
+  const name = ownName(ctx) ?? '';
+  const room = await ctx.mailroom();
+  const taken = await room.take(name, ALL);
+  for (const m of taken) recordDelivered(ctx, m.id, name, 'wake');
+  await room.done(taken);
+}

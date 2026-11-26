@@ -79,7 +79,7 @@ export function infraRun(ctx: Context, name: string, command: string[]): { lines
 /**
  * hook の標準入力を読んで決める。Bash と、file を書き替える道具のほかは通す。止めた命令は guard.jsonl に残す。
  * Bash は、手続きと道具の直打ちを見て通す物を、続けて castlist の分（castlistGuard。設定が無ければ何もしない）と、
- * メッセージを NATS で配る席の分（mailGuard。設定の messages が nats でなければ何もしない）で見る。
+ * メッセージを NATS で配る席の分（mailGuard）で見る。
  */
 export async function guard(ctx: Context, stdin: string): Promise<Verdict> {
   const write = writeOf(stdin);
@@ -103,7 +103,7 @@ export async function guard(ctx: Context, stdin: string): Promise<Verdict> {
   }
   const verdict = judge({ command, role: roleOf(ctx.env), config: ctx.config, approvals: readApprovals(ctx.state, ctx.config.infra), now: ctx.now() });
   const castlist = verdict.allow ? await castlistGuard(ctx, stdin) : verdict;
-  // 設定の messages が nats の席だけ: 手伝いの中からの送る命令と、同じ返答の中で渡した物がある時の送る命令（mail.ts の mailGuard）。
+  // 手伝いの中からの送る命令と、同じ返答の中で渡した物がある時の送る命令（mail.ts の mailGuard）。
   const mail = castlist.allow ? mailGuard(ctx, stdin, command) : castlist;
   if (!mail.allow) recordGuardStop(ctx, command, mail.reason);
   return mail;

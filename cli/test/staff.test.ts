@@ -46,6 +46,11 @@ async function reviewed(config: Record<string, unknown> = {}, issue?: string): P
   return { ...w, staff };
 }
 
+/** 席に付く、メッセージを渡す hook（guardSettings）。待つ命令は背景で動く。 */
+const WAITING = { type: 'command', async: true, asyncRewake: true, timeout: 86400, command: '/r/cli/bin/roster mail wait' };
+const GATE = [{ matcher: 'Bash', hooks: [{ type: 'command', command: '/r/cli/bin/roster mail gate' }] }];
+const MAIL_HOOKS = { PostToolUse: GATE, PostToolUseFailure: GATE, Stop: [{ hooks: [WAITING] }], UserPromptSubmit: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster mail prompt' }] }] };
+
 describe('名簿の Key', () => {
   test('Staff の席の Key は <課題の Key>.staff。課題の Key は subject に持つ', () => {
     expect(staffKey('AI-8')).toBe('AI-8.staff');
@@ -112,8 +117,9 @@ describe('roster assign --role staff-engineer', () => {
     expect(JSON.parse(args[1] ?? '')).toEqual({
       hooks: {
         PreToolUse: [{ matcher: 'Bash|Edit|Write|NotebookEdit', hooks: [{ type: 'command', command: '/r/cli/bin/roster guard' }] }],
-        SessionStart: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-start' }, { type: 'command', command: '/r/cli/bin/roster returned check' }] }],
-        SessionEnd: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-end' }] }],
+        SessionStart: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-start' }, { type: 'command', command: '/r/cli/bin/roster mail claim' }, WAITING] }],
+        SessionEnd: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-end' }, { type: 'command', command: '/r/cli/bin/roster mail release' }] }],
+        ...MAIL_HOOKS,
       },
     });
     expect(args.slice(2, 8)).toEqual(['--model', 'claude-opus-5-5', '--effort', 'high', '--permission-mode', 'bypassPermissions']);
@@ -166,7 +172,7 @@ describe('Staff が打たない命令', () => {
     const w = await reviewed();
     expect((await askTpm(w.staff, { text: '見る物が読めない', waitingFor: '見る物' }))[0]).toBe('送った: 【ask-tpm】→ file:tpm（相手の手が空いた時に届く。送り直さない）');
     expect((await reportIncident(w.staff, { text: '依頼書の URL が 404', type: 'reliability', tags: [], severe: false })).at(-1)).toBe('送った: 【incident】→ file:tpm（相手の手が空いた時に届く。送り直さない）');
-    w.wire.inbox('file:tpm');
+    w.posted('tpm');
     expect(await notify(w.tpm, 'AI-8.staff', { text: 'URL を直した' })).toEqual(['送った: 【notify】→ file:2（相手の手が空いた時に届く。送り直さない）']);
   });
 

@@ -11,12 +11,11 @@ import { type EnvName, LAUNCH_ENV, withEnv } from './env.ts';
  * claude の引数。--add-dir は後ろの語もまとめて folder として読むので、最初の入力の前に -- を置く。
  * --settings で guard（roster guard）の hook を付ける。hook の拒否は bypassPermissions でも効く。見る道具は役割で決まる（guardSettings）。
  * --add-dir の先の settings の hook は読まれないので、ここで渡す。
- * mail は、メッセージを NATS で渡す hook も付けるか（設定の messages が nats の時。guardSettings）。
  */
-export function claudeArgs(record: RoleRecord, root: string, mail = false): string[] {
+export function claudeArgs(record: RoleRecord, root: string): string[] {
   return [
     '--settings',
-    guardSettings(join(root, 'cli', 'bin', 'roster'), record.role, mail),
+    guardSettings(join(root, 'cli', 'bin', 'roster'), record.role),
     '--model',
     record.model,
     '--effort',
@@ -47,9 +46,9 @@ export function roleEnv(record: RoleRecord, project: string, state: string, root
   };
 }
 
-/** claude を起こし、終わるまで待って終了コードを返す。mail は、メッセージを NATS で渡す hook も付けるか。 */
-export function runRole(record: RoleRecord, project: string, state: string, root: string, env: NodeJS.ProcessEnv = process.env, mail = false): number {
-  const r = spawnSync('claude', claudeArgs(record, root, mail), { cwd: record.cwd, env: roleEnv(record, project, state, root, env), stdio: 'inherit' });
+/** claude を起こし、終わるまで待って終了コードを返す。 */
+export function runRole(record: RoleRecord, project: string, state: string, root: string, env: NodeJS.ProcessEnv = process.env): number {
+  const r = spawnSync('claude', claudeArgs(record, root), { cwd: record.cwd, env: roleEnv(record, project, state, root, env), stdio: 'inherit' });
   if (r.error) throw r.error;
   return r.status ?? 1;
 }

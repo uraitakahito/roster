@@ -1,11 +1,11 @@
-// roster mail …: メッセージを NATS JetStream で渡す hook の命令（設定の messages が nats の席に、guard.ts の guardSettings が付ける）。
+// roster mail …: メッセージを NATS JetStream で渡す hook の命令（どの席にも、guard.ts の guardSettings が付ける）。
 // どれも hook の入力（stdin の JSON）を読み、Claude Code の作業を誤りで止めない（program.ts が、どの誤りでも exit 0 にする）。
 // 担当が中で起こした手伝い（subagent。入力に agent_id がある）の中では、何もしない。
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Context } from '../context.ts';
 import { sendsMessage, type Verdict } from '../guard.ts';
-import { allClaims, claimNamed, claudePid, deliveredKey, deliveredLines, effective, ENDED_FILE, endedLines, recipientName, removeClaim as dropClaim, type EndedHow, type EndedLine, guardedKeys, markGuarded, gateFile, lineCount, ownName, readClaim, recordDelivered, removeClaim, stopWaiter, usesNats, waiterFile, writeClaim, type DeliveredWhen, type GateMark, type WaiterMark } from '../mail.ts';
+import { allClaims, claimNamed, claudePid, deliveredKey, deliveredLines, effective, ENDED_FILE, endedLines, recipientName, removeClaim as dropClaim, type EndedHow, type EndedLine, guardedKeys, markGuarded, gateFile, lineCount, ownName, readClaim, recordDelivered, removeClaim, stopWaiter, waiterFile, writeClaim, type DeliveredWhen, type GateMark, type WaiterMark } from '../mail.ts';
 import { MAILROOM_LIMITS, type Beacon, type Mailroom, type Recipient, type Stored, type TakeLimit, type Taken } from '../mailroom/types.ts';
 import { allRoles, requireTpmSide, type RoleRecord } from '../roster.ts';
 import { envOf } from '../env.ts';
@@ -38,13 +38,14 @@ export function hookInput(stdin: string): HookInput {
 }
 
 /**
- * 名乗る（SessionStart の hook）: この session が「渡す hook を持つ」と、状態の folder に書く。送り手は、これが効いている受け手にだけ NATS で送る。
- * Claude Code の pid（mail.ts の claudePid）か、その始まった時刻が分からなければ、名乗らない（前の名乗りも消す。今のとおり cmux で届く）。
- * 設定が nats でなければ、何もしない。
+ * 名乗る（SessionStart の hook）: この session が「渡す hook を持つ」と、状態の folder に書く。
+ * 送り手は、名乗りに依らず配りの口に置く。名乗りが効いている session では、送る前の検査が本文を出さずに hook に渡させ、待つ命令が動く。
+ * Claude Code の pid（mail.ts の claudePid）か、その始まった時刻が分からなければ、名乗らない（前の名乗りも消す。
+ * 自分宛ては配りの口に残り、送る前の検査と roster inbox が、命令の結果に本文を出す）。
  */
 export function mailClaim(ctx: Context, stdin: string): void {
   const input = hookInput(stdin);
-  if (input.agent_id !== undefined || !usesNats(ctx)) return;
+  if (input.agent_id !== undefined) return;
   const name = ownName(ctx);
   if (name === undefined) return;
   const found = claudePid(ctx.env, ctx.procs);
@@ -474,7 +475,7 @@ export function toolUseLine(path: string | undefined, toolUseId: string): number
 }
 
 /**
- * roster guard に足す守り（設定の messages が nats の席だけ。Bash の命令が、roster の送る命令・ページを置く命令の時）。
+ * roster guard に足す守り（Bash の命令が、roster の送る命令・ページを置く命令の時）。
  * - 手伝い（subagent。入力に agent_id がある）の中からの送る命令は止める（送る前の検査も、止めた後に渡す hook も、担当の物）。
  * - 同じ返答の中で渡した物がある時は、1 度止める: この命令を書いた返答（会話の記録の中の、この道具の呼び出しの id を持つ行）より後に、
  *   hook が渡した記録（行の数で比べる。同じ session の物だけ）があれば、「渡した物を読んでから打ち直す」と止める。同じ渡した記録では、2 度止めない。
@@ -483,7 +484,7 @@ export function toolUseLine(path: string | undefined, toolUseId: string): number
  *   並べた送りは、送る前の検査が時刻で止める（commands/messages.ts の assertNotFresh）。行が先に書かれる版になれば、ここも効く。
  */
 export function mailGuard(ctx: Context, stdin: string, command: string): Verdict {
-  if (!usesNats(ctx) || !sendsMessage(command)) return { allow: true };
+  if (!sendsMessage(command)) return { allow: true };
   const input = hookInput(stdin);
   if (input.agent_id !== undefined) {
     return { allow: false, reason: '送る命令（roster ask・report・notify・answer・dismiss・assign・page put）は、手伝い（subagent）でなく担当が打ちます。手伝いは、送る中身を担当に返してください（担当が、届いたメッセージを読んだうえで打つ）。' };
@@ -543,7 +544,7 @@ function nameOfRole(role: Pick<RoleRecord, 'key' | 'launch'>): Recipient | undef
 }
 
 /**
- * TPM 担当の側の片付け（設定の messages が nats の時だけ。TPM 担当が名乗る時と、送る命令を打つ時に呼ぶ）。命令の結果に出す行を返す。
+ * TPM 担当の側の片付け（TPM 担当が名乗る時と、送る命令を打つ時に呼ぶ）。命令の結果に出す行を返す。
  * - 渡し直しの上限を超えた物を引いて「渡せない」と記録し、置き場に写す（T2）。
  * - 届かないまま期限で消えた物（記録の箱にあって・配る箱に無く・渡した記録が無く・置いてから期限を過ぎた物）を「期限切れ」と記録し、写す（T3）。
  *   判じるのは、写しの遅れが 0 の時だけ。名乗る時（sweep）はいつも、送る命令の時は EXPIRED_CHECK_EVERY_MS に 1 度。
@@ -551,7 +552,7 @@ function nameOfRole(role: Pick<RoleRecord, 'key' | 'launch'>): Recipient | undef
  * どの行も、1 通につき 1 度だけ出る。配りの口が誤りの時は、何も出さずに終わる（呼んだ命令を止めない）。
  */
 export async function tidyMail(ctx: Context, options: { sweep: boolean }): Promise<string[]> {
-  if (!usesNats(ctx) || envOf(ctx.env, 'KEY') !== undefined) return [];
+  if (envOf(ctx.env, 'KEY') !== undefined) return [];
   const out: string[] = [];
   try {
     const room = await ctx.mailroom();
@@ -594,12 +595,12 @@ export async function tidyMail(ctx: Context, options: { sweep: boolean }): Promi
 }
 
 /**
- * 席を閉じる時の片付け（roster close。設定の messages が nats の時だけ）: その受け手の取り口と残りを消し、残っていた物を
+ * 席を閉じる時の片付け（roster close）: その受け手の取り口と残りを消し、残っていた物を
  * 「期限切れ（席を閉じた）」と記録して写す。名乗りと印も消す。命令の結果に出す行を返す。
  * 担当の交代（dismiss --handover）の後の close では、消さない（同じ受け手の名を、次の担当が継ぐことがある）。
  */
 export async function clearSeat(ctx: Context, role: RoleRecord): Promise<string[]> {
-  if (!usesNats(ctx) || role.dismissed === 'handover') return [];
+  if (role.dismissed === 'handover') return [];
   const name = nameOfRole(role);
   if (name === undefined) return [];
   try {
@@ -616,7 +617,7 @@ export async function clearSeat(ctx: Context, role: RoleRecord): Promise<string[
   }
 }
 
-/** roster inbox の、NATS の分（設定の messages が nats で、名乗っている session）: 自分宛てで残っている物を、取り置かずに出すだけ（届いたとは記録しない）。無ければ空。 */
+/** roster inbox の、名乗りが効いている session の分: 自分宛てで残っている物を、取り置かずに出すだけ（届いたとは記録しない。hook が後で渡す）。無ければ空。 */
 export async function peekInbox(ctx: Context, name: Recipient): Promise<string[]> {
   const letters = await (await ctx.mailroom()).peek(name);
   if (letters.length === 0) return [];
@@ -624,9 +625,9 @@ export async function peekInbox(ctx: Context, name: Recipient): Promise<string[]
 }
 
 /**
- * roster mail left（TPM 担当だけ。設定の messages が cmux でも nats でも動く）: メッセージキュー（NATS）に残っている物（まだ渡っていない物）を、
+ * roster mail left（TPM 担当だけ）: メッセージキュー（NATS）に残っている物（まだ渡っていない物）を、
  * 受け手ごとに、数と、1 通ごとの見出し・送り手・置いた時刻で出す。取り置かない（読むだけ）。
- * 設定を cmux に戻す前と後に、残りを見るための物（戻した後は、送り手が NATS に置かず、hook を持たない席は受け取らない）。
+ * 渡す hook を持たない席（名乗りが効いていない session）宛ての物は、期限で消えるまで残る（その席の roster inbox と送る前の検査が、本文を出す）。
  * 見る受け手は、取り口のある受け手・名簿の担当・名乗りのある受け手・送った記録で NATS に置いた受け手・TPM 担当。応えなければ、そう出す。
  */
 export async function mailLeft(ctx: Context): Promise<string[]> {

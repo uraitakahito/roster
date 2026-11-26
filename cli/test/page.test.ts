@@ -104,9 +104,9 @@ describe('roster page put', () => {
 
   test('#45 の形: 担当は、TPM 担当からの未読があれば、確認・提案・計画・結果のページを置く前に 1 度止まり、打ち直すと置く', async () => {
     const s = setup();
-    s.w.wire.hold('file:1');
+    s.w.hold('file:1');
     for (const [i, kind] of ['confirm', 'proposal', 'plan', 'result'].entries()) {
-      const { id } = s.w.wire.send('file:1', 'Technical Program Manager', `【answer】案 B にする ${i}`);
+      const { id } = await s.w.send('file:1', 'Technical Program Manager', `【answer】案 B にする ${i}`);
       const before = s.curls().length;
       await expect(pagePut(s.role, s.html, { kind })).rejects.toThrow([
         '相手から、まだ読んでいないメッセージが 1 件あります。ページを置いていません。',
@@ -124,8 +124,8 @@ describe('roster page put', () => {
 
   test('依頼書・課題の写し・時系列・監査のページは、未読があっても止めない', async () => {
     const s = setup();
-    s.w.wire.hold('file:1');
-    s.w.wire.send('file:1', 'Technical Program Manager', '【notify】知らせ');
+    s.w.hold('file:1');
+    await s.w.send('file:1', 'Technical Program Manager', '【notify】知らせ');
     for (const kind of ['brief', 'issue', 'timeline', 'audit']) expect((await pagePut(s.role, s.html, { kind }))[1]).toBe(`URL: ${BASE}/${s.project}/t-x7k2/${kind}-1.html`);
     // 見せていないので、次の確認のページでは止まる
     await expect(pagePut(s.role, s.html, { kind: 'confirm' })).rejects.toThrow(/1 件あります。ページを置いていません。/);
@@ -133,14 +133,14 @@ describe('roster page put', () => {
 
   test('TPM 担当は、--key の担当から来た未読だけで止まる', async () => {
     const s = setup();
-    s.w.wire.hold('file:tpm');
-    s.w.wire.send('file:tpm', 'SWE t-b2c3', '【done】別の課題');
+    s.w.hold('tpm');
+    await s.w.send('file:tpm', 'SWE t-b2c3', '【done】別の課題');
     expect((await pagePut(s.tpm, s.html, { kind: 'confirm', key: 't-x7k2' }))[1]).toContain('/t-x7k2/confirm-1.html');
-    s.w.wire.send('file:tpm', 'SWE t-x7k2', '【ask-tpm】前提が変わった');
+    await s.w.send('file:tpm', 'SWE t-x7k2', '【ask-tpm】前提が変わった');
     await expect(pagePut(s.tpm, s.html, { kind: 'confirm', key: 't-x7k2' })).rejects.toThrow(/^t-x7k2 の担当から、まだ読んでいないメッセージが 1 件あります。ページを置いていません。[\s\S]*前提が変わった/);
     expect((await pagePut(s.tpm, s.html, { kind: 'confirm', key: 't-x7k2' }))[1]).toContain('/t-x7k2/confirm-2.html');
     // 名簿に無い Key では見ない
-    s.w.wire.send('file:tpm', 'SWE t-x7k2', '【ask-tpm】もう 1 つ');
+    await s.w.send('file:tpm', 'SWE t-x7k2', '【ask-tpm】もう 1 つ');
     expect((await pagePut(s.tpm, s.html, { kind: 'confirm', key: 't-zzzz' }))[1]).toContain('/t-zzzz/confirm-1.html');
   });
 

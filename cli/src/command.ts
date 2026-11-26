@@ -3,7 +3,6 @@ import { join } from 'node:path';
 import { busyMessage, castlistUrl, downMessage, missingCastlistWarning, PM_REF, registerPm, requireUp } from './castlist.ts';
 import type { Context } from './context.ts';
 import { guardSettings } from './guard.ts';
-import { usesNats } from './mail.ts';
 import { presentSettingsEnv, resolveSettings } from './settings.ts';
 import { shellQuote } from './shell.ts';
 import { envName } from './env.ts';
@@ -17,13 +16,12 @@ import { skillSetDir, TpmError } from './skill-sets.ts';
  * TPM 担当が roster を名前だけで打てるように、PATH の頭に roster の folder を足す（担当には roster run-role が同じことをする）。
  * --add-dir は後ろの語もまとめて folder として読むので、最初の入力の前に -- を置く。
  * launch は、1 行の頭に足す起こしの印（startTpm が castlist を設定した時に渡す。字のまま足す）。
- * mail は、メッセージを NATS で渡す hook も付けるか（設定の messages が nats の時。guardSettings）。
  */
-export function buildCommand(dir: string, root: string, skillSets: string[], env: NodeJS.ProcessEnv, launch: string[] = [], mail = false): string {
+export function buildCommand(dir: string, root: string, skillSets: string[], env: NodeJS.ProcessEnv, launch: string[] = []): string {
   const settings = resolveSettings('tpm', { env });
   const addDirs = ['core', ...skillSets].map(s => skillSetDir(root, s));
   const bin = join(root, 'cli', 'bin');
-  const claude = ['claude', '--model', settings.model, '--effort', settings.effort, '--permission-mode', settings.permissionMode, '--settings', guardSettings(join(bin, 'roster'), undefined, mail), '--add-dir', ...addDirs, '--', '/tpm'];
+  const claude = ['claude', '--model', settings.model, '--effort', settings.effort, '--permission-mode', settings.permissionMode, '--settings', guardSettings(join(bin, 'roster')), '--add-dir', ...addDirs, '--', '/tpm'];
   const assigns = [`PATH=${shellQuote(bin)}:"$PATH"`, ...presentSettingsEnv(env).map(([name, value]) => `${name}=${shellQuote(value)}`), ...launch];
   return `cd ${shellQuote(dir)} && ${assigns.join(' ')} ${claude.map(shellQuote).join(' ')}`;
 }
@@ -38,7 +36,7 @@ export function buildCommand(dir: string, root: string, skillSets: string[], env
 export async function startTpm(ctx: Context): Promise<{ warnings: string[], alert: string[], line: string }> {
   const settings = resolveSettings('tpm', { env: ctx.env });
   const url = castlistUrl(ctx);
-  if (url === undefined) return { warnings: [], alert: missingCastlistWarning(ctx), line: buildCommand(ctx.project, ctx.root, ctx.skillSets, ctx.env, [], usesNats(ctx)) };
+  if (url === undefined) return { warnings: [], alert: missingCastlistWarning(ctx), line: buildCommand(ctx.project, ctx.root, ctx.skillSets, ctx.env) };
   const done = 'TPM 担当を起こす 1 行は出していません。';
   const after = ['打ってから、もう 1 度 roster start を打ってください。'];
   const warnings = await requireUp(ctx, done, after);
@@ -53,5 +51,5 @@ export async function startTpm(ctx: Context): Promise<{ warnings: string[], aler
     `${envName('LAUNCH_EFFORT')}=${shellQuote(settings.effort)}`,
     `${envName('LAUNCH_FRESH')}=1`,
   ];
-  return { warnings, alert: [], line: buildCommand(ctx.project, ctx.root, ctx.skillSets, ctx.env, launch, usesNats(ctx)) };
+  return { warnings, alert: [], line: buildCommand(ctx.project, ctx.root, ctx.skillSets, ctx.env, launch) };
 }

@@ -3,7 +3,7 @@
 // castlist を設定していれば、行ごとに、その時刻にその席に居たアクターを castlist に聞いて欄に出す（聞けなければ、そう書いてページは置く）。
 import { castlistUrl } from '../castlist.ts';
 import type { Context } from '../context.ts';
-import { syncDeliveries, type GateStop, type GuardStop, type WaitChange } from '../evidence.ts';
+import type { GateStop, GuardStop, WaitChange } from '../evidence.ts';
 import { incidentLine, readIncidents, requireIncident, writeIncident, type Incident } from '../incidents.ts';
 import { HEADINGS, type HeadingId } from '../protocol.ts';
 import { isStaffKey, staffKey, subjectOfStaffKey } from '../roster.ts';
@@ -84,7 +84,7 @@ const counterpart = (key: string): string => isStaffKey(key) ? subjectOfStaffKey
  * メッセージには届いた時刻を添え、届く前に相手が送ったメッセージがあれば「行き違い」の印を付ける。
  */
 export function collect(ctx: Context, key: string, window?: { from: string, to: string }, triggerId?: string): TimelineEvent[] {
-  // 見た時刻は口から引く（送る前の検査と同じ決め方。queued は見ず、時刻が無ければ「分からない」にする）。
+  // 見た時刻は口から引く（送る前の検査と同じ決め方。時刻が無ければ、送った時刻に倒さず「分からない」にする）。
   const seenAt = seenTimes(ctx, { live: false });
   const returned = returnedIds(ctx);
   // 課題の Key で集めると、その課題の Staff Engineer 担当の席（名簿の Key は <課題の Key>.staff）の行も入る。
@@ -210,8 +210,6 @@ ${rows.join('\n')}
 export async function incidentTimeline(ctx: Context, target: string, options: { minutes?: number } = {}): Promise<string[]> {
   const minutes = options.minutes ?? DEFAULT_MINUTES;
   if (!Number.isFinite(minutes) || minutes <= 0) throw new TpmError('--minutes は 1 以上の数にしてください');
-  // 連携の道具が古いメッセージを捨てる前に、届いた時刻を写す。
-  syncDeliveries(ctx);
   const n = /^#?([1-9]\d*)$/.exec(target)?.[1];
   let incident: Incident | undefined;
   let events: TimelineEvent[];

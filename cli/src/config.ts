@@ -18,10 +18,10 @@ export const TRANSPORTS = ['cmux', 'file'] as const;
 export type Transport = typeof TRANSPORTS[number];
 
 /**
- * 担当どうしのメッセージを配る道。cmux は連携の道具がそのまま運ぶ（既定）。nats は NATS JetStream で配る:
- * 席を起こす時に渡す hook を付け、名乗った受け手にだけ NATS で配る（名乗っていない受け手には、cmux で送る）。
+ * 担当どうしのメッセージを配る道。nats（NATS JetStream）だけ。書いても書かなくても同じ（いつも NATS で配る）。
+ * 前の版の cmux（連携の道具がそのまま運ぶ道）は外した。書いてあれば、設定の誤りにする（messagesField）。
  */
-export const MESSAGE_ROUTES = ['cmux', 'nats'] as const;
+export const MESSAGE_ROUTES = ['nats'] as const;
 /** メッセージを配る道の名前。 */
 export type MessageRoute = typeof MESSAGE_ROUTES[number];
 
@@ -53,7 +53,7 @@ export interface FileConfig {
   roles: Partial<Record<RoleName, Partial<RoleSettings>>>
   /** アクターの台帳（castlist）の URL。書かなければ castlist に何も送らない。 */
   castlist?: string
-  /** メッセージを配る道（書いた時だけ。書かなければ cmux）。 */
+  /** メッセージを配る道（書いた時だけ。書いても書かなくても、いつも NATS で配る）。 */
   messages?: MessageRoute
 }
 
@@ -88,7 +88,7 @@ export interface RolesConfig {
   roles: Partial<Record<RoleName, Partial<RoleSettings>>>
   /** アクターの台帳（castlist）の URL（project の folder の設定だけ。$ROSTER_CASTLIST_URL が勝つ。castlist.ts の castlistUrl）。 */
   castlist?: string
-  /** メッセージを配る道（project の folder の設定に書いた時だけ。書かなければ cmux）。 */
+  /** メッセージを配る道（project の folder の設定に書いた時だけ。書いても書かなくても、いつも NATS で配る）。 */
   messages?: MessageRoute
   /** 集めた設定（project の folder 自身が先頭、次に直下の folder を名前の順）。 */
   sources: ConfigSource[]
@@ -134,8 +134,15 @@ function fileConfig(config: Record<string, unknown>, configFile: string): FileCo
     infra: infraField(config.infra, configFile),
     roles: rolesField(config, configFile),
     ...castlistField(config.castlist, configFile),
-    ...(config.messages === undefined ? {} : { messages: oneOf(config.messages, MESSAGE_ROUTES, 'cmux', 'messages', configFile) }),
+    ...messagesField(config.messages, configFile),
   };
+}
+
+/** messages の欄。書いてあれば nats だけを受ける。前の版の cmux は、外した事を伝える誤りにする。 */
+function messagesField(value: unknown, configFile: string): { messages?: MessageRoute } {
+  if (value === undefined) return {};
+  if (value === 'cmux') throw new TpmError(`${configFile} の messages の cmux は外しました（メッセージは、いつも NATS JetStream で配ります）。この行を消してください`);
+  return { messages: oneOf(value, MESSAGE_ROUTES, 'nats', 'messages', configFile) };
 }
 
 /** castlist が受けるのは、roster を動かす機械の中からだけ（Host が 127.0.0.1 か localhost）。 */

@@ -44,7 +44,7 @@ const notes = (w: World): MessageRecordNote[] => w.tpm.state.lines<MessageRecord
 const seated = (ctx: Context): Context => ({ ...ctx, env: { ...ctx.env, ROSTER_CASTLIST_URL: 'http://127.0.0.1:8802', CLAUDE_CODE_SESSION_ID: 's-1' } });
 
 describe('送った記録を置き場に写す', () => {
-  test('TPM 担当 → 担当: 1 件を carried で置く。送り手は TPM 担当の名（TPM_PARTY）、受け手は担当の Key、id と時刻は送った記録の物', async () => {
+  test('TPM 担当 → 担当: 1 件を waiting（届くのを待っている）で置く。送り手は TPM 担当の名（TPM_PARTY）、受け手は担当の Key、id と時刻は送った記録の物', async () => {
     const w = await started();
     await notify(w.tpm, 't-x7k2', { text: 'A で進める' });
     const [sent] = log(w);
@@ -57,7 +57,7 @@ describe('送った記録を置き場に写す', () => {
       to: 't-x7k2',
       text: '【notify】A で進める',
       sentAt: NOW,
-      state: 'carried',
+      state: 'waiting',
       createdAt: expect.any(String) as string,
       updatedAt: expect.any(String) as string,
     }]);
@@ -72,7 +72,7 @@ describe('送った記録を置き場に写す', () => {
     await notify(w.tpm, 't-x7k2', { text: 'どちらにするか' });
     const asked = log(w)[0]?.id ?? '';
     await askTpm(w.se, { text: '案 A にする', waitingFor: '案の選択', replyTo: asked });
-    expect((await records(w.store))[1]).toMatchObject({ key: 't-x7k2', heading: 'ask-tpm', from: 't-x7k2', to: TPM_PARTY, text: '【ask-tpm】案 A にする', state: 'carried', replyTo: asked });
+    expect((await records(w.store))[1]).toMatchObject({ key: 't-x7k2', heading: 'ask-tpm', from: 't-x7k2', to: TPM_PARTY, text: '【ask-tpm】案 A にする', state: 'waiting', replyTo: asked });
   });
 
   test('担当 → 担当（レビューの頼み）: 送り手は課題の担当の Key、受け手は Staff Engineer 担当の席の Key', async () => {
@@ -85,7 +85,7 @@ describe('送った記録を置き場に写す', () => {
     await hello({ ...staff, env: { ...staff.env, ROSTER_ROLE: 'staff-engineer' } });
     expect((await askReview(w.se, { url: 'https://github.com/o/r/pull/7' }))[0]).toBe('送った: 【ask-review】→ file:2（相手の手が空いた時に届く。送り直さない）');
     const sent = log(w).at(-1);
-    expect((await records(w.store)).at(-1)).toMatchObject({ id: sent?.id, key: 't-x7k2', heading: 'ask-review', from: 't-x7k2', to: 't-x7k2.staff', text: sent?.text, state: 'carried' });
+    expect((await records(w.store)).at(-1)).toMatchObject({ id: sent?.id, key: 't-x7k2', heading: 'ask-review', from: 't-x7k2', to: 't-x7k2.staff', text: sent?.text, state: 'waiting' });
   });
 
   test('castlist の設定と session の id があれば、ページを置く時と同じ送り手の付随する id を付ける', async () => {
@@ -95,18 +95,21 @@ describe('送った記録を置き場に写す', () => {
   });
 
   test('8000 字を超える本文は、頭の 7990 字に「…（長いので切った）」を付ける。log.jsonl の本文は切らない', async () => {
+    // 送る命令は、8000 字（UTF-16）を超える本文を置かない。超える行は、前の版の行と、絵文字の多い本文（符号位置では 8000 字に収まらない事は無い）だけ。
     const w = await started();
+    const old = (id: string, text: string): Sent => ({ at: NOW, key: 't-x7k2', heading: 'notify', from: 'Technical Program Manager', to: 'file:1', text, id });
     const body = `${'あ'.repeat(7000)}${'😀'.repeat(2000)}`;
-    await notify(w.tpm, 't-x7k2', { text: body });
+    copyMessageRecord(w.tpm, old('old-1', `【notify】${body}`));
+    await messageRecordsSettled();
     const [record] = await records(w.store);
     const chars = [...record?.text ?? ''];
     expect(chars).toHaveLength(8000);
     expect(record?.text).toBe(`${[...`【notify】${body}`].slice(0, 7990).join('')}…（長いので切った）`);
-    expect(log(w)[0]?.text).toBe(`【notify】${body}`);
-    // ちょうど 8000 字は切らない。
+    // ちょうど 8000 字は切らない。送る命令でも置ける。
     const fit = 'い'.repeat(8000 - '【notify】'.length);
     await notify(w.tpm, 't-x7k2', { text: fit });
     expect((await records(w.store))[1]?.text).toBe(`【notify】${fit}`);
+    expect(log(w)[0]?.text).toBe(`【notify】${fit}`);
   });
 });
 
@@ -151,7 +154,7 @@ describe('置き場が送り手を確かめられない時は、送り手を外�
     const [sent] = log(w);
     const [record, ...rest] = await records(w.store);
     expect(rest).toEqual([]);
-    expect(record).toMatchObject({ id: sent?.id, from: TPM_PARTY, to: 't-x7k2', text: '【notify】A で進める', sentAt: NOW, state: 'carried' });
+    expect(record).toMatchObject({ id: sent?.id, from: TPM_PARTY, to: 't-x7k2', text: '【notify】A で進める', sentAt: NOW, state: 'waiting' });
     expect(record?.sender).toBeUndefined();
     expect(w.store.messagePuts.map(r => r.query.actorRef)).toEqual(['claude.session:s-1', undefined]);
     expect(notes(w)).toEqual([{ at: NOW, id: sent?.id, reason: expect.stringMatching(reason) as string, placed: 'without-sender' }]);
@@ -191,7 +194,7 @@ describe('写せなくても、送りは止めない', () => {
     const w = await started();
     breakStore(w.store);
     expect(await notify(w.tpm, 't-x7k2', { text: 'A で進める' })).toEqual(SENT);
-    expect(w.wire.inbox('file:1').map(m => m.text)).toEqual(['【notify】A で進める']);
+    expect(w.posted('file:1').map(m => m.text)).toEqual(['【notify】A で進める']);
     const [sent] = log(w);
     expect(sent).toMatchObject({ heading: 'notify', text: '【notify】A で進める' });
     expect(await records(w.store)).toEqual([]);
@@ -222,10 +225,10 @@ describe('写せなくても、送りは止めない', () => {
   });
 
   test('id の形が置き場の決まりに合わない時は、字を替えずに、写さない（置き場には頼まない）', async () => {
+    // 今の版が作る id は、いつも UUID。前の版（連携の道具が id を作った頃）の行を写す時の守り。
     const w = await started();
-    const messages = Object.assign(Object.create(w.tpm.messages) as Context['messages'], { send: () => ({ id: 'workspace:1/7' }) });
-    expect(await notify({ ...w.tpm, messages }, 't-x7k2', { text: 'A で進める' })).toEqual(SENT);
-    expect(log(w).map(l => l.id)).toEqual(['workspace:1/7']);
+    copyMessageRecord(w.tpm, { at: NOW, key: 't-x7k2', heading: 'notify', from: 'Technical Program Manager', to: 'file:1', text: '【notify】A で進める', id: 'workspace:1/7' });
+    await messageRecordsSettled();
     expect(await records(w.store)).toEqual([]);
     expect(w.store.messagePuts).toEqual([]);
     expect(notes(w)).toEqual([{ at: NOW, id: 'workspace:1/7', reason: 'id の形が、置き場の決まりに合わない（写していない）' }]);
