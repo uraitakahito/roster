@@ -11,6 +11,8 @@ import { nextHandler, type NextAnswer, type NextSeen } from './next-fake.ts';
 import { reportDone } from '../src/commands/messages.ts';
 import { hello } from '../src/commands/role-side.ts';
 import { FileTransport } from '../src/transport/file.ts';
+import type { ProcInfo, Procs } from '../src/mail.ts';
+import { MemoryMailroom, MemoryPostOffice } from '../src/mailroom/memory.ts';
 
 /** 課題の概要の節（40 字以上）のある依頼書。world が置き場に置く。 */
 export const BRIEF_HTML = '<h1>依頼書</h1><section id="summary"><h2>課題の概要</h2><p>試しの課題。担当が課題の中身を読めるようにし、TPM 担当が相談に乗れるようにすることが求められている。</p></section>';
@@ -431,6 +433,40 @@ export interface World {
   prs: Map<string, string | undefined>
   /** 外の命令の答えを替える（`<命令> <引数…>` の字 → 答え）。無い命令は今までどおり exit 0・`{}`。 */
   answers: Map<string, ExecResult>
+  /** 試験用の配りの口の、預かる側（NATS の server に当たる）。どの周りの口も、これ 1 つを見る（周りごとに別の口＝別の process）。 */
+  office: MemoryPostOffice
+  /** 偽の process（pid → 始まった時刻の字と、親・命令）。居る process だけを入れる。 */
+  procs: FakeProcs
+  /** 命令の結果に、返す行のほかに出た字（Context の print）。 */
+  printed: string[]
+  /** 時を ms 進める（周りの now と、配りの口の時計）。 */
+  pass: (ms: number) => void
+}
+
+/** 偽の process の表。alive に入れた pid だけが居る。stopped は、止める合図を送った pid。 */
+export class FakeProcs implements Procs {
+  self = 4242;
+  alive = new Map<number, { started: string } & ProcInfo>();
+  stopped: number[] = [];
+
+  /** process を足す（始まった時刻の字は、pid から作る）。 */
+  add(pid: number, ppid = 1, command = 'node'): void {
+    this.alive.set(pid, { started: `started-${pid}`, ppid, command });
+  }
+
+  startedAt(pid: number): string | undefined {
+    return this.alive.get(pid)?.started;
+  }
+
+  info(pid: number): ProcInfo | undefined {
+    const p = this.alive.get(pid);
+    return p === undefined ? undefined : { ppid: p.ppid, command: p.command };
+  }
+
+  stop(pid: number): void {
+    this.stopped.push(pid);
+    this.alive.delete(pid);
+  }
 }
 
 /** 置き場の API を、偽の置き場（生成した client に差し込む handler）に送る周り。 */
@@ -469,15 +505,26 @@ export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessE
     return cmd === 'curl' ? store.curl(args) : { status: 0, stdout: '{}', stderr: '' };
   };
   let slept = 0;
-  const at = (env: NodeJS.ProcessEnv): Context => ({
-    // 控えの folder も一時の folder にする（本物の控えに試験のページを置かない）。
-    ...withStore(createContext({ XDG_STATE_HOME: join(base, 'state'), ROSTER_PAGES_DIR: join(base, 'pages'), ...env }, project, exec), store),
-    now: () => new Date('2026-11-20T12:00:00.000Z'),
-    sleep: () => {
-      slept += 1;
-      return Promise.resolve();
-    },
-  });
+  let now = Date.parse('2026-11-20T12:00:00.000Z');
+  const office = new MemoryPostOffice(() => new Date(now));
+  const procs = new FakeProcs();
+  const printed: string[] = [];
+  const at = (env: NodeJS.ProcessEnv): Context => {
+    // 周りごとに別の口（別の process に当たる）。同じ預かる側を見る。
+    const room = new MemoryMailroom(office);
+    return {
+      // 控えの folder も一時の folder にする（本物の控えに試験のページを置かない）。
+      ...withStore(createContext({ XDG_STATE_HOME: join(base, 'state'), ROSTER_PAGES_DIR: join(base, 'pages'), ...env }, project, exec), store),
+      now: () => new Date(now),
+      sleep: () => {
+        slept += 1;
+        return Promise.resolve();
+      },
+      mailroom: () => Promise.resolve(room),
+      procs,
+      print: lines => void printed.push(...lines),
+    };
+  };
   const tpm = at(env);
   return {
     project,
@@ -490,6 +537,12 @@ export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessE
     slept: () => slept,
     prs,
     answers,
+    office,
+    procs,
+    printed,
+    pass: (ms) => {
+      now += ms;
+    },
   };
 }
 

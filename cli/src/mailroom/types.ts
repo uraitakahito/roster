@@ -14,6 +14,11 @@ export interface Letter {
   text: string
   /** 返事の先のメッセージの id。 */
   replyTo?: string
+  /**
+   * 送った側の記録の欄（名 → 値。名は英小文字と数字と `-`）。道具は中身を見ずに、そのまま運ぶ（取り置いた物・読んだ物・記録にも出る）。
+   * 受け手の側が、送った側の手元の記録を読まずに、同じ値の記録を作るための物（上の層が、Key・見出し・送り手と受け手の Key・送った時刻を入れる）。
+   */
+  labels?: Record<string, string>
 }
 
 /** 預かったメッセージ。at は道具が預かった時刻（ISO の字）。 */
@@ -85,6 +90,11 @@ export interface Mailroom {
   counts(to: Recipient): Promise<Counts>
   /** 今ある物を、古い順に取り置いて返す（待たない）。無ければ空。 */
   take(to: Recipient, limit: TakeLimit): Promise<Taken[]>
+  /**
+   * 受け手の箱に残っている物を、古い順に読む（取り置かない。渡した回数にも数えない）。取り置き中の物も、
+   * 渡し直しの上限を超えて undeliverable() がまだ片付けていない物も入る（数は counts() が持つ）。
+   */
+  peek(to: Recipient): Promise<Stored[]>
   /** 来るまで ms 待ち、来たら取り置いて返す。来なければ空。 */
   wait(to: Recipient, limit: TakeLimit, ms: number): Promise<Taken[]>
   /** 取り置いた物を「渡せた」と返す（箱から外れる）。同じ口（同じ process）で取った物だけを受ける。 */

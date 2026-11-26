@@ -18,6 +18,17 @@ const token = (s: string): string => s.replaceAll(/[^A-Za-z0-9_-]/g, '_');
 /** 受け手の名に使える形（そのまま道具の宛名と取り口の名にする。字を替えると、違う受け手が同じ名になりうるので、替えずに断る）。 */
 const RECIPIENT = /^[A-Za-z0-9_-]{1,64}$/;
 
+/** 送った側の記録の欄（Letter の labels）を運ぶ header の名の頭。 */
+const LABEL_HEADER = 'Roster-Label-';
+/** 欄の名に使える形（header の名の後ろに、そのまま付ける）。 */
+const LABEL = /^[a-z0-9-]{1,32}$/;
+
+/** header（読む側が要る所だけ）。 */
+interface Headers {
+  get(k: string): string
+  keys(): string[]
+}
+
 /** 受け手の名を確かめて返す。 */
 function recipientName(to: Recipient): string {
   if (!RECIPIENT.test(to)) throw new TpmError(`受け手の名に使えない字があります（英数字と _ と - を 64 字まで）: ${to}`);
@@ -195,6 +206,10 @@ export class NatsMailroom implements Mailroom {
     // 預かった時刻は、置く時に 1 度決めて持たせる（記録の箱と配る箱で、同じ時刻を返すため）。
     h.set('Roster-At', new Date().toISOString());
     if (letter.replyTo !== undefined) h.set('Roster-Reply-To', letter.replyTo);
+    for (const [name, value] of Object.entries(letter.labels ?? {})) {
+      if (!LABEL.test(name)) throw new TpmError(`欄の名に使えない字があります（英小文字・数字・- を 32 字まで）: ${name}`);
+      h.set(`${LABEL_HEADER}${name}`, encodeURIComponent(value));
+    }
     const ack = await js.publish(this.subject(letter.to), letter.text, { msgID: letter.id, headers: h });
     return { duplicate: ack.duplicate };
   }
@@ -202,6 +217,10 @@ export class NatsMailroom implements Mailroom {
   async counts(to: Recipient): Promise<Counts> {
     const info = await (await this.consumer(to)).info();
     return { waiting: info.num_pending, held: info.num_ack_pending };
+  }
+
+  async peek(to: Recipient): Promise<Stored[]> {
+    return (await this.scan(this.subject(to))).map(m => this.fromStored(to, m));
   }
 
   take(to: Recipient, limit: TakeLimit): Promise<Taken[]> {
@@ -250,10 +269,11 @@ export class NatsMailroom implements Mailroom {
     return { ...this.stored(to, m.headers?.get('Nats-Msg-Id') ?? '', m.string(), m.headers, m.time.toISOString()), deliveries: m.info.deliveryCount };
   }
 
-  private stored(to: Recipient, id: string, text: string, h: { get(k: string): string } | undefined, at: string): Stored {
+  private stored(to: Recipient, id: string, text: string, h: Headers | undefined, at: string): Stored {
     const replyTo = h?.get('Roster-Reply-To') ?? '';
+    const labels = Object.fromEntries((h?.keys() ?? []).filter(k => k.startsWith(LABEL_HEADER)).map(k => [k.slice(LABEL_HEADER.length), decodeURIComponent(h?.get(k) ?? '')]));
     const recipient = decodeURIComponent(h?.get('Roster-To') ?? '') || to;
-    return { id, from: decodeURIComponent(h?.get('Roster-From') ?? ''), to: recipient, text, at: (h?.get('Roster-At') ?? '') || at, ...(replyTo === '' ? {} : { replyTo }) };
+    return { id, from: decodeURIComponent(h?.get('Roster-From') ?? ''), to: recipient, text, at: (h?.get('Roster-At') ?? '') || at, ...(replyTo === '' ? {} : { replyTo }), ...(Object.keys(labels).length === 0 ? {} : { labels }) };
   }
 
   async done(taken: Taken[]): Promise<void> {
@@ -322,7 +342,7 @@ export class NatsMailroom implements Mailroom {
   }
 
   /** 配る箱の中の物を、古い順に読む（取り置かない。渡した回数にも数えない）。filter は宛名。 */
-  private async peek(filter: string): Promise<StoredMsg[]> {
+  private async scan(filter: string): Promise<StoredMsg[]> {
     const { jsm } = await this.open();
     const out: StoredMsg[] = [];
     for (let seq = 1; ;) {
@@ -343,7 +363,7 @@ export class NatsMailroom implements Mailroom {
 
   async clear(to: Recipient): Promise<Stored[]> {
     const { jsm } = await this.open();
-    const kept = await this.peek(this.subject(to));
+    const kept = await this.scan(this.subject(to));
     try {
       await jsm.consumers.delete(this.work, recipientName(to));
     }
@@ -384,7 +404,7 @@ export class NatsMailroom implements Mailroom {
   }
 
   async outstanding(): Promise<Set<string>> {
-    return new Set((await this.peek(`roster.${this.space}.msg.>`)).map(m => m.header.get('Nats-Msg-Id')));
+    return new Set((await this.scan(`roster.${this.space}.msg.>`)).map(m => m.header.get('Nats-Msg-Id')));
   }
 
   async lag(): Promise<number> {

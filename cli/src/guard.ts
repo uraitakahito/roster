@@ -159,6 +159,12 @@ function killsByPattern(words: string[]): boolean {
   return targets.length === 0 || targets.some(t => !KILL_TARGET.test(t));
 }
 
+/** roster の、メッセージを送る命令と、ページを置く命令（送る前の検査を通る物）。 */
+const SENDS = /^roster (?:(?:ask|report|notify|answer|dismiss|assign)\b|page put\b)/;
+
+/** 命令の中に、roster の送る命令（ask・report・notify・answer・dismiss・assign・page put）があるか。単純な命令の頭だけを見る。 */
+export const sendsMessage = (command: string): boolean => splitCommands(command).some(words => SENDS.test(words.join(' ')));
+
 /** 命令の頭にこれを書くと、道具の直打ちを通す（roster 自身の開発と試しのため。環境の手続きと、読むだけの担当の守りと、Audit の席を起こす命令と、pattern で process に合図を送る命令には効かない）。 */
 export const RAW = 'ROSTER_RAW=1';
 
@@ -311,16 +317,30 @@ export function judgeWrite(call: WriteCall, role: RoleName | undefined, roots: P
  * どの席にも、session の始まりと終わりに castlist に送る hook（roster castlist session-start・session-end）を付ける。castlist を設定していなければ、その命令は何もしない。
  * session の始まりには、前の session 宛てに届いたメッセージ（届け違い）を見る hook（roster returned check）も付ける。castlist の設定に依らない。
  * Auditor の席には、session の始まりに roster audit fresh を呼ぶ hook も付ける。
+ * mail（設定の messages が nats の席）の時だけ、メッセージを NATS で渡す hook（roster mail …）を、今ある hook の後ろに足す:
+ * 名乗る・外す（SessionStart・SessionEnd）、検査が止めた後に渡す（Bash を使い終えた後。PostToolUse と PostToolUseFailure の両方）、人の入力の時に渡す（UserPromptSubmit）、
+ * 手を止めている間に待つ（Stop と SessionStart。背景で動き、exit 2 で session を起こす）。mail が false なら、今までと 1 字も変わらない。
  */
-export function guardSettings(tpmBin: string, role?: RoleName): string {
+export function guardSettings(tpmBin: string, role?: RoleName, mail = false): string {
   const hook = (command: string) => ({ type: 'command', command: `${shellQuote(tpmBin)} ${command}` });
+  // 待つ命令: 背景で動かし（async）、exit 2 で終わった時に stderr の字で session を起こさせる（asyncRewake）。待つのは長くて 1 日。
+  const waiting = { type: 'command', async: true, asyncRewake: true, timeout: 86400, command: `${shellQuote(tpmBin)} mail wait` };
   const matcher = readOnly(role) === undefined ? 'Bash' : ['Bash', ...WRITE_TOOLS].join('|');
   return JSON.stringify({
     hooks: {
       PreToolUse: [{ matcher, hooks: [hook('guard')] }],
       // Auditor の席は、席を起こした時と /clear の時に印を書く（前の監査の文脈が残ったまま、次の監査を始めないため）。
-      SessionStart: [{ hooks: [...(role === AUDIT_ROLE ? [hook('audit fresh')] : []), hook('castlist session-start'), hook('returned check')] }],
-      SessionEnd: [{ hooks: [hook('castlist session-end')] }],
+      SessionStart: [{ hooks: [...(role === AUDIT_ROLE ? [hook('audit fresh')] : []), hook('castlist session-start'), hook('returned check'), ...(mail ? [hook('mail claim'), waiting] : [])] }],
+      SessionEnd: [{ hooks: [hook('castlist session-end'), ...(mail ? [hook('mail release')] : [])] }],
+      ...(mail
+        ? {
+            // Bash を使い終えた後（成功の後・失敗の後の両方）。結果を pipe で切る（… | tail -1）と、検査が止めても命令は「成功」になるため。
+            PostToolUse: [{ matcher: 'Bash', hooks: [hook('mail gate')] }],
+            PostToolUseFailure: [{ matcher: 'Bash', hooks: [hook('mail gate')] }],
+            Stop: [{ hooks: [waiting] }],
+            UserPromptSubmit: [{ hooks: [hook('mail prompt')] }],
+          }
+        : {}),
     },
   });
 }

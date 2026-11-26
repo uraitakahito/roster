@@ -193,7 +193,7 @@ pagetray の新しい版が出て、この repo の `.pagetray-version` が上�
 
 ## メッセージキュー（NATS）
 
-担当どうしのメッセージを預かり、受け手ごとに配る段取り（取り置き・渡せたの確かめ・渡し直し・上限・期限）を受け持つ、既存のオープンソース [NATS](https://nats.io/) の server（JetStream を入れて使う）。roster は、これを「配りの口」（`cli/src/mailroom/`。[開発](/development/#nats-jetstreamメッセージキューとのつなぎ)）の向こうに置く。**今は、まだ命令からは使っていない**（メッセージは cmux が運んでいる。使い始めるのは、hook と送る前の検査を替える段から）。Apple Container（`container` CLI）で動かし、`127.0.0.1` だけで待ち受ける。起こす・止める・上げるのは DevOps Engineer 担当で、命令は `roster infra run nats -- <命令>` で打つ（この repo の `.claude/roles/config.jsonc` の「TPM に相談」）。
+担当どうしのメッセージを預かり、受け手ごとに配る段取り（取り置き・渡せたの確かめ・渡し直し・上限・期限）を受け持つ、既存のオープンソース [NATS](https://nats.io/) の server（JetStream を入れて使う）。roster は、これを「配りの口」（`cli/src/mailroom/`。[開発](/development/#nats-jetstreamメッセージキューとのつなぎ)）の向こうに置く。**使うのは、project の設定に `"messages": "nats"` と書いた時だけ**（書かなければ、メッセージは今までどおり cmux が運び、NATS には何も送らない。下の「[メッセージを NATS で配る道を入れる・戻す](#メッセージを-nats-で配る道を入れる戻す)」）。Apple Container（`container` CLI）で動かし、`127.0.0.1` だけで待ち受ける。起こす・止める・上げるのは DevOps Engineer 担当で、命令は `roster infra run nats -- <命令>` で打つ（この repo の `.claude/roles/config.jsonc` の「TPM に相談」）。
 
 | 物 | 値 |
 |---|---|
@@ -221,9 +221,37 @@ roster infra run nats -- container run -d --name roster-nats \
 
 ### 止める・roster を動かす機械を起こし直した後
 
-- 止めている間に担当が送ろうとすると、「メッセージキューが応えません」で止まる（送っていない）。先に【ask-tpm】を送り、答えを待つ。止めるのは `roster infra run nats -- container stop roster-nats`。
+- 止めている間、メッセージを NATS で配る道を入れた project の、名乗っている席（hook を持つ席）は、**どこへも送れない**（送る前の検査が NATS に聞くため。「メッセージキューが応えません。送っていません」で止まり、居場所の状態に出る）。名乗っていない席も、名乗っている席へは送れない。課題に記録を書く命令は、記録を書く前に止まる。
+- 直してと頼む道だけは残る: `roster ask devops` と `roster report incident` は、NATS が応えない時、今までの cmux の形に落として送る（検査も cmux の形だけ。落とした事は `gate.jsonl` に `queue` の `fallback` と残る）。メッセージキューが止まった事を知らせる道が、メッセージキューに頼らないようにするため。受け手の席は cmux の hook も持っているので、cmux で届く。
+- だから、止める前に、止めると【ask-tpm】で知らせ、答えを待つ。止めるのは `roster infra run nats -- container stop roster-nats`。
 - roster を動かす機械を起こし直すと止まったままになる。`container system start` の後に `roster infra run nats -- container start roster-nats` を打つ。預かった物・取り置き・取り口の位置は volume から戻る（取り置き中だった物は、取った時から 30 秒の所で渡し直される）。
 - volume（`roster-nats-data`）は消さない。
+
+### メッセージを NATS で配る道を入れる・戻す
+
+既定では入っていない。入れるかは Product Manager が決める（[設定](/configuration/#メッセージを配る道任意)・届き方は[担当のあいだの決まり](/protocol/#メッセージを-nats-で配る道設定で入れた時)）。
+
+**入れる**
+
+1. NATS が起きていることを見る（上の「起こす」）。
+2. project の folder の `.claude/roles/config.jsonc` に `"messages": "nats"` を足す。
+3. TPM 担当を `roster start` の 1 行で起こし直す（1 行に、メッセージを渡す hook が入る）。担当は、`roster assign` で起こした席から hook を持つ。
+4. 設定を書く前から動いている席は hook を持たない。その席には、今までどおり cmux で届く（送り手が、受け手の名乗りを見て道を決める）。みな NATS にしたい時は、席を閉じて起こし直す。
+5. 確かめ: 起こした席の状態の folder に `mail/claims/<受け手の名>.jsonc` が出来ていること。その席に送ったメッセージの `log.jsonl` の行に `"carrier":"nats"` が付き、渡った後に `delivered.jsonl` に行が足されること。置き場の一覧の画面（`/messages`）では、状態が `waiting` から `delivered` に替わる。
+
+**見張る物**
+
+- 名乗りが出来ない席（Claude Code の process の番号が分からない起こし方）は、cmux で届き続ける。`mail/claims/` に file が無ければ、これ。
+- `delivered.jsonl` に `"when":"output"` の行が増えるのは、止めた後に渡す hook が働いていない印（送る前の検査が、本文を命令の結果に出して通した回）。
+- TPM 担当の命令の結果に「渡せない」「期限切れ」の行が出たら、その 1 通は届いていない。要る中身なら送り直す。
+- NATS を止めている間は、名乗っている席はどこへも送れず、名乗っている席への送りも「メッセージキューが応えません。送っていません」で止まる。残るのは、直してと頼む `roster ask devops` と `roster report incident` だけ（cmux の形に落ちる。上の「止める・roster を動かす機械を起こし直した後」）。
+
+**戻す**
+
+1. **設定を外す前に**、TPM 担当が `roster mail left` を打ち、NATS に残っている物（まだ渡っていない物）を、受け手ごとに見る。この命令は読むだけで、設定が `cmux` でも `nats` でも動く（戻した後に打っても出る）。
+2. 残っていれば、どちらかにする: (a) 受け手に渡るのを待つ（手を止めた時・人の入力の時に hook が渡す。`roster mail left` が「残っている物は無い」になってから戻す）。(b) TPM 担当が、その中身を、設定を戻した後に今の形（cmux）で送り直す。**残したまま戻すと、hook を持たない席（戻した後に起こし直した席）は受け取らず、72 時間で黙って消える**（設定が `cmux` の間は、「期限切れ」も出ない）。
+3. `config.jsonc` の `"messages": "nats"` を消す（か `"cmux"` にする）。これより後の送りは、どの席へも cmux で行く。送る前の検査も、今までの形に戻る。hook を持つ席は、設定を戻した後も、残っている自分宛てを hook で受け取る。
+4. 席を起こし直すと、hook の無い席になる。`roster close` が残りを片付けるのは、設定が `nats` の間だけなので、戻す前に閉じる席は先に閉じる。
 
 ### 版を上げる
 

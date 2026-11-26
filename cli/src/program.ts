@@ -15,12 +15,14 @@ import { issueView } from './commands/issue.ts';
 import { messageRecordsSettled } from './commands/message-record.ts';
 import { fileDelete, fileList, filePath, filePut, type FileListOptions, type FilePutOptions } from './commands/file.ts';
 import { PAGE_KINDS, pageDelete, pageImport, pageList, pagePath, pagePut, pageReply, type PageDeleteOptions, type PageListOptions } from './commands/page.ts';
+import { mailClaim, mailGate, mailLeft, mailPrompt, mailRelease, mailWait, type WaitResult } from './commands/mail.ts';
 import { registerMessages } from './commands/register.ts';
 import { registerReview } from './commands/review.ts';
-import { hello, inbox } from './commands/role-side.ts';
+import { hello, inboxNow } from './commands/role-side.ts';
 import { assign, close, newKey, roles, type AssignOptions } from './commands/tpm-side.ts';
 import { composeSkillSets, readConfigSources } from './config.ts';
-import { createContext } from './context.ts';
+import { createContext, mailroomsClosed } from './context.ts';
+import { usesNats } from './mail.ts';
 import { exec } from './exec.ts';
 import type { Verdict } from './guard.ts';
 import { ROLE_NAMES, type RoleName } from './protocol.ts';
@@ -102,7 +104,7 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
     .option('--model <model>', 'TPM 担当の model（既定は roster start が起こす model。$ROSTER_MODEL があればそれ）')
     .option('--effort <effort>', 'TPM 担当の effort（既定は $CLAUDE_EFFORT、無ければ roster start が起こす effort）')
     .action(async (options: { model?: string, effort?: string }) => print(await hello(createContext(), options)));
-  program.command('inbox').description('自分宛てで、まだ届いていないメッセージを出す（段の区切りに見る）').action(() => print(inbox(createContext())));
+  program.command('inbox').description('自分宛てで、まだ届いていないメッセージを出す（段の区切りに見る）').action(async () => print(await inboxNow(createContext())));
   registerMessages(program, print);
   registerReview(program, print);
   registerIncident(program, print);
@@ -209,6 +211,52 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
     });
   returned.command('show').description('返った物（【returned】の id）の宛先と全文を、送った記録から出す（TPM 担当。読むだけ）').argument('<id>', 'メッセージの id（頭の数字だけでもよい）')
     .action((id: string) => print(showReturned(createContext(), id)));
+  // メッセージを NATS で渡す hook の命令（設定の messages が nats の席にだけ付く。guard.ts の guardSettings）。
+  // hook なので、どんな誤りでも何も出さずに 0 で終わる（Claude Code の作業を止めない）。
+  const quiet = (name: string, run: () => void | Promise<void>) => async (): Promise<void> => {
+    try {
+      await run();
+    }
+    catch (e) {
+      process.stderr.write(`roster mail ${name}: ${(e as Error).message}\n`);
+    }
+  };
+  const mail = program.command('mail').description('メッセージを NATS JetStream で渡す hook の命令（設定の messages が nats の席で、Claude Code の hook が呼ぶ）');
+  mail.command('claim').description('（SessionStart の hook が呼ぶ）この session が「渡す hook を持つ」と名乗る（Claude Code の pid が分からなければ名乗らない）')
+    .action(quiet('claim', () => mailClaim(createContext(), readStdin())));
+  mail.command('release').description('（SessionEnd の hook が呼ぶ）名乗りを外し、待つ命令を止める')
+    .action(quiet('release', () => mailRelease(createContext(), readStdin())));
+  mail.command('gate').description('（Bash の後の hook が呼ぶ。PostToolUse・PostToolUseFailure の両方）送る前の検査が止めた後に、自分宛ての本文を文脈に渡す（止めた印が無ければ、何もしない）')
+    .action(quiet('gate', async () => {
+      const out = await mailGate(createContext(), readStdin());
+      if (out !== undefined) console.log(out);
+    }));
+  mail.command('prompt').description('（UserPromptSubmit の hook が呼ぶ）待つ命令を止め、自分宛てがあれば本文を文脈に渡す（決して exit 2 にしない）')
+    .action(quiet('prompt', async () => {
+      const out = await mailPrompt(createContext(), readStdin());
+      if (out !== undefined) console.log(out);
+    }));
+  mail.command('wait').description('（Stop・SessionStart の hook が背景で呼ぶ）自分宛てが来るまで待ち、来たら本文を stderr に出して exit 2 で終わる（Claude Code が session を起こす）')
+    .action(async () => {
+      // 止める合図（次の待つ命令・人の入力の時の hook が送る SIGTERM）で、取り置いた物を返して終わる。
+      const stop = new AbortController();
+      for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) process.once(sig, () => stop.abort());
+      let result: WaitResult = { code: 0 };
+      try {
+        result = await mailWait(createContext(), readStdin(), stop.signal);
+      }
+      catch (e) {
+        process.stderr.write(`roster mail wait: ${(e as Error).message}\n`);
+      }
+      await messageRecordsSettled();
+      await mailroomsClosed();
+      // exit 2 は、渡す本文がある時だけ。本文を書き終えてから終わる（待ちの timer が残るので、自分で終わる）。
+      const text = result.code === 2 ? result.stderr : undefined;
+      if (text !== undefined) await new Promise<void>(resolve => void process.stderr.write(`${text}\n`, () => resolve()));
+      process.exit(text === undefined ? 0 : 2);
+    });
+  mail.command('left').description('（TPM 担当が打つ）メッセージキュー（NATS）に残っている物を、受け手ごとに出す（読むだけ。設定の messages に依らない。設定を戻す前後に見る）')
+    .action(async () => print(await mailLeft(createContext())));
   const castlist = program.command('castlist').description('アクターの台帳（castlist）: session の始まりと終わりを送る（hook が呼ぶ。castlist を設定していなければ何もしない）・監査の検索を読む（find・show・lineage・events・settings。読むだけ）');
   castlist.command('session-start').description('（SessionStart の hook が呼ぶ）session を登録し、登場・再登場・要約・分身と、起こした・継いだ線を送る')
     .action(async () => {
@@ -289,7 +337,7 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
     .requiredOption('--state <folder>', '状態の folder')
     .action((key: string, options: { project: string, state: string }) => {
       const ctx = createContext(withEnv(process.env, { PROJECT: options.project, STATE: options.state }));
-      process.exit(runRole(requireRole(ctx, key), ctx.project, ctx.state.dir, ctx.root));
+      process.exit(runRole(requireRole(ctx, key), ctx.project, ctx.state.dir, ctx.root, process.env, usesNats(ctx)));
     });
 
   const banner = program.command('banner').description('通知のバナー（cmux の通知）を、居場所の役割 × きっかけで出すか消すか');
@@ -337,6 +385,8 @@ export async function runProgram(argv: string[], program: Command = buildProgram
   finally {
     // 止まる前に送った物の、置き場への写しを待つ（process.exit も、ほかの誤りで落ちる時も、途中の写しを切る）。
     await messageRecordsSettled();
+    // 配りの口（NATS との繋ぎ）を閉じる。取り置いたままの物は返る。
+    await mailroomsClosed();
   }
   if (failed) process.exit(1);
 }

@@ -20,6 +20,7 @@ export const ENV_NAMES = [
   'PAGES_URL',
   'PAGES_DIR',
   'CASTLIST_URL',
+  'NATS_URL',
   'ADDRESS',
 ] as const;
 
