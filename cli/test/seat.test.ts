@@ -228,6 +228,9 @@ describe('repo の席の後始末', () => {
     const ended = await reportEnd(w.seat, { prs: [], removed: [], left: 'なし' });
     expect(ended).toContain('課題は閉じない: gh-12（repo の席。課題を済みにするのは、Tech Lead 担当の片付けの時）');
     expect(closes(w)).toBe(0);
+    // Tech Lead 担当は、repo の席が名簿に残っている間は終えられない。
+    await expect(reportEnd(w.lead, { prs: [], removed: [], left: 'なし' })).rejects.toThrow(/^repo の席が名簿に残っています（gh-12\.pagetray）。【end】は送っていません/);
+    await seatClose(w.lead, 'pagetray');
     expect(await reportEnd(w.lead, { prs: [], removed: [], left: 'なし' })).toContain('課題を閉じた: gh-12');
     expect(closes(w)).toBe(1);
     expect(bodies(w)).toEqual([
@@ -239,7 +242,7 @@ describe('repo の席の後始末', () => {
 
   test('repo の席は roster ask pm を打てない（確認は Tech Lead 担当がまとめる）', async () => {
     const w = await tracked();
-    await expect(askPm(w.seat, { url: 'https://claude.ai/artifact/c1', items: ['案'], waitingFor: '案' })).rejects.toThrow(/^repo の席（gh-12\.pagetray）は roster ask pm を打ちません.*Tech Lead 担当（gh-12）に伝えてください/);
+    await expect(askPm(w.seat, { url: 'https://claude.ai/artifact/c1', items: ['案'], waitingFor: '案' })).rejects.toThrow(/^repo の席（gh-12\.pagetray）は roster ask pm を打ちません.*roster ask lead で Tech Lead 担当（gh-12）に送ってください/);
     expect(bodies(w)).toEqual([]);
     expect(w.posted('file:tpm')).toEqual([]);
   });

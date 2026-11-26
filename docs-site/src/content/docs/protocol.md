@@ -325,19 +325,26 @@ sequenceDiagram
 
 ## Tech Lead 担当と repo の席
 
-Tech Lead 担当（役割 `tech-lead`。題は `Lead <課題の Key>: <短い題>`。skill は `/tech-lead`）は、いくつもの repo に渡る課題 1 つの全体をまとめる担当。TPM 担当が `roster assign <課題の Key> --role tech-lead --seats <数>` で起こす。Tech Lead 担当は、repo ごとの席（repo の席。役割は `software-engineer`）を自分で起こす。**作りかけ**: 今あるのは、席を起こす・閉じる命令まで。席とじかに話す道・レビューの宛先・skill の手順は、これから足す。
+Tech Lead 担当（役割 `tech-lead`。題は `Lead <課題の Key>: <短い題>`。skill は `/tech-lead`）は、いくつもの repo に渡る課題 1 つの全体をまとめる担当。TPM 担当が `roster assign <課題の Key> --role tech-lead --seats <数>` で起こす。Tech Lead 担当は、repo ごとの席（repo の席。役割は `software-engineer`）を自分で起こす。Tech Lead 担当と repo の席は、TPM 担当を通らず、じかに話す。**作りかけ**: レビューの宛先（repo の席の頼みを Tech Lead 担当へ届ける）と skill の手順は、これから足す。
 
 | 命令 | 打つ者 | すること |
 |---|---|---|
 | `roster assign <課題の Key> --role tech-lead --seats <数>` | TPM 担当 | Tech Lead 担当を起こす。`--seats` は、起こしてよい repo の席の数の上限（Product Manager が計画で通した数。名簿の行の `seats` に書く）。動いている Tech Lead 担当への続きの依頼書に付けると、上限を替える。落ちた Tech Lead 担当の起こし直しで付けなければ、前の行の上限を受け継ぐ。`--role tech-lead` のほかに付けると断る |
 | `roster seat add <名> --brief <依頼書の URL> [--cwd <repo の folder>] [--title <短い題>]` | Tech Lead 担当 | 名簿に `<課題の Key>.<名>` の行（役割 `software-engineer`・`subject` は課題の Key・課題管理の課題は Tech Lead 担当と同じ）を書き、席を起こして、名乗りを待つ。依頼書は名簿の行で渡す（課題の概要の節が要る）。課題の写しは、Tech Lead 担当が受けた物（か、作らなかった訳）をそのまま渡し、席ごとに写し直さない。題は `SWE <課題の Key> <名>: <短い題>`。席を起こす所は `roster assign` と同じ関数（`cli/src/commands/launch.ts` の `launch`）を通るので、hook・色・castlist への知らせは同じ |
+| `roster seat brief <名> --brief <依頼書の URL> [--note <一言>] [--supersede\|--after]` | Tech Lead 担当 | 居る repo の席に、次の依頼書を送る（【brief】）。済んでいない前の依頼書があれば止まり、`--supersede`（取り消す）か `--after`（済ませてから）で進む。TPM 担当の続きの `roster assign` と同じ検査と数え |
+| `roster seat notify <名> <本文> [--reply-to <id>]` | Tech Lead 担当 | repo の席に、知らせ・問いへの答えを送る（【notify】） |
+| `roster seat dismiss <名> [--supersede]` | Tech Lead 担当 | repo の席に、片付けの指示を送る（【dismiss】）。席は worktree を片付けて【end】を Tech Lead 担当へ返す |
 | `roster seat close <名>` | Tech Lead 担当 | 自分の課題の repo の席を閉じ、名簿から消す。居場所の無い席か、片付けの終わり（【end】）を送った席だけ（起こし直して、まだ名乗っていない席は、前の席の【end】では閉じない）。その席の Staff Engineer 担当の席が残っていれば、一緒に閉じる |
+| `roster ask lead <問い> --waiting-for <何を>` | repo の席 | Tech Lead 担当に問いを送り（【ask-lead】）、状態を `回答待ち(Lead)` にする。repo の席でない担当からは断る |
 
 - **断る物**（`roster seat add`）: Tech Lead 担当でない session・名の形（英小文字・数字・`-`）・名 `staff`（Staff Engineer 担当の席の Key とぶつかる）・もう居る席・上限が渡されていない時・上限を超える分。上限は、今の名簿に居る repo の席で数える（落ちた席を同じ名で起こし直すのは数えない）。
 - **TPM 担当の命令**: `roster assign` と `roster dismiss` は、repo の席を断る（名簿の行に親の課題があり、Staff Engineer 担当の席でない行。Key の形では見ないので、点を含む課題の Key は今までどおり振れる）。`roster close <課題の Key>` は、残った repo の席も一緒に閉じる。`roster roles` は、居場所の無い repo の席に、Tech Lead 担当の命令（`roster seat add`・`roster seat close`）を案内する（repo の席を親の課題にまとめて出す並べ替えは、していない。名簿は Key の順なので、親の課題の次に並ぶ）。`roster assign` は、動いている席と違う `--role` を受けると止まる（名簿は Key 1 つに 1 行なので、役割を替えたつもりの依頼書が今の席に届く。役割を替えるなら、`roster dismiss <Key> --handover` → 【end】 → `roster close <Key>` の後に振る）。
 - **名乗り**: repo の席の `roster hello` は、課題の Key（親の課題）・名簿の Key・Tech Lead 担当の席の題を返す。ページは、親の課題の folder に置かれる。
+- **上へ送る先**: repo の席の【done】【merged】【doc-fix】【end】は、TPM 担当でなく、親の課題の Tech Lead 担当へ届く（`cli/src/commands/messages.ts` の `bossOf`。送る関数・2 度送りの検査・箱へ置けるかの検査の 3 か所が、これで宛先を引く）。Tech Lead 担当の席が無ければ、送らず・記録も書かずに止まり、`roster ask tpm` を案内する。【incident】【ask-devops】【ask-tpm】は、repo の席からも TPM 担当へ届く。【done】の後の状態は `回答待ち(Lead): 次の依頼`、【end】の後は `回答待ち(Lead): 席を閉じる`。
+- **依頼書の数え**: repo の席では、「仕事を振る者が送った物」を、記録の行の送り手の担当の Key（`sender`）が親の課題の Key かで見分ける（Tech Lead 担当の題は替わりうるので、題の字では見ない。`fromAssigner`）。Tech Lead 担当が送る行の Key は、受け手の repo の席の Key（TPM 担当の送りと同じ）。ほかの担当は、今までどおり送り手の題が TPM 担当の題かで見る。届かないまま終わった物（渡せない・期限切れ）を記録するのは、TPM 担当の命令の片付けだけなので、Tech Lead 担当の検査に「届かないまま終わった」と出るのは、その後。
+- **終わり方**: Tech Lead 担当の【end】は、repo の席が名簿に残っていれば断る（席ごとに `roster seat dismiss` → 【end】 → `roster seat close`）。
 - **課題管理の課題**: repo の席の片付けの終わり（【end】）は、課題を済みにしない（「課題は閉じない」と出す）。済みにするのは、Tech Lead 担当の【end】だけ。repo の席が書く記録の 1 行目は、席の名を添える（`【結果】Software Engineer（pagetray）: …`）。ほかの担当の記録の形は変わらない。
-- **Product Manager への確認**: repo の席の `roster ask pm` は断る（確認は、Tech Lead 担当がまとめて送る）。
+- **Product Manager への確認**: repo の席の `roster ask pm` は断る（`roster ask lead` で Tech Lead 担当に送り、Tech Lead 担当がまとめて確認にする）。
 - **台帳での名**（castlist）: repo の席の名の接頭辞は、名簿の Key から作る（`ai-36-pagetray-swe`。課題の Key から作ると、同じ課題の repo の席がみな同じ名になる）。Tech Lead 担当は `ai-36-lead`。ラベル `tpm.subject` に親の課題の Key が入る。
 - **出来事の時系列**: `roster incident timeline <課題の Key>` は、その課題の repo の席（と、その席の Staff Engineer 担当の席）の記録も集める。repo の席は、`roster seat add` が起こすたびに足す控え（状態の folder の `repo-seats.jsonl`。席を閉じても消さない）と今の名簿で見分ける（Key の頭では見ない。点を含む別の課題の Key を混ぜないため）。
 - guard は、`roster seat` を送る命令と見る（手伝い（subagent）に打たせない守りが、これで見分ける。`cli/src/guard.ts` の `SENDS`）。

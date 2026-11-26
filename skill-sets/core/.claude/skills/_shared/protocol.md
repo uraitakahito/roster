@@ -48,6 +48,18 @@ Staff Engineer 担当は、【done】【end】【merged】【doc-fix】【ask-pm
 
 宛先は、どちらも命令が名簿から引く（書かない）。送り手の名は、命令が名簿の題から付ける。
 
+### 分けた課題の中（Tech Lead 担当と repo の席。TPM 担当を通らない）
+
+いくつもの repo に渡る課題を Tech Lead 担当がまとめる時、Tech Lead 担当は repo ごとの席（repo の席。Software Engineer 担当）を起こす。repo の席から見ると、Tech Lead 担当が「自分に仕事を振る者」で、上の表の TPM 担当に当たる。
+
+| 見出し | 誰から誰へ | いつ | 命令 |
+|---|---|---|---|
+| 【ask-lead】 | repo の席 → Tech Lead 担当 | Tech Lead 担当に聞きたいこと・決めてほしいことがある（Product Manager に決めてほしいことも、これで送る。repo の席は【ask-pm】を送れない） | `roster ask lead "<問い・試したこと・案>" --waiting-for "<何を>"` |
+| 【brief】【notify】【dismiss】 | Tech Lead 担当 → repo の席 | 次の依頼書・知らせと問いへの答え・片付けの指示（中身は、下の「TPM 担当から」と同じ） | `roster seat brief <名> --brief <URL> [--supersede\|--after]`・`roster seat notify <名> "<本文>"`・`roster seat dismiss <名> [--supersede]` |
+
+- repo の席の【done】【merged】【doc-fix】【end】は、命令が Tech Lead 担当へ届ける（命令は同じ。宛先を書かない）。【incident】【ask-devops】【ask-tpm】は、repo の席からも TPM 担当へ届く（Tech Lead 担当の席が応えない時の相談は【ask-tpm】）。
+- repo の席を起こすのは `roster seat add <名> --brief <URL>`、片付けの終わった席を閉じるのは `roster seat close <名>`（どちらも Tech Lead 担当）。
+
 Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけが使う見出しは 2 つ。【audit】は、Product Manager へじかに出した監査の報告の写し（`roster report audit`）。【decided】は、Product Manager の決定（`roster report decided`）。Auditor は、【done】【end】【merged】【doc-fix】【ask-pm】【ask-review】を送らない（下の「監査」）。
 
 ### TPM 担当から
@@ -69,6 +81,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
   - Product Manager の答えを待つ: `roster wait pm "<何を>"`（`回答待ち(PM): <何を>`）。TPM 担当が Product Manager に手の操作を頼んで待つ回は `--hand` を付ける（下の「思わぬ出来事」）
   - TPM 担当の答えを待つ: `roster wait tpm "<何を>"`（`回答待ち(TPM): <何を>`）
   - レビューの相手を待つ: `回答待ち(レビュー): <何を>`（`roster ask review`・`roster report review` が出す。手では打たない）
+  - Tech Lead 担当の答えを待つ（repo の席）: `roster wait lead "<何を>"`（`回答待ち(Lead): <何を>`）
   - 待つ時間に限りがあれば添える: `roster wait tpm "merge（14:30 まで）"`
 - `roster wait` は打った時刻も覚える。Product Manager への通知のバナーは、TPM 担当が**その回に** `roster wait pm` を打って手を止めた時に出る（設定は docs の「設定」の「通知のバナー」）。
 - やりとりの命令は、メッセージを送った後の待ちも出す（`roster ask …` は回答待ち、`roster ask review` は `回答待ち(レビュー): <見る物>`、`roster report done` は `回答待ち(TPM): 次の依頼`、`roster report end` は `回答待ち(TPM): workspace を閉じる`）。答えが来たら `roster wait work "<段>"` に戻す。

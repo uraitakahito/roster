@@ -16,6 +16,9 @@ export const COMMANDS = [
   'assign',
   'close',
   'seat add',
+  'seat brief',
+  'seat notify',
+  'seat dismiss',
   'seat close',
   'hello',
   'inbox',
@@ -25,6 +28,7 @@ export const COMMANDS = [
   'ask pm',
   'ask devops',
   'ask review',
+  'ask lead',
   'report merged',
   'report doc-fix',
   'report done',
@@ -206,6 +210,8 @@ export const HEADINGS = {
   'ask-devops': { from: 'role' },
   // 課題の担当が、計画や PR のレビューを頼む。Staff Engineer 担当の席へじかに届く（席が無ければ、命令が起こして依頼書で渡す）。
   'ask-review': { from: 'role', peer: true },
+  // repo の席（Tech Lead 担当が起こした席）が、Tech Lead 担当に問いを送る。答えは【notify】で返る。
+  'ask-lead': { from: 'role' },
   'doc-fix': { from: 'role', record: '文書の修正' },
   'merged': { from: 'role' },
   'done': { from: 'role' },
@@ -244,12 +250,18 @@ export const WAIT = {
   tpm: (what: string) => `回答待ち(TPM): ${what}`,
   /** レビューの相手を待つ（課題の担当は判定を、Staff Engineer 担当は次の頼みを）。 */
   review: (what: string) => `回答待ち(レビュー): ${what}`,
+  /** Tech Lead 担当の答えを待つ（repo の席）。 */
+  lead: (what: string) => `回答待ち(Lead): ${what}`,
 } as const;
 /** 待ちの種類（`roster wait` の kind）。 */
 export type WaitKind = keyof typeof WAIT;
 
 /** 【done】の後の待ち。 */
 export const WAIT_NEXT_BRIEF = WAIT.tpm('次の依頼');
+/** repo の席の【done】の後の待ち（次の依頼書は Tech Lead 担当から来る）。 */
+export const WAIT_NEXT_BRIEF_LEAD = WAIT.lead('次の依頼');
+/** repo の席の【end】の後の待ち（席は Tech Lead 担当が閉じる）。 */
+export const WAIT_SEAT_CLOSE = WAIT.lead('席を閉じる');
 /** 【end】の後の待ち。 */
 export const WAIT_CLOSE = WAIT.tpm('workspace を閉じる');
 

@@ -1,4 +1,6 @@
-// Tech Lead 担当が打つ命令: 自分の課題の repo の席（Software Engineer 担当）を起こす（seatAdd）・閉じる（seatClose）。
+// Tech Lead 担当が打つ命令: 自分の課題の repo の席（Software Engineer 担当）を起こす（seatAdd）・次の依頼書を送る（seatBrief）・
+// 知らせる（seatNotify）・片付けの指示を送る（seatDismiss）・閉じる（seatClose）。repo の席から見ると、Tech Lead 担当は自分に仕事を振る者で、
+// 届く見出し（【brief】【notify】【dismiss】）と数えは、TPM 担当が振る時と同じ（messages.ts の同じ関数を、送り手を替えて使う）。
 // repo の席は、名簿の Key が `<課題の Key>.<名>` で、親の課題（Tech Lead 担当の課題の Key）を持つ。席を起こす・閉じる所は、
 // TPM 担当の roster assign・roster close と同じ関数（launch.ts の launch・tpm-side.ts の closeSeat）を通す（hook と箱の片付けを受け継ぐ）。
 import { assertSummary } from '../brief.ts';
@@ -9,7 +11,7 @@ import { isRepoSeat, noteRepoSeat, readRole, repoSeatKey, repoSeats, requireSelf
 import { resolveSettings } from '../settings.ts';
 import { skillSetDir, TpmError } from '../skill-sets.ts';
 import { launch, roleDefaults } from './launch.ts';
-import { assertRead, type Sent } from './messages.ts';
+import { assertRead, assertSettled, brief, dismissSeat, notifySeat, type Sent } from './messages.ts';
 import { closeWithChildren } from './tpm-side.ts';
 
 /** repo の席の役割。 */
@@ -53,7 +55,7 @@ export async function seatAdd(ctx: Context, name: string, options: SeatAddOption
   const existing = readRole(ctx, key);
   if (existing !== undefined && !isRepoSeat(existing)) throw new TpmError(`${key} は、名簿で別の担当の Key です（${existing.title}）。別の名にしてください`);
   const alive = existing?.address !== undefined && ctx.seats.seats().some(s => s.address === existing.address);
-  if (existing !== undefined && alive) throw new TpmError(`${key} の席は、もう居ます（${existing.address}）。起こしていません`);
+  if (existing !== undefined && alive) throw new TpmError(`${key} の席は、もう居ます（${existing.address}）。起こしていません。次の依頼書は roster seat brief ${name} --brief <URL> で送ってください`);
   if (self.seats === undefined) throw new TpmError(`repo の席の数の上限が、まだ渡されていません。起こしていません。roster ask tpm で、計画の席の数を伝えて頼んでください（TPM 担当が roster assign ${self.key} --role tech-lead --seats <数> で渡す）`);
   const others = repoSeats(ctx, self.key).filter(r => r.key !== key);
   if (others.length >= self.seats) throw new TpmError(`repo の席は ${self.seats} つまでです（今: ${others.map(r => r.key).join('・')}）。起こしていません。数を増やすなら、roster ask tpm で頼んでください`);
@@ -88,6 +90,51 @@ export async function seatAdd(ctx: Context, name: string, options: SeatAddOption
   return await launch(ctx, record, existing !== undefined, options.wait, [`名簿の Key: ${key}`, ...skew], sid ? sessionRef(sid) : undefined);
 }
 
+/** 自分の課題の repo の席の、名簿の行。無ければ止まる。 */
+function ownSeat(ctx: Context, self: RoleRecord, name: string): RoleRecord {
+  const key = seatKey(self, name);
+  const seat = readRole(ctx, key);
+  if (seat === undefined || !isRepoSeat(seat) || seat.subject !== self.key) throw new TpmError(`${key} の席が名簿にいません（自分の課題の repo の席だけに送れる・閉じられる。席を起こすのは roster seat add）`);
+  return seat;
+}
+
+/** `roster seat brief` の旗。 */
+export interface SeatBriefOptions {
+  brief: string
+  /** 【brief】に添える一言。 */
+  note?: string
+  /** 済んでいない前の依頼書を取り消す。 */
+  supersede?: boolean
+  /** 済んでいない前の依頼書を済ませてから、これをさせる。 */
+  after?: boolean
+}
+
+/**
+ * Tech Lead 担当が、居る repo の席に、次の依頼書を送る（【brief】）。済んでいない前の依頼書があれば止まる（--supersede か --after で進む）。
+ * TPM 担当の続きの roster assign と同じ検査と数え（assertSettled・brief）を通す。
+ */
+export async function seatBrief(ctx: Context, name: string, options: SeatBriefOptions): Promise<string[]> {
+  const self = requireLead(ctx, 'roster seat brief');
+  const seat = ownSeat(ctx, self, name);
+  if (options.supersede === true && options.after === true) throw new TpmError('--supersede と --after は、どちらか 1 つにしてください');
+  await assertRead(ctx, `${seat.key} の担当`, seat.title);
+  const choice = options.supersede === true ? 'supersede' : options.after === true ? 'after' : undefined;
+  const settled = assertSettled(ctx, seat, 'assign', choice, 'lead');
+  return await brief(ctx, seat, options.brief, options.note, settled === undefined || choice === undefined ? undefined : { text: settled, choice }, self.title);
+}
+
+/** Tech Lead 担当が、repo の席に、返事の要らないメッセージ（知らせ・【ask-lead】への答え）を送る（【notify】）。 */
+export async function seatNotify(ctx: Context, name: string, options: { text: string, replyTo?: string }): Promise<string[]> {
+  const self = requireLead(ctx, 'roster seat notify');
+  return await notifySeat(ctx, self, ownSeat(ctx, self, name), options);
+}
+
+/** Tech Lead 担当が、repo の席に、片付けの指示を送る（【dismiss】）。席は【end】を Tech Lead 担当へ返す。受けたら roster seat close で閉じる。 */
+export async function seatDismiss(ctx: Context, name: string, options: { supersede?: boolean }): Promise<string[]> {
+  const self = requireLead(ctx, 'roster seat dismiss');
+  return await dismissSeat(ctx, self, ownSeat(ctx, self, name), options);
+}
+
 /**
  * その席（今の居場所）が、片付けの終わり（【end】）を送ったか。名乗っていない席（起こし直したばかり）は、まだ送っていないとする
  * （同じ Key の前の席の【end】を、今の席の物に数えない）。
@@ -104,10 +151,9 @@ const hasEnded = (ctx: Context, seat: RoleRecord): boolean => {
  */
 export async function seatClose(ctx: Context, name: string): Promise<string[]> {
   const self = requireLead(ctx, 'roster seat close');
-  const key = seatKey(self, name);
-  const seat = readRole(ctx, key);
-  if (seat === undefined || !isRepoSeat(seat) || seat.subject !== self.key) throw new TpmError(`${key} の席が名簿にいません（自分の課題の repo の席だけを閉じられる）`);
+  const seat = ownSeat(ctx, self, name);
+  const key = seat.key;
   const alive = seat.address !== undefined && ctx.seats.seats().some(s => s.address === seat.address);
-  if (alive && !hasEnded(ctx, seat)) throw new TpmError(`${key} の席は、まだ片付けの終わり（【end】）を送っていません。閉じていません。片付けの指示を送り、【end】を受けてから閉じてください`);
+  if (alive && !hasEnded(ctx, seat)) throw new TpmError(`${key} の席は、まだ片付けの終わり（【end】）を送っていません。閉じていません。roster seat dismiss ${name} で片付けの指示を送り、【end】を受けてから閉じてください`);
   return await closeWithChildren(ctx, seat);
 }
