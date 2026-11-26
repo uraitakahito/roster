@@ -259,6 +259,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 
 - 自分が変えてよくない環境は、自分では変えず【ask-devops】で TPM 担当に送る。
 - 手続きを踏んでいない命令は、guard が実行の前に止める。止まったら、出た文のとおりに頼む（別の書き方で通そうとしない）。
+- process を止めるときは、`pgrep -fl '<型>'` で pid と command line を見て、当たった数を確かめてから、その数字を `kill <pid>` に書く。`pkill`・`killall` と pid を名指さない `kill`（`xargs kill`・`kill $(pgrep …)`）は打たない（guard が止める。macOS の `pkill` は後ろの旗も pattern に読み、2026-11-23 の朝（JST）に担当の session ごと 29 個を止めた。台帳 #89）。
 - 設定に書かれていない環境で、並べて動いている担当やほかの人が困りそうな物を変えるときも、先に【ask-tpm】を送る。
 - 手元で image を build する builder（環境 `builder`。container の名は `buildkit`）は、どの担当も使う。`container build` はそのまま打つ（builder が止まっていれば build が起こす）。build に `-c`・`-m`・`--ssh`・`--dns…` を付けない（動いている builder を作り直し、ほかの担当の build が落ちる。guard はこれを止められない）。要るなら【ask-devops】。
 

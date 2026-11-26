@@ -1,12 +1,14 @@
 // guard: 担当が使う道具を、実行の前に見て、通すか止めるかを決める（Claude Code の PreToolUse hook から呼ばれる）。
-// 止めるのは 4 つ。(1) project の設定（infra。直下の folder の設定の宣言も合わせる）に書いた環境に触る命令で、手続きを踏んでいない物。
+// 止めるのは 6 つ。(1) project の設定（infra。直下の folder の設定の宣言も合わせる）に書いた環境に触る命令で、手続きを踏んでいない物。
 // (2) 連携と課題管理の道具の直打ち（roster を通さないと、記録と状態が抜ける）。
 // (3) 担当が置き場のページと file を消す命令: 消す要求を直に送る curl と、置き場の CLI（pagetray）の消す命令
 //     （消してよいのは TPM 担当だけ。roster page delete・roster file delete も担当からは止まる）。
 // (4) 読むだけの担当（Auditor・Staff Engineer 担当）が repo・設定・記録を変えること: project の folder・状態の folder・ページの控えの下への書き込み（Edit・Write・NotebookEdit）と、
 //     git・gh の変える命令（どちらも見て勧めるだけで、直さない）。
+// (5) Audit の席を起こす命令（roster audit start。起こすのは Product Manager）。
+// (6) pattern で選んだ process に合図を送る命令（pkill・killall と、pid を名指さない kill。どの席からも。台帳 #89・#92）。
 // (1) は命令の字全体に match の字が含まれるかで見る（共有の環境は、疑わしければ止める）。
-// (2)〜(4) の shell の命令は、単純な命令に分け、その頭（実際に打つ道具の命令）だけを見る。commit の文・grep の型・here-document に道具の名が入っても止めない。
+// (2)〜(6) の shell の命令は、単純な命令に分け、その頭（実際に打つ道具の命令）だけを見る。commit の文・grep の型・here-document に道具の名が入っても止めない。
 // どれも字で見るので、防げるのは「うっかり」まで。script に包んだ命令や、shell の redirect での書き込みはすり抜ける。確実な守りは、担当に渡す権限の方で行う。
 import { existsSync, realpathSync } from 'node:fs';
 import { basename, dirname, join, resolve, sep } from 'node:path';
@@ -122,7 +124,42 @@ function changesRepo(words: string[]): boolean {
 /** Audit の席を起こす命令。Product Manager が自分の手で打つ物なので、TPM 担当と担当が道具として打つのは止める。 */
 const AUDIT_START = /^roster audit start\b/;
 
-/** 命令の頭にこれを書くと、道具の直打ちを通す（roster 自身の開発と試しのため。環境の手続きと、読むだけの担当の守りと、Audit の席を起こす命令には効かない）。 */
+/** pattern で選んだ process に合図を送る命令（引数に依らず止める）。 */
+const PATTERN_KILLERS = new Set(['pkill', 'killall']);
+/** kill の、値を取る旗（`-s TERM`・`-n 9`）。 */
+const KILL_VALUE_FLAGS = new Set(['-s', '-n']);
+/** kill の的として通す字: pid（数字。0 は自分の process group なので外す）・job（`%1`）・変数（`$pid`・`${PID}`・`$!`・`$$`・`$1`）。 */
+const KILL_TARGET = /^(?:[1-9]\d*|%\S+|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?|\$[!$\d])$/;
+
+/**
+ * 単純な命令（語の並び）が、pattern で選んだ process に合図を送る命令か。pkill・killall はいつも。
+ * kill は、的（旗でない引数）がみな pid・job・変数の時だけ通す（通す形を数える。疑わしければ止める）。的が無い（`pgrep … | xargs kill`）・
+ * 空の語（`$(pgrep …)` の跡）・`{}`・0・負の数（process group）は止める。`--` の後ろはみな的。
+ * `kill -l`・`kill -L`（合図の一覧）は通す。
+ */
+function killsByPattern(words: string[]): boolean {
+  const [name, ...args] = words;
+  if (name !== undefined && PATTERN_KILLERS.has(name)) return true;
+  if (name !== 'kill') return false;
+  const targets: string[] = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i] ?? '';
+    if (arg === '--') {
+      targets.push(...args.slice(i + 1));
+      break;
+    }
+    if (arg.startsWith('-') && targets.length === 0) {
+      // 合図の一覧。的の後ろの -l は旗でない（kill は先に的へ送る）ので、的の前だけで見る。
+      if (arg === '-l' || arg === '-L') return false;
+      if (KILL_VALUE_FLAGS.has(arg)) i += 1;
+      continue;
+    }
+    targets.push(arg);
+  }
+  return targets.length === 0 || targets.some(t => !KILL_TARGET.test(t));
+}
+
+/** 命令の頭にこれを書くと、道具の直打ちを通す（roster 自身の開発と試しのため。環境の手続きと、読むだけの担当の守りと、Audit の席を起こす命令と、pattern で process に合図を送る命令には効かない）。 */
 export const RAW = 'ROSTER_RAW=1';
 
 /** guard に聞く 1 件。打った命令と、決めるのに要る設定・承認・時刻。 */
@@ -170,6 +207,10 @@ export function judge(asked: Asked): Verdict {
   const commands = splitCommands(asked.command);
   if (commands.some(words => AUDIT_START.test(words.join(' ')))) {
     return { allow: false, reason: 'Audit の席を起こすのは Product Manager です。roster audit start は、Product Manager が自分の手で打ちます（Auditor は TPM 担当の回し方も見るので、TPM 担当と担当は起こさない）。' };
+  }
+  const killer = commands.find(killsByPattern);
+  if (killer !== undefined) {
+    return { allow: false, reason: `pattern で選んで process に合図を送る命令は止めます（${killer.filter(w => w !== '').slice(0, 3).join(' ')}）。思わぬ process に届くため（macOS の pkill は後ろの旗も pattern に読み、2026-11-23 の朝（JST）に担当の session ごと 29 個を止めた）。pgrep -fl '<型>' で pid と command line を見て、当たった数を確かめてから、その数字を kill <pid> に書いてください（pgrep の出力を変数や $(…) で kill に渡すと、見る手が抜けます）。` };
   }
   const reader = readOnly(asked.role);
   if (reader !== undefined) {

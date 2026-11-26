@@ -20,7 +20,7 @@ TPM 担当が書く依頼書には、その課題だけのことを書く（ひ�
 | 決まり | 見出し・順番・記録・名簿 | `protocol.md` の文と、`cli/src/protocol.ts`・`cli/src/roster.ts`・`cli/src/commands/` |
 | 連携の道具 | メッセージを送る・担当を起こす・状態を出す | `cli/src/transport/`（`cmux`・試験用の `file`） |
 | 課題管理の道具 | 課題を読む・課題に記録を書く・課題を閉じる | `cli/src/tracker/`（`jira`・`github`・`none`） |
-| guard | 共有の環境と、道具の直打ちと、担当が置き場のページを消す要求と、読むだけの担当（Auditor・Staff Engineer 担当）が repo・設定・記録を変えることと、Audit の席を起こす命令を止める | `cli/src/guard.ts`（Claude Code の hook から呼ばれる） |
+| guard | 共有の環境と、道具の直打ちと、担当が置き場のページを消す要求と、読むだけの担当（Auditor・Staff Engineer 担当）が repo・設定・記録を変えることと、Audit の席を起こす命令と、pattern で process に合図を送る命令を止める | `cli/src/guard.ts`（Claude Code の hook から呼ばれる） |
 | バナー | 通知のバナーを、居場所の役割 × きっかけで出すか消すか（[設定](/configuration/#通知のバナー任意)） | `cli/src/banner.ts`・`cli/src/commands/banner.ts`（cmux の通知の hook から呼ばれる） |
 
 ```mermaid
@@ -309,13 +309,14 @@ Auditor（役割 `auditor`。題は `Audit`、課題の Key は `audit`。skill 
 
 同じ `--settings` で、session の始まりと終わりに `roster castlist session-start`・`roster castlist session-end` を呼ぶ hook も付ける（[アクターの台帳](#アクターの台帳castlist)。castlist を設定していなければ何もしない）。
 
-止めるのは 5 つ（castlist を設定した project では、castlist に送れない時の Bash も止める。[アクターの台帳](#アクターの台帳castlist)）。
+止めるのは 6 つ（castlist を設定した project では、castlist に送れない時の Bash も止める。[アクターの台帳](#アクターの台帳castlist)）。
 
 - **共有の環境に触る命令**: 設定の `infra` の `match` に当たる命令を、環境の手続きで見る（[設定](/configuration/)）。「PM だけ」はどの担当も通らない（Product Manager が自分の terminal で直に打つ）。「TPM に相談」と「PM の承認」は DevOps Engineer 担当だけが通り、「PM の承認」は `roster infra approve` で書いた承認の期限の中だけ通る。
 - **道具の直打ち**: `cmux agent message`・`cmux set-status`・`cmux workspace create`・`cmux workspace close`、`acli` の記録と状態、（課題管理が GitHub の Issue の project では）`gh issue comment`・`gh issue close`。`roster` を通さないと記録と状態が抜けるため。課題を読む命令（`acli jira workitem view` など）は止めない。
 - **担当が置き場のページと file を消す命令**: 消す要求を直に送る `curl` と、置き場の CLI（`pagetray`）の消す命令。消してよいのは TPM 担当だけ。
 - **読むだけの担当が repo・設定・記録を変えること**: Auditor（役割 `auditor`）と Staff Engineer 担当（役割 `staff-engineer`）は見て勧めるだけで、直さない。この 2 つの席だけ、hook を file を書き替える道具（Edit・Write・NotebookEdit）にも付け、project の folder・状態の folder・ページの控えの folder の下への書き込みを止める（書く先を読めない呼び出しも止める）。shell では、`git` の変える命令（`commit`・`push`・`pull`・`checkout`・`stash` など。`git -C <folder> …` の形も）と、`gh` の変える命令（`pr create`・`pr merge`・`pr review`・`pr comment`・`release`・書き込みの `api` など）を止める。読む命令（`git log`・`git diff`・`git fetch`・`gh pr view`）は通す。`ROSTER_RAW=1` は効かない。
 - **Audit の席を起こす命令**: `roster audit start` を、TPM 担当と担当が道具として打つこと（Auditor の席を起こすのは Product Manager。`ROSTER_RAW=1` は効かない）。
+- **pattern で process に合図を送る命令**: `pkill`・`killall`（引数に依らず）と、pid を名指さない `kill`（的が無い `pgrep … | xargs kill`・的が `$(…)` の `kill $(pgrep …)`・`kill 0`（自分の process group）・`kill -9 -1`（送れる process みな））。pattern で選ぶと思わぬ process に届くため（macOS の `pkill` は pattern の後ろの旗も 2 つ目の pattern に読み、2026-11-23 の朝（05:33 JST）に担当の session ごと 29 個の process を止めた。台帳 #89・#92）。`pgrep -fl '<型>'` で pid と command line を見て、当たった数を確かめてから、その数字を `kill <pid>` に書く。`kill` は、的がみな pid・job（`%1`）・変数（`$pid`・`$!`・`$$`）の時だけ通す（通す形を数える。的が `{}`・負の数（process group）でも止める）。`kill -l` も通す。TPM 担当にも効き、`ROSTER_RAW=1` は効かない。すり抜ける物: pgrep の出力を変数に入れて渡す形（`pid=$(pgrep -f x -n); kill $pid` は、pkill と同じく後ろの `-n` を pattern に読み、当たった pid をみな送る）、`timeout 5 pkill …` のように前に付く語の表に無い命令の後ろ、前に付く語の旗の値の後ろ（`sudo -u root pkill …`・`nice -n 10 pkill …`・`xargs -n 1 kill`・`xargs -I {} kill {}`。旗の値を命令の名と読む）。誤って止まる物: `command -v pkill`（`which pkill` で代える）、pid の file を読む `kill $(cat x.pid)`（file を読んで数字を書く）。
 
 hook は shell の命令（Bash）と、読むだけの担当の席では file を書き替える道具にだけ付くので、claude.ai の Atlassian の connector の道具は見ない。担当は、`acli` に命令の無い課題の欄（コンポーネントなど）だけを connector で書き、コメントと状態は connector で書かない（決まりの「Jira の課題の欄を書く」）。
 

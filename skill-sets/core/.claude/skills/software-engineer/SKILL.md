@@ -39,6 +39,7 @@ roster hello
 - PR は main から切った branch で出す。題か本文に課題の Key（GitHub の Issue なら `Refs #12`。`Closes` は書かない）。CI が緑になってから、自分で merge する（依頼書が TPM 担当の merge を求めたら `roster ask tpm` で頼む）。merge したら、main の push で動く workflow（`gh run list --branch main --limit 4`）が通ったかを見てから `roster report merged` を打つ（PR が merge 済みでなければ、送らずに止まる。merge の命令と 1 行に続けて書かず、merge できたのを見てから打つ）。
   - PR の check が緑でも、docs の公開（`docs`）は main でしか動かない。落ちていたら、落ちたことと、`gh workflow run <workflow の file> --ref main` で流した新しい回が通ったかを【merged】の一言に書く。落ちた回の `gh run rerun` は使わない（roster の `docs` では、前の試みの artifact が残って重なり、また落ちる）。
 - `git add -A`・`git add .` は使わない。ファイルを名指して add する。
+- 止める process は、`pgrep -fl '<型>'` で pid と command line を見て、当たった数を確かめてから、その数字を `kill <pid>` に書く（`pkill`・`killall` と pid を名指さない `kill` は guard が止める。台帳 #89）。
 - 動くことを示してから「できた」と言う。試験を流し、要るなら実際に起こして見る。
 - 環境（container・サーバーなど）を変える前に、protocol.md の「共有の環境」を見る。自分が変えてよくない環境は、自分では変えず `roster ask devops`。
 - 思わぬ出来事（うその知らせ・行き違い・session の権限で断られた命令・計画と違う公開や削除・自分の誤り）に気づいたら、その場で `roster report incident` で台帳に 1 行書いて続ける（protocol.md の「思わぬ出来事」）。原因は調べなくてよい（調べるのは Auditor。protocol.md の「監査」）。

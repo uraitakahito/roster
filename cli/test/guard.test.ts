@@ -299,6 +299,83 @@ describe('Audit の席を起こす命令', () => {
   });
 });
 
+describe('pattern で process に合図を送る命令（台帳 #89・#92）', () => {
+  // 試験は字を judge に渡すだけで、命令は打たない。
+  test.each([
+    'pkill -f "castlist-server" -n',
+    'pkill node',
+    'killall Finder',
+    '/usr/bin/pkill -9 -f x',
+    'sudo pkill -f x',
+    'nohup killall x',
+    'cd /w && pkill -f x',
+    'true; pkill -f x',
+    'sh -c "pkill -f x"',
+    'x=$(killall -s x)',
+    'ROSTER_RAW=1 pkill -f x',
+    // kill でも、的を名指さない物は、pattern で選んだ物にまとめて送るのと同じ。
+    'pgrep -f x | xargs kill',
+    'pgrep -f x | xargs kill -9',
+    'kill $(pgrep -f x)',
+    'kill -9 "$(pgrep -f x)"',
+    'kill `pgrep -f x`',
+    'kill 0',
+    'kill -9 -1',
+    'kill -- -123',
+    'kill -TERM -1234',
+    'kill',
+    'kill 123 x',
+    'kill foo',
+    // 的の後ろの -l は合図の一覧の旗でない（kill は先に的へ送る）。
+    'kill 0 -l',
+    'kill -9 0 -l',
+    'kill $(pgrep -f x) -l',
+    'pgrep -f x | xargs -I{} kill {}',
+    // 誤って止まる物（docs に書いた）。pid の file は読んで、数字を書く。
+    'kill $(cat x.pid)',
+    'command -v pkill',
+  ])('止める: %s', (command) => {
+    for (const role of [undefined, 'software-engineer', 'devops-engineer', 'staff-engineer'] as const) {
+      expect(ask(command, role), String(role)).toEqual({ allow: false, reason: expect.stringContaining('pgrep -fl') as string });
+    }
+  });
+
+  test.each([
+    'kill 12345',
+    'kill -9 12345 12346',
+    'kill -TERM 12345',
+    'kill -s TERM 12345',
+    'kill -n 9 12345',
+    'kill %1',
+    'kill $pid',
+    'kill -9 "$PID"',
+    'kill ${PID}',
+    'python3 -m http.server 8931 & sleep 1; kill $!',
+    'kill -9 $$',
+    'kill $1',
+    'kill -- 12345',
+    'kill -l',
+    'kill -l 15',
+    'pgrep -fl castlist-server',
+    'ps -o pid,command -p 12345',
+    'git commit -m "pkill と killall を止める"',
+    'grep -rn "pkill\\|killall" skill-sets',
+    'cat <<EOF\npkill -f x\nEOF',
+    'echo killall',
+    // この repo の設定の infra にある字（頭は container）と、operations.md の調べ方の 1 行（型は引用の中）。
+    'container kill buildkit',
+    'jq -r \'.message.content[]? | (.input.command? // "") | select(test("\\\\b(pkill|killall|kill)\\\\b"))\' "$f"',
+    // すり抜ける物（guard の限り。docs に書いた）: pgrep の出力を変数に入れて渡す形。
+    'pid=$(pgrep -f x -n); kill $pid',
+  ])('通す: %s', (command) => {
+    expect(ask(command, 'software-engineer')).toEqual({ allow: true });
+  });
+
+  test('止めた訳の命令の字に、$(…) の跡の空の語を残さない', () => {
+    expect(ask('kill $(pgrep -f x)', 'software-engineer')).toEqual({ allow: false, reason: expect.stringContaining('止めます（kill）') as string });
+  });
+});
+
 describe('Auditor は repo を変えない', () => {
   test.each<[string, boolean]>([
     ['git status', true],
