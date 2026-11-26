@@ -108,14 +108,15 @@ function queueDown(ctx: Context, not: string, e: unknown): TpmError {
 
 /**
  * メッセージを配りの口（NATS）に置き、作った id を返す。長すぎる本文は置かずに誤り。配りの口が誤りなら、置けていないとして止まる。
+ * labels は、送った側の記録の欄（deliver の注）。
  * urgent（直してと頼む命令。fellBack の注）の時は、止まらずに undefined を返す（呼ぶ側が cmux で送る）。落とした事は gate.jsonl に残す。
  */
-async function post(ctx: Context, box: Recipient, from: string, text: string, replyTo: string | undefined, urgent: boolean): Promise<string | undefined> {
+async function post(ctx: Context, box: Recipient, from: string, text: string, replyTo: string | undefined, labels: Record<string, string>, urgent: boolean): Promise<string | undefined> {
   const length = text.length;
   if (length > NATS_TEXT_MAX) throw new TpmError(`本文が長すぎます（${length} 字。メッセージキューで送れるのは ${NATS_TEXT_MAX} 字まで）。長い本文はページに書いて（roster page put）、URL を送ってください。送っていません`);
   const id = randomUUID();
   try {
-    await (await ctx.mailroom()).put({ id, from, to: box, text, ...(replyTo === undefined ? {} : { replyTo }) });
+    await (await ctx.mailroom()).put({ id, from, to: box, text, ...(replyTo === undefined ? {} : { replyTo }), labels });
   }
   catch (e) {
     if (!urgent) throw queueDown(ctx, '送っていません', e);
@@ -155,6 +156,7 @@ async function assertReachable(ctx: Context, party: Party): Promise<void> {
  * 運ぶ道: 設定の messages が nats で、届く担当の名乗り（mail.ts）が効いていれば、配りの口（NATS）に置く（cmux では送らない。記録の行に carrier: nats）。
  * それ以外（設定が cmux・届く担当が名乗っていない・届く担当が分からない）は、今のとおり連携の道具（cmux）で送る。
  * cmux で送る返事の先が NATS で運んだ物（cmux の知らない id）の時は、cmux には返事の形を付けずに宛先へ送る（記録の replyTo は残す）。
+ * NATS に置く物には、送った側の記録の欄（Key・見出し・送り手と受け手の Key・送った時刻）を持たせる（commands/mail.ts の sentFrom が読む）。
  * urgent は、直してと頼む命令（配りの口が応えなければ、cmux で送る。post の注）。
  */
 async function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: string, body: string, recipient: Party, replyTo?: string, extra: Pick<Sent, 'settle' | 'peer' | 'briefs'> = {}, urgent = false): Promise<string> {
@@ -163,10 +165,14 @@ async function deliver(ctx: Context, id: HeadingId, key: string, from: string, t
   const original = replyTo === undefined ? undefined : ctx.state.lines<Sent>('log.jsonl').findLast(l => l.id === replyTo);
   const receiving = replyTo === undefined ? recipient : original?.sender;
   const box = usesNats(ctx) && receiving !== undefined ? claimOf(ctx, receiving)?.name : undefined;
-  const posted = box === undefined ? undefined : await post(ctx, box, from, text, replyTo, urgent);
+  // 置く物に、置き場の記録に要る欄を持たせる（受け手の側が、この session の log.jsonl を読まずに、同じ値の記録を書き足せるように。
+  // 受け手が待っていると、こちらが log.jsonl に書く前に、受け手の書き足しが置き場に先に着くことがある）。
+  const at = ctx.now().toISOString();
+  const labels = { key, heading: id, from: selfParty(ctx.env).key, at, ...(receiving === undefined ? {} : { to: receiving.key }) };
+  const posted = box === undefined ? undefined : await post(ctx, box, from, text, replyTo, labels, urgent);
   const sentId = posted ?? ctx.messages.send(to, from, text, original?.carrier === 'nats' ? undefined : replyTo).id;
   const sent: Sent = {
-    at: ctx.now().toISOString(),
+    at: posted === undefined ? ctx.now().toISOString() : at,
     key,
     heading: id,
     from,

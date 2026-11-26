@@ -1,7 +1,7 @@
 // NATS で運んだメッセージの「届いた時刻」（seen.ts）と、置き場の記録への書き足しの試験。
 import { describe, expect, test } from 'vitest';
 import { mailGate, mailPrompt, mailWait } from '../src/commands/mail.ts';
-import { MESSAGE_RECORDS_FILE } from '../src/commands/message-record.ts';
+import { copyMessageRecord, MESSAGE_RECORDS_FILE } from '../src/commands/message-record.ts';
 import { askTpm, dismiss, notify, reportDone, type Sent } from '../src/commands/messages.ts';
 import { assign } from '../src/commands/tpm-side.ts';
 import { recordDelivered } from '../src/mail.ts';
@@ -86,6 +86,35 @@ describe('置き場の記録への書き足し', () => {
     expect(w.store.messages.get(name)).toMatchObject({ id, heading: 'notify', from: 'tpm', to: 't-x7k2', text: '【notify】画面に出る物', state: 'delivered', deliveredAt: '2026-11-20T12:01:30.000Z', via: 'prompt', deliveries: 1 });
     // 受け手の側の書き込みには、送り手の付随する id を付けない。
     expect(w.store.messagePuts.at(-1)?.query).not.toHaveProperty('actorRef');
+  });
+
+  test('受け手の書き足しが先・送り手の写しが後に着いても、置き場の記録の Key・見出し・送り手・受け手は同じ値になる', async () => {
+    const w = await natsWorld();
+    claim(w, w.se, 200);
+    await notify(w.tpm, 't-x7k2', { text: '待っている受け手が、すぐ取る物' });
+    await messageRecordsSettled();
+    const sent = w.tpm.state.lines<Sent>('log.jsonl').at(-1);
+    if (sent === undefined) throw new Error('送った記録が無い');
+    const name = [...w.store.messages.keys()].find(k => k.endsWith(`/${sent.id}`)) ?? '';
+    const first = { ...w.store.messages.get(name) };
+    // 送り手の写しが、まだ置き場に着いていない事にする。受け手の側は、送り手の log.jsonl も読めない事にする。
+    w.store.messages.delete(name);
+    const receiver = w.role('t-x7k2', 'file:1');
+    const blind = { ...receiver, state: Object.assign(Object.create(receiver.state) as typeof receiver.state, { lines: <T>(file: string): T[] => file === 'log.jsonl' ? [] : receiver.state.lines<T>(file) }) };
+    w.pass(60_000);
+    expect(await mailPrompt(blind, '{}')).toContain('すぐ取る物');
+    await messageRecordsSettled();
+    const early = w.store.messages.get(name);
+    expect(early).toMatchObject({ key: 't-x7k2', heading: 'notify', from: 'tpm', to: 't-x7k2', text: sent.text, sentAt: sent.at, state: 'delivered', via: 'prompt', deliveries: 1 });
+    // 後から着いた送り手の写しは、何も崩さない（状態も戻さない）。送り手の付随する id だけが足される。
+    copyMessageRecord(w.tpm, sent);
+    await messageRecordsSettled();
+    const { createdAt, updatedAt, state, deliveredAt, via, deliveries, sender, ...kept } = w.store.messages.get(name) ?? {};
+    const { createdAt: c0, updatedAt: u0, state: s0, sender: sender0, ...sentFirst } = first;
+    expect(kept).toEqual(sentFirst);
+    expect([state, via, deliveries, deliveredAt]).toEqual(['delivered', 'prompt', 1, '2026-11-20T12:01:00.000Z']);
+    expect(sender).toEqual(sender0);
+    expect([createdAt, updatedAt, c0, u0, s0].every(v => v !== undefined)).toBe(true);
   });
 
   test('置き場に写せなくても、渡すのは止めない（写しの記録に 1 行残す）。送った記録に行が無い物も、配りの口の中身から写す', async () => {

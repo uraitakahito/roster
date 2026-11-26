@@ -121,12 +121,27 @@ async function batchOf(ctx: Context, room: Mailroom, name: Recipient, head: stri
 const headingOf = (text: string): string => /^【([^】]+)】/.exec(text)?.[1] ?? '';
 
 /**
- * 配りの口の 1 通の、送った記録（log.jsonl）の行。置き場の記録に書き足す時の元。
- * 行が無い時（送る命令が、置いた直後に落ちた）は、配りの口の中身から作る（Key は分からないので空。置き場には Key 無しで写る）。
+ * 配りの口の 1 通から、送った記録の行（置き場の記録に書き足す時の元）を作る。送り手の log.jsonl は読まず、受け取った物の本文と、
+ * 送り手が持たせた欄（labels: Key・見出し・送り手と受け手の Key・送った時刻。messages.ts の deliver）から作る。
+ * だから、送り手の写しと受け手の書き足しの、どちらが置き場に先に着いても、同じ値の記録になる（置き場は、初めに置いた値を保つ）。
+ * 欄の無い物は、本文と宛名から作る（Key は空。置き場には Key 無しで写る）。
  */
-export function sentLineOf(log: Sent[], m: { id: string, from: string, to: string, text: string, at: string, replyTo?: string }): Sent {
-  return log.findLast(l => l.id === m.id)
-    ?? { at: m.at, key: '', heading: headingOf(m.text), from: m.from, to: m.to, text: m.text, id: m.id, ...(m.replyTo === undefined ? {} : { replyTo: m.replyTo }), carrier: 'nats', box: m.to };
+export function sentFrom(m: Stored): Sent {
+  const l = m.labels ?? {};
+  return {
+    at: l.at ?? m.at,
+    key: l.key ?? '',
+    heading: l.heading ?? headingOf(m.text),
+    from: m.from,
+    to: m.to,
+    text: m.text,
+    id: m.id,
+    ...(m.replyTo === undefined ? {} : { replyTo: m.replyTo }),
+    ...(l.from === undefined ? {} : { sender: { key: l.from } }),
+    ...(l.to === undefined ? {} : { recipient: { key: l.to } }),
+    carrier: 'nats',
+    box: m.to,
+  };
 }
 
 /**
@@ -137,11 +152,10 @@ export function sentLineOf(log: Sent[], m: { id: string, from: string, to: strin
 async function handOver(ctx: Context, room: Mailroom, name: Recipient, when: DeliveredWhen, head: string[], batch: Taken[], input: HookInput): Promise<string> {
   const text = compose(ctx, name, head, batch);
   const lines = lineCount(input.transcript_path);
-  const log = ctx.state.lines<Sent>('log.jsonl');
   for (const m of batch) {
     const line = recordDelivered(ctx, m.id, name, when, lines, input.session_id);
     // 置き場の記録にも写す（待たない。写せなくても止めない）。
-    copyMessageRecord(ctx, sentLineOf(log, m), { state: 'delivered', deliveredAt: line.at, via: when, deliveries: line.nth });
+    copyMessageRecord(ctx, sentFrom(m), { state: 'delivered', deliveredAt: line.at, via: when, deliveries: line.nth });
   }
   await room.done(batch).catch(() => undefined);
   return text;
@@ -401,11 +415,11 @@ const EXPIRED_CHECK_EVERY_MS = 60 * 60 * 1000;
  * 届かずに終わった 1 通を記録し（ENDED_FILE。1 通につき 1 行）、置き場の記録に写し、命令の結果に出す 1 行を返す。
  * もう記録してあれば、何もせず undefined（結果に出すのは、1 通につき 1 度だけ）。
  */
-function ended(ctx: Context, log: Sent[], known: Set<string>, how: EndedHow, m: Stored): string | undefined {
+function ended(ctx: Context, known: Set<string>, how: EndedHow, m: Stored): string | undefined {
   if (known.has(m.id)) return undefined;
   known.add(m.id);
   ctx.state.append(ENDED_FILE, { at: ctx.now().toISOString(), id: m.id, to: m.to, how } satisfies EndedLine);
-  const sent = sentLineOf(log, m);
+  const sent = sentFrom(m);
   const deliveries = deliveredLines(ctx).filter(l => l.id === m.id && l.when !== 'output').length;
   copyMessageRecord(ctx, sent, { state: ENDED[how].state, via: ENDED[how].via, ...(deliveries === 0 ? {} : { deliveries }) });
   return `${ENDED[how].label}: 【${sent.heading}】${sent.from} → ${sent.recipient?.key ?? m.to}（${sent.at} に送った。id ${m.id}。${ENDED[how].why}。要る中身なら、送り直す）`;
@@ -434,10 +448,9 @@ export async function tidyMail(ctx: Context, options: { sweep: boolean }): Promi
   const out: string[] = [];
   try {
     const room = await ctx.mailroom();
-    const log = ctx.state.lines<Sent>('log.jsonl');
     const known = new Set(endedLines(ctx).map(l => l.id));
     const keep = (how: EndedHow, m: Stored): void => {
-      const line = ended(ctx, log, known, how, m);
+      const line = ended(ctx, known, how, m);
       if (line !== undefined) out.push(line);
     };
     for (const u of await room.undeliverable()) {
@@ -484,9 +497,8 @@ export async function clearSeat(ctx: Context, role: RoleRecord): Promise<string[
   if (name === undefined) return [];
   try {
     const left = await (await ctx.mailroom()).clear(name);
-    const log = ctx.state.lines<Sent>('log.jsonl');
     const known = new Set(endedLines(ctx).map(l => l.id));
-    const lines = left.map(m => ended(ctx, log, known, 'closed', m)).filter(l => l !== undefined);
+    const lines = left.map(m => ended(ctx, known, 'closed', m)).filter(l => l !== undefined);
     dropClaim(ctx, name);
     ctx.state.remove(gateFile(name));
     if (stopWaiter(ctx, name)) ctx.state.remove(waiterFile(name));

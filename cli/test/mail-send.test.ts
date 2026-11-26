@@ -25,7 +25,7 @@ describe('送り分け（名乗った受け手には NATS、名乗っていな�
     const sent = log(w).at(-1);
     expect(sent).toMatchObject({ heading: 'notify', from: FROM_TPM, to: 'file:1', text: '【notify】A で進める', carrier: 'nats', box: 't-x7k2', sender: { key: 'tpm' }, recipient: { key: 't-x7k2' } });
     expect(sent?.id).toMatch(UUID);
-    expect(left(w, 't-x7k2')).toEqual([{ id: sent?.id, from: FROM_TPM, to: 't-x7k2', text: '【notify】A で進める', at: '2026-11-20T12:00:00.000Z' }]);
+    expect(left(w, 't-x7k2')).toEqual([{ id: sent?.id, from: FROM_TPM, to: 't-x7k2', text: '【notify】A で進める', at: '2026-11-20T12:00:00.000Z', labels: { key: 't-x7k2', heading: 'notify', from: 'tpm', to: 't-x7k2', at: '2026-11-20T12:00:00.000Z' } }]);
     await new Promise(resolve => setTimeout(resolve, 0));
     expect([...w.store.messages.values()].at(-1)).toMatchObject({ id: sent?.id, state: 'waiting', from: 'tpm', to: 't-x7k2' });
   });

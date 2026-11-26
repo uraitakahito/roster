@@ -278,6 +278,27 @@ export function mailroomContract(name: string, bench: () => Bench | Promise<Benc
       await y.close();
     }, slow + (SHORT_LIMITS.holdMs + 300) * SHORT_LIMITS.maxDeliveries + 2000);
 
+    test('送った側の記録の欄（labels）を、そのまま運ぶ（取り置いた物・読んだ物・記録に出る）。無ければ、欄は出ない', async () => {
+      const b = await bench();
+      const x = b.open();
+      const y = b.open();
+      const to = someone();
+      const since = new Date(Date.now() - 1000);
+      const labels = { 'key': 'AI-25.staff', 'heading': 'ask-tpm', 'from': 't-1', 'to': 'tpm', 'at': '2026-11-24T00:00:00.000Z', 'note-1': '日本語と 空白・% と = も' };
+      await y.counts(to);
+      await x.put({ ...letter(to, 'a'), labels });
+      await x.put(letter(to, 'b'));
+      await b.pass(200);
+      expect((await y.peek(to)).map(s => s.labels)).toEqual([labels, undefined]);
+      expect((await y.record(since)).filter(s => s.to === to).map(s => s.labels)).toEqual([labels, undefined]);
+      const taken = await y.take(to, ALL);
+      expect(taken.map(t => t.labels)).toEqual([labels, undefined]);
+      await y.done(taken);
+      await expect(x.put({ ...letter(to, 'c'), labels: { 'Bad Name': 'v' } })).rejects.toThrow(/欄の名に使えない字/);
+      await x.close();
+      await y.close();
+    }, slow);
+
     test('1 度に取るのは、字の上限まで。入りきらない物は次の回の頭で取れる', async () => {
       const b = await bench();
       const x = b.open();
