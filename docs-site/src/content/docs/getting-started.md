@@ -32,13 +32,13 @@ cd </your/workspace> # あなたが作業する場所
 
 担当どうしのメッセージは、メッセージキュー（NATS JetStream）で配る。TPM 担当を起こす前に、roster を動かす機械で NATS が動いていること（起こし方は[運用](/operations/#メッセージキューnats)）。止まっていると、送る命令は「メッセージキューが応えません。送っていません」で止まる（`roster report incident` だけは、台帳に書いて、送っていない事を出して終わる）。
 
-`roster start` は claude を起こさない。folder と、その直下の folder の `.claude/roles/config.jsonc`（[設定](/configuration/#直下の-folder-の設定)）を読み、`skill-sets` を確かめて、次の 1 行を出すだけ。それをそのまま打てばClaude Codeが適切に起動する。`PATH=…` は、TPM 担当が `roster` を名前だけで打てるようにする。`--settings` は、shell の命令を実行の前に `roster guard` に見せる hook（[担当のあいだの決まり](/protocol/#guard)）。`<repo>` は roster を置いた場所（上の例なら `/foo/bar/roster`）に替わる。違う場所に置いたときも、`<repo>` のところだけが変わる（場所に空白などがあれば `roster start` が引用符も付けるので、出た 1 行をそのまま写す）。
+`roster start` は claude を起こさない。folder と、その直下の folder の `.claude/roles/config.jsonc`（[設定](/configuration/#直下の-folder-の設定)）を読み、`skill-sets` を確かめて、次の 1 行を出すだけ。それをそのまま打てばClaude Codeが適切に起動する。`PATH=…` は、TPM 担当が `roster` を名前だけで打てるようにする。`--settings` は、Claude Code に付ける hook（下の例では `{…}` と略した。出る 1 行には全部が書いてある）: shell の命令を実行の前に `roster guard` に見せる hook（[担当のあいだの決まり](/protocol/#guard)）・session の始まりと終わりをアクターの台帳に送る hook（`roster castlist …`。castlist を設定していなければ何もしない）・メッセージを渡す hook（`roster mail …`。[担当のあいだの決まり](/protocol/#メッセージを-nats-で配る道)）。`<repo>` は roster を置いた場所（上の例なら `/foo/bar/roster`）に替わる。違う場所に置いたときも、`<repo>` のところだけが変わる（場所に空白などがあれば `roster start` が引用符も付けるので、出た 1 行をそのまま写す）。
 
 ```sh
 # skill-sets が無い（既定）
-cd <folder> && PATH=<repo>/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"<repo>/cli/bin/roster guard"}]}]}}' --add-dir <repo>/skill-sets/core -- /tpm
+cd <folder> && PATH=<repo>/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{…}}' --add-dir <repo>/skill-sets/core -- /tpm
 # "skill-sets": ["dependabot"]
-cd <folder> && PATH=<repo>/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"<repo>/cli/bin/roster guard"}]}]}}' --add-dir <repo>/skill-sets/core <repo>/skill-sets/dependabot -- /tpm
+cd <folder> && PATH=<repo>/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{…}}' --add-dir <repo>/skill-sets/core <repo>/skill-sets/dependabot -- /tpm
 ```
 
 **最初の入力は `--` の後に置く**（`--add-dir` は後ろの語もまとめて folder として読むため）。
