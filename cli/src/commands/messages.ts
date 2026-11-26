@@ -517,7 +517,9 @@ function openBriefs(role: RoleRecord, address: string, log: Sent[], seenAt: Seen
   // 前の版で起こした担当（名簿に firstBrief の欄が無い）の最初の依頼書は数えない（止めすぎるより、見逃す側に倒す）。
   const first = role.firstBrief;
   let open: OpenBrief[] = first === undefined ? [] : [{ url: first, ...(role.helloAt === undefined ? {} : { seen: role.helloAt }) }];
-  for (const l of log) {
+  // 送った時刻の順に読む（同じ時刻は、file の順のまま）。後から足した行（置いた直後に落ちた送る命令の行。commands/mail.ts の tidyMail）は
+  // file の末尾に入るので、file の順に読むと、足した【dismiss】・【brief】が、時刻と違う所で効く。
+  for (const l of [...log].sort((a, b) => a.at.localeCompare(b.at))) {
     // 課題の担当がじかに送ったレビューの頼み（【ask-review】。記録の Key は送った課題の担当）も、Staff Engineer 担当の席の依頼書に積む。
     if (l.peer === true && l.heading === 'ask-review' && l.to === address) {
       const at = seen(l);

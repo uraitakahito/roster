@@ -604,7 +604,7 @@ export async function tidyMail(ctx: Context, options: { sweep: boolean }): Promi
           ctx.state.append('log.jsonl', lost);
           logged.add(m.id);
           copyMessageRecord(ctx, lost);
-          out.push(`送った記録の抜けを足した: 【${lost.heading}】${lost.from} → ${lost.recipient?.key ?? m.to}（${lost.at} に送った。id ${m.id}。送る命令が、置いた直後に落ちていた）`);
+          out.push(`送った記録の抜けを足した: 【${lost.heading}】${lost.from} → ${lost.recipient?.key ?? m.to}（${lost.at} に送った。id ${m.id}。送る命令が、置いた後に記録を書けずに終わっていた: 落ちたか、置けたと分からずに止まった）`);
         }
       }
       ctx.state.write(EXPIRED_CHECK_FILE, { at: new Date(now).toISOString() });

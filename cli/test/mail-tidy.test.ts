@@ -6,11 +6,12 @@ import { mailLeft, mailPrompt, tidyMail } from '../src/commands/mail.ts';
 import { messageRecordsSettled } from '../src/commands/message-record.ts';
 import { askTpm, dismiss, notify, reportDone, TPM_PARTY, type Sent } from '../src/commands/messages.ts';
 import { hello, inboxNow } from '../src/commands/role-side.ts';
-import { close } from '../src/commands/tpm-side.ts';
+import { assign, close } from '../src/commands/tpm-side.ts';
 import { deliveredLines, endedLines, readClaim } from '../src/mail.ts';
 import { MemoryMailroom } from '../src/mailroom/memory.ts';
 import { MAILROOM_LIMITS } from '../src/mailroom/types.ts';
-import { ALL, claim, down, left, natsWorld, patched, TPM } from './mail-helpers.ts';
+import { BRIEF } from './helpers.ts';
+import { ALL, claim, down, handed, left, natsWorld, patched, TPM } from './mail-helpers.ts';
 
 const HOURS = 3_600_000;
 const stateOf = (w: { store: { messages: Map<string, { id: string, state: string, via?: string }> } }, id: string): unknown => {
@@ -276,11 +277,33 @@ describe('送った記録の抜け（置いた直後に、送る命令が落ち�
     expect((await hello(w.tpm, TPM)).filter(l => l.startsWith('送った記録の抜け'))).toEqual([]);
     w.pass(61_000);
     const lines = (await hello(w.tpm, TPM)).filter(l => l.startsWith('送った記録の抜け'));
-    expect(lines).toEqual([`送った記録の抜けを足した: 【ask-tpm】${gone.from} → ${gone.recipient?.key ?? ''}（${gone.at} に送った。id ${id}。送る命令が、置いた直後に落ちていた）`]);
+    expect(lines).toEqual([`送った記録の抜けを足した: 【ask-tpm】${gone.from} → ${gone.recipient?.key ?? ''}（${gone.at} に送った。id ${id}。送る命令が、置いた後に記録を書けずに終わっていた: 落ちたか、置けたと分からずに止まった）`]);
     expect(w.tpm.state.lines<Sent>('log.jsonl').filter(l => l.id === id)).toEqual([{ ...gone, recovered: true }]);
     // 2 度は足さない。
     expect((await hello(w.tpm, TPM)).filter(l => l.startsWith('送った記録の抜け'))).toEqual([]);
     expect(w.tpm.state.lines<Sent>('log.jsonl').filter(l => l.id === id)).toHaveLength(1);
+  });
+
+  test('足した行は、送った時刻の所で効く（足した【brief】に、その後の【done】が当たる。末尾で効いて「済んでいない」に残らない）', async () => {
+    const w = await natsWorld();
+    // 最初の依頼書を済ませる。
+    await reportDone(w.se, { kind: 'result', summary: '済んだ', remaining: 'なし', decisions: 'なし', points: [] });
+    await handed(w.tpm);
+    w.pass(1000);
+    // 続きの【brief】を送り、その行が送った記録から抜けた事にする（置いた直後に落ちた）。担当は受け取り、【done】を返す。
+    await assign(w.tpm, 't-x7k2', { role: 'software-engineer', title: '計画と実装', brief: BRIEF, wait: 0 });
+    const id = left(w, 't-x7k2')[0]?.id ?? '';
+    const gone = drop(w, id);
+    expect(gone.heading).toBe('brief');
+    await handed(w.se);
+    w.pass(1000);
+    await reportDone(w.se, { kind: 'result', summary: '続きも済んだ', remaining: 'なし', decisions: 'なし', points: [] });
+    await handed(w.tpm);
+    w.pass(61_000);
+    expect((await hello(w.tpm, TPM)).filter(l => l.startsWith('送った記録の抜け'))).toHaveLength(1);
+    // 足した【brief】は file の末尾にあるが、時刻は【done】より前。【done】が当たって、済んでいる。
+    expect(w.tpm.state.lines<Sent>('log.jsonl').at(-1)?.id).toBe(id);
+    await expect(dismiss(w.tpm, 't-x7k2', { handover: false })).resolves.toEqual([expect.stringMatching(/^送った: 【dismiss】/) as string]);
   });
 
   test('送った記録にある物・行を持たない物（前の版が置いた物）は、足さない', async () => {
