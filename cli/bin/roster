@@ -9,7 +9,8 @@
 set -eu
 cli=$(CDPATH='' cd -- "$(dirname -- "$(readlink -f -- "$0")")/.." && pwd)
 if [ ! -d "$cli/node_modules" ]; then
-  echo "roster: $cli/node_modules がありません。先に cd $cli && pnpm install --frozen-lockfile を打ってください" >&2
+  # この時は guard も起きず、担当の Bash はみな止まるので、入れるのは Product Manager が自分の terminal で打つ。
+  echo "roster: $cli/node_modules がありません。Product Manager が自分の terminal で cd $cli && pnpm install --frozen-lockfile を打ってください（担当の Bash は、入れるまで guard が止める）" >&2
   exit 2
 fi
 # cmux の通知の hook のように、PATH が macOS の既定（/usr/bin:/bin:/usr/sbin:/sbin）だけで呼ばれた時のため、

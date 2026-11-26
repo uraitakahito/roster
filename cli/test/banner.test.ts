@@ -348,7 +348,7 @@ describe('入口（bin/roster）を cmux の app と同じ既定の PATH で起�
     chmodSync(join(copy, 'bin', 'roster'), 0o755);
     const r = spawnSync(join(copy, 'bin', 'roster'), ['guard'], { input: '{}', encoding: 'utf8', cwd: '/', env: { PATH: APP_PATH, HOME: home } });
     expect(r.status).toBe(2);
-    expect(r.stderr).toContain(`roster: ${copy}/node_modules がありません。先に cd ${copy} && pnpm install --frozen-lockfile を打ってください`);
+    expect(r.stderr).toContain(`roster: ${copy}/node_modules がありません。Product Manager が自分の terminal で cd ${copy} && pnpm install --frozen-lockfile を打ってください（担当の Bash は、入れるまで guard が止める）`);
   });
 
   test('PATH に cmux が無ければ cmux の app の bin を後ろに足し、node があれば shim を足さない', () => {
