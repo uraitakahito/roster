@@ -1,8 +1,10 @@
 // TPM 担当の側の片付け（渡せない・期限切れ・席を閉じる・名簿に無い取り口）と、roster inbox の NATS の形の試験。
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { mailLeft, mailPrompt, tidyMail } from '../src/commands/mail.ts';
 import { messageRecordsSettled } from '../src/commands/message-record.ts';
-import { askTpm, dismiss, notify, reportDone } from '../src/commands/messages.ts';
+import { askTpm, dismiss, notify, reportDone, TPM_PARTY, type Sent } from '../src/commands/messages.ts';
 import { hello, inboxNow } from '../src/commands/role-side.ts';
 import { close } from '../src/commands/tpm-side.ts';
 import { deliveredLines, endedLines, readClaim } from '../src/mail.ts';
@@ -250,5 +252,45 @@ describe('命令の結果に見せた物（渡す hook を持たない session�
     w.pass(73 * HOURS);
     expect((await hello(w.tpm, TPM)).filter(l => l.startsWith('期限切れ'))).toEqual([]);
     expect(endedLines(w.tpm)).toEqual([]);
+  });
+});
+
+describe('送った記録の抜け（置いた直後に、送る命令が落ちた）', () => {
+  /** 送った記録（log.jsonl）から、その id の行を抜く（置いた後・記録を書く前に落ちた形）。抜いた行を返す。 */
+  const drop = (w: { tpm: { state: { dir: string } } }, id: string): Sent => {
+    const file = join(w.tpm.state.dir, 'log.jsonl');
+    const lines = readFileSync(file, 'utf8').split('\n').filter(l => l !== '');
+    const gone = lines.find(l => (JSON.parse(l) as Sent).id === id) ?? '';
+    writeFileSync(file, lines.filter(l => l !== gone).map(l => `${l}\n`).join(''));
+    return JSON.parse(gone) as Sent;
+  };
+
+  test('TPM 担当が名乗る時に、置いた物が持つ行から足し、結果に 1 度だけ出す（足した行は、元の行と同じ。recovered の印が付く）', async () => {
+    const w = await natsWorld();
+    claim(w, w.se, 200);
+    await askTpm(w.se, { text: '置いた直後に落ちた送り', waitingFor: '答え' });
+    const id = left(w, 'tpm')[0]?.id ?? '';
+    const gone = drop(w, id);
+    expect([gone.heading, gone.recipient]).toEqual(['ask-tpm', { key: TPM_PARTY }]);
+    // 置かれてすぐは、まだ書いている途中かもしれないので足さない。
+    expect((await hello(w.tpm, TPM)).filter(l => l.startsWith('送った記録の抜け'))).toEqual([]);
+    w.pass(61_000);
+    const lines = (await hello(w.tpm, TPM)).filter(l => l.startsWith('送った記録の抜け'));
+    expect(lines).toEqual([`送った記録の抜けを足した: 【ask-tpm】${gone.from} → ${gone.recipient?.key ?? ''}（${gone.at} に送った。id ${id}。送る命令が、置いた直後に落ちていた）`]);
+    expect(w.tpm.state.lines<Sent>('log.jsonl').filter(l => l.id === id)).toEqual([{ ...gone, recovered: true }]);
+    // 2 度は足さない。
+    expect((await hello(w.tpm, TPM)).filter(l => l.startsWith('送った記録の抜け'))).toEqual([]);
+    expect(w.tpm.state.lines<Sent>('log.jsonl').filter(l => l.id === id)).toHaveLength(1);
+  });
+
+  test('送った記録にある物・行を持たない物（前の版が置いた物）は、足さない', async () => {
+    const w = await natsWorld();
+    await notify(w.tpm, 't-x7k2', { text: '記録のある物' });
+    await (await w.tpm.mailroom()).put({ id: 'old-1', from: 'Technical Program Manager', to: 't-x7k2', text: '【notify】前の版が置いた物', labels: { key: 't-x7k2', heading: 'notify' } });
+    await (await w.tpm.mailroom()).put({ id: 'bad-1', from: 'Technical Program Manager', to: 't-x7k2', text: '【notify】行が読めない物', labels: { sent: '{' } });
+    const before = w.tpm.state.lines<Sent>('log.jsonl').length;
+    w.pass(61_000);
+    expect((await hello(w.tpm, TPM)).filter(l => l.startsWith('送った記録の抜け'))).toEqual([]);
+    expect(w.tpm.state.lines<Sent>('log.jsonl')).toHaveLength(before);
   });
 });
