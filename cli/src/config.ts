@@ -95,7 +95,7 @@ export interface RolesConfig {
 }
 
 /** config.jsonc で既定を替えられる担当。 */
-const CONFIGURABLE_ROLES = ['software-engineer', 'devops-engineer', 'staff-engineer', 'auditor'] as const;
+const CONFIGURABLE_ROLES = ['software-engineer', 'tech-lead', 'devops-engineer', 'staff-engineer', 'auditor'] as const;
 const ROLE_FIELDS = ['model', 'effort', 'permissionMode'] as const;
 
 const ENV_NAME = /^[a-z0-9-]+$/;

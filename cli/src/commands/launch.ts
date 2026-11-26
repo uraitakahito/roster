@@ -1,5 +1,5 @@
 // 担当を起こす: 名簿に書き、居場所を作って roster run-role を動かし、名乗るまで待つ。起こす前に決める物（設定に書いた担当の既定・課題の写し）も持つ。
-// roster assign（tpm-side.ts）と roster audit start（audit.ts）が使う。
+// roster assign（tpm-side.ts）・roster audit start（audit.ts）・roster ask review（staff.ts の launchStaff。Staff Engineer 担当の席）が使う。
 import { randomUUID } from 'node:crypto';
 import { realpathSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -34,7 +34,7 @@ export class NotStartedError extends TpmError {}
 
 /**
  * 名簿の行の担当を起こす: 名簿に書き、居場所を作って roster run-role を動かし、名乗るまで wait 秒待つ（0 なら待たない）。
- * again は起こし直しか（出す字が変わる）。more は、起こした行と folder の行の後に出す行。roster assign と roster audit start が使う。
+ * again は起こし直しか（出す字が変わる）。more は、起こした行と folder の行の後に出す行。roster assign・roster audit start と、Staff Engineer 担当の席を起こす launchStaff（staff.ts）が使う。
  * castlist を設定していれば、起こしの id と、起こした者（launchedBy。castlist の付随する id）を名簿に書く（roster run-role が担当の環境変数にする）。
  * 状態の folder は symlink を解いて渡す（古い在り処の symlink を通って起きた担当が起こす席にも、新しい path を渡す。t-6ydg）。
  * description は題の下に出す説明。色は役割の表（ROLES の color）から、宛先を名簿に書いた後に付ける（paint）。

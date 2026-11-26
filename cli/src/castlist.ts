@@ -44,6 +44,7 @@ const ISSUER_LIMIT = 64;
 /** 役割の、名の接頭辞に使う略。 */
 const ROLE_ABBREV = {
   'software-engineer': 'swe',
+  'tech-lead': 'lead',
   'devops-engineer': 'devops',
   'sustaining-engineer': 'sus',
   'staff-engineer': 'staff',

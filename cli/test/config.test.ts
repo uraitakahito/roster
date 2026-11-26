@@ -49,6 +49,7 @@ describe('readRolesConfig', () => {
     const file = config('{ "software-engineer": { "model": "claude-fable-5-2", "effort": "high" }, "devops-engineer": {}, "auditor": { "effort": "medium" } }');
     expect(readRolesConfig(file).roles).toEqual({ 'software-engineer': { model: 'claude-fable-5-2', effort: 'high' }, 'devops-engineer': {}, 'auditor': { effort: 'medium' } });
     expect(readRolesConfig(config('{ "staff-engineer": { "model": "claude-fable-5-2" } }')).roles).toEqual({ 'staff-engineer': { model: 'claude-fable-5-2' } });
+    expect(readRolesConfig(config('{ "tech-lead": { "effort": "high" } }')).roles).toEqual({ 'tech-lead': { effort: 'high' } });
   });
 
   test('前の欄 api（AI-36 の切り替えの間の client の選び）は、どんな値でも読み飛ばす（誤りにしない。設定に残っていても止まらない）', () => {
