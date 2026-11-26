@@ -11,7 +11,7 @@ import { readRole } from '../roster.ts';
 import { copyRefs, fileImport, findFiles, removeFiles, type FileRecord } from './file.ts';
 import { roleOf } from './infra.ts';
 import { assertRead } from './messages.ts';
-import { inState, isStorePage, PARTY_SINCE, party, REPLY_LABELS, setReply, type Party, type ReplyState } from './reply.ts';
+import { inState, isStorePage, party, REPLY_LABELS, setReply, type Party, type ReplyState } from './reply.ts';
 import { compareStored, down, fetchTo, inStore, KEY, localPath, pagesDir, pagesRequest, pagesUrl, PROJECT, reason, removeLocal, requireKey, selfAddress, sender, senderRefused, writeCopy } from './store.ts';
 import { envOf } from '../env.ts';
 
@@ -43,15 +43,15 @@ export interface PageRecord {
   size: number
   /** 置き場の中の path（`/<project>/<Key>/<種類>-<番号>.html`）。 */
   path: string
-  /** 返事待ちにした時刻（roster ask pm）。返事を求めていないページと、0.5.0 より前の置き場の答えには無い。 */
+  /** 返事待ちにした時刻（roster ask pm）。返事を求めていないページには無い。 */
   asked_at?: string
   /** 答えた時刻（roster answer）。まだ答えていなければ無い。 */
   answered_at?: string
-  /** 誰の返事を待つか（review・tpm）。Product Manager を待つページと、0.8.0 より前の置き場の答えには無い。 */
+  /** 誰の返事を待つか（review・tpm）。Product Manager を待つページには無い。 */
   waits_on?: string
-  /** レビューの判定（roster report review）。0.8.0 から。 */
+  /** レビューの判定（roster report review）。 */
   verdict?: string
-  /** 見た物・見てほしい物（置き場のページの path か https の URL）。0.8.0 から。無ければ欄が無い。 */
+  /** 見た物・見てほしい物（置き場のページの path か https の URL）。無ければ欄が無い。 */
   targets?: string[]
 }
 
@@ -202,7 +202,7 @@ export async function pageList(ctx: Context, options: PageListOptions): Promise<
   if (r.code === '000') throw down(ctx, '');
   if (r.code !== '200') throw new TpmError(`置き場が一覧を返しませんでした（${r.code}）: ${reason(r.body)}`);
   const pages = (JSON.parse(r.body) as { pages: PageRecord[] }).pages
-    // 0.5.0 より前の置き場は reply の絞りを、0.8.0 より前の置き場は on を読まずに返すので、記録の欄でも絞る。
+    // 置き場が返事の状態で絞った物を、記録の欄でも絞る。
     .filter(p => reply === undefined || inState(p, reply, on))
     .map(p => ({ ...p, url: `${pagesUrl(ctx.env)}${p.path}` }));
   if (options.json) return [JSON.stringify(pages, null, 2)];
@@ -231,11 +231,6 @@ export async function pageReply(ctx: Context, urls: string[], options: { waiting
       continue;
     }
     if (result === 'down') throw down(ctx, '返事の状態は書いていません。');
-    if (result === 'old') {
-      throw new TpmError(on === 'pm'
-        ? '置き場（pagetray）の版が古く、返事の状態を持てません（0.5.0 から）。roster ask devops で置き場の版を上げるよう頼んでください'
-        : `置き場（pagetray）の版が古く、待ちの相手（--on）を持てません（${PARTY_SINCE} から）。何も書いていません。roster ask devops で置き場の版を上げるよう頼んでください`);
-    }
     if (result === 'conflict') {
       throw new TpmError(state === 'answered'
         ? `そのページは、--on ${on} の相手の返事を待っていません（置き場は何も替えていない）: ${url}。今の待ちは roster page list --reply waiting --on <相手> で見る`
@@ -324,7 +319,7 @@ interface DeleteTarget {
 /**
  * ページを消す（戻せない）。消してよいのは TPM 担当だけ（担当の居場所から打つと止まる）。
  * URL を名指すか、--key（今の project か --project の、その Key のページみな）か、--project だけ（その project のページみな）。
- * --key・--project の時は、合う file も一緒に消す（file を扱えない前の置き場なら、file は無い物とする）。
+ * --key・--project の時は、合う file も一緒に消す。
  * Auditor が置いたページは、Product Manager の言葉（--pm）が無ければ消さない（消した事は audits.jsonl に残る）。
  * まず消す物を一覧で出し、--yes を付けたときだけ置き場に頼む。置き場は番号を残すので、消した URL は 410 になり、同じ番号は 2 度使われない。
  * 消した後に、控えの file（Key・project ごとなら folder）も消す。
@@ -342,7 +337,7 @@ export async function pageDelete(ctx: Context, urls: string[], options: PageDele
     if (r.code === '000') throw down(ctx, 'ページは消していません。');
     if (r.code !== '200') throw new TpmError(`置き場が一覧を返しませんでした（${r.code}）: ${reason(r.body)}`);
     const pages = (JSON.parse(r.body) as { pages: PageRecord[] }).pages.filter(p => target.covers(p.path));
-    found.push({ target, pages, files: target.files ? await findFiles(ctx, query) ?? [] : [] });
+    found.push({ target, pages, files: target.files ? await findFiles(ctx, query) : [] });
   }
   const pages = found.flatMap(f => f.pages);
   const files = found.flatMap(f => f.files);

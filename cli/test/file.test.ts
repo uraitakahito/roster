@@ -31,7 +31,8 @@ function setup() {
     writeFileSync(join(src, name), body);
     return join(src, name);
   };
-  const curls = (): string[][] => w.calls.filter(c => c.cmd === 'curl').map(c => c.args);
+  /** 置き場に頼んだ物（API と本文の curl）。 */
+  const curls = (): string[] => w.asked();
   /** 置いて、出た URL を返す。 */
   const put = async (ctx: Context, name: string, body: Buffer | string = PNG): Promise<string> => (await filePut(ctx, source(name, body), { reviewed: true }))[1]?.replace('URL: ', '') ?? '';
   return { dir, src, w, store: w.store, role, tpm, project, source, curls, put };
@@ -57,20 +58,10 @@ describe('roster file put', () => {
     ]);
     expect(readFileSync(path).equals(PNG)).toBe(true);
     expect(s.store.files.get(`/${s.project}/t-x7k2/files/screen-1.png`)?.record).toMatchObject({ role: 'software-engineer', workspace: 'file:1', type: 'image/png' });
-    expect(s.curls()[0]).toEqual([
-      '-sS',
-      '--max-time',
-      '10',
-      '-w',
-      '\n%{http_code} %header{pagetray-api}',
-      '-X',
-      'POST',
-      '-H',
-      'Content-Type: image/png',
-      '--data-binary',
-      `@${file}`,
-      `${BASE}/api/files?project=${encodeURIComponent(s.project)}&key=t-x7k2&name=screen.png&role=software-engineer&workspace=file%3A1`,
-    ]);
+    const sent = s.store.requests[0];
+    expect([sent?.method, sent?.path, sent?.query]).toEqual(['POST', `/api/projects/${s.project}/keys/t-x7k2/files`, { name: 'screen.png', role: 'software-engineer', workspace: 'file:1' }]);
+    expect(sent?.headers['content-type']).toBe('image/png');
+    expect(sent?.bytes?.equals(PNG)).toBe(true);
     expect((await filePut(s.role, file, { reviewed: true }))[2]).toBe('ページからの参照: files/screen-2.png');
   });
 
@@ -141,7 +132,7 @@ describe('roster file put', () => {
 
   test('置き場が断れば訳を出す。応えなければ DevOps に頼むよう言う。控えは書かない', async () => {
     const s = setup();
-    s.store.refuse = { code: 415, body: '{"error":"中身が拡張子の形でない"}' };
+    s.store.refuse = { code: 415, message: '中身が拡張子の形でない' };
     await expect(s.put(s.role, 'a.png')).rejects.toThrow('置き場が file を受け取りませんでした（415）: 中身が拡張子の形でない');
     s.store.refuse = undefined;
     s.store.down = true;
@@ -150,15 +141,14 @@ describe('roster file put', () => {
   });
 });
 
-describe('roster file put の送り手（pagetray 0.6.0 の actor_issuer・actor_ref）', () => {
+describe('roster file put の送り手（actorIssuer・actorRef）', () => {
   const SID = '5f0c2a8e-0000-4000-8000-000000000002';
   const seated = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({ ...ctx, env: { ...ctx.env, ROSTER_CASTLIST_URL: 'http://127.0.0.1:8802', CLAUDE_CODE_SESSION_ID: SID, ...env } });
 
   test('castlist の設定と session の id があれば、ページと同じ issuer と claude.session:<id> を付ける', async () => {
     const s = setup();
     await s.put(seated(s.role), 'screen.png');
-    expect(s.store.posts.map(q => [q.get('actor_issuer'), q.get('actor_ref')])).toEqual([[castlistIssuer(s.w.tpm.state.dir), `claude.session:${SID}`]]);
-    expect(s.curls()[0]?.at(-1)).toContain(`&actor_ref=claude.session%3A${SID}`);
+    expect(s.store.posts.map(q => [q.get('actorIssuer'), q.get('actorRef')])).toEqual([[castlistIssuer(s.w.tpm.state.dir), `claude.session:${SID}`]]);
     expect(s.store.files.get(`/${s.project}/t-x7k2/files/screen-1.png`)?.record).toMatchObject({ role: 'software-engineer' });
   });
 
@@ -166,30 +156,17 @@ describe('roster file put の送り手（pagetray 0.6.0 の actor_issuer・actor
     const s = setup();
     await s.put({ ...s.role, env: { ...s.role.env, CLAUDE_CODE_SESSION_ID: SID } }, 'a.png');
     await s.put(seated(s.role, { CLAUDE_CODE_SESSION_ID: undefined }), 'b.png');
-    expect(s.store.posts.map(q => q.has('actor_issuer') || q.has('actor_ref'))).toEqual([false, false]);
+    expect(s.store.posts.map(q => q.has('actorIssuer') || q.has('actorRef'))).toEqual([false, false]);
   });
 
-  test('503 は castlist に聞けない、422 は登録が無い。どちらも file を上げずに 1 行で止まり、控えも書かない', async () => {
+  test('503 は castlist に聞けない、400（fieldList に /actorRef）は登録が無い。どちらも file を上げずに 1 行で止まり、控えも書かない', async () => {
     const s = setup();
     s.store.sender = 'unreachable';
     await expect(s.put(seated(s.role), 'a.png')).rejects.toThrow(/^置き場（http:\/\/127\.0\.0\.1:8801）が castlist に送り手を聞けませんでした（503）。file は上げていません。.*castlist が起きてから.*打ち直して.*roster report incident[^\n]*$/);
     s.store.sender = 'unregistered';
-    await expect(s.put(seated(s.role), 'a.png')).rejects.toThrow(new RegExp(`^この session（claude\\.session:${SID}）は castlist に登録が無いと、置き場が答えました（422）。file は上げていません。.*guard.*Bash.*打ち直して.*roster report incident[^\\n]*$`));
+    await expect(s.put(seated(s.role), 'a.png')).rejects.toThrow(new RegExp(`^この session（claude\\.session:${SID}）は castlist に登録が無いと、置き場が答えました（400）。file は上げていません。.*guard.*Bash.*打ち直して.*roster report incident[^\\n]*$`));
     expect(s.store.files.size).toBe(0);
     expect(existsSync(join(s.dir, s.project))).toBe(false);
-  });
-});
-
-describe('置き場が 0.4.0 より前（file のエンドポイントが無い）', () => {
-  test('put・path・list・delete は、置き場の版を上げるよう DevOps に頼むよう言って止まる', async () => {
-    const s = setup();
-    s.store.noFiles = true;
-    const old = '置き場（pagetray）の版が古く、file を扱えません。roster ask devops で置き場の版を上げるよう頼んでください';
-    await expect(s.put(s.role, 'a.png')).rejects.toThrow(old);
-    await expect(filePath(s.role, `${BASE}/${s.project}/t-x7k2/files/a-1.png`)).rejects.toThrow(old);
-    await expect(fileList(s.role, {})).rejects.toThrow(old);
-    await expect(fileDelete(s.tpm, [`${BASE}/${s.project}/t-x7k2/files/a-1.png`], {})).rejects.toThrow(old);
-    expect(existsSync(join(s.dir, s.project, 't-x7k2', 'files', 'a-1.png'))).toBe(false);
   });
 });
 
@@ -240,7 +217,7 @@ describe('roster file list', () => {
     const files = JSON.parse((await fileList(s.role, { json: true, role: 'tpm' })).join('\n')) as Record<string, unknown>[];
     expect(files).toEqual([expect.objectContaining({ key: 't-y', name: 'c', ext: 'txt', n: 1, url: `${BASE}/${s.project}/t-y/files/c-1.txt` })]);
     await fileList(s.role, { q: 'c.txt', limit: '5', allProjects: true });
-    expect(s.curls().at(-1)?.at(-1)).toBe(`${BASE}/api/files?limit=5&q=c.txt`);
+    expect(s.store.requests.at(-1)?.query).toEqual({ maxResults: '5', q: 'c.txt' });
   });
 });
 
@@ -285,7 +262,8 @@ describe('roster file delete', () => {
   test('--yes で置き場と控えから消え、URL は 410、番号は使い回さない。ほかの file は残る', async () => {
     const s = await placed();
     expect(await fileDelete(s.tpm, [s.shot, s.shot], { yes: true })).toEqual(['消した: 1 個（控えも消した）', `- ${s.shot}`]);
-    expect(s.curls().at(-1)?.at(-1)).toBe(`${BASE}/api/files?project=${encodeURIComponent(s.project)}&key=t-x7k2&name=shot.png&n=1`);
+    const sent = s.store.requests.at(-1);
+    expect([sent?.method, sent?.path, sent?.query]).toEqual(['DELETE', '/api/files', { project: s.project, key: 't-x7k2', name: 'shot.png', n: '1' }]);
     expect(existsSync(join(s.dir, s.project, 't-x7k2', 'files', 'shot-1.png'))).toBe(false);
     expect(existsSync(join(s.dir, s.project, 't-x7k2', 'files', 'other-1.png'))).toBe(true);
     await expect(filePath(s.tpm, s.shot)).rejects.toThrow('（410）');

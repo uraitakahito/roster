@@ -1,17 +1,17 @@
-// 置き場（pagetray 0.5.0 から）のページの、返事の状態（返事待ち・答えた）を書く・読む。
+// 置き場のページの、返事の状態（返事待ち・答えた）を書く・読む。
 // roster ask pm が確認のページを返事待ちにし、roster answer が答えたにする。Product Manager は、置き場の一覧の UI の印と件数で、返事が要るページを見分ける。
-// 待ちの相手（pagetray 0.8.0 から）: レビューの依頼書はレビューの席を、上げたレビューは TPM 担当を待つ（review-marks.ts）。Product Manager の数には入らない。
-// 状態を書けない置き場（0.5.0 より前・止まっている）でも、メッセージを送る命令は止めない（印は付かないだけ）。
+// 待ちの相手: レビューの依頼書はレビューの席を、上げたレビューは TPM 担当を待つ（review-marks.ts）。Product Manager の数には入らない。
+// 状態を書けない時（置き場が止まっている）でも、メッセージを送る命令は止めない（印は付かないだけ）。
 import { basename } from 'node:path';
 import type { Context } from '../context.ts';
 import { TpmError } from '../skill-sets.ts';
 import type { PageRecord } from './page.ts';
-import { inStore, OldStoreError, pagesRequest, pagesUrl, reason, storeAtLeast, type Reply } from './store.ts';
+import { inStore, pagesRequest, pagesUrl, reason } from './store.ts';
 
 /** 返事の状態。置き場の API の `state`・`reply` の値と同じ名。 */
 export type ReplyState = 'waiting' | 'answered';
 
-/** 待ちの相手。置き場の API の `on` の値と同じ名（0.8.0 から）。pm は Product Manager（書かない時と同じ）。 */
+/** 待ちの相手。置き場の API の `on` の値と同じ名。pm は Product Manager（書かない時と同じ）。 */
 export type Party = 'pm' | 'review' | 'tpm';
 /** 待ちの相手の名を読む。違えば undefined。 */
 export const party = (value: string): Party | undefined => (['pm', 'review', 'tpm'] as const).find(p => p === value);
@@ -24,8 +24,6 @@ export const REPLY_LABELS: Record<Party, Record<ReplyState, string>> = {
 };
 /** Product Manager の返事の状態の、人が読む名。 */
 export const REPLY_LABEL = REPLY_LABELS.pm;
-/** 待ちの相手を書ける置き場の版（これより前の置き場は on を黙って捨て、Product Manager の返事待ちにしてしまう）。 */
-export const PARTY_SINCE = '0.8.0';
 
 /** 置き場の中のページの path（`<project>/<Key>/<種類>-<番号>.html`）の形。 */
 const PAGE_PATH = /^([^/]+)\/([^/]+)\/([a-z][a-z0-9-]{0,31})-([1-9]\d*)\.html$/;
@@ -46,11 +44,11 @@ export const samePage = (ctx: Context, a: string, b: string): boolean => {
 };
 
 /**
- * 状態を書いた結果。done は書けた。old は置き場の版が古く（0.5.0 より前。待ちの相手を書く時は 0.8.0 より前）その道が無い。down は置き場が応えない。
+ * 状態を書いた結果。done は書けた。down は置き場が応えない。
  * missing はそのページが無い（消した物も）。conflict は、そのページが on の相手を待っていない（置き場は何も替えていない）。
  * foreign は置き場のページの URL でない（何もしていない）。
  */
-export type ReplyResult = 'done' | 'old' | 'down' | 'missing' | 'conflict' | 'foreign';
+export type ReplyResult = 'done' | 'down' | 'missing' | 'conflict' | 'foreign';
 
 /** 置き場のページの URL を、project・Key・種類・番号に分ける。置き場のページでなければ undefined。 */
 export function pageParts(ctx: Context, url: string): { project: string, key: string, kind: string, n: string } | undefined {
@@ -60,40 +58,18 @@ export function pageParts(ctx: Context, url: string): { project: string, key: st
   return { project, key, kind, n };
 }
 
-/**
- * ページ 1 枚の返事の状態を書く（POST /api/pages/reply。設定の api.pagetray が next なら SetReplyState）。書けない訳は、止まらずに返す。
- * on（待ちの相手）が Product Manager でない時は、置き場が 0.8.0 より前なら送らずに old を返す（古い置き場は on を捨て、Product Manager の返事待ちにしてしまうため）。
- */
+/** ページ 1 枚の返事の状態を書く（SetReplyState。待ちの相手が Product Manager なら on を書かない）。書けない訳は、止まらずに返す。 */
 export async function setReply(ctx: Context, url: string, state: ReplyState, on: Party = 'pm'): Promise<ReplyResult> {
   const parts = pageParts(ctx, url);
   if (parts === undefined) return 'foreign';
-  if (on !== 'pm') {
-    const since = await storeAtLeast(ctx, PARTY_SINCE);
-    if (since !== 'yes') return since;
-  }
   const query = new URLSearchParams({ ...parts, state, ...(on === 'pm' ? {} : { on }) });
-  // 版の古い置き場（next の道）は止めずに old にする。ask pm・answer は、メッセージを送った後に呼ぶので、ここで止めると送った行が出ない。
-  const r = await unlessOld(() => pagesRequest(ctx, { op: 'SetReplyState', query }));
-  if (r === undefined) return 'old';
+  const r = await pagesRequest(ctx, { op: 'SetReplyState', query });
   if (r.code === '000') return 'down';
   if (r.code === '200') return 'done';
   if (r.code === '409') return 'conflict';
-  // 0.5.0 より前の置き場は、この path をページの本文の道（GET だけ）として読み、405 を返す。
-  if (r.code === '405') return 'old';
-  // 消したページ（410）と無いページ（404）。0.5.0 からの置き場は、どちらも 404 で返す。
-  if (r.code === '404' || r.code === '410') return 'missing';
+  // 消したページも無いページも、置き場は 404 で返す。
+  if (r.code === '404') return 'missing';
   throw new TpmError(`置き場が返事の状態を書きませんでした（${r.code}）: ${reason(r.body)}`);
-}
-
-/** 置き場に頼む。版の古い置き場（OldStoreError）なら止めずに undefined。 */
-async function unlessOld(run: () => Promise<Reply>): Promise<Reply | undefined> {
-  try {
-    return await run();
-  }
-  catch (e) {
-    if (e instanceof OldStoreError) return undefined;
-    throw e;
-  }
 }
 
 /** 記録が、その相手の、その状態か。返事を求めていないページは、どちらでもない。 */
@@ -104,31 +80,28 @@ export function inState(page: PageRecord, state: ReplyState, on: Party = 'pm'): 
 
 /**
  * 今の project の、その Key の、Product Manager の返事待ちのページの URL（古い順）。置き場に聞けなければ undefined。
- * 0.5.0 より前の置き場は `reply` の絞りを読まずにみな返すので、記録の欄でも絞る（前の置き場では、いつも空になる）。
- * 0.8.0 からの置き場は、`on` の無い `reply` に Product Manager の分だけを返す（レビュー待ち・上げた件は入らない）。
+ * 置き場は、`on` の無い `reply` に Product Manager の分だけを返す（レビュー待ち・上げた件は入らない）。記録の欄でも絞る。
  */
 export async function waitingUrls(ctx: Context, key: string): Promise<string[] | undefined> {
   const query = new URLSearchParams({ project: basename(ctx.state.dir), key, reply: 'waiting', sort: 'created_at', limit: '1000' });
-  const r = await unlessOld(() => pagesRequest(ctx, { op: 'ListPages', query }));
-  if (r?.code !== '200') return undefined;
+  const r = await pagesRequest(ctx, { op: 'ListPages', query });
+  if (r.code !== '200') return undefined;
   return (JSON.parse(r.body) as { pages: PageRecord[] }).pages.filter(p => inState(p, 'waiting')).map(p => `${pagesUrl(ctx.env)}${p.path}`);
 }
 
 /**
  * 今の project の、その Key の返事待ちのページの URL を、待ちの相手ごとに（古い順）。置き場に聞けなければ undefined。
- * 相手ごとに、置き場が返事待ちに絞った物を聞く（Key のページが多くても落とさない）。0.8.0 より前の置き場には、Product Manager の分だけを聞く
- * （古い置き場は on を捨てるため。レビュー待ち・上げた件は、古い置き場には無い）。
+ * 相手ごとに、置き場が返事待ちに絞った物を聞く（Key のページが多くても落とさない）。
  */
 export async function waitingByParty(ctx: Context, key: string): Promise<Record<Party, string[]> | undefined> {
   const of = async (on: Party): Promise<string[] | undefined> => {
     const query = new URLSearchParams({ project: basename(ctx.state.dir), key, reply: 'waiting', ...(on === 'pm' ? {} : { on }), sort: 'created_at', limit: '1000' });
-    const r = await unlessOld(() => pagesRequest(ctx, { op: 'ListPages', query }));
-    if (r?.code !== '200') return undefined;
+    const r = await pagesRequest(ctx, { op: 'ListPages', query });
+    if (r.code !== '200') return undefined;
     return (JSON.parse(r.body) as { pages: PageRecord[] }).pages.filter(p => inState(p, 'waiting', on)).map(p => `${pagesUrl(ctx.env)}${p.path}`);
   };
   const pm = await of('pm');
   if (pm === undefined) return undefined;
-  if (await storeAtLeast(ctx, PARTY_SINCE) !== 'yes') return { pm, review: [], tpm: [] };
   return { pm, review: await of('review') ?? [], tpm: await of('tpm') ?? [] };
 }
 
@@ -146,17 +119,16 @@ export const WAITING_PAGES: Record<Party, string> = {
 export async function replyLine(ctx: Context, url: string, state: ReplyState, done?: string, on: Party = 'pm'): Promise<string[]> {
   const result = await setReply(ctx, url, state, on);
   if (result === 'done') return [`置き場の印: ${done ?? `${REPLY_LABELS[on][state]}にした`} ${url}`];
-  return markFailure(url, result, `roster page reply ${url} --${state}${on === 'pm' ? '' : ` --on ${on}`}`, on === 'pm' ? '返事の状態を持てない' : `レビューの印を持てない（${PARTY_SINCE} から）`);
+  return markFailure(url, result, `roster page reply ${url} --${state}${on === 'pm' ? '' : ` --on ${on}`}`);
 }
 
 /**
  * 置き場の印を付けられなかった訳の 1 行（メッセージを送る命令は止めない）。fix は、置き場が応えない時に TPM 担当が後で直す命令。
- * old は、古い置き場で持てない物の字（「返事の状態を持てない」など）。done と foreign は何も出さない。
+ * done と foreign は何も出さない。
  */
-export function markFailure(url: string, result: ReplyResult, fix: string, old: string): string[] {
+export function markFailure(url: string, result: ReplyResult, fix: string): string[] {
   switch (result) {
     case 'done': return [];
-    case 'old': return [`置き場の印: 付けていない（置き場の版が古く、${old}。メッセージは送った。置き場の版を上げるのは roster ask devops）`];
     case 'down': return [`置き場の印: 付けていない（置き場が応えない。メッセージは送った。後で TPM 担当が ${fix} で直せる）`];
     case 'missing': return [`置き場の印: 付けていない（そのページは置き場に無い: ${url}）`];
     case 'conflict': return [`置き場の印: 付けていない（${url} は、その相手の返事を待っていなかった。置き場は何も替えていない）`];

@@ -7,9 +7,9 @@ import { describe, expect, test } from 'vitest';
 import { askTpm, dismiss, notify, reportDone, toPeer } from '../src/commands/messages.ts';
 import { pageList, pagePath, pagePut, pageReply, type PageRecord } from '../src/commands/page.ts';
 import { reviewList } from '../src/commands/review.ts';
+import { markBrief } from '../src/commands/review-marks.ts';
 import { hello } from '../src/commands/role-side.ts';
 import { askReview, reportReview } from '../src/commands/staff.ts';
-import { atLeast } from '../src/commands/store.ts';
 import { collect } from '../src/commands/timeline.ts';
 import { assign, close } from '../src/commands/tpm-side.ts';
 import type { Context } from '../src/context.ts';
@@ -495,7 +495,7 @@ describe('Staff の席の題と説明（reviewLabel）', () => {
   });
 });
 
-describe('置き場のレビューの印（pagetray 0.8.0 から）', () => {
+describe('置き場のレビューの印', () => {
   /** 置き場の中の、AI-8 のページの記録。 */
   const record = (w: World, page: string): PageRecord | undefined => w.store.pages.get(`/${basename(w.tpm.state.dir)}/AI-8/${page}.html`)?.record;
   /** 置き場の中の path（見た物に書く形）。 */
@@ -563,19 +563,6 @@ describe('置き場のレビューの印（pagetray 0.8.0 から）', () => {
     expect(out.join('\n')).not.toMatch(/の返事待ちのページが/);
   });
 
-  test('0.8.0 より前の置き場には、待ちの相手を送らない（Product Manager の返事待ちにしない）。命令は止めない', async () => {
-    const w = await started();
-    w.store.version = '0.7.0';
-    const out = await askReview(w.se, { url: w.plan, wait: 0 });
-    expect(out).toContain('置き場の印: 付けていない（置き場の版が古く、レビューの印を持てない（0.8.0 から）。メッセージは送った。置き場の版を上げるのは roster ask devops）');
-    expect(record(w, 'brief-1')?.asked_at).toBeUndefined();
-    expect(w.calls.some(c => c.args.some(a => a.includes('/api/pages/reply') || a.includes('/api/pages/review')))).toBe(false);
-    // 手で直す命令も、古い置き場には --on を送らずに止まる
-    const brief = requireRole(w.tpm, 'AI-8.staff').brief ?? '';
-    await expect(pageReply(w.tpm, [brief], { waiting: true, on: 'review' })).rejects.toThrow(/待ちの相手（--on）を持てません（0\.8\.0 から）。何も書いていません/);
-    expect(record(w, 'brief-1')?.asked_at).toBeUndefined();
-  });
-
   test('置き場が応えない時の直す手には、待ちの相手が付く', async () => {
     const w = await asked();
     const page = await w.put(w.staff, 'review');
@@ -608,7 +595,7 @@ describe('置き場の印を付けられない時（review-3 の指摘）', () =
   test('送った後に置き場が誤りを返しても、命令は止めずに 1 行で知らせる（状態も書く）', async () => {
     const w = await asked();
     const page = await w.put(w.staff, 'review');
-    w.store.failMarks = 500;
+    w.store.markError = 500;
     const out = await reportReview(w.staff, { url: page, verdict: 'reject', summary: '依頼と違う' });
     expect(out[0]).toMatch(/^送った: 【review】/);
     expect(out).toContainEqual(expect.stringMatching(/^置き場の印: 判定と見た物を書いていない（置き場が断った: 500 置き場の中の誤り）$/));
@@ -623,12 +610,25 @@ describe('置き場の印を付けられない時（review-3 の指摘）', () =
     const w = await asked();
     const page = await w.put(w.staff, 'review');
     const brief = requireRole(w.tpm, 'AI-8.staff').brief ?? '';
-    w.store.failVersion = 503;
+    w.store.down = true;
     const out = await reportReview(w.staff, { url: page, verdict: 'approve', summary: 'よい' });
     expect(out).toContain('置き場の印: 付けていない（置き場が応えない。メッセージは送った。判定と見た物は手では書けない。roster review list と、レビューのページ・依頼書で見る）');
     expect(out).toContain(`  後で TPM 担当が直せる: roster page reply ${brief} --answered --on review`);
-    // 起き直す間の 503 は「版が古い」とみなさない
-    expect(out.join('\n')).not.toMatch(/版が古く/);
+  });
+
+  test('置き場が応えない時、依頼書の印は書かずに、直す手を（置き換えた前の依頼書の分も）みな並べる', async () => {
+    const w = await asked();
+    const brief = requireRole(w.tpm, 'AI-8.staff').brief ?? '';
+    const old = brief.replace('/brief-1.html', '/brief-9.html');
+    w.store.down = true;
+    const before = w.store.requests.length;
+    expect(await markBrief(w.se, brief, readReviews(w.tpm), [old])).toEqual([
+      '置き場の印: 付けていない（置き場が応えない。メッセージは送った。判定と見た物は手では書けない。roster review list と、レビューのページ・依頼書で見る）',
+      `  後で TPM 担当が直せる: roster page reply ${brief} --waiting --on review`,
+      `  後で TPM 担当が直せる: roster page reply ${old} --answered --on review`,
+    ]);
+    // 応えないとわかったら、ほかの印は送らない。
+    expect(w.store.requests).toHaveLength(before + 1);
   });
 
   test('ほかの相手を待っているページを --waiting で移そうとすると、待ちを移さないと止まる', async () => {
@@ -636,17 +636,5 @@ describe('置き場の印を付けられない時（review-3 の指摘）', () =
     const brief = requireRole(w.tpm, 'AI-8.staff').brief ?? '';
     await expect(pageReply(w.tpm, [brief], { waiting: true })).rejects.toThrow(/今ほかの相手の返事を待っています（置き場は待ちを移さない。何も替えていない）/);
     expect(record(w, 'brief-1')).toMatchObject({ waits_on: 'review' });
-  });
-});
-
-describe('置き場の版の比べ（atLeast）', () => {
-  test('数で比べる（0.10.0 は 0.8.0 より後）。形の違う字は、古いとみなす', () => {
-    expect(atLeast('0.8.0', '0.8.0')).toBe(true);
-    expect(atLeast('0.10.0', '0.8.0')).toBe(true);
-    expect(atLeast('1.0.0', '0.8.0')).toBe(true);
-    expect(atLeast('0.7.9', '0.8.0')).toBe(false);
-    expect(atLeast('', '0.8.0')).toBe(false);
-    expect(atLeast('0.8', '0.8.0')).toBe(false);
-    expect(atLeast('0.8.0-dev', '0.8.0')).toBe(true);
   });
 });

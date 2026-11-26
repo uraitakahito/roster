@@ -1,55 +1,31 @@
 // cli と本物の置き場（pagetray）のつなぎの試験。$ROSTER_E2E_PAGES_URL に動いている pagetray の URL がある時だけ流す
 // （CI の pagetray-e2e.yml。手元では docs-site の開発のページの「pagetray（ページの置き場のサーバー）とのつなぎ」）。
 // ほかの試験は偽の置き場（helpers.ts の FakeStore）で流すので、API の形（URL・引数の名・JSON の欄）のずれはここで見つける。
-// $ROSTER_E2E_API が next なら、設定の api の pagetray を next にした roster で、新しい API の置き場（rc の image）に向けて流す（AI-36 の段 6c）。
-// その置き場は file・返事・レビューの印をみな持つので、版を聞いて試験を選ぶ所（今の API の /api/version など）は聞かない。
-import { execFileSync } from 'node:child_process';
+// 置き場には、いつも生成した client で新しい API（pagetray 1.0.0 から）に送る。置き場は file・返事・レビューの印をみな持つので、版で試験を選ばない。
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { fileDelete, fileList, filePath, filePut, type FileRecord } from '../src/commands/file.ts';
 import { PAGE_KINDS, pageDelete, pageImport, pageList, pagePath, pagePut, pageReply, type PageRecord } from '../src/commands/page.ts';
-import { PARTY_SINCE, setReply, waitingUrls } from '../src/commands/reply.ts';
-import { castlistIssuer } from '../src/castlist.ts';
+import { setReply, waitingUrls } from '../src/commands/reply.ts';
 import type { Context } from '../src/context.ts';
 import { exec } from '../src/exec.ts';
 import { ROLE_NAMES } from '../src/protocol.ts';
 import { world } from './helpers.ts';
 import { markBrief, markEscalated, markVerdict } from '../src/commands/review-marks.ts';
-import { atLeast } from '../src/commands/store.ts';
+import { pagetrayClient } from '../src/commands/store.ts';
 import type { Review } from '../src/reviews.ts';
 
 const URL = process.env.ROSTER_E2E_PAGES_URL ?? '';
-/** 新しい API の置き場に向けるか（設定の api の pagetray を next にする）。 */
-const NEXT = URL !== '' && process.env.ROSTER_E2E_API === 'next';
-/**
- * 置き場に file のエンドポイントがあるか（pagetray 0.4.0 から）。.pagetray-version が 0.3 の間は、file の試験を飛ばして CI を緑に保つ。
- * 版の番号でなくエンドポイントで見るのは、0.4.0 の release の前の手元のサーバー（版は 0.3.x のまま）にも向けて流せるように。
- */
-const FILES = NEXT || (URL !== '' && execFileSync('curl', ['-s', '-o', '/dev/null', '-w', '%{http_code}', `${URL}/api/files?limit=1`], { encoding: 'utf8' }) === '200');
-/**
- * 置き場が返事の状態を持てるか（pagetray 0.5.0 から）。引数の無い POST に、持てる置き場は 400、前の置き場は 405（その道が無い）を返す。
- * 持てない置き場には、「印を付けずに通る」方の試験を流す（新しい roster が古い置き場に当たった時の振る舞い）。
- */
-const REPLY = NEXT || (URL !== '' && execFileSync('curl', ['-s', '-o', '/dev/null', '-w', '%{http_code}', '-X', 'POST', `${URL}/api/pages/reply`], { encoding: 'utf8' }) === '400');
-/**
- * 置き場が送り手（actor_issuer・actor_ref）を記録するか（pagetray 0.6.0 から）。/api/version の版で見る（前の版は知らない引数を読まずに置くので、答えでは見分けられない）。
- * CI の置き場は PAGETRAY_CASTLIST_URL を付けずに起こすので、castlist には聞かず、付随する id だけを残す（未確認。`sender.actor` は null）。
- * 新しい API の置き場は castlist に向けて起こすので、送り手の試験は castlist-e2e.test.ts が流す（ここでは流さない）。
- */
-const SENDER = URL !== '' && !NEXT && ((): boolean => {
-  const [major = 0, minor = 0] = (JSON.parse(execFileSync('curl', ['-fsS', `${URL}/api/version`], { encoding: 'utf8' })) as { version: string }).version.split('.').map(Number);
-  return major > 0 || minor >= 6;
-})();
 /** PNG の頭の 8 byte と、少しの中身。 */
 const PNG = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('つなぎの試験の図')]);
 
-/** 本物の curl で本物の置き場に向けた周り。project の名（状態の folder の名）は world ごとに違う。 */
+/** 本物の curl と生成した client で、本物の置き場に向けた周り。project の名（状態の folder の名）は world ごとに違う。 */
 function setup() {
-  const w = world(NEXT ? { api: { pagetray: 'next' } } : {});
+  const w = world();
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'roster-e2e-pages-')));
-  const real = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({ ...ctx, exec, env: { ...ctx.env, ROSTER_PAGES_URL: URL, ROSTER_PAGES_DIR: dir, ...env } });
+  const real = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({ ...ctx, exec, clients: { ...ctx.clients, pagetray: url => pagetrayClient(url) }, env: { ...ctx.env, ROSTER_PAGES_URL: URL, ROSTER_PAGES_DIR: dir, ...env } });
   const html = join(dir, 'src.html');
   const put = async (ctx: Context, kind: string, text: string, key?: string): Promise<string> => {
     writeFileSync(html, text);
@@ -145,13 +121,13 @@ describe.skipIf(URL === '')('cli と pagetray のつなぎ', () => {
     const ctx = s.real(s.w.role('K-4', 'file:1'));
     const empty = join(s.dir, 'empty.html');
     writeFileSync(empty, '');
-    // 新しい API の訳は ValidationException の字（欄の path は /body）。
-    await expect(pagePut(ctx, empty, { kind: 'plan' })).rejects.toThrow(NEXT ? '置き場がページを受け取りませんでした（400）' : '（400）: 本文が空');
+    // 訳は ValidationException の字（欄の path は /body）。
+    await expect(pagePut(ctx, empty, { kind: 'plan' })).rejects.toThrow('置き場がページを受け取りませんでした（400）');
     await expect(pagePath(ctx, `${URL}/${s.project}/K-4/plan-1.html`)).rejects.toThrow('置き場にページがありません（404）');
   });
 });
 
-describe.skipIf(!FILES)('cli と pagetray のつなぎ（file。置き場が 0.4.0 から）', () => {
+describe.skipIf(URL === '')('cli と pagetray のつなぎ（file）', () => {
   /** 図を書いて上げ、URL を返す。 */
   async function upload(s: ReturnType<typeof setup>, ctx: Context, name: string, body: Buffer | string = PNG, key?: string): Promise<string> {
     const src = join(s.dir, `src-${name}`);
@@ -217,7 +193,7 @@ describe.skipIf(!FILES)('cli と pagetray のつなぎ（file。置き場が 0.4
     expect((await files(s, { allProjects: true, key: 'K-9' })).filter(f => f.project === project).map(f => [f.n, f.role, f.created_at])).toEqual([[3, 'unknown', '2026-11-19T01:02:03.456Z']]);
   });
 
-  test.skipIf(!REPLY)('返事の状態: 返事待ちにして、絞って探せて、答えたにできる。消したページ・無いページには書けない', async () => {
+  test('返事の状態: 返事待ちにして、絞って探せて、答えたにできる。消したページ・無いページには書けない', async () => {
     const s = setup();
     const se = s.real(s.w.role('K-9', 'file:1'), { ROSTER_ROLE: 'software-engineer' });
     const first = await s.put(se, 'confirm', '<title>案を選ぶ</title>');
@@ -246,44 +222,9 @@ describe.skipIf(!FILES)('cli と pagetray のつなぎ（file。置き場が 0.4
     expect(await setReply(s.tpm, second, 'answered')).toBe('missing');
     expect(await waitingUrls(s.tpm, 'K-9')).toEqual([]);
   });
-
-  test.skipIf(REPLY)('返事の状態を持てない置き場（0.5.0 より前）: 書く道は old を返し、返事待ちは 1 枚も数えない', async () => {
-    const s = setup();
-    const se = s.real(s.w.role('K-9', 'file:1'), { ROSTER_ROLE: 'software-engineer' });
-    const first = await s.put(se, 'confirm', '<title>案を選ぶ</title>');
-    await s.put(se, 'confirm', '<title>計画の確認</title>');
-    expect(await setReply(se, first, 'waiting')).toBe('old');
-    // 前の置き場は reply の絞りを読まずに 2 枚とも返すが、返事待ちとは数えない。
-    expect(await waitingUrls(s.tpm, 'K-9')).toEqual([]);
-    expect(await s.list(s.tpm, { reply: 'waiting' })).toEqual([]);
-    await expect(pageReply(s.tpm, [first], { waiting: true })).rejects.toThrow(/版が古く/);
-  });
 });
 
-describe.skipIf(!SENDER)('cli と pagetray のつなぎ（送り手。置き場が 0.6.0 から）', () => {
-  test('castlist の設定と session の id があると、ページと file の記録に、付けた issuer と ref が残る（置き場に castlist の URL が無いので未確認）', async () => {
-    const s = setup();
-    const sid = '5f0c2a8e-0000-4000-8000-0000000000e2';
-    const ctx = s.real(s.w.role('K-20', 'file:1'), { ROSTER_ROLE: 'software-engineer', ROSTER_CASTLIST_URL: 'http://127.0.0.1:8802', CLAUDE_CODE_SESSION_ID: sid });
-    const sender = { issuer: castlistIssuer(s.w.tpm.state.dir), ref: `claude.session:${sid}`, actor: null };
-    const url = await s.put(ctx, 'result', '<title>送り手のある結果</title><p>つなぎの試験</p>');
-    expect(await s.list(s.tpm, { key: 'K-20' })).toEqual([expect.objectContaining({ url, sender: expect.objectContaining(sender) as unknown })]);
-    const src = join(s.dir, 'src-sender.png');
-    writeFileSync(src, PNG);
-    const file = (await filePut(ctx, src, { reviewed: true }))[1]?.replace('URL: ', '') ?? '';
-    const listed = JSON.parse((await fileList(s.tpm, { key: 'K-20', json: true })).join('\n')) as (FileRecord & { url: string })[];
-    expect(listed).toEqual([expect.objectContaining({ url: file, sender: expect.objectContaining(sender) as unknown })]);
-    // 付けない時は、前と同じに置き、sender は出ない。
-    const plain = await s.put(s.real(s.w.role('K-21', 'file:1'), { ROSTER_ROLE: 'software-engineer' }), 'result', '<title>送り手の無い結果</title>');
-    expect(await s.list(s.tpm, { key: 'K-21' })).toEqual([expect.not.objectContaining({ sender: expect.anything() as unknown })]);
-    expect((await s.list(s.tpm, { key: 'K-21' }))[0]?.url).toBe(plain);
-  });
-});
-
-/** 置き場がレビューの印（待ちの相手・判定・見た物）を持てるか（pagetray 0.8.0 から）。/api/version の版で見る（前の版は知らない on を読まずに捨てる）。 */
-const MARKS = NEXT || (URL !== '' && atLeast((JSON.parse(execFileSync('curl', ['-fsS', `${URL}/api/version`], { encoding: 'utf8' })) as { version: string }).version, PARTY_SINCE));
-
-describe.skipIf(!MARKS)('cli と pagetray のつなぎ（レビューの印。置き場が 0.8.0 から）', () => {
+describe.skipIf(URL === '')('cli と pagetray のつなぎ（レビューの印）', () => {
   test('依頼書にレビュー待ちと見る物、レビューのページに判定と見た物、上げた件の待ち。Product Manager の返事待ちには入らない', async () => {
     const s = setup();
     const se = s.real(s.w.role('K-30', 'file:1'), { ROSTER_ROLE: 'software-engineer' });

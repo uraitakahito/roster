@@ -1,6 +1,6 @@
 // cli と本物の castlist（アクターの台帳）のつなぎの試験。$ROSTER_E2E_CASTLIST_URL に動いている castlist の URL がある時だけ流す
 // （CI の pagetray-e2e.yml の next の job。手元では docs-site の開発のページの「生成した client」の「つなぎの試験（新しい API）」）。
-// castlist にはいつも生成した client（新しい API）で送る。$ROSTER_E2E_API が next なら、設定の api の pagetray も next にした roster で流す（新しい API の pagetray に向ける）。
+// castlist にも pagetray にも、いつも生成した client（新しい API）で送る。
 // $ROSTER_E2E_PAGES_URL もあれば、その置き場（この castlist に送り手を聞く物）に、送り手の付いたページと file を置く。
 // ほかの試験は偽の castlist・偽の HTTP で流すので、API の形（道・欄の名・誤りの型）のずれはここで見つける。
 import { randomUUID } from 'node:crypto';
@@ -15,21 +15,21 @@ import { fileList, filePut } from '../src/commands/file.ts';
 import { pageList, pagePut } from '../src/commands/page.ts';
 import { startTpm } from '../src/command.ts';
 import type { Context } from '../src/context.ts';
+import { pagetrayClient } from '../src/commands/store.ts';
 import { exec } from '../src/exec.ts';
 import { world } from './helpers.ts';
 
 const CASTLIST = process.env.ROSTER_E2E_CASTLIST_URL ?? '';
 const PAGES = process.env.ROSTER_E2E_PAGES_URL ?? '';
 /** 置き場に新しい API で送るか（設定の api の pagetray を next にする）。 */
-const NEXT = process.env.ROSTER_E2E_API === 'next';
 /** PNG の頭の 8 byte と、少しの中身。 */
 const PNG = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('つなぎの試験の図')]);
 
 /** 本物の castlist（と置き場）に向けた TPM 担当の周り。issuer（状態の folder の名）は world ごとに違うので、名の番号はいつも 1 から。時計は本物。 */
 function setup() {
-  const w = world({ castlist: CASTLIST, ...(NEXT ? { api: { pagetray: 'next' } } : {}) });
+  const w = world({ castlist: CASTLIST });
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'roster-e2e-castlist-')));
-  const real = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({ ...ctx, exec, now: () => new Date(), env: { ...ctx.env, ...(PAGES === '' ? {} : { ROSTER_PAGES_URL: PAGES }), ROSTER_PAGES_DIR: dir, ...env } });
+  const real = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({ ...ctx, exec, clients: { ...ctx.clients, pagetray: url => pagetrayClient(url) }, now: () => new Date(), env: { ...ctx.env, ...(PAGES === '' ? {} : { ROSTER_PAGES_URL: PAGES }), ROSTER_PAGES_DIR: dir, ...env } });
   return { w, dir, real, tpm: real(w.tpm) };
 }
 

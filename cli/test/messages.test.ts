@@ -69,12 +69,10 @@ describe('1 つの課題の 1 周（課題管理なし）', () => {
       '【dismiss】この課題に続きは無い。worktree と課題を片付けて【end】を返す。',
     ]);
     expect(await roles(w.tpm)).toEqual(['名簿: 担当はいない']);
-    // 外へ打つ命令は、【dismiss】の時に置き場へ返事待ちのページを、待ちの相手ごとに聞く物だけ（課題管理には何も書かない）。
-    // Product Manager の分・置き場の版・レビュー待ち・上げた件の順。
-    expect(w.calls.map((c) => {
-      const url = new URL(c.args.at(-1) ?? '');
-      return [c.cmd, url.pathname, url.searchParams.get('reply'), url.searchParams.get('on')];
-    })).toEqual([['curl', '/api/pages', 'waiting', null], ['curl', '/api/version', null, null], ['curl', '/api/pages', 'waiting', 'review'], ['curl', '/api/pages', 'waiting', 'tpm']]);
+    // 外へ打つ命令は無く（課題管理には何も書かない）、置き場に頼むのは【dismiss】の時に返事待ちのページを、待ちの相手ごとに聞く物だけ。
+    // Product Manager の分・レビュー待ち・上げた件の順。
+    expect(w.calls).toEqual([]);
+    expect(w.store.requests.map(r => [r.method, r.path, r.query.reply, r.query.on])).toEqual([['GET', '/api/pages', 'waiting', undefined], ['GET', '/api/pages', 'waiting', 'review'], ['GET', '/api/pages', 'waiting', 'tpm']]);
     // 送ったメッセージは log.jsonl に残る
     expect(w.tpm.state.lines<{ heading: string }>('log.jsonl').map(l => l.heading)).toEqual(['ask-tpm', 'notify', 'merged', 'done', 'brief', 'done', 'dismiss', 'end']);
   });
@@ -120,6 +118,21 @@ describe('課題への記録（GitHub の Issue）', () => {
     expect(out).toContain('課題を閉じた: gh-12');
     expect(texts(w, 'file:tpm')[0]).toBe('【ask-pm】https://claude.ai/artifact/c1 項目: (1) 案の選択 (2) 切り替えの単位');
     expect(texts(w, 'file:1')[0]).toBe('【answer】(1) 案 A (2) project ごと\n細かい事は依頼書に');
+  });
+
+  test('置き場が 1.0.0 より前（0.8.x に戻した）なら、ask pm・answer・dismiss は送る前に止まる（送った後に印で落ちない。review-66）', async () => {
+    const w = await started();
+    w.store.version = '0.8.0';
+    const sent = () => [texts(w, 'file:tpm').length, texts(w, 'file:1').length];
+    const before = sent();
+    for (const run of [
+      () => askPm(w.se, { url: 'https://claude.ai/artifact/c1', items: ['案の選択'], waitingFor: '案の選択' }),
+      () => answer(w.tpm, 't-x7k2', { text: '(1) 案 A' }),
+      () => dismiss(w.tpm, 't-x7k2', { handover: false }),
+    ]) {
+      await expect(run()).rejects.toThrow(/の版は 0\.8\.0 で、この roster が話す API（1\.0\.0 から）を持ちません。何も頼んでいません。/);
+    }
+    expect(sent()).toEqual(before);
   });
 
   test('【ask-pm】は状態を回答待ち(PM) にする。確認のページは開かない（Product Manager は置き場の一覧の UI で見る）', async () => {

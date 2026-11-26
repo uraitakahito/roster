@@ -4,13 +4,18 @@ import { createServer } from 'node:net';
 import { Readable } from 'node:stream';
 import type { HttpRequest } from '@smithy/types';
 
-/** 受けた要求 1 件。query は引数の名 → 値（重ねた物は配列）。text は本文の字、body は本文が JSON なら読んだ物。 */
+/**
+ * 受けた要求 1 件。query は引数の名 → 値（重ねた物は配列）。text は本文の字、body は本文が JSON なら読んだ物。
+ * origin（送った先の `http://<host>:<port>`）と bytes（本文の byte）は、偽の handler だけが入れる。
+ */
 export interface NextSeen {
   method: string
+  origin?: string
   path: string
   query: Record<string, string | string[] | null>
   headers: Record<string, string>
   text: string | undefined
+  bytes?: Buffer
   body: Record<string, unknown> | undefined
 }
 
@@ -33,9 +38,10 @@ export function nextHandler(answer: (seen: NextSeen) => NextAnswer | undefined, 
     destroy: () => undefined,
     handle: (request: HttpRequest) => {
       const raw: unknown = request.body;
-      const text = typeof raw === 'string' ? raw : raw instanceof Uint8Array ? Buffer.from(raw).toString() : undefined;
+      const bytes = typeof raw === 'string' ? Buffer.from(raw) : raw instanceof Uint8Array ? Buffer.from(raw) : undefined;
+      const text = bytes?.toString();
       const json = (request.headers['content-type'] ?? '').startsWith('application/json') && text !== undefined && text !== '';
-      const one: NextSeen = { method: request.method, path: request.path, query: { ...request.query }, headers: { ...request.headers }, text, body: json ? JSON.parse(text) as Record<string, unknown> : undefined };
+      const one: NextSeen = { method: request.method, origin: `${request.protocol}//${request.hostname}${request.port === undefined ? '' : `:${request.port}`}`, path: request.path, query: { ...request.query }, headers: { ...request.headers }, text, bytes, body: json ? JSON.parse(text) as Record<string, unknown> : undefined };
       if (record(one)) seen.push(one);
       const got = answer(one) ?? { status: 404, type: 'UnknownOperationException', body: '知らない道' };
       if ('throws' in got) return Promise.reject(got.throws);

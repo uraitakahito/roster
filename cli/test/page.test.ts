@@ -29,8 +29,8 @@ function setup() {
   const project = basename(w.tpm.state.dir);
   const html = join(dir, '..', `${basename(dir)}-src.html`);
   writeFileSync(html, HTML);
-  /** 置き場への要求（curl）の引数。 */
-  const curls = (): string[][] => w.calls.filter(c => c.cmd === 'curl').map(c => c.args);
+  /** 置き場に頼んだ物（API と本文の curl）。 */
+  const curls = (): string[] => w.asked();
   /** 置き場に入っているページの記録を、path から。 */
   const stored = (path: string) => w.store.pages.get(path)?.record;
   return { dir, w, store: w.store, role, tpm, project, html, curls, stored };
@@ -46,26 +46,6 @@ describe('roster page put', () => {
     expect(s.stored(`/${s.project}/t-x7k2/proposal-1.html`)).toMatchObject({ role: 'software-engineer', workspace: 'file:1', title: '試し' });
     expect(s.store.pages.get(`/${s.project}/t-x7k2/proposal-1.html`)?.body.toString()).toBe(HTML);
     expect((await pagePut(s.role, s.html, { kind: 'proposal' }))[1]).toBe(`URL: ${BASE}/${s.project}/t-x7k2/proposal-2.html`);
-  });
-
-  test('置く要求は、file をそのまま送る POST 1 つ', async () => {
-    const s = setup();
-    await pagePut(s.role, s.html, { kind: 'plan' });
-    const query = `project=${encodeURIComponent(s.project)}&key=t-x7k2&kind=plan&role=software-engineer&workspace=file%3A1`;
-    expect(s.curls()).toEqual([[
-      '-sS',
-      '--max-time',
-      '10',
-      '-w',
-      '\n%{http_code} %header{pagetray-api}',
-      '-X',
-      'POST',
-      '-H',
-      'Content-Type: text/html; charset=utf-8',
-      '--data-binary',
-      `@${s.html}`,
-      `${BASE}/api/pages?${query}`,
-    ]]);
   });
 
   test('TPM 担当は --key で置き、役割は tpm、居場所は自分の宛先。担当と project の名が揃う', async () => {
@@ -94,25 +74,11 @@ describe('roster page put', () => {
     expect(existsSync(join(s.dir, s.project))).toBe(false);
   });
 
-  test('置き場の API の版が違えば、答えを使わずに止まる。控えも書かない', async () => {
-    const s = setup();
-    s.store.api = '2';
-    await expect(pagePut(s.role, s.html, { kind: 'result' })).rejects.toThrow(/API の版は 2 で、この roster が話せるのは 1 です.*\.pagetray-version.*roster ask devops/);
-    expect(existsSync(join(s.dir, s.project))).toBe(false);
-    await expect(pageList(s.role, {})).rejects.toThrow(/API の版は 2/);
-  });
-
-  test('API の版を付けない置き場（版ができる前の物）には、今までどおり置ける', async () => {
-    const s = setup();
-    s.store.api = undefined;
-    expect((await pagePut(s.role, s.html, { kind: 'result' }))[1]).toBe(`URL: ${BASE}/${s.project}/t-x7k2/result-1.html`);
-  });
-
   test('置き場が断れば、置き場の言う訳を出す', async () => {
     const s = setup();
-    s.store.refuse = { code: 413, body: 'length limit exceeded' };
+    s.store.refuse = { code: 413, message: 'length limit exceeded' };
     await expect(pagePut(s.role, s.html, { kind: 'result' })).rejects.toThrow('置き場がページを受け取りませんでした（413）: length limit exceeded');
-    s.store.refuse = { code: 400, body: '{"error":"本文が空"}' };
+    s.store.refuse = { code: 400, message: '本文が空' };
     await expect(pagePut(s.role, s.html, { kind: 'result' })).rejects.toThrow('（400）: 本文が空');
   });
 
@@ -193,7 +159,7 @@ describe('roster page put', () => {
     const s = setup();
     const ctx = { ...s.role, env: { ...s.role.env, ROSTER_PAGES_URL: 'http://127.0.0.1:9900/' } };
     expect((await pagePut(ctx, s.html, { kind: 'plan' }))[1]).toBe(`URL: http://127.0.0.1:9900/${s.project}/t-x7k2/plan-1.html`);
-    expect(s.curls()[0]?.at(-1)).toMatch(/^http:\/\/127\.0\.0\.1:9900\/api\/pages\?/);
+    expect(s.store.requests.map(r => `${r.origin ?? ''}${r.path}`)).toEqual([`http://127.0.0.1:9900/api/projects/${s.project}/keys/t-x7k2/kinds/plan/pages`]);
   });
 });
 
@@ -203,23 +169,21 @@ const SID = '5f0c2a8e-0000-4000-8000-000000000001';
 /** castlist の設定（$ROSTER_CASTLIST_URL）と session の id を足した周り。 */
 const seated = (ctx: Context, env: NodeJS.ProcessEnv = {}): Context => ({ ...ctx, env: { ...ctx.env, ROSTER_CASTLIST_URL: CASTLIST, CLAUDE_CODE_SESSION_ID: SID, ...env } });
 
-describe('roster page put の送り手（pagetray 0.6.0 の actor_issuer・actor_ref）', () => {
-  test('castlist の設定と session の id があれば、issuer と claude.session:<id> を、URL の引数に符号にして付ける', async () => {
+describe('roster page put の送り手（actorIssuer・actorRef）', () => {
+  test('castlist の設定と session の id があれば、issuer と claude.session:<id> を、URL の引数に付ける', async () => {
     const s = setup();
     await pagePut(seated(s.role), s.html, { kind: 'plan' });
     const issuer = castlistIssuer(s.w.tpm.state.dir);
     expect(issuer).toMatch(/^tpm\./);
-    expect(s.store.posts.map(q => [q.get('actor_issuer'), q.get('actor_ref')])).toEqual([[issuer, `claude.session:${SID}`]]);
-    expect(s.curls()[0]?.at(-1)).toContain(`&actor_issuer=${encodeURIComponent(issuer)}&actor_ref=claude.session%3A${SID}`);
+    expect(s.store.posts.map(q => [q.get('actorIssuer'), q.get('actorRef')])).toEqual([[issuer, `claude.session:${SID}`]]);
     expect(s.stored(`/${s.project}/t-x7k2/plan-1.html`)).toMatchObject({ role: 'software-engineer', workspace: 'file:1' });
   });
 
-  test('設定の castlist（config.jsonc）でも付ける。TPM 担当が置く時も付ける。字は符号にする', async () => {
+  test('設定の castlist（config.jsonc）でも付ける。TPM 担当が置く時も付ける。字はそのまま届く', async () => {
     const s = setup();
     const tpm: Context = { ...s.tpm, config: { ...s.tpm.config, castlist: CASTLIST }, env: { ...s.tpm.env, CLAUDE_CODE_SESSION_ID: 'a&b=c d' } };
     await pagePut(tpm, s.html, { kind: 'brief', key: 't-x7k2' });
-    expect(s.store.posts[0]?.get('actor_ref')).toBe('claude.session:a&b=c d');
-    expect(s.curls()[0]?.at(-1)).toContain('actor_ref=claude.session%3Aa%26b%3Dc+d');
+    expect(s.store.posts[0]?.get('actorRef')).toBe('claude.session:a&b=c d');
   });
 
   test('castlist の設定が無い・session の id が無い（空も）時は、今までどおり付けない', async () => {
@@ -227,7 +191,7 @@ describe('roster page put の送り手（pagetray 0.6.0 の actor_issuer・actor
     await pagePut({ ...s.role, env: { ...s.role.env, CLAUDE_CODE_SESSION_ID: SID } }, s.html, { kind: 'plan' });
     await pagePut(seated(s.role, { CLAUDE_CODE_SESSION_ID: undefined }), s.html, { kind: 'plan' });
     await pagePut(seated(s.role, { CLAUDE_CODE_SESSION_ID: '' }), s.html, { kind: 'plan' });
-    expect(s.store.posts.map(q => [q.has('actor_issuer'), q.has('actor_ref')])).toEqual([[false, false], [false, false], [false, false]]);
+    expect(s.store.posts.map(q => [q.has('actorIssuer'), q.has('actorRef')])).toEqual([[false, false], [false, false], [false, false]]);
     expect(s.store.pages.size).toBe(3);
   });
 
@@ -248,7 +212,7 @@ describe('roster page put の送り手（pagetray 0.6.0 の actor_issuer・actor
     expect(s.store.posts).toHaveLength(1);
   });
 
-  test('置き場が、この session は castlist に登録が無いと答える（422）と、ページを置かずに 1 行で止まる。打ち直し、続けば台帳に挙げるよう言う', async () => {
+  test('置き場が、この session は castlist に登録が無いと答える（400 の fieldList に /actorRef）と、ページを置かずに 1 行で止まる。打ち直し、続けば台帳に挙げるよう言う', async () => {
     const s = setup();
     s.store.sender = 'unregistered';
     let message = '';
@@ -258,15 +222,15 @@ describe('roster page put の送り手（pagetray 0.6.0 の actor_issuer・actor
     catch (e) {
       message = (e as Error).message;
     }
-    expect(message).toMatch(new RegExp(`この session（claude\\.session:${SID}）は castlist に登録が無いと、置き場が答えました（422）。ページは置けていません。.*guard.*Bash.*打ち直して.*roster report incident`));
+    expect(message).toMatch(new RegExp(`この session（claude\\.session:${SID}）は castlist に登録が無いと、置き場が答えました（400）。ページは置けていません。.*guard.*Bash.*打ち直して.*roster report incident`));
     expect(message).not.toContain('\n');
     expect(s.store.pages.size).toBe(0);
     expect(existsSync(join(s.dir, s.project))).toBe(false);
   });
 
-  test('送り手を付けない時の 503・422 は、今までどおり置き場の訳を出す', async () => {
+  test('送り手を付けない時の 503 は、今までどおり置き場の訳を出す', async () => {
     const s = setup();
-    s.store.refuse = { code: 503, body: '{"error":"混んでいる"}' };
+    s.store.refuse = { code: 503, message: '混んでいる' };
     await expect(pagePut(s.role, s.html, { kind: 'result' })).rejects.toThrow('置き場がページを受け取りませんでした（503）: 混んでいる');
   });
 
@@ -276,7 +240,7 @@ describe('roster page put の送り手（pagetray 0.6.0 の actor_issuer・actor
     mkdirSync(folder, { recursive: true });
     writeFileSync(join(folder, 'result-1.html'), HTML);
     await pageImport(seated(s.tpm));
-    expect(s.store.posts.map(q => q.has('actor_ref'))).toEqual([false]);
+    expect(s.store.posts.map(q => q.has('actorRef'))).toEqual([false]);
   });
 });
 
@@ -322,16 +286,6 @@ describe('roster page path', () => {
     await expect(pagePath(s.role, `${BASE}/api/backup`)).rejects.toThrow('file がありません');
     await expect(pagePath(s.role, `${BASE}/${s.project}/t-x7k2/notes.txt`)).rejects.toThrow('file がありません');
     expect(s.curls()).toHaveLength(before);
-  });
-
-  test('置き場の API の版が違えば読まず、途中の file も残さない', async () => {
-    const s = setup();
-    await pagePut(s.role, s.html, { kind: 'plan' });
-    const folder = join(s.dir, s.project, 't-x7k2');
-    for (const name of readdirSync(folder)) rmSync(join(folder, name));
-    s.store.api = '2';
-    await expect(pagePath(s.role, `${BASE}/${s.project}/t-x7k2/plan-1.html`)).rejects.toThrow(/API の版は 2/);
-    expect(readdirSync(folder)).toEqual([]);
   });
 
   test('控えに無く、置き場も応えなければ、DevOps に頼むよう言う', async () => {
@@ -389,10 +343,10 @@ describe('roster page path と、ページが参照する file', () => {
     expect(lines.slice(1)).toEqual([expect.stringMatching(/^注意: ページが参照する file を取れなかった（.*\/t-x7k2\/files\/none-1\.png）: 置き場に file がありません（404）/)]);
   });
 
-  test('置き場が file を扱えない（0.4.0 より前）・応えない時も、ページは読める', async () => {
+  test('置き場が応えない時も、控えにあるページは読める（参照の file は注意の行）', async () => {
     const s = await referenced(() => '<img src="files/shot-1.png">');
-    s.store.noFiles = true;
-    expect((await pagePath(s.other, s.url))[1]).toMatch(/^注意: .*版が古く/);
+    await pagePath(s.other, s.url);
+    rmSync(s.at('t-x7k2', 'files'), { recursive: true });
     s.store.down = true;
     expect(await pagePath(s.other, s.url)).toEqual([s.at('t-x7k2', 'result-1.html'), expect.stringMatching(/^注意: .*応えません/)]);
   });
@@ -415,7 +369,7 @@ describe('roster page list', () => {
       `2026-11-20T12:00:01.000Z  t-x7k2  plan-1  software-engineer  file:1  ${BASE}/${s.project}/t-x7k2/plan-1.html  試し`,
       `2026-11-20T12:00:00.000Z  t-x7k2  brief-1  tpm  file:tpm  ${BASE}/${s.project}/t-x7k2/brief-1.html  試し`,
     ]);
-    expect(s.curls().at(-1)?.at(-1)).toBe(`${BASE}/api/pages?limit=50&project=${encodeURIComponent(s.project)}`);
+    expect(s.store.requests.at(-1)?.query).toEqual({ project: s.project, maxResults: '50' });
   });
 
   test('旗で絞り、並びを替える', async () => {
@@ -425,7 +379,7 @@ describe('roster page list', () => {
     expect((await pageList(s.role, { kind: 'brief', oldest: true })).map(l => l.split('  ')[1])).toEqual(['t-x7k2', 't-other']);
     expect(await pageList(s.role, { q: '無い語' })).toEqual(['合うページは無い']);
     await pageList(s.role, { q: '試し', limit: '5', allProjects: true });
-    expect(s.curls().at(-1)?.at(-1)).toBe(`${BASE}/api/pages?limit=5&q=${encodeURIComponent('試し')}`);
+    expect(s.store.requests.at(-1)?.query).toEqual({ q: '試し', maxResults: '5' });
   });
 
   test('--json は、url を足した記録の配列を出す', async () => {
@@ -536,13 +490,10 @@ describe('roster page import', () => {
     ]);
   });
 
-  test('控えに file が無ければ、file のエンドポイントに聞かない（0.4.0 より前の置き場にも入れられる）', async () => {
+  test('控えに file が無ければ、file のエンドポイントに聞かない', async () => {
     const s = legacy();
-    s.store.noFiles = true;
     expect((await pageImport(s.tpm))[0]).toContain('入れた: 3 枚');
-    mkdirSync(join(s.folder, 'files'));
-    writeFileSync(join(s.folder, 'files', 'a-1.png'), PNG);
-    await expect(pageImport(s.tpm)).rejects.toThrow('版が古く');
+    expect(s.store.requests.filter(r => r.path.endsWith('/files'))).toEqual([]);
   });
 });
 
@@ -608,7 +559,8 @@ describe('roster page delete', () => {
       '消した: 1 枚（控えも消した）',
       `- ${s.url('t-x7k2', 'proposal-2.html')}`,
     ]);
-    expect(s.curls().at(-1)).toEqual(['-sS', '--max-time', '10', '-w', '\n%{http_code} %header{pagetray-api}', '-X', 'DELETE', `${BASE}/api/pages?project=${encodeURIComponent(s.project)}&key=t-x7k2&kind=proposal&n=2`]);
+    const sent = s.store.requests.at(-1);
+    expect([sent?.method, sent?.path, sent?.query]).toEqual(['DELETE', '/api/pages', { project: s.project, key: 't-x7k2', kind: 'proposal', n: '2' }]);
     expect(existsSync(s.cachedFile('t-x7k2', 'proposal-2.html'))).toBe(false);
     expect(existsSync(s.cachedFile('t-x7k2', 'proposal-1.html'))).toBe(true);
     expect(s.store.pages.size).toBe(4);
@@ -674,12 +626,6 @@ describe('roster page delete', () => {
     await pageDelete(s.tpm, [], { key: 't-y', yes: true });
     expect(await pageDelete(s.tpm, [], { project: s.project })).toEqual(['置き場に、消すページは無い']);
     expect(s.store.files.size).toBe(0);
-  });
-
-  test('file を扱えない置き場（0.4.0 より前）でも、--key でページは消せる', async () => {
-    const s = await placed();
-    s.store.noFiles = true;
-    expect((await pageDelete(s.tpm, [], { key: 't-x7k2', yes: true }))[0]).toBe('消した: 3 枚（控えも消した）');
   });
 
   test('置き場が応えなければ、消さずに DevOps に頼むよう言う', async () => {

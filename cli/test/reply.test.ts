@@ -121,22 +121,7 @@ describe('roster ask pm と roster answer が、置き場のページの返事�
   });
 });
 
-describe('返事の状態を持てない置き場でも、メッセージは送る', () => {
-  test('0.5.0 より前の置き場（書く道が無く、一覧は絞りを読まない）: 印は付けず、ask pm も answer も通る', async () => {
-    const s = await started();
-    const first = await s.confirm('案を選ぶ');
-    await s.confirm('計画の確認');
-    s.w.store.noReply = true;
-    const out = await askPm(s.se, { url: first, items: ['案の選択'], waitingFor: '案の選択' });
-    expect(out[0]).toBe('送った: 【ask-pm】→ file:tpm（相手の手が空いた時に届く。送り直さない）');
-    expect(out[1]).toMatch(/^置き場の印: 付けていない（置き場の版が古く/);
-    expect(out[2]).toBe('状態: 回答待ち(PM): 案の選択');
-    // 前の置き場は reply の絞りを読まずに 2 枚とも返すが、返事待ちとは数えない（止まらない）。
-    expect(await answer(s.tpm, 't-x7k2', { text: '案 A' })).toEqual(['送った: 【answer】→ file:1（相手の手が空いた時に届く。送り直さない）']);
-    expect(await pageList(s.tpm, { reply: 'waiting' })).toEqual(['合うページは無い']);
-    await expect(pageReply(s.tpm, [first], { waiting: true })).rejects.toThrow(/版が古く[\s\S]*roster ask devops/);
-  });
-
+describe('置き場が止まっていても、メッセージは送る', () => {
   test('止まっている置き場: 印は付けず、ask pm も answer も dismiss も通る', async () => {
     const s = await started();
     const url = await s.confirm('案を選ぶ');
