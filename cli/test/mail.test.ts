@@ -206,6 +206,8 @@ describe('席に付ける hook（guardSettings）', () => {
     expect(h.SessionStart?.[0]?.hooks.at(-1)).toEqual(waiting);
     expect(h.SessionEnd?.[0]?.hooks.map(c => c.command)).toEqual([`${BIN} castlist session-end`, `${BIN} mail release`]);
     expect(h.PostToolUseFailure).toEqual([{ matcher: 'Bash', hooks: [{ type: 'command', command: `${BIN} mail gate` }] }]);
+    // 結果を pipe で切ると、止まった命令も「成功」になるので、成功の後にも付ける。
+    expect(h.PostToolUse).toEqual(h.PostToolUseFailure);
     expect(h.Stop).toEqual([{ hooks: [waiting] }]);
     expect(h.UserPromptSubmit).toEqual([{ hooks: [{ type: 'command', command: `${BIN} mail prompt` }] }]);
     expect(claudeArgs(record, '/r', true)[1]).toBe(guardSettings(BIN, 'software-engineer', true));

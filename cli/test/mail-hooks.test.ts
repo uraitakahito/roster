@@ -77,6 +77,21 @@ describe('検査が止めた後に渡す（roster mail gate）', () => {
     expect(w.printed).toEqual([]);
   });
 
+  test('結果を pipe で切った命令（成功の後の hook。PostToolUse）でも渡し、JSON の event の名を入力に合わせる', async () => {
+    const w = await seated();
+    await notify(w.tpm, 't-x7k2', { text: 'pipe で切っても渡る物' });
+    await expect(askTpm(w.se, ask)).rejects.toThrow(/まだ渡っていない/);
+    const out = JSON.parse(await mailGate(w.hook(), JSON.stringify({ session_id: 's-200', hook_event_name: 'PostToolUse', tool_name: 'Bash' })) ?? '{}') as { hookSpecificOutput: { hookEventName: string, additionalContext: string } };
+    expect(out.hookSpecificOutput.hookEventName).toBe('PostToolUse');
+    expect(out.hookSpecificOutput.additionalContext).toContain('【notify】pipe で切っても渡る物');
+    expect(deliveredLines(w.se).map(l => l.when)).toEqual(['gate']);
+    expect(w.se.state.read(gateFile('t-x7k2'))).toBeUndefined();
+    expect(await askTpm(w.se, ask)).toHaveLength(2);
+    expect(w.printed).toEqual([]);
+    // 印が無い時（ふつうの Bash の後）は、配りの口に聞かない。
+    expect(await mailGate(down(w.hook()), JSON.stringify({ hook_event_name: 'PostToolUse' }))).toBeUndefined();
+  });
+
   test('止めた印が無ければ、配りの口に聞かずに終わる（1 字も出さない）', async () => {
     const w = await seated();
     await notify(w.tpm, 't-x7k2', { text: '検査が止めていない時は、渡さない' });

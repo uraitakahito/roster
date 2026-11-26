@@ -19,6 +19,8 @@ export interface HookInput {
   transcript_path?: string
   /** 手伝い（subagent）の中で動いた hook にだけ在る。 */
   agent_id?: string
+  /** hook の event の名（`PostToolUse`・`PostToolUseFailure` など）。 */
+  hook_event_name?: string
   /** 道具の hook にだけ在る: 道具の呼び出しの id（`toolu_…`）。 */
   tool_use_id?: string
 }
@@ -146,11 +148,13 @@ async function handOver(ctx: Context, room: Mailroom, name: Recipient, when: Del
 }
 
 /** hook の出力（stdout の JSON）: 字を Claude Code の文脈に足す。 */
-const contextOutput = (event: 'PostToolUseFailure' | 'UserPromptSubmit', text: string): string => JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext: text } });
+const contextOutput = (event: 'PostToolUse' | 'PostToolUseFailure' | 'UserPromptSubmit', text: string): string => JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext: text } });
 
 /**
- * 検査が止めた後に渡す（PostToolUseFailure の hook。Bash の命令が 0 でない結果で終わるたびに動く）。出力の JSON を返す。出す物が無ければ undefined。
- * 送る前の検査が止めた印（mail.ts の GateMark）が無ければ、配りの口に聞かずに終わる（file を見るだけ）。
+ * 検査が止めた後に渡す（Bash を使い終えた後の hook。成功の後の PostToolUse と、失敗の後の PostToolUseFailure の両方に付く）。
+ * 両方に付ける訳: 結果を pipe で切る書き方（`roster ask … | tail -1`）では、検査が止めても、命令全体の結果は後ろの命令の 0 になり、
+ * Claude Code は「成功」と見て PostToolUse を動かす。出力の JSON を返す（event の名は、入力の hook_event_name に合わせる）。出す物が無ければ undefined。
+ * 送る前の検査が止めた印（mail.ts の GateMark）が無ければ、配りの口に聞かずに終わる（file を見るだけ。Bash のたびに動くので）。
  * 印があれば、自分宛てを取り置き、止まった訳（印の字）と本文を渡して、印を消す。取り置ける物が無ければ、印を残して何も出さない
  * （打ち直しの検査が、取り置き中かどうかで決める。T8）。
  */
@@ -166,7 +170,7 @@ export async function mailGate(ctx: Context, stdin: string): Promise<string | un
   if (batch.length === 0) return undefined;
   const text = await handOver(ctx, room, name, 'gate', head, batch, input);
   ctx.state.remove(gateFile(name));
-  return contextOutput('PostToolUseFailure', text);
+  return contextOutput(input.hook_event_name === 'PostToolUse' ? 'PostToolUse' : 'PostToolUseFailure', text);
 }
 
 /**

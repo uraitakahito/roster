@@ -318,7 +318,7 @@ export function judgeWrite(call: WriteCall, role: RoleName | undefined, roots: P
  * session の始まりには、前の session 宛てに届いたメッセージ（届け違い）を見る hook（roster returned check）も付ける。castlist の設定に依らない。
  * Auditor の席には、session の始まりに roster audit fresh を呼ぶ hook も付ける。
  * mail（設定の messages が nats の席）の時だけ、メッセージを NATS で渡す hook（roster mail …）を、今ある hook の後ろに足す:
- * 名乗る・外す（SessionStart・SessionEnd）、検査が止めた後に渡す（PostToolUseFailure の Bash）、人の入力の時に渡す（UserPromptSubmit）、
+ * 名乗る・外す（SessionStart・SessionEnd）、検査が止めた後に渡す（Bash を使い終えた後。PostToolUse と PostToolUseFailure の両方）、人の入力の時に渡す（UserPromptSubmit）、
  * 手を止めている間に待つ（Stop と SessionStart。背景で動き、exit 2 で session を起こす）。mail が false なら、今までと 1 字も変わらない。
  */
 export function guardSettings(tpmBin: string, role?: RoleName, mail = false): string {
@@ -334,6 +334,8 @@ export function guardSettings(tpmBin: string, role?: RoleName, mail = false): st
       SessionEnd: [{ hooks: [hook('castlist session-end'), ...(mail ? [hook('mail release')] : [])] }],
       ...(mail
         ? {
+            // Bash を使い終えた後（成功の後・失敗の後の両方）。結果を pipe で切る（… | tail -1）と、検査が止めても命令は「成功」になるため。
+            PostToolUse: [{ matcher: 'Bash', hooks: [hook('mail gate')] }],
             PostToolUseFailure: [{ matcher: 'Bash', hooks: [hook('mail gate')] }],
             Stop: [{ hooks: [waiting] }],
             UserPromptSubmit: [{ hooks: [hook('mail prompt')] }],

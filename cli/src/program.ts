@@ -226,7 +226,7 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
     .action(quiet('claim', () => mailClaim(createContext(), readStdin())));
   mail.command('release').description('（SessionEnd の hook が呼ぶ）名乗りを外し、待つ命令を止める')
     .action(quiet('release', () => mailRelease(createContext(), readStdin())));
-  mail.command('gate').description('（PostToolUseFailure の hook が呼ぶ）送る前の検査が止めた後に、自分宛ての本文を文脈に渡す（止めた印が無ければ、何もしない）')
+  mail.command('gate').description('（Bash の後の hook が呼ぶ。PostToolUse・PostToolUseFailure の両方）送る前の検査が止めた後に、自分宛ての本文を文脈に渡す（止めた印が無ければ、何もしない）')
     .action(quiet('gate', async () => {
       const out = await mailGate(createContext(), readStdin());
       if (out !== undefined) console.log(out);
