@@ -100,6 +100,12 @@ describe('repo の席と、TPM 担当の命令', () => {
     expect((await assign(w.tpm, 'web.app', { role: 'software-engineer', brief: BRIEF, wait: 0 }))[0]).toMatch(/^起こした: SWE web\.app/);
   });
 
+  test('roster assign は、動いている席と違う役割では振れない（依頼書が、役割を替えたつもりで今の席に届くのを止める）', async () => {
+    const w = await led(1);
+    await expect(assign(w.tpm, 'AI-36', { role: 'software-engineer', brief: BRIEF, wait: 0 })).rejects.toThrow(/^AI-36 には、Tech Lead 担当がもう動いています（file:1）。--role software-engineer では起こせません・依頼書も送っていません/);
+    expect(w.posted('file:1')).toEqual([]);
+  });
+
   test('roster close <課題の Key> は、残った repo の席も一緒に閉じる', async () => {
     const w = await led(2);
     await seatAdd(w.lead, 'pagetray', SEAT);

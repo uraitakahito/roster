@@ -220,6 +220,8 @@ async function assignSeat(ctx: Context, subjectKey: string, options: AssignOptio
   }
   if (existing !== undefined && alive) {
     if (options.brief === undefined && subject === undefined) throw new TpmError(`${key} の担当はもう動いています（${existing.address}）。新しい依頼書を --brief で渡してください`);
+    // 動いている席と違う役割で振っても、名簿は Key 1 つに 1 行なので、依頼書は今の席に届く。役割を替えるつもりの取り違えを止める。
+    if (existing.role !== options.role) throw new TpmError(`${key} には、${ROLES[existing.role].label} 担当がもう動いています（${existing.address}）。--role ${options.role} では起こせません・依頼書も送っていません。役割を替えるなら、roster dismiss ${key} --handover で今の担当を外し、【end】を受けて roster close ${key} で閉じてから振る。今の担当に依頼書を送るなら、--role ${existing.role}`);
     if (options.supersede === true && options.after === true) throw new TpmError('--supersede と --after は、どちらか 1 つにしてください');
     // 写しを置く前に、送る前の検査を通す（止まった回に写しだけが増えないように）。
     await assertRead(ctx, `${existing.key} の担当`, existing.title);

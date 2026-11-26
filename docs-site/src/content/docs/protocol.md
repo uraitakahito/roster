@@ -333,7 +333,7 @@ Tech Lead 担当（役割 `tech-lead`。題は `Lead <課題の Key>: <短い題
 | `roster seat close <名>` | Tech Lead 担当 | 自分の課題の repo の席を閉じ、名簿から消す。居場所の無い席か、片付けの終わり（【end】）を送った席だけ |
 
 - **断る物**（`roster seat add`）: Tech Lead 担当でない session・名の形（英小文字・数字・`-`）・名 `staff`（Staff Engineer 担当の席の Key とぶつかる）・もう居る席・上限が渡されていない時・上限を超える分。上限は、今の名簿に居る repo の席で数える（落ちた席を同じ名で起こし直すのは数えない）。
-- **TPM 担当の命令**: `roster assign` と `roster dismiss` は、repo の席を断る（名簿の行に親の課題があり、Staff Engineer 担当の席でない行。Key の形では見ないので、点を含む課題の Key は今までどおり振れる）。`roster close <課題の Key>` は、残った repo の席も一緒に閉じる。
+- **TPM 担当の命令**: `roster assign` と `roster dismiss` は、repo の席を断る（名簿の行に親の課題があり、Staff Engineer 担当の席でない行。Key の形では見ないので、点を含む課題の Key は今までどおり振れる）。`roster close <課題の Key>` は、残った repo の席も一緒に閉じる。`roster assign` は、動いている席と違う `--role` を受けると止まる（名簿は Key 1 つに 1 行なので、役割を替えたつもりの依頼書が今の席に届く。役割を替えるなら、`roster dismiss <Key> --handover` → 【end】 → `roster close <Key>` の後に振る）。
 - **名乗り**: repo の席の `roster hello` は、課題の Key（親の課題）・名簿の Key・Tech Lead 担当の席の題を返す。ページは、親の課題の folder に置かれる。
 - **課題管理の課題**: repo の席の片付けの終わり（【end】）は、課題を済みにしない（「課題は閉じない」と出す）。済みにするのは、Tech Lead 担当の【end】だけ。repo の席が書く記録の 1 行目は、席の名を添える（`【結果】Software Engineer（pagetray）: …`）。ほかの担当の記録の形は変わらない。
 - **Product Manager への確認**: repo の席の `roster ask pm` は断る（確認は、Tech Lead 担当がまとめて送る）。
