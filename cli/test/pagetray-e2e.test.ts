@@ -267,7 +267,7 @@ describe.skipIf(URL === '')('cli と pagetray のつなぎ（送った記録）'
     await hello(s.w.tpm, { model: 'claude-opus-5-5', effort: 'medium' });
     await assign(s.w.tpm, 'K-40', { role: 'software-engineer', title: '計画と実装', brief: BRIEF, wait: 0 });
     await hello(s.w.role('K-40', 'file:1'));
-    notify(s.tpm, 'K-40', { text: 'A で進める' });
+    await notify(s.tpm, 'K-40', { text: 'A で進める' });
     // 試験の時刻は止めてあるので、2 件の送った時刻は同じ。置いた順で並ぶように、1 件ずつ写しが済むのを待つ。
     await messageRecordsSettled();
     await askTpm(s.real(s.w.role('K-40', 'file:1')), { text: '長'.repeat(9000), waitingFor: '答え' });

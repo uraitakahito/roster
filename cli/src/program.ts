@@ -197,10 +197,10 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
     });
   const returned = program.command('returned').description('届け違い: 新しい session の始まりに、前の session 宛てに届いたメッセージを見つけて TPM 担当へ返す（check は hook が呼ぶ）・返った物の全文を読む（show）');
   returned.command('check').description('（SessionStart の hook が呼ぶ）この居場所に届いた・待っているメッセージの宛先の担当と自分を比べ、違う物を配らせず、扱わないよう示し、台帳に書いて【returned】で返す')
-    .action(() => {
+    .action(async () => {
       // hook なので、どんな誤りでも 0 で終わる。標準出力は、届け違いがあった時の JSON だけ（Claude Code が画面と文脈に出す）。
       try {
-        const out = checkStart(createContext());
+        const out = await checkStart(createContext());
         if (out !== undefined) console.log(JSON.stringify(out));
       }
       catch (e) {

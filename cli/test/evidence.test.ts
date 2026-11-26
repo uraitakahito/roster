@@ -24,7 +24,7 @@ async function started(config: Record<string, unknown> = {}, issue?: string): Pr
 describe('課題管理への書き込み（tracker.jsonl）', () => {
   test('コメントと「済み」を、打った担当と一緒に残す。読むだけの命令は残さない', async () => {
     const w = await started({ tracker: 'github' }, 'gh-12');
-    reportDone(w.se, { kind: 'plan', summary: '計画', remaining: 'なし', decisions: 'なし', points: [] });
+    await reportDone(w.se, { kind: 'plan', summary: '計画', remaining: 'なし', decisions: 'なし', points: [] });
     await answer(w.tpm, 't-x7k2', { text: '案 A' });
     w.se.tracker.close('gh-12');
     expect(w.tpm.state.lines<TrackerWrite>('tracker.jsonl').map(({ at, ...rest }) => ({ ...rest, at: typeof at }))).toEqual([
@@ -59,12 +59,12 @@ describe('入口の検査が止めた回（gate.jsonl）と、返事の先（log
   test('読んでいないメッセージ・merge していない PR・読めない PR を残す', async () => {
     const w = await started();
     w.wire.hold('file:1');
-    notify(w.tpm, 't-x7k2', { text: '待つこと' });
+    await notify(w.tpm, 't-x7k2', { text: '待つこと' });
     await expect(askTpm(w.se, { text: 'q', waitingFor: 'a' })).rejects.toThrow(/読んでいない/);
     w.prs.set(PR, 'OPEN');
-    expect(() => reportMerged(w.se, { pr: PR, note: 'n' })).toThrow(/merge されていません/);
+    await expect(reportMerged(w.se, { pr: PR, note: 'n' })).rejects.toThrow(/merge されていません/);
     w.prs.set(PR, undefined);
-    expect(() => reportMerged(w.se, { pr: PR, note: 'n' })).toThrow(/読めません/);
+    await expect(reportMerged(w.se, { pr: PR, note: 'n' })).rejects.toThrow(/読めません/);
     expect(w.tpm.state.lines<GateStop>('gate.jsonl')).toEqual([
       { at: AT, by: 't-x7k2', role: 'tpm', gate: 'unread', detail: 'm1-file-1' },
       { at: AT, by: 't-x7k2', role: 'tpm', gate: 'not-merged', detail: `${PR} OPEN` },
@@ -75,7 +75,7 @@ describe('入口の検査が止めた回（gate.jsonl）と、返事の先（log
   test('--reply-to の id を log.jsonl に残す', async () => {
     const w = await started();
     await askTpm(w.se, { text: 'q', waitingFor: 'a' });
-    notify(w.tpm, 't-x7k2', { text: 'a', replyTo: 'm1-file-tpm' });
+    await notify(w.tpm, 't-x7k2', { text: 'a', replyTo: 'm1-file-tpm' });
     expect(w.tpm.state.lines<{ heading: string, replyTo?: string }>('log.jsonl').map(l => [l.heading, l.replyTo])).toEqual([['ask-tpm', undefined], ['notify', 'm1-file-tpm']]);
   });
 });
@@ -84,7 +84,7 @@ describe('wait の移り（waits.jsonl）', () => {
   test('roster wait と、【done】の後の待ちを順に残す', async () => {
     const w = await started();
     wait(w.se, 'work', '実装');
-    reportDone(w.se, { kind: 'result', summary: 's', remaining: 'なし', decisions: 'なし', points: [] });
+    await reportDone(w.se, { kind: 'result', summary: 's', remaining: 'なし', decisions: 'なし', points: [] });
     wait(w.tpm, 'pm', '指示');
     expect(w.tpm.state.lines<WaitChange>('waits.jsonl').map(l => [l.by, l.address, l.text])).toEqual([
       ['t-x7k2', 'file:1', '作業中: 実装'],

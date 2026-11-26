@@ -131,7 +131,7 @@ describe('置き場が止まっていても、メッセージは送る', () => {
     expect(s.texts('file:tpm').at(-1)).toMatch(/^【ask-pm】/);
     expect(await answer(s.tpm, 't-x7k2', { text: '案 A' })).toEqual(['送った: 【answer】→ file:1（相手の手が空いた時に届く。送り直さない）']);
     await expect(pageReply(s.tpm, [url], { waiting: true })).rejects.toThrow(/置き場（.*）が応えません。返事の状態は書いていません。/);
-    reportDone(s.se, { kind: 'result', summary: '済んだ', remaining: 'なし', decisions: 'なし', points: [] });
+    await reportDone(s.se, { kind: 'result', summary: '済んだ', remaining: 'なし', decisions: 'なし', points: [] });
     expect(await dismiss(s.tpm, 't-x7k2', { handover: false })).toEqual(['送った: 【dismiss】→ file:1（相手の手が空いた時に届く。送り直さない）']);
   });
 });
@@ -158,7 +158,7 @@ describe('roster page reply と roster dismiss', () => {
     const s = await started();
     const url = await s.confirm('案を選ぶ');
     await askPm(s.se, { url, items: ['案の選択'], waitingFor: '案' });
-    reportDone(s.se, { kind: 'proposal', summary: '3 案', remaining: 'なし', decisions: '案の選択', points: [] });
+    await reportDone(s.se, { kind: 'proposal', summary: '3 案', remaining: 'なし', decisions: '案の選択', points: [] });
     expect(await dismiss(s.tpm, 't-x7k2', { handover: false })).toEqual([
       '送った: 【dismiss】→ file:1（相手の手が空いた時に届く。送り直さない）',
       '置き場に、t-x7k2 の返事待ちのページが 1 枚残っています:',

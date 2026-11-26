@@ -497,7 +497,7 @@ export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessE
 export async function finish(w: World, key: string, address: string): Promise<void> {
   const se = w.role(key, address);
   await hello(se);
-  reportDone(se, { kind: 'result', summary: '済んだ', remaining: 'なし', decisions: 'なし', points: [] });
+  await reportDone(se, { kind: 'result', summary: '済んだ', remaining: 'なし', decisions: 'なし', points: [] });
 }
 
 /** Staff Engineer 担当の skill が在る、偽の roster の root（roster assign --role staff-engineer は、skill が無ければ起こす前に止まる）。 */

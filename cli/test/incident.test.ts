@@ -47,49 +47,49 @@ describe('台帳に書く', () => {
   test('担当: roster report incident は台帳に書き、【incident】を送る。課題管理には書かない', async () => {
     const w = await started({ tracker: 'github' }, 'gh-12');
     const comments = w.calls.filter(c => c.args[1] === 'comment').length;
-    expect(reportIncident(w.se, { text: 'merge が断られたのに【merged】を送った', type: 'reliability', tags: [], severe: false })).toEqual([
+    expect(await reportIncident(w.se, { text: 'merge が断られたのに【merged】を送った', type: 'reliability', tags: [], severe: false })).toEqual([
       '台帳に書いた: #1 信頼性 t-x7k2 11-20 12:00「merge が断られたのに【merged】を送った」',
       '送った: 【incident】→ file:tpm（相手の手が空いた時に届く。送り直さない）',
     ]);
     expect(w.wire.inbox('file:tpm').at(-1)?.text).toBe('【incident】#1 信頼性: merge が断られたのに【merged】を送った');
-    reportIncident(w.se, { text: 'image が public だった', type: 'safety', tags: ['公開'], severe: true });
+    await reportIncident(w.se, { text: 'image が public だった', type: 'safety', tags: ['公開'], severe: true });
     expect(w.wire.inbox('file:tpm').at(-1)?.text).toBe('【incident】#2 [重い] 安全性: image が public だった（tag: 公開）');
     expect(readIncidents(w.tpm).map(i => [i.by, i.source])).toEqual([['t-x7k2', 'report'], ['t-x7k2', 'report']]);
     expect(w.calls.filter(c => c.args[1] === 'comment')).toHaveLength(comments);
     // 種類の誤りは、送る前の検査より先に見る（何も書かない）
-    expect(() => reportIncident(w.se, { text: 'x', type: '安全性', tags: [], severe: false })).toThrow(/safety と書いて/);
+    await expect(reportIncident(w.se, { text: 'x', type: '安全性', tags: [], severe: false })).rejects.toThrow(/safety と書いて/);
     expect(readIncidents(w.tpm)).toHaveLength(2);
   });
 
   test('【done】の「残り」と【end】の「残っている物」は、「なし」で始まらなければ台帳に入る', async () => {
     const w = await started();
-    const done = (remaining: string): string[] => reportDone(w.se, { kind: 'result', summary: 's', remaining, decisions: 'なし', points: [] });
-    done('なし');
-    done('なし（提案まで。repo は変えていない）');
+    const done = (remaining: string): Promise<string[]> => reportDone(w.se, { kind: 'result', summary: 's', remaining, decisions: 'なし', points: [] });
+    await done('なし');
+    await done('なし（提案まで。repo は変えていない）');
     expect(readIncidents(w.tpm)).toEqual([]);
-    expect(done('本体の checkout が main より古い')).toContain('台帳に入れた（TPM 担当が、振るか捨てるかを決める）: #1');
+    expect(await done('本体の checkout が main より古い')).toContain('台帳に入れた（TPM 担当が、振るか捨てるかを決める）: #1');
     await dismiss(w.tpm, 't-x7k2', { handover: false });
-    expect(reportEnd(w.se, { prs: [], removed: [], left: '古い image が 1 つ残っている' })).toContain('台帳の #1（【done】の残り）に寄せた（TPM 担当が、振るか捨てるかを決める）');
+    expect(await reportEnd(w.se, { prs: [], removed: [], left: '古い image が 1 つ残っている' })).toContain('台帳の #1（【done】の残り）に寄せた（TPM 担当が、振るか捨てるかを決める）');
     expect(readIncidents(w.tpm).map(i => [i.source, i.type, i.text])).toEqual([
       ['remaining', undefined, '【done】の残り: 本体の checkout が main より古い ／ 【end】の残り: 古い image が 1 つ残っている'],
     ]);
     // 【done】の「残り」が無ければ、【end】の「残っている物」は新しい件
     const v = await started();
-    reportDone(v.se, { kind: 'result', summary: 's', remaining: 'なし', decisions: 'なし', points: [] });
+    await reportDone(v.se, { kind: 'result', summary: 's', remaining: 'なし', decisions: 'なし', points: [] });
     await dismiss(v.tpm, 't-x7k2', { handover: false });
-    expect(reportEnd(v.se, { prs: [], removed: [], left: '古い image が 1 つ残っている' })).toContain('台帳に入れた（TPM 担当が、振るか捨てるかを決める）: #1');
+    expect(await reportEnd(v.se, { prs: [], removed: [], left: '古い image が 1 つ残っている' })).toContain('台帳に入れた（TPM 担当が、振るか捨てるかを決める）: #1');
     expect(readIncidents(v.tpm).map(i => i.text)).toEqual(['【end】の残り: 古い image が 1 つ残っている']);
   });
 
   test('【end】の「残っている物」は、同じ Key の未決の【done】の「残り」の、いちばん新しい件に寄せる', async () => {
     const w = await started();
-    const done = (remaining: string): string[] => reportDone(w.se, { kind: 'result', summary: 's', remaining, decisions: 'なし', points: [] });
+    const done = (remaining: string): Promise<string[]> => reportDone(w.se, { kind: 'result', summary: 's', remaining, decisions: 'なし', points: [] });
     add(w, 't-x7k2', 'merge の前に main が動いた');
-    done('古い image が 1 つ残っている');
-    done('proposal-3 は古い版');
+    await done('古い image が 1 つ残っている');
+    await done('proposal-3 は古い版');
     await dismiss(w.tpm, 't-x7k2', { handover: false });
     // 中身が【done】の「残り」と同じなら、足さない
-    expect(reportEnd(w.se, { prs: [], removed: [], left: 'proposal-3 は古い版' })).toContain('台帳の #3（【done】の残り）に寄せた（TPM 担当が、振るか捨てるかを決める）');
+    expect(await reportEnd(w.se, { prs: [], removed: [], left: 'proposal-3 は古い版' })).toContain('台帳の #3（【done】の残り）に寄せた（TPM 担当が、振るか捨てるかを決める）');
     expect(readIncidents(w.tpm).map(i => i.text)).toEqual([
       'merge の前に main が動いた',
       '【done】の残り: 古い image が 1 つ残っている',
@@ -99,13 +99,13 @@ describe('台帳に書く', () => {
 
   test('寄せる先は未決の件だけ。違う中身は後ろに足す。決めた件と、ほかの Key の件には寄せない', async () => {
     const w = await started();
-    const done = (remaining: string): string[] => reportDone(w.se, { kind: 'result', summary: 's', remaining, decisions: 'なし', points: [] });
-    done('古い image が 1 つ残っている');
+    const done = (remaining: string): Promise<string[]> => reportDone(w.se, { kind: 'result', summary: 's', remaining, decisions: 'なし', points: [] });
+    await done('古い image が 1 つ残っている');
     incidentDrop(w.tpm, ['1'], { why: '次の release で消える' });
-    done('proposal-3 は古い版');
+    await done('proposal-3 は古い版');
     addIncident(w.tpm, { key: 't-other', source: 'remaining', text: '【done】の残り: ほかの課題の残り' });
     await dismiss(w.tpm, 't-x7k2', { handover: false });
-    expect(reportEnd(w.se, { prs: [], removed: [], left: 'proposal-3 は古い版。置いたままのページ: brief-2' })).toContain('台帳の #2（【done】の残り）に寄せた（TPM 担当が、振るか捨てるかを決める）');
+    expect(await reportEnd(w.se, { prs: [], removed: [], left: 'proposal-3 は古い版。置いたままのページ: brief-2' })).toContain('台帳の #2（【done】の残り）に寄せた（TPM 担当が、振るか捨てるかを決める）');
     expect(readIncidents(w.tpm).map(i => [i.n, i.status, i.text])).toEqual([
       [1, 'dropped', '【done】の残り: 古い image が 1 つ残っている'],
       [2, 'open', '【done】の残り: proposal-3 は古い版 ／ 【end】の残り: proposal-3 は古い版。置いたままのページ: brief-2'],
@@ -203,7 +203,7 @@ describe('台帳を見直す・扱いを決める', () => {
 
   test('出来事（種類のある件）を「調べない」「済み」にできるのは Auditor だけ。「残り」と「PM の手」は TPM 担当も決められる', async () => {
     const w = await ledger();
-    reportDone(w.se, { kind: 'result', summary: 's', remaining: '古い image が残っている', decisions: 'なし', points: [] });
+    await reportDone(w.se, { kind: 'result', summary: 's', remaining: '古い image が残っている', decisions: 'なし', points: [] });
     expect(() => incidentDrop(w.tpm, ['1'], { why: '1 度きり' })).toThrow('出来事（種類のある件）を「調べない」にできるのは Auditor だけです: #1。どれも書き替えていません');
     expect(() => incidentClose(w.tpm, ['2', '3'], { pr: 'https://github.com/o/r/pull/9' })).toThrow('を「済み」にできるのは Auditor だけです: #2・#3');
     // 出来事が 1 つでも混じっていれば、「残り」も書き替えない。
@@ -290,7 +290,7 @@ describe('追いかけの一覧（roster incident follow）', () => {
     add(w, 't-3m36', '行き違い 2', { tags: ['行き違い'] });
     wait(w.tpm, 'pm', 'Jira の画面', { hand: true });
     w.se.now = w.tpm.now;
-    reportDone(w.se, { kind: 'result', summary: 's', remaining: '本体の checkout が main より古い', decisions: 'なし', points: [] });
+    await reportDone(w.se, { kind: 'result', summary: 's', remaining: '本体の checkout が main より古い', decisions: 'なし', points: [] });
     at(w, '2026-11-21T00:00:00.000Z');
     // 振り先の 1 つは名簿に居ない担当、もう 1 つは動いていて【done】を返した担当。
     incidentAssign(w.tpm, ['1'], { to: 't-k4wd' });

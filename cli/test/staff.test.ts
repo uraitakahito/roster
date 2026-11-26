@@ -153,10 +153,10 @@ describe('Staff が打たない命令', () => {
     const w = await reviewed({ tracker: 'jira' }, 'AI-8');
     const before = w.calls.length;
     const no = /Staff Engineer 担当は roster .+ を打ちません。レビューの結果は roster report review で返してください/;
-    expect(() => reportDone(w.staff, { kind: 'result', summary: 'x', remaining: 'なし', decisions: 'なし', points: [] })).toThrow(no);
-    expect(() => reportEnd(w.staff, { prs: [], removed: [], left: 'なし' })).toThrow(no);
-    expect(() => reportMerged(w.staff, { pr: PR, note: 'x' })).toThrow(no);
-    expect(() => reportDocFix(w.staff, { pr: PR, note: 'x' })).toThrow(no);
+    await expect(reportDone(w.staff, { kind: 'result', summary: 'x', remaining: 'なし', decisions: 'なし', points: [] })).rejects.toThrow(no);
+    await expect(reportEnd(w.staff, { prs: [], removed: [], left: 'なし' })).rejects.toThrow(no);
+    await expect(reportMerged(w.staff, { pr: PR, note: 'x' })).rejects.toThrow(no);
+    await expect(reportDocFix(w.staff, { pr: PR, note: 'x' })).rejects.toThrow(no);
     await expect(askPm(w.staff, { url: 'http://127.0.0.1:8801/p/AI-8/confirm-1.html', items: ['x'], waitingFor: 'x' })).rejects.toThrow(no);
     // 課題管理（acli）には何も打っていない
     expect(w.calls.slice(before).filter(c => c.cmd === 'acli')).toEqual([]);
@@ -165,9 +165,9 @@ describe('Staff が打たない命令', () => {
   test('【ask-tpm】と【incident】は送れる。TPM 担当は名簿の Key で答える', async () => {
     const w = await reviewed();
     expect((await askTpm(w.staff, { text: '見る物が読めない', waitingFor: '見る物' }))[0]).toBe('送った: 【ask-tpm】→ file:tpm（相手の手が空いた時に届く。送り直さない）');
-    expect(reportIncident(w.staff, { text: '依頼書の URL が 404', type: 'reliability', tags: [], severe: false }).at(-1)).toBe('送った: 【incident】→ file:tpm（相手の手が空いた時に届く。送り直さない）');
+    expect((await reportIncident(w.staff, { text: '依頼書の URL が 404', type: 'reliability', tags: [], severe: false })).at(-1)).toBe('送った: 【incident】→ file:tpm（相手の手が空いた時に届く。送り直さない）');
     w.wire.inbox('file:tpm');
-    expect(notify(w.tpm, 'AI-8.staff', { text: 'URL を直した' })).toEqual(['送った: 【notify】→ file:2（相手の手が空いた時に届く。送り直さない）']);
+    expect(await notify(w.tpm, 'AI-8.staff', { text: 'URL を直した' })).toEqual(['送った: 【notify】→ file:2（相手の手が空いた時に届く。送り直さない）']);
   });
 
   test('Staff の席に【dismiss】は送れない（roster close で閉じる）', async () => {

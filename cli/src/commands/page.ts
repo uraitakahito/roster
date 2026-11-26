@@ -66,7 +66,7 @@ export const pageFolder = (ctx: Context, key: string): string => join(pagesDir(c
 export async function pagePut(ctx: Context, file: string, options: { kind: string, key?: string }): Promise<string[]> {
   if (!(PAGE_KINDS as readonly string[]).includes(options.kind)) throw new TpmError(`--kind は ${PAGE_KINDS.join('・')} のどれかにしてください`);
   if (!existsSync(file) || !statSync(file).isFile()) throw new TpmError(`file がありません: ${file}`);
-  if (READ_FIRST.includes(options.kind as PageKind)) assertReadBeforePut(ctx, options.key);
+  if (READ_FIRST.includes(options.kind as PageKind)) await assertReadBeforePut(ctx, options.key);
   const { path, url } = await putPage(ctx, { file }, options.kind as PageKind, options.key);
   return [`置いた: ${path}`, `URL: ${url}`];
 }
@@ -75,13 +75,13 @@ export async function pagePut(ctx: Context, file: string, options: { kind: strin
  * 置く前の検査。送る命令の検査（assertRead）と同じく、まだ見せていない未読があれば出して 1 度止まり、打ち直せば置く。
  * 担当は、自分宛ての物（TPM 担当と、レビューの相手から）を見る。TPM 担当は、--key の担当から来た物だけを見る（名簿に無い Key なら見ない）。
  */
-function assertReadBeforePut(ctx: Context, keyOption?: string): void {
+async function assertReadBeforePut(ctx: Context, keyOption?: string): Promise<void> {
   if (envOf(ctx.env, 'KEY')) {
-    assertRead(ctx, '相手', undefined, 'put');
+    await assertRead(ctx, '相手', undefined, 'put');
     return;
   }
   const role = keyOption === undefined ? undefined : readRole(ctx, keyOption);
-  if (role !== undefined) assertRead(ctx, `${role.key} の担当`, role.title, 'put');
+  if (role !== undefined) await assertRead(ctx, `${role.key} の担当`, role.title, 'put');
 }
 
 /** file の中身か字をページとして置き、控えの path と URL を返す（pagePut と、roster assign の課題の写し）。 */

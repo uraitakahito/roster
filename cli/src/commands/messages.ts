@@ -86,7 +86,9 @@ const REPEAT_SECONDS = 30;
  * 止まった命令の打ち直しを `;` や `||` で 1 行に続けて書くと、止まらなかった時にも 2 度目が動く（課題の記録も 2 件になる）。
  * 課題に記録を書く命令は、記録の前にもこれを呼ぶ。
  */
-function assertNotRepeat(ctx: Context, id: HeadingId, from: string, to: string, body: string, replyTo?: string): void {
+// 今は待つ物が無い。形だけ非同期にしておく（呼ぶ側を替えずに、Promise を返す配りの口（mailroom）を待てるように）。
+// eslint-disable-next-line @typescript-eslint/require-await
+async function assertNotRepeat(ctx: Context, id: HeadingId, from: string, to: string, body: string, replyTo?: string): Promise<void> {
   const text = message(id, body);
   const since = ctx.now().getTime() - REPEAT_SECONDS * 1000;
   const same = ctx.state.lines<Sent>('log.jsonl').findLast(l => l.from === from && l.to === to && l.text === text && l.replyTo === replyTo);
@@ -96,14 +98,14 @@ function assertNotRepeat(ctx: Context, id: HeadingId, from: string, to: string, 
 }
 
 /** 担当が TPM 担当へ送る物の 2 度送りを見る（課題に記録を書く前に呼ぶ）。 */
-const notRepeatToTpm = (ctx: Context, self: RoleRecord, id: HeadingId, body: string): void => assertNotRepeat(ctx, id, self.title, requireTpm(ctx).address, body);
+const notRepeatToTpm = async (ctx: Context, self: RoleRecord, id: HeadingId, body: string): Promise<void> => assertNotRepeat(ctx, id, self.title, requireTpm(ctx).address, body);
 
 /**
  * メッセージを送り、送った記録を log.jsonl に足す。recipient は届く担当（返事の形なら元の行の送り手に替える）、extra は記録の行に足す欄。
  * 足した行は、置き場にも写す（message-record.ts。待たない。写せなくても、送った事と log.jsonl は変わらない）。
  */
-function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: string, body: string, recipient: Party, replyTo?: string, extra: Pick<Sent, 'settle' | 'peer' | 'briefs'> = {}): string {
-  assertNotRepeat(ctx, id, from, to, body, replyTo);
+async function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: string, body: string, recipient: Party, replyTo?: string, extra: Pick<Sent, 'settle' | 'peer' | 'briefs'> = {}): Promise<string> {
+  await assertNotRepeat(ctx, id, from, to, body, replyTo);
   const text = message(id, body);
   const receiving = replyTo === undefined ? recipient : ctx.state.lines<Sent>('log.jsonl').findLast(l => l.id === replyTo)?.sender;
   const d = ctx.messages.send(to, from, text, replyTo);
@@ -126,7 +128,7 @@ function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: str
 }
 
 /** 担当から TPM 担当へ。 */
-function toTpm(ctx: Context, self: RoleRecord, id: HeadingId, body: string, replyTo?: string, extra: Pick<Sent, 'briefs'> = {}): string {
+async function toTpm(ctx: Context, self: RoleRecord, id: HeadingId, body: string, replyTo?: string, extra: Pick<Sent, 'briefs'> = {}): Promise<string> {
   return deliver(ctx, id, self.key, self.title, requireTpm(ctx).address, body, { key: TPM_PARTY }, replyTo, extra);
 }
 
@@ -134,7 +136,7 @@ function toTpm(ctx: Context, self: RoleRecord, id: HeadingId, body: string, repl
  * 届け違いのメッセージを、担当から TPM 担当へ【returned】で返す（roster returned check が呼ぶ。送る前の検査は通さない: hook の中なので止まれない）。
  * TPM 担当の居場所が無ければ送らずに止まる。
  */
-export function returnToTpm(ctx: Context, self: RoleRecord, body: string): string {
+export async function returnToTpm(ctx: Context, self: RoleRecord, body: string): Promise<string> {
   if (tpmSeat(ctx) === undefined) throw new TpmError('TPM 担当の居場所がありません');
   return toTpm(ctx, self, 'returned', body);
 }
@@ -149,7 +151,7 @@ function seatOf(ctx: Context, role: RoleRecord): string {
 }
 
 /** TPM 担当から担当へ。居場所が無ければ止まる。 */
-function toRole(ctx: Context, role: RoleRecord, id: HeadingId, body: string, replyTo?: string, extra: Pick<Sent, 'settle'> = {}): string {
+async function toRole(ctx: Context, role: RoleRecord, id: HeadingId, body: string, replyTo?: string, extra: Pick<Sent, 'settle'> = {}): Promise<string> {
   return deliver(ctx, id, role.key, TPM_TITLE, seatOf(ctx, role), body, partyOf(role), replyTo, extra);
 }
 
@@ -163,12 +165,12 @@ function peerSeat(ctx: Context, peer: RoleRecord): string {
 }
 
 /** 担当から担当へ、じかに（レビューの頼みと判定だけ）。送り手の名は名簿の題。相手の居場所が無ければ止まる。 */
-export function toPeer(ctx: Context, self: RoleRecord, peer: RoleRecord, id: HeadingId, body: string): string {
+export async function toPeer(ctx: Context, self: RoleRecord, peer: RoleRecord, id: HeadingId, body: string): Promise<string> {
   return deliver(ctx, id, self.key, self.title, peerSeat(ctx, peer), body, partyOf(peer), undefined, { peer: true });
 }
 
 /** 担当が担当へじかに送る物の 2 度送りを見る（課題に記録を書く前に呼ぶ。相手の宛先で数える）。 */
-export const notRepeatToPeer = (ctx: Context, self: RoleRecord, peer: RoleRecord, id: HeadingId, body: string): void => assertNotRepeat(ctx, id, self.title, peerSeat(ctx, peer), body);
+export const notRepeatToPeer = async (ctx: Context, self: RoleRecord, peer: RoleRecord, id: HeadingId, body: string): Promise<void> => assertNotRepeat(ctx, id, self.title, peerSeat(ctx, peer), body);
 
 /** 課題に記録を書く。課題が無い・課題管理を使わない project なら書かない。 */
 export function record(ctx: Context, role: RoleRecord, note: Note): string[] {
@@ -209,7 +211,9 @@ const READ_STOP = {
  * 送り手は、担当なら「Key が自分で、TPM 担当の名でない行」、TPM 担当なら「TPM 担当の名の行」で見る（宛先では見ない。返事の形（--reply-to）は、
  * 記録の宛先と本当の受け手がずれることがある。題でも見ない。居場所の題は替わることがある）。
  */
-export function assertRead(ctx: Context, who: string, from?: string, action: keyof typeof READ_STOP = 'send'): void {
+// 今は待つ物が無い。形だけ非同期にしておく（呼ぶ側を替えずに、Promise を返す配りの口（mailroom）を待てるように）。
+// eslint-disable-next-line @typescript-eslint/require-await
+export async function assertRead(ctx: Context, who: string, from?: string, action: keyof typeof READ_STOP = 'send'): Promise<void> {
   const incoming = ctx.messages.pending().filter(m => from === undefined || m.from === from);
   if (incoming.length === 0) return;
   const self = ctx.seats.whoami();
@@ -232,9 +236,9 @@ export function assertRead(ctx: Context, who: string, from?: string, action: key
 }
 
 /** メッセージを送る担当の、自分の名簿の行。送る前の検査（assertRead）を通す。 */
-export function sender(ctx: Context): RoleRecord {
+export async function sender(ctx: Context): Promise<RoleRecord> {
   const self = requireSelf(ctx);
-  assertRead(ctx, '相手');
+  await assertRead(ctx, '相手');
   return self;
 }
 
@@ -252,8 +256,8 @@ export function notAuditor(self: RoleRecord, command: string): void {
 }
 
 /** Auditor だけが打つ命令の、自分の名簿の行。送る前の検査（assertRead）を通す。 */
-function auditor(ctx: Context, command: string): RoleRecord {
-  const self = sender(ctx);
+async function auditor(ctx: Context, command: string): Promise<RoleRecord> {
+  const self = await sender(ctx);
   if (self.role !== 'auditor') throw new TpmError(`${command} は Auditor（Audit の席）が打ちます`);
   return self;
 }
@@ -268,9 +272,9 @@ function tpmSeat(ctx: Context): string | undefined {
 }
 
 /** TPM 担当がメッセージを送る先の、名簿の行。送る前の検査（assertRead）を通す。 */
-function receiver(ctx: Context, key: string): RoleRecord {
+async function receiver(ctx: Context, key: string): Promise<RoleRecord> {
   const role = requireRole(ctx, key);
-  assertRead(ctx, `${role.key} の担当`, role.title);
+  await assertRead(ctx, `${role.key} の担当`, role.title);
   return role;
 }
 
@@ -492,13 +496,13 @@ export interface IncidentOptions {
 }
 
 /** 担当が、気づいた出来事（起きた事実）を台帳に書き、TPM 担当に知らせる（【incident】）。課題管理には書かない。 */
-export function reportIncident(ctx: Context, options: IncidentOptions): string[] {
+export async function reportIncident(ctx: Context, options: IncidentOptions): Promise<string[]> {
   const type = incidentType(options.type);
-  const self = sender(ctx);
+  const self = await sender(ctx);
   const incident = addIncident(ctx, { key: self.key, source: 'report', text: options.text, type, tags: options.tags, severe: options.severe });
   const tags = incident.tags.length === 0 ? '' : `（tag: ${incident.tags.join('・')}）`;
   const body = `#${incident.n}${incident.severe ? ' [重い]' : ''} ${INCIDENT_TYPES[type]}: ${options.text}${tags}`;
-  return [`台帳に書いた: ${incidentLine(incident)}`, ...tagLines(ctx, incident), toTpm(ctx, self, 'incident', body)];
+  return [`台帳に書いた: ${incidentLine(incident)}`, ...tagLines(ctx, incident), await toTpm(ctx, self, 'incident', body)];
 }
 
 /** 状態 wait の字を出し、移りを waits.jsonl に残す。自分の宛先を返す。 */
@@ -511,15 +515,15 @@ export function showWait(ctx: Context, text: string): string {
 
 /** TPM 担当に決めてほしいことを送り（【ask-tpm】）、状態を回答待ちにする。 */
 export async function askTpm(ctx: Context, options: { text: string, waitingFor: string, replyTo?: string, review?: number }): Promise<string[]> {
-  const self = sender(ctx);
-  if (options.review === undefined) return [toTpm(ctx, self, 'ask-tpm', options.text, options.replyTo), ...wait(ctx, 'tpm', options.waitingFor)];
+  const self = await sender(ctx);
+  if (options.review === undefined) return [await toTpm(ctx, self, 'ask-tpm', options.text, options.replyTo), ...wait(ctx, 'tpm', options.waitingFor)];
   // レビューの判定を受けずに上げる: TPM 担当は判定を受け取っていないので、レビューのページの URL を本文に足し、上げたことを頼みの記録に残す。
   const review = readReviews(ctx).find(r => r.n === options.review);
   if (review === undefined || review.key !== self.key) throw new TpmError(`--review は、自分の課題（${self.key}）のレビューの頼みの番号にしてください（roster review list --key ${self.key} で見る）`);
   if (review.verdict === undefined || review.page === undefined) throw new TpmError(`レビュー #${review.n} は、まだ判定が返っていません。送っていません`);
   // 上げるのは「直すべき」を受けない時だけ（ほかの判定は、受けるか・直すかを課題の担当が決めて進む）。
   if (review.verdict !== 'reject') throw new TpmError(`レビュー #${review.n} の判定は「${VERDICTS[review.verdict]}」です。--review で上げるのは「${VERDICTS.reject}」を受けない時だけです（ほかの判定は、指摘ごとに自分で決めて進む）。送っていません`);
-  const sent = toTpm(ctx, self, 'ask-tpm', `レビュー #${review.n}（判定: ${VERDICTS[review.verdict]}。${review.page}）を受けない: ${options.text}`, options.replyTo);
+  const sent = await toTpm(ctx, self, 'ask-tpm', `レビュー #${review.n}（判定: ${VERDICTS[review.verdict]}。${review.page}）を受けない: ${options.text}`, options.replyTo);
   // 2 度目に上げても、最初に上げた時刻を残す。
   if (review.escalatedAt === undefined) patchReview(ctx, review.n, { escalatedAt: ctx.now().toISOString() });
   // 置き場のレビューのページを「上げた」にする（TPM 担当が決めたら roster page reply --answered --on tpm で外す）。
@@ -557,7 +561,7 @@ async function assertSupersede(ctx: Context, self: RoleRecord, url: string, supe
  * supersede は、この確認で置き換える古い確認。送った後、その返事待ちの印を外す（答える要が無くなったため）。
  */
 export async function askPm(ctx: Context, options: { url: string, items: string[], waitingFor: string, supersede?: string[] }): Promise<string[]> {
-  const self = sender(ctx);
+  const self = await sender(ctx);
   notAuditor(self, 'roster ask pm');
   if (options.items.length === 0) throw new TpmError('--item で、決めてほしい項目の題を 1 つ以上書いてください');
   const supersede = options.supersede ?? [];
@@ -565,7 +569,7 @@ export async function askPm(ctx: Context, options: { url: string, items: string[
     `${options.url} 項目: ${options.items.map((item, i) => `(${i + 1}) ${item}`).join(' ')}`,
     ...(supersede.length === 0 ? [] : [`置き換える確認: ${supersede.join(' ')}`]),
   ].join(' ');
-  notRepeatToTpm(ctx, self, 'ask-pm', body);
+  await notRepeatToTpm(ctx, self, 'ask-pm', body);
   await assertSupersede(ctx, self, options.url, supersede);
   const recorded = record(ctx, self, {
     kind: '確認',
@@ -574,7 +578,7 @@ export async function askPm(ctx: Context, options: { url: string, items: string[
     links: [{ label: '確認', url: options.url }, ...supersede.map(url => ({ label: '置き換えた確認', url }))],
     points: options.items,
   });
-  const sent = toTpm(ctx, self, 'ask-pm', body);
+  const sent = await toTpm(ctx, self, 'ask-pm', body);
   // 置き場の確認のページを返事待ちにする（Product Manager が、一覧の UI の印と件数で気づく）。書けなくても、送った事は変わらない。
   // 置き換えた古い確認は、返事待ちから外す（残すと、答える要の無いページが「返事待ち」に出続ける）。
   const marks = await replyLine(ctx, options.url, 'waiting');
@@ -583,28 +587,28 @@ export async function askPm(ctx: Context, options: { url: string, items: string[
 }
 
 /** 共有の環境で DevOps Engineer 担当の手が要ることを、TPM 担当に送る（【ask-devops】）。 */
-export function askDevops(ctx: Context, options: { what: string, why: string, urgent: boolean }): string[] {
-  const self = sender(ctx);
-  return [toTpm(ctx, self, 'ask-devops', `何を: ${options.what}／なぜ: ${options.why}／急ぎ: ${options.urgent ? 'はい' : 'いいえ'}`)];
+export async function askDevops(ctx: Context, options: { what: string, why: string, urgent: boolean }): Promise<string[]> {
+  const self = await sender(ctx);
+  return [await toTpm(ctx, self, 'ask-devops', `何を: ${options.what}／なぜ: ${options.why}／急ぎ: ${options.urgent ? 'はい' : 'いいえ'}`)];
 }
 
 /** 自分の PR を 1 本 merge したと知らせる（【merged】）。 */
-export function reportMerged(ctx: Context, options: { pr: string, note: string, unchecked?: string }): string[] {
-  const self = sender(ctx);
+export async function reportMerged(ctx: Context, options: { pr: string, note: string, unchecked?: string }): Promise<string[]> {
+  const self = await sender(ctx);
   notAuditor(self, 'roster report merged');
   const checked = assertMerged(ctx, [options.pr], options.unchecked);
-  return [toTpm(ctx, self, 'merged', `${options.pr} ${options.note}${checked}`)];
+  return [await toTpm(ctx, self, 'merged', `${options.pr} ${options.note}${checked}`)];
 }
 
 /** 文書やコメントの食い違いを直した PR を merge したと知らせ、課題があれば記録を書く（【doc-fix】）。 */
-export function reportDocFix(ctx: Context, options: { pr: string, note: string, unchecked?: string }): string[] {
-  const self = sender(ctx);
+export async function reportDocFix(ctx: Context, options: { pr: string, note: string, unchecked?: string }): Promise<string[]> {
+  const self = await sender(ctx);
   notAuditor(self, 'roster report doc-fix');
   const checked = assertMerged(ctx, [options.pr], options.unchecked);
   const body = `${options.pr}（merge 済み）${options.note}${checked}`;
-  notRepeatToTpm(ctx, self, 'doc-fix', body);
+  await notRepeatToTpm(ctx, self, 'doc-fix', body);
   const recorded = record(ctx, self, { kind: '文書の修正', role: ROLES[self.role].label, summary: options.note, links: [{ label: 'PR（merge 済み）', url: options.pr }], points: [] });
-  return [...recorded, toTpm(ctx, self, 'doc-fix', body)];
+  return [...recorded, await toTpm(ctx, self, 'doc-fix', body)];
 }
 
 /** `roster report done --kind` の値（`roster page put --kind` と同じ語）と、課題に書く記録の種類。 */
@@ -677,8 +681,8 @@ const briefLabel = (open: OpenBrief[], url: string): string => {
 };
 
 /** 依頼書 1 つの成果を出した。TPM 担当は「残り」と「決めてほしいこと」で【dismiss】を送るかを決めるので、どちらも必ず書く。 */
-export function reportDone(ctx: Context, options: DoneOptions): string[] {
-  const self = sender(ctx);
+export async function reportDone(ctx: Context, options: DoneOptions): Promise<string[]> {
+  const self = await sender(ctx);
   notAuditor(self, 'roster report done');
   const remaining = required(options.remaining, '--remaining（残り）');
   const decisions = required(options.decisions, '--decisions（決めてほしいこと）');
@@ -688,7 +692,7 @@ export function reportDone(ctx: Context, options: DoneOptions): string[] {
   const open = naming ? ownOpenBriefs(ctx, self) : quietly(() => ownOpenBriefs(ctx, self)) ?? [];
   const named = naming ? namedBriefs(ctx, open, options.briefs ?? []) : undefined;
   const body = `${options.url === undefined ? '' : `${options.url} `}要点: ${options.summary}／残り: ${remaining}／決めてほしいこと: ${decisions}${named === undefined ? '' : `／済ませた依頼書: ${named.map(u => briefLabel(open, u)).join('・')}`}`;
-  notRepeatToTpm(ctx, self, 'done', body);
+  await notRepeatToTpm(ctx, self, 'done', body);
   const recorded = record(ctx, self, {
     kind,
     role: ROLES[self.role].label,
@@ -696,7 +700,7 @@ export function reportDone(ctx: Context, options: DoneOptions): string[] {
     links: options.url === undefined ? [] : [{ label: kind, url: options.url }],
     points: options.points,
   });
-  const sent = toTpm(ctx, self, 'done', body, undefined, named === undefined ? {} : { briefs: named });
+  const sent = await toTpm(ctx, self, 'done', body, undefined, named === undefined ? {} : { briefs: named });
   showWait(ctx, WAIT_NEXT_BRIEF);
   // 名指さず、見ていて済んでいない依頼書がいくつもあれば、済んだのは古い 1 つだけと知らせる（止めない。1 通で済ませた時の名指し忘れ）。
   const seenOpen = named === undefined ? open.filter(b => b.seen !== undefined) : [];
@@ -716,8 +720,8 @@ export interface EndOptions {
 }
 
 /** 【dismiss】を受けて片付けた。課題に結果を書き、課題を閉じる（担当の交代なら閉じない）。 */
-export function reportEnd(ctx: Context, options: EndOptions): string[] {
-  const self = sender(ctx);
+export async function reportEnd(ctx: Context, options: EndOptions): Promise<string[]> {
+  const self = await sender(ctx);
   notAuditor(self, 'roster report end');
   if (self.dismissed === undefined && !ROLES[self.role].endsWithoutDismiss) {
     throw new TpmError('【dismiss】がまだ来ていません。【done】の後は次の【brief】か【dismiss】を待ち、自分から【end】を送らない');
@@ -725,7 +729,7 @@ export function reportEnd(ctx: Context, options: EndOptions): string[] {
   const left = required(options.left, '--left（残っている物）');
   const checked = assertMerged(ctx, options.prs, options.prs.length === 0 ? undefined : options.unchecked);
   const body = `成果: ${options.url ?? 'なし'}／merge した PR: ${options.prs.join(' ') || 'なし'}／消した worktree: ${options.removed.join(' ') || 'なし'}／残っている物: ${left}${checked}`;
-  notRepeatToTpm(ctx, self, 'end', body);
+  await notRepeatToTpm(ctx, self, 'end', body);
   const links: NoteLink[] = [
     ...(options.url === undefined ? [] : [{ label: '成果', url: options.url }]),
     ...options.prs.map(pr => ({ label: 'PR（merge 済み）', url: pr })),
@@ -740,15 +744,15 @@ export function reportEnd(ctx: Context, options: EndOptions): string[] {
       out.push(`課題を閉じた: ${self.issue}`);
     }
   }
-  out.push(toTpm(ctx, self, 'end', body), ...keepRemaining(ctx, self, 'end', left));
+  out.push(await toTpm(ctx, self, 'end', body), ...keepRemaining(ctx, self, 'end', left));
   showWait(ctx, WAIT_CLOSE);
   out.push(`状態: ${WAIT_CLOSE}（居場所は自分で閉じない）`);
   return out;
 }
 
 /** Dependabot の PR だけで使う見出し。recreated は、新しい番号の題に替える。 */
-export function reportDependabot(ctx: Context, id: 'merge-request' | 'not-yet' | 'recreated', options: { text: string, title?: string }): string[] {
-  const self = sender(ctx);
+export async function reportDependabot(ctx: Context, id: 'merge-request' | 'not-yet' | 'recreated', options: { text: string, title?: string }): Promise<string[]> {
+  const self = await sender(ctx);
   const out: string[] = [];
   if (id === 'recreated' && options.title !== undefined) {
     ctx.seats.setTitle(options.title);
@@ -756,7 +760,7 @@ export function reportDependabot(ctx: Context, id: 'merge-request' | 'not-yet' |
     writeRole(ctx, self);
     out.push(`題を替えた: ${options.title}`);
   }
-  out.push(toTpm(ctx, self, id, options.text));
+  out.push(await toTpm(ctx, self, id, options.text));
   if (id === 'merge-request') out.push(...wait(ctx, 'tpm', 'merge'));
   return out;
 }
@@ -777,13 +781,13 @@ export interface AuditOptions {
  * 記録を残し、TPM 担当に写しを送り（【audit】。TPM 担当は伝え直さない）、状態を回答待ち(PM) にする（その回の終わりに通知のバナーが出る）。
  * TPM 担当が起きていなくても報告はできる（写しは送らず、その事を出す）。
  */
-export function reportAudit(ctx: Context, options: AuditOptions): string[] {
-  const self = auditor(ctx, 'roster report audit');
+export async function reportAudit(ctx: Context, options: AuditOptions): Promise<string[]> {
+  const self = await auditor(ctx, 'roster report audit');
   if (!isPageUrl(ctx.env, options.url)) throw new TpmError(`--url は、roster page put --kind audit で置いた監査のページの URL にしてください: ${options.url}`);
   const decisions = options.items.length === 0 ? 'なし' : options.items.map((item, i) => `(${i + 1}) ${item}`).join(' ');
   const body = `${options.url} 要点: ${options.summary}／決めてほしいこと: ${decisions}（写し。Product Manager には Audit の席でじかに報告した。伝え直さなくてよい）`;
   const copied = tpmSeat(ctx) !== undefined;
-  const sent = copied ? toTpm(ctx, self, 'audit', body) : 'TPM 担当が起きていないので、写しは送っていない（報告は、この席とページで Product Manager に出す）';
+  const sent = copied ? await toTpm(ctx, self, 'audit', body) : 'TPM 担当が起きていないので、写しは送っていない（報告は、この席とページで Product Manager に出す）';
   appendAudit(ctx, { kind: 'report', url: options.url, summary: options.summary, items: options.items, copied });
   return [sent, ...wait(ctx, 'pm', '監査の報告'), 'この席に、要点と決めてほしいことを書いて、Product Manager の答えを待つ'];
 }
@@ -803,13 +807,13 @@ export interface DecidedOptions {
  * Auditor が、Product Manager の決定を TPM 担当に渡す（【decided】）。TPM 担当は「する」の勧告を課題にして振る。
  * TPM 担当が起きていなければ、送らず・記録せずに止まる（起きた後に打ち直す）。
  */
-export function reportDecided(ctx: Context, options: DecidedOptions): string[] {
-  const self = auditor(ctx, 'roster report decided');
+export async function reportDecided(ctx: Context, options: DecidedOptions): Promise<string[]> {
+  const self = await auditor(ctx, 'roster report decided');
   if (options.adopted.length + options.accepted.length + options.later.length === 0) throw new TpmError('--do・--accept・--later のどれかで、勧告の題を 1 つ以上書いてください');
   if (tpmSeat(ctx) === undefined) throw new TpmError('TPM 担当が起きていません。決定は送っていません・記録していません。Product Manager にそう伝え、TPM 担当が起きた後に、同じ命令を打ち直してください');
   const part = (label: string, titles: string[]): string[] => titles.length === 0 ? [] : [`${label}: ${titles.join('・')}`];
   const body = `${options.url} ${[...part('する', options.adopted), ...part('受け入れる', options.accepted), ...part('見送る', options.later)].join('／')}`;
-  const sent = toTpm(ctx, self, 'decided', body);
+  const sent = await toTpm(ctx, self, 'decided', body);
   appendAudit(ctx, { kind: 'decided', url: options.url, adopted: options.adopted, accepted: options.accepted, later: options.later });
   // Product Manager は今この席で答えたところなので、バナーは出さない（wait の記録は書かず、状態の字だけ替える）。
   const text = WAIT.pm('次の /audit');
@@ -820,10 +824,10 @@ export function reportDecided(ctx: Context, options: DecidedOptions): string[] {
 // ---- TPM 担当が打つ ----
 
 /** 動いている担当に、新しい依頼書を送る。 */
-export function brief(ctx: Context, role: RoleRecord, url: string, note?: string, settled?: { text: string, choice: SettleChoice }): string[] {
-  assertRead(ctx, `${role.key} の担当`, role.title);
+export async function brief(ctx: Context, role: RoleRecord, url: string, note?: string, settled?: { text: string, choice: SettleChoice }): Promise<string[]> {
+  await assertRead(ctx, `${role.key} の担当`, role.title);
   const body = [url, issueCopyLine(role), note, settled?.text].filter(v => v !== undefined).join(' ');
-  const sent = toRole(ctx, role, 'brief', body, undefined, { settle: settled?.choice ?? 'none' });
+  const sent = await toRole(ctx, role, 'brief', body, undefined, { settle: settled?.choice ?? 'none' });
   role.brief = url;
   delete role.dismissed;
   writeRole(ctx, role);
@@ -871,20 +875,20 @@ async function answeredPages(ctx: Context, key: string, options: AnswerOptions):
 /** Product Manager の答えを返す。課題があれば、返す前に「決定」の記録を書く。返した後、置き場の返事待ちのページを答えたにする。 */
 export async function answer(ctx: Context, key: string, options: AnswerOptions): Promise<string[]> {
   requireTpmSide(ctx, 'roster answer');
-  const role = receiver(ctx, key);
-  if (role.address !== undefined) assertNotRepeat(ctx, 'answer', TPM_TITLE, role.address, options.text, options.replyTo);
+  const role = await receiver(ctx, key);
+  if (role.address !== undefined) await assertNotRepeat(ctx, 'answer', TPM_TITLE, role.address, options.text, options.replyTo);
   const pages = await answeredPages(ctx, key, options);
   const recorded = record(ctx, role, { kind: '決定', role: 'TPM', summary: oneLine(options.text), links: [], points: [] });
-  const sent = toRole(ctx, role, 'answer', options.text, options.replyTo);
+  const sent = await toRole(ctx, role, 'answer', options.text, options.replyTo);
   const marks: string[] = [];
   for (const url of pages) marks.push(...await replyLine(ctx, url, 'answered'));
   return [...recorded, sent, ...marks];
 }
 
 /** 担当に、返事の要らないメッセージを送る（【notify】）。 */
-export function notify(ctx: Context, key: string, options: { text: string, replyTo?: string }): string[] {
+export async function notify(ctx: Context, key: string, options: { text: string, replyTo?: string }): Promise<string[]> {
   requireTpmSide(ctx, 'roster notify');
-  return [toRole(ctx, receiver(ctx, key), 'notify', options.text, options.replyTo)];
+  return [await toRole(ctx, await receiver(ctx, key), 'notify', options.text, options.replyTo)];
 }
 
 /** この課題に続きは無い、と知らせる。handover は担当の交代（課題は続くので、担当は課題を閉じない）。 */
@@ -893,12 +897,12 @@ export async function dismiss(ctx: Context, key: string, options: { handover: bo
   if (readRole(ctx, key)?.role === 'auditor') throw new TpmError('Auditor の席に【dismiss】は送れません（Auditor の席は、Product Manager が起こし、閉じる）');
   // Staff Engineer 担当は worktree も PR も持たないので、片付けのやりとり（【dismiss】と【end】）は要らない。
   if (readRole(ctx, key)?.role === 'staff-engineer') throw new TpmError(`Staff Engineer 担当の席に【dismiss】は送りません。roster close ${key} で閉じます（課題の席を roster close で閉じる時にも、一緒に閉じる）`);
-  const role = receiver(ctx, key);
+  const role = await receiver(ctx, key);
   const settled = assertSettled(ctx, role, 'dismiss', options.supersede === true ? 'supersede' : undefined);
   const body = [options.handover
     ? '担当の交代のため（課題は続くので、課題は閉じない）。worktree を片付けて【end】を返す。'
     : 'この課題に続きは無い。worktree と課題を片付けて【end】を返す。', settled].filter(v => v !== undefined).join('');
-  const sent = toRole(ctx, role, 'dismiss', body);
+  const sent = await toRole(ctx, role, 'dismiss', body);
   role.dismissed = options.handover ? 'handover' : 'done';
   writeRole(ctx, role);
   // 答えが要らなくなった確認が、置き場で返事待ちのまま残らないように知らせる（止めない）。

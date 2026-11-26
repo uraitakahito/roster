@@ -38,7 +38,7 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
     .action(async (options: { url: string, item: string[], waitingFor: string, supersede: string[] }) => print(await askPm(createContext(), { url: options.url, items: options.item, waitingFor: options.waitingFor, supersede: options.supersede })));
   ask.command('devops').description('【ask-devops】共有の環境で DevOps Engineer 担当の手が要る')
     .requiredOption('--what <何を>').requiredOption('--why <なぜ>').option('--urgent', '急ぎ', false)
-    .action((options: { what: string, why: string, urgent: boolean }) => print(askDevops(createContext(), options)));
+    .action(async (options: { what: string, why: string, urgent: boolean }) => print(await askDevops(createContext(), options)));
   ask.command('review').description('【ask-review】計画・提案のページか PR のレビューを頼む（Staff Engineer 担当の席へじかに届く。席が無ければ起こす。レビューは助言）')
     .requiredOption('--url <URL>', '見る物（置き場のページか PR の URL）')
     .option('--focus <見てほしい所>', '特に見てほしい所')
@@ -48,11 +48,11 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
   report.command('merged').description('【merged】自分の PR を 1 本 merge した（PR が merge 済みでなければ送らない）')
     .requiredOption('--pr <URL>').requiredOption('--note <一言>')
     .option('--unchecked <訳>', 'PR が merge 済みかを gh で確かめずに送る（gh で読めない PR。確かめた方法を書く）')
-    .action((options: { pr: string, note: string, unchecked?: string }) => print(reportMerged(createContext(), options)));
+    .action(async (options: { pr: string, note: string, unchecked?: string }) => print(await reportMerged(createContext(), options)));
   report.command('doc-fix').description('【doc-fix】文書の食い違いを直した PR を merge した')
     .requiredOption('--pr <URL>').requiredOption('--note <一言>')
     .option('--unchecked <訳>', 'PR が merge 済みかを gh で確かめずに送る（gh で読めない PR。確かめた方法を書く）')
-    .action((options: { pr: string, note: string, unchecked?: string }) => print(reportDocFix(createContext(), options)));
+    .action(async (options: { pr: string, note: string, unchecked?: string }) => print(await reportDocFix(createContext(), options)));
   report.command('done').description('【done】依頼書 1 つの成果を出した')
     .option('--url <URL>', '成果のページ（roster page put で置いた URL）')
     .option('--kind <種類>', `成果の種類（${Object.keys(DONE_KINDS).join('・')}。課題には ${Object.values(DONE_KINDS).join('・')} の記録を書く）`, 'result')
@@ -61,10 +61,10 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
     .option('--decisions <決めてほしいこと>', '【ask-pm】で送った項目の題（無ければ「なし」）')
     .option('--point <要点>', '課題の記録に書く要点（3 つまで・繰り返せる）', collect, [] as string[])
     .option('--briefs <依頼書>', '1 通で済ませた依頼書（brief-2,brief-3 のように名か URL を「,」で並べる。無ければ、見ていた依頼書のいちばん古い 1 つを済ませる）')
-    .action((options: { url?: string, kind: string, summary: string, remaining?: string, decisions?: string, point: string[], briefs?: string }) => {
+    .action(async (options: { url?: string, kind: string, summary: string, remaining?: string, decisions?: string, point: string[], briefs?: string }) => {
       const kind = doneKind(options.kind);
       const { briefs, ...rest } = options;
-      print(reportDone(createContext(), { ...rest, kind, points: options.point, ...(briefs === undefined ? {} : { briefs: briefs.split(',').map(b => b.trim()).filter(b => b !== '') }) }));
+      print(await reportDone(createContext(), { ...rest, kind, points: options.point, ...(briefs === undefined ? {} : { briefs: briefs.split(',').map(b => b.trim()).filter(b => b !== '') }) }));
     });
   report.command('end').description('【end】【dismiss】を受けて片付けた（課題を閉じる）')
     .option('--url <URL>', '成果のページ（roster page put で置いた URL）')
@@ -72,23 +72,23 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
     .option('--removed <worktree>', '消した worktree（繰り返せる）', collect, [] as string[])
     .option('--left <残っている物>', '残っている物（無ければ「なし」）')
     .option('--unchecked <訳>', 'PR が merge 済みかを gh で確かめずに送る（gh で読めない PR。確かめた方法を書く）')
-    .action((options: { url?: string, pr: string[], removed: string[], left?: string, unchecked?: string }) => print(reportEnd(createContext(), { ...options, prs: options.pr })));
+    .action(async (options: { url?: string, pr: string[], removed: string[], left?: string, unchecked?: string }) => print(await reportEnd(createContext(), { ...options, prs: options.pr })));
   report.command('incident <text>').description('【incident】思わぬ出来事（起きた事実）を台帳に書き、TPM 担当に知らせる')
     .requiredOption('--type <種類>', Object.keys(INCIDENT_TYPES).join('・'))
     .option('--tag <tag>', '同じ種の出来事を数える印（繰り返せる。権限で断られた命令は 権限）', collect, [] as string[])
     .option('--severe', 'すぐ止めないと害が広がる', false)
-    .action((text: string, options: { type: string, tag: string[], severe: boolean }) => print(reportIncident(createContext(), { ...options, text, tags: options.tag })));
+    .action(async (text: string, options: { type: string, tag: string[], severe: boolean }) => print(await reportIncident(createContext(), { ...options, text, tags: options.tag })));
   report.command('audit').description('【audit】（Auditor）監査のページを Product Manager へじかに報告した。記録を残し、TPM 担当に写しを送る')
     .requiredOption('--url <URL>', '監査のページ（roster page put --kind audit で置いた URL）')
     .requiredOption('--summary <要点>')
     .option('--item <題>', 'Product Manager に決めてほしい項目の題（繰り返せる）', collect, [] as string[])
-    .action((options: { url: string, summary: string, item: string[] }) => print(reportAudit(createContext(), { url: options.url, summary: options.summary, items: options.item })));
+    .action(async (options: { url: string, summary: string, item: string[] }) => print(await reportAudit(createContext(), { url: options.url, summary: options.summary, items: options.item })));
   report.command('decided').description('【decided】（Auditor）Product Manager の決定を TPM 担当に渡す')
     .requiredOption('--url <URL>', '監査のページ')
     .option('--do <勧告の題>', 'する（TPM 担当が課題にして振る。繰り返せる）', collect, [] as string[])
     .option('--accept <勧告の題>', '受け入れる（直さない。繰り返せる）', collect, [] as string[])
     .option('--later <勧告の題>', '見送る（今は決めない。繰り返せる）', collect, [] as string[])
-    .action((options: { url: string, do: string[], accept: string[], later: string[] }) => print(reportDecided(createContext(), { url: options.url, adopted: options.do, accepted: options.accept, later: options.later })));
+    .action(async (options: { url: string, do: string[], accept: string[], later: string[] }) => print(await reportDecided(createContext(), { url: options.url, adopted: options.do, accepted: options.accept, later: options.later })));
   report.command('review').description('【review】（Staff Engineer 担当）レビューのページと判定を、頼んだ課題の担当へじかに返す（課題に「レビュー」の記録も書く）')
     .requiredOption('--url <URL>', 'レビューのページ（roster page put --kind review で置いた URL）')
     .requiredOption('--verdict <判定>', Object.entries(VERDICTS).map(([id, label]) => `${id}（${label}）`).join('・'))
@@ -101,7 +101,7 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
   ] as const) {
     report.command(`${id} <text>`).description(description)
       .option('--title <題>', '（recreated）新しい番号の居場所の題')
-      .action((text: string, options: { title?: string }) => print(reportDependabot(createContext(), id, { text, ...options })));
+      .action(async (text: string, options: { title?: string }) => print(await reportDependabot(createContext(), id, { text, ...options })));
   }
 
   program.command('answer <key> <text>').description('TPM 担当が【answer】を返す（課題に「決定」の記録も書き、置き場の返事待ちのページを答えたにする）')
@@ -111,7 +111,7 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
     .action(async (key: string, text: string, options: { replyTo?: string, url: string[], all?: boolean }) => print(await answer(createContext(), key, { text, urls: options.url, ...(options.replyTo === undefined ? {} : { replyTo: options.replyTo }), ...(options.all ? { all: true } : {}) })));
   program.command('notify <key> <text>').description('TPM 担当が【notify】を送る（返事は要らない）')
     .option('--reply-to <id>', '返事の先のメッセージの id')
-    .action((key: string, text: string, options: { replyTo?: string }) => print(notify(createContext(), key, { text, ...options })));
+    .action(async (key: string, text: string, options: { replyTo?: string }) => print(await notify(createContext(), key, { text, ...options })));
   program.command('dismiss <key>').description('TPM 担当が【dismiss】を送る')
     .option('--handover', '担当の交代のため（担当は課題を閉じない）', false)
     .option('--supersede', '済んでいない依頼書・まだ見ていないメッセージを取り消して送る（本文に「取り消す: …」と載る）', false)
