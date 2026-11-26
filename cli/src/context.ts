@@ -116,7 +116,11 @@ export function createContext(env: NodeJS.ProcessEnv = process.env, cwd: string 
     sleep,
     now: () => new Date(),
     clients: { castlist: url => castlistClient(url), pagetray: url => pagetrayClient(url) },
-    mailroom: () => room ??= openMailroom(envOf(env, 'NATS_URL') || DEFAULT_NATS_URL, basename(state.dir)),
+    // 作るのに失敗した時（NATS の client を読めない）は、失敗を覚えたままにしない（次に呼ばれた時に、作り直す）。
+    mailroom: () => room ??= openMailroom(envOf(env, 'NATS_URL') || DEFAULT_NATS_URL, basename(state.dir)).catch((e: unknown) => {
+      room = undefined;
+      throw e;
+    }),
     procs: realProcs,
     print: lines => console.log(lines.join('\n')),
   };

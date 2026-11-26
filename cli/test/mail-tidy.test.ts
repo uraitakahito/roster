@@ -193,6 +193,23 @@ describe('roster inbox（設定が nats で、名乗っている session）', ()
     await expect(inboxNow(down(w.se))).rejects.toThrow(/応えません/);
   });
 
+  test('名乗っている session にも cmux で届いた物があれば、両方を出す（cmux の分は、今のとおり見せたと覚える）', async () => {
+    const w = await natsWorld();
+    w.wire.hold('file:1');
+    await notify(w.tpm, 't-x7k2', { text: 'cmux で待っている物' });
+    claim(w, w.se, 200);
+    expect(await inboxNow(w.se)).toEqual(['--- Technical Program Manager（id m1-file-1）', '【notify】cmux で待っている物']);
+    await notify(w.tpm, 't-x7k2', { text: 'NATS に残っている物' });
+    const id = left(w, 't-x7k2')[0]?.id ?? '';
+    expect(await inboxNow(w.se)).toEqual([
+      '--- Technical Program Manager（id m1-file-1）',
+      '【notify】cmux で待っている物',
+      `--- Technical Program Manager（id ${id}）`,
+      '【notify】NATS に残っている物',
+      '--- ここまで（出しただけ。届いたとは記録していない。hook が、この後で渡す）',
+    ]);
+  });
+
   test('名乗っていない session・設定が cmux の session では、今のとおり', async () => {
     const w = await natsWorld();
     w.wire.hold('file:1');

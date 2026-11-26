@@ -5,6 +5,7 @@ import { assign } from '../src/commands/tpm-side.ts';
 import { hello } from '../src/commands/role-side.ts';
 import { deliveredLines, gateFile, passedIds, recordDelivered, type GateMark } from '../src/mail.ts';
 import { MAILROOM_LIMITS } from '../src/mailroom/types.ts';
+import { readShown } from '../src/seen.ts';
 import { MemoryMailroom } from '../src/mailroom/memory.ts';
 import { BRIEF } from './helpers.ts';
 import { ALL, claim, down, left, natsWorld, patched, FROM_SE, FROM_TPM } from './mail-helpers.ts';
@@ -92,8 +93,12 @@ describe('送り分け（名乗った受け手には NATS、名乗っていな�
     await expect(notify(w.tpm, 't-x7k2', { text: `${long}い` })).rejects.toThrow(/本文が長すぎます（8009 字。.*長い本文はページに書いて（roster page put）、URL を送ってください。送っていません/);
     expect(w.office.work).toEqual([]);
     expect(log(w)).toHaveLength(lines);
-    // 見出しを合わせて 8,000 字なら送れる（字は符号位置で数える）。
-    await notify(w.tpm, 't-x7k2', { text: '𠮷'.repeat(8000 - '【notify】'.length) });
+    // 見出しを合わせて 8,000 字なら送れる。
+    await notify(w.tpm, 't-x7k2', { text: 'あ'.repeat(8000 - '【notify】'.length) });
+    expect(left(w, 't-x7k2')).toHaveLength(1);
+    // 字は、hook が渡す字の上限と同じ数え方（UTF-16）で数える: 符号位置では 4,100 字でも、絵文字は 2 つに数えるので送れない。
+    w.pass(60_000);
+    await expect(notify(w.tpm, 't-x7k2', { text: '😀'.repeat(4100) })).rejects.toThrow(/本文が長すぎます（8208 字。/);
     expect(left(w, 't-x7k2')).toHaveLength(1);
   });
 
@@ -157,6 +162,41 @@ describe('送る前の検査（自分が名乗っている session）', () => {
     await hook.done(taken);
     expect(await askTpm(w.se, ask)).toContain('送った: 【ask-tpm】→ file:tpm（相手の手が空いた時に届く。送り直さない）');
     expect(w.se.state.read(gateFile('t-x7k2'))).toBeUndefined();
+  });
+
+  test('T8 の見分け: 取り置き中の物があっても、印から取り置きの長さ＋少しの間を過ぎたら (b)（命令の結果に出して通す）', async () => {
+    const w = await waiting();
+    await expect(askTpm(w.se, ask)).rejects.toThrow(/まだ渡っていない/);
+    // 落ちた hook の取り置きが、何度も渡し直されて残り続ける形（取り置き中の数は 1 のまま）。
+    const stuck = new MemoryMailroom(w.office);
+    await stuck.take('t-x7k2', ALL);
+    w.pass(10_000);
+    await expect(askTpm(w.se, ask)).rejects.toThrow(/渡している途中です/);
+    w.pass(25_000);
+    await stuck.take('t-x7k2', ALL);
+    w.pass(5000);
+    // 印から 40 秒後。取り置き中の物はあるが、もう (a) にしない。
+    expect(await (await w.se.mailroom()).counts('t-x7k2')).toEqual({ waiting: 0, held: 1 });
+    expect(await askTpm(w.se, ask)).toHaveLength(2);
+    expect(w.printed.join('\n')).toContain('【notify】先に読んでほしい事');
+    expect(deliveredLines(w.se).map(l => l.when)).toEqual(['output']);
+  });
+
+  test('名乗る前に cmux で届いた物を持ったまま送ると、今の形で止まる（本文が出て、shown/ に覚える）。その後は NATS の形の検査に進む', async () => {
+    const w = await natsWorld();
+    w.wire.hold('file:1');
+    await notify(w.tpm, 't-x7k2', { text: '名乗る前に cmux で送られた物' });
+    claim(w, w.se, 200);
+    await notify(w.tpm, 't-x7k2', { text: '名乗った後に NATS で送られた物' });
+    const first = await askTpm(w.se, ask).catch((e: unknown) => (e as Error).message);
+    expect(first).toMatch(/^相手から、まだ読んでいないメッセージが 1 件あります。送っていません。\n--- Technical Program Manager（id m\d+-file-1）\n【notify】名乗る前に cmux で送られた物\n--- ここまで/);
+    expect(first).not.toContain('NATS で送られた物');
+    expect(readShown(w.se, 'file:1')).toHaveLength(1);
+    expect(w.se.state.read(gateFile('t-x7k2'))).toBeUndefined();
+    // 打ち直し: cmux の分は見せたので通り、NATS の形の検査が止める（本文は出さない）。
+    const second = await askTpm(w.se, ask).catch((e: unknown) => (e as Error).message);
+    expect(second).toMatch(/^相手から、まだ渡っていないメッセージが 1 件あります（【notify】Technical Program Manager）。送っていません。/);
+    expect(w.se.state.read(gateFile('t-x7k2'))).toBeDefined();
   });
 
   test('T8 (b): 止めた後の打ち直しで、取り置き中が無ければ、本文を命令の結果に出して通す。届いたとは記録せず、配りの口にも残す', async () => {

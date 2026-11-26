@@ -85,6 +85,17 @@ describe('Claude Code の pid', () => {
     expect(claudePid({}, procs)).toEqual({ pid: 200, from: 'parent' });
   });
 
+  test('path に空白のある Claude Code も、親の列から見つける', () => {
+    const procs = new FakeProcs();
+    procs.add(4242, 300, 'node');
+    procs.add(300, 200, '/bin/sh');
+    procs.add(200, 1, '/Users/me/Application Support/Claude Code/claude');
+    expect(claudePid({}, procs)).toEqual({ pid: 200, from: 'parent' });
+    // 名が claude で終わるだけの物は、当てない。
+    procs.add(200, 1, '/opt/tools/not claude/run');
+    expect(claudePid({}, procs)).toBeUndefined();
+  });
+
   test('どちらでも分からなければ undefined', () => {
     const procs = new FakeProcs();
     procs.add(4242, 300, 'node');

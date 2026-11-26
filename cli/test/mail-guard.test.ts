@@ -24,7 +24,7 @@ const SEND = 'roster ask tpm --text "案" --waiting-for "案"';
 
 describe('送る命令の見分け', () => {
   test('roster の送る命令とページを置く命令を、単純な命令の頭で見分ける', () => {
-    for (const c of ['roster ask tpm --text a', 'roster report done --kind result', 'roster notify t-1 --text a', 'roster answer t-1 --text a', 'roster dismiss t-1', 'roster assign t-1 --role software-engineer', 'roster page put /tmp/a.html --kind result', 'cd /w && X=1 /r/cli/bin/roster ask pm --url u', 'git status; roster report merged --pr u']) {
+    for (const c of ['roster ask tpm --text a', 'roster report done --kind result', 'roster notify t-1 --text a', 'roster answer t-1 --text a', 'roster dismiss t-1', 'roster assign t-1 --role software-engineer', 'roster page put /tmp/a.html --kind result', 'cd /w && X=1 /r/cli/bin/roster ask pm --url u', 'cli/bin/roster report done --kind result', './roster notify t-1 --text a', 'git status; roster report merged --pr u']) {
       expect(sendsMessage(c), c).toBe(true);
     }
     for (const c of ['roster inbox', 'roster page path http://x', 'roster page list', 'roster wait work "実装"', 'roster hello', 'echo roster ask tpm', 'git commit -m "roster ask tpm を直す"', 'roster-old ask tpm']) {

@@ -56,12 +56,16 @@ export async function hello(ctx: Context, options: { model?: string, effort?: st
 }
 
 /**
- * roster inbox の入口。設定の messages が nats で、自分（この session）の名乗りが効いていれば、配りの口に残っている自分宛てを出すだけ
- * （取り置かない・届いたにしない。commands/mail.ts の peekInbox）。それ以外は、今のとおり（inbox）。
+ * roster inbox の入口。設定の messages が nats で、自分（この session）の名乗りが効いていれば、今の物（cmux の未読。inbox）に続けて、
+ * 配りの口に残っている自分宛ても出す（取り置かない・届いたにしない。commands/mail.ts の peekInbox）。名乗っている席にも、cmux で届く時があるため。
+ * それ以外は、今のとおり（inbox）。
  */
 export async function inboxNow(ctx: Context): Promise<string[]> {
   const claim = ownClaim(ctx);
-  return claim === undefined ? inbox(ctx) : peekInbox(ctx, claim.name);
+  if (claim === undefined) return inbox(ctx);
+  const pending = ctx.messages.pending().length === 0 ? [] : inbox(ctx);
+  const left = await peekInbox(ctx, claim.name);
+  return pending.length + left.length === 0 ? inbox(ctx) : [...pending, ...left];
 }
 
 /** 自分宛てで、まだ届いていないメッセージを出す。届くのは手が空いた時なので、段の区切り（PR を出す前・merge を頼む前）に見る。 */

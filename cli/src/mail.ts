@@ -87,7 +87,7 @@ export const realProcs: Procs = {
 export const PID_ENV = ['CMUX_CLAUDE_PID', 'CLAUDE_PID'] as const;
 /** 親をたどる段の上限。 */
 const ANCESTORS_MAX = 12;
-/** Claude Code の命令の名（argv の頭の、最後の節）。 */
+/** Claude Code の命令の名（ps の comm＝動かした file の path の、最後の節。path に空白があってもよいように、空白では切らない）。 */
 const CLAUDE_COMMAND = 'claude';
 
 /** pid をどこから知ったか。 */
@@ -111,7 +111,7 @@ export function claudePid(env: NodeJS.ProcessEnv, procs: Procs): { pid: number, 
     const given = Number(env[name]);
     if (ancestors.some(a => a.pid === given)) return { pid: given, from: name };
   }
-  const named = ancestors.find(a => basename(a.command.split(' ')[0] ?? '') === CLAUDE_COMMAND);
+  const named = ancestors.find(a => basename(a.command) === CLAUDE_COMMAND);
   return named === undefined ? undefined : { pid: named.pid, from: 'parent' };
 }
 

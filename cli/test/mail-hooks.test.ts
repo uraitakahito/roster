@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import type { Context } from '../src/context.ts';
-import { mailGate, mailPrompt, mailWait } from '../src/commands/mail.ts';
+import { mailGate, mailPrompt, mailWait, pause } from '../src/commands/mail.ts';
 import { askTpm, notify } from '../src/commands/messages.ts';
 import { deliveredLines, gateFile, waiterFile, type GateMark } from '../src/mail.ts';
 import { MemoryMailroom } from '../src/mailroom/memory.ts';
@@ -322,6 +322,30 @@ describe('手を止めている間に待つ（roster mail wait）', () => {
     const s = stopping(w.hook(), 3);
     await mailWait(s.ctx, '{}', s.signal);
     expect(w.procs.stopped).toEqual([]);
+  });
+});
+
+describe('待つ間の合図の聞き手', () => {
+  test('眠りが先に終わったら、止める合図の listener を外す（待つ命令は 2 秒ごとに呼ぶので、残すと溜まる）', async () => {
+    const stop = new AbortController();
+    let listening = 0;
+    const add = stop.signal.addEventListener.bind(stop.signal);
+    const remove = stop.signal.removeEventListener.bind(stop.signal);
+    stop.signal.addEventListener = (...args: Parameters<typeof add>) => {
+      listening += 1;
+      add(...args);
+    };
+    stop.signal.removeEventListener = (...args: Parameters<typeof remove>) => {
+      listening -= 1;
+      remove(...args);
+    };
+    for (let i = 0; i < 50; i++) await pause({ sleep: () => Promise.resolve() }, 2000, stop.signal);
+    expect(listening).toBe(0);
+    // 合図が来たら、眠りを待たずに返る。
+    const waiting = pause({ sleep: () => new Promise<void>(() => undefined) }, 2000, stop.signal);
+    stop.abort();
+    await waiting;
+    await pause({ sleep: () => new Promise<void>(() => undefined) }, 2000, stop.signal);
   });
 });
 

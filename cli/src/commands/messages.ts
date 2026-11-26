@@ -22,7 +22,7 @@ import { isPageUrl } from './store.ts';
 import { readShown, returnedIds, seenTimes, shownFile, type SeenAt } from '../seen.ts';
 import { envOf } from '../env.ts';
 import { claimOf, deliveredLines, endedLines, gateFile, markPassed, ownClaim, passedIds, recordDelivered, usesNats, type Claim, type GateMark } from '../mail.ts';
-import type { Counts, Recipient, Stored } from '../mailroom/types.ts';
+import { MAILROOM_LIMITS, type Counts, type Recipient, type Stored } from '../mailroom/types.ts';
 import { selfParty, TPM_PARTY, type Party } from '../party.ts';
 
 export { selfParty, TPM_PARTY, type Party } from '../party.ts';
@@ -93,7 +93,10 @@ async function assertNotRepeat(ctx: Context, id: HeadingId, from: string, to: st
 /** 担当が TPM 担当へ送る物の 2 度送りを見る（課題に記録を書く前に呼ぶ）。 */
 const notRepeatToTpm = async (ctx: Context, self: RoleRecord, id: HeadingId, body: string): Promise<void> => assertNotRepeat(ctx, id, self.title, requireTpm(ctx).address, body);
 
-/** NATS で送れる本文の長さ（字。符号位置で数える。置き場の記録の本文の上限と同じ）。 */
+/**
+ * NATS で送れる本文の長さ（字。JavaScript の字の長さ＝UTF-16 で数える。hook が 1 度に渡す字の上限（commands/mail.ts の CONTEXT_MAX）と
+ * 同じ数え方にして、絵文字の多い本文が hook の上限を超えないようにする。符号位置で数える置き場の上限（8,000）より、きつい側）。
+ */
 const NATS_TEXT_MAX = 8000;
 
 /** メッセージキュー（NATS）が応えない時の誤り。居場所の状態にも出す。not は「送っていません」などの字。 */
@@ -105,7 +108,7 @@ function queueDown(ctx: Context, not: string, e: unknown): TpmError {
 
 /** メッセージを配りの口（NATS）に置き、作った id を返す。長すぎる本文は置かずに誤り。配りの口が誤りなら、置けていないとして止まる。 */
 async function post(ctx: Context, box: Recipient, from: string, text: string, replyTo?: string): Promise<string> {
-  const length = [...text].length;
+  const length = text.length;
   if (length > NATS_TEXT_MAX) throw new TpmError(`本文が長すぎます（${length} 字。メッセージキューで送れるのは ${NATS_TEXT_MAX} 字まで）。長い本文はページに書いて（roster page put）、URL を送ってください。送っていません`);
   const id = randomUUID();
   try {
@@ -238,11 +241,18 @@ const READ_STOP = {
  * （送った直後の次の命令が、自分のメッセージを未読として出して止まった。台帳 #97・#100）。送った記録（log.jsonl）の、送り手が自分の行の id を除く。
  * 送り手は、担当なら「Key が自分で、TPM 担当の名でない行」、TPM 担当なら「TPM 担当の名の行」で見る（宛先では見ない。返事の形（--reply-to）は、
  * 記録の宛先と本当の受け手がずれることがある。題でも見ない。居場所の題は替わることがある）。
- * 設定の messages が nats で、自分（この session）の名乗りが効いている時は、配りの口（NATS）に聞く形になる（assertHandedOver）。
+ * 設定の messages が nats で、自分（この session）の名乗りが効いている時は、これを通した後に、配りの口（NATS）に聞く形の検査（assertHandedOver）も通す。
  */
 export async function assertRead(ctx: Context, who: string, from?: string, action: keyof typeof READ_STOP = 'send'): Promise<void> {
+  // 名乗っている席にも、cmux で届く時がある（席を起こしてから名乗るまでに送られた【brief】・/clear の間・名乗りが一時に効かない間）。
+  // だから、cmux の形の検査はいつも先に通し、名乗りが効いていれば、続けて NATS の形の検査をする。
+  assertShown(ctx, who, from, action);
   const claim = ownClaim(ctx);
-  if (claim !== undefined) return assertHandedOver(ctx, claim, who, from, action);
+  if (claim !== undefined) await assertHandedOver(ctx, claim, who, from, action);
+}
+
+/** 送る前の検査の、cmux の形（連携の道具の受信箱と shown/）。中身は assertRead の注のとおり。 */
+function assertShown(ctx: Context, who: string, from: string | undefined, action: keyof typeof READ_STOP): void {
   const incoming = ctx.messages.pending().filter(m => from === undefined || m.from === from);
   if (incoming.length === 0) return;
   const self = ctx.seats.whoami();
@@ -263,6 +273,9 @@ export async function assertRead(ctx: Context, who: string, from?: string, actio
     `読んだうえで、${READ_STOP[action].retry}。`,
   ].join('\n'));
 }
+
+/** T8 の (a)「渡している途中」と見る間に足す、取り置きの長さの後の少しの間（ミリ秒）。 */
+const HANDING_GRACE_MS = 5000;
 
 /** 写しの遅れ（N4）が無くなるのを待つ回数と、1 回の間（合わせて長くて 2 秒）。 */
 const LAG_TRIES = 20;
@@ -316,8 +329,8 @@ async function askQueue(ctx: Context, name: Recipient): Promise<{ lag: number, l
  * - 写しの遅れ（N4）が、長くて 2 秒待っても残れば止める。配りの口が応えなければ止める。どちらも、居場所の状態に出す。
  * - 「検査では止めない」の印の付いた id と、渡し直しの上限を超えた物しか残っていない時（箱の数が 0）は、止めない。
  * - 前の印が残っていて（hook が渡していない）、同じ id がまだ残っている時（T8）:
- *   (a) 取り置き中の物があれば、渡している途中と見て、もう 1 度止める。
- *   (b) 無ければ、hook が働いていないと見て、本文を命令の結果に出して通す。出した id には「検査では止めない」の印を付ける。
+ *   (a) 印を書いてから、取り置きの長さ（30 秒）＋ HANDING_GRACE_MS の内で、取り置き中の物があれば、渡している途中と見て、もう 1 度止める。
+ *   (b) そうでなければ（取り置き中が無い・その間を過ぎた）、hook が働いていないと見て、本文を命令の結果に出して通す。出した id には「検査では止めない」の印を付ける。
  *       届いたとは記録せず（渡した記録に output と残す）、配りの口にも残す（hook が後で渡せる）。
  * from（相手の題）で絞る決まりは、今までと同じ（TPM 担当が担当に送る時は、その担当からの物だけで止まる）。
  */
@@ -342,7 +355,10 @@ async function assertHandedOver(ctx: Context, claim: Claim, who: string, from: s
   if (unread.length === 0 || asked.counts.waiting + asked.counts.held === 0) return;
   const ids = unread.map(m => m.id);
   const again = mark !== undefined && unread.some(m => mark.ids.includes(m.id));
-  if (again && asked.counts.held > 0) {
+  // 渡している途中と見るのは、印を書いてから、取り置きの長さ＋少しの間の内だけ。箱の取り置き中の数は、止めた物と違う物の取り置きでも
+  // 増えるので、数だけで見ると、(b) に行かないまま渡し直しの上限に届く道がある。
+  const handing = mark !== undefined && ctx.now().getTime() - Date.parse(mark.at) < MAILROOM_LIMITS.holdMs + HANDING_GRACE_MS;
+  if (again && handing && asked.counts.held > 0) {
     recordGateStop(ctx, 'unread', ids.join(' '));
     throw new TpmError(`${who}からのメッセージ ${unread.length} 件を、渡している途中です。${not}。長くて 30 秒待って、同じ命令を打ち直してください`);
   }

@@ -216,12 +216,20 @@ const BACKOFF_MAX_MS = 30_000;
 const CLAIM_TRIES = 10;
 const CLAIM_PAUSE_MS = 500;
 
-/** ms 待つ。止める合図が来たら、待たずに返る。 */
-function pause(ctx: Context, ms: number, signal: AbortSignal): Promise<void> {
-  if (signal.aborted) return Promise.resolve();
-  return Promise.race([ctx.sleep(ms), new Promise<void>((resolve) => {
-    signal.addEventListener('abort', () => resolve(), { once: true });
-  })]);
+/** ms 待つ。止める合図が来たら、待たずに返る。眠りが先に終わったら、合図の listener を外す（待つ命令は TICK_MS ごとに呼ぶので、残すと溜まる）。 */
+export async function pause(ctx: Pick<Context, 'sleep'>, ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return;
+  let wake = (): void => undefined;
+  const stopped = new Promise<void>((resolve) => {
+    wake = resolve;
+  });
+  signal.addEventListener('abort', wake, { once: true });
+  try {
+    await Promise.race([ctx.sleep(ms), stopped]);
+  }
+  finally {
+    signal.removeEventListener('abort', wake);
+  }
 }
 
 /**
@@ -489,9 +497,9 @@ export async function clearSeat(ctx: Context, role: RoleRecord): Promise<string[
   }
 }
 
-/** roster inbox の、NATS の形（設定の messages が nats で、名乗っている session）: 自分宛てで残っている物を、取り置かずに出すだけ（届いたとは記録しない）。 */
+/** roster inbox の、NATS の分（設定の messages が nats で、名乗っている session）: 自分宛てで残っている物を、取り置かずに出すだけ（届いたとは記録しない）。無ければ空。 */
 export async function peekInbox(ctx: Context, name: Recipient): Promise<string[]> {
   const letters = await (await ctx.mailroom()).peek(name);
-  if (letters.length === 0) return ['まだ届いていないメッセージは無い'];
+  if (letters.length === 0) return [];
   return [...letters.flatMap(m => [`--- ${m.from}（id ${m.id}）`, m.text]), '--- ここまで（出しただけ。届いたとは記録していない。hook が、この後で渡す）'];
 }
