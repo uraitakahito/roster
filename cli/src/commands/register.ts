@@ -92,11 +92,16 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
     .option('--accept <勧告の題>', '受け入れる（直さない。繰り返せる）', collect, [] as string[])
     .option('--later <勧告の題>', '見送る（今は決めない。繰り返せる）', collect, [] as string[])
     .action(async (options: { url: string, do: string[], accept: string[], later: string[] }) => print(await reportDecided(createContext(), { url: options.url, adopted: options.do, accepted: options.accept, later: options.later })));
-  report.command('review').description('【review】（Staff Engineer 担当）レビューのページと判定を、頼んだ課題の担当へじかに返す（課題に「レビュー」の記録も書く）')
+  report.command('review').description('【review】（Staff Engineer 担当。repo の席の頼みは Tech Lead 担当）レビューのページと判定を、頼んだ担当へじかに返す（課題に「レビュー」の記録も書く）')
     .requiredOption('--url <URL>', 'レビューのページ（roster page put --kind review で置いた URL）')
     .requiredOption('--verdict <判定>', Object.entries(VERDICTS).map(([id, label]) => `${id}（${label}）`).join('・'))
     .requiredOption('--summary <一言>')
-    .action(async (options: { url: string, verdict: string, summary: string }) => print(await reportReview(createContext(), options)));
+    .option('--review <番号>', '（Tech Lead 担当）判定を返す頼みの番号。返していない頼みがいくつもある時は、名指す（roster review list で見る）')
+    .action(async (options: { url: string, verdict: string, summary: string, review?: string }) => {
+      const { review, ...rest } = options;
+      if (review !== undefined && !/^[1-9]\d*$/.test(review)) throw new TpmError('--review は、レビューの頼みの番号（1 以上の数）にしてください');
+      print(await reportReview(createContext(), { ...rest, ...(review === undefined ? {} : { review: Number(review) }) }));
+    });
   for (const [id, description] of [
     ['merge-request', '【merge-request】（Dependabot）PR の merge を頼む'],
     ['not-yet', '【not-yet】（Dependabot）まだ対象でない・rebase に応じない'],

@@ -12,6 +12,8 @@ import { resolveSettings } from '../settings.ts';
 import { skillSetDir, TpmError } from '../skill-sets.ts';
 import { launch, roleDefaults } from './launch.ts';
 import { assertRead, assertSettled, brief, dismissSeat, notifySeat, type Sent } from './messages.ts';
+import { openReviews, patchReview } from '../reviews.ts';
+import { markWithdrawn } from './review-marks.ts';
 import { closeWithChildren } from './tpm-side.ts';
 
 /** repo の席の役割。 */
@@ -169,5 +171,12 @@ export async function seatClose(ctx: Context, name: string): Promise<string[]> {
   const key = seat.key;
   const alive = seat.address !== undefined && ctx.seats.seats().some(s => s.address === seat.address);
   if (alive && !hasEnded(ctx, seat)) throw new TpmError(`${key} の席は、まだ片付けの終わり（【end】）を送っていません。閉じていません。roster seat dismiss ${name} で片付けの指示を送り、【end】を受けてから閉じてください`);
-  return await closeWithChildren(ctx, seat);
+  // その席が頼んで、まだ返っていないレビュー。居る席は、返してから閉じる。居場所の無い席の頼みは、返す相手が居ないので取り下げる
+  // （判定「見られなかった」と訳を書く。残すと、誰も返せない頼みが、数と置き場の印に残り続ける）。
+  const pending = openReviews(ctx, key);
+  if (alive && pending.length > 0) throw new TpmError(`${key} の席が頼んだレビューが、まだ返っていません（${pending.map(r => `#${r.n}`).join('・')}）。閉じていません。roster report review で返してから閉じてください`);
+  const reviewedAt = ctx.now().toISOString();
+  for (const r of pending) patchReview(ctx, r.n, { verdict: 'not-assessed', summary: '頼んだ席を閉じたので、返していない', reviewedAt });
+  const withdrawn = pending.length === 0 ? [] : [`返っていなかったレビューの頼みを取り下げた: ${pending.map(r => `#${r.n}`).join('・')}`, ...await markWithdrawn(ctx, pending)];
+  return [...await closeWithChildren(ctx, seat), ...withdrawn];
 }

@@ -101,6 +101,13 @@ export async function markVerdict(ctx: Context, page: string, verdict: Verdict, 
   });
 }
 
+/** 頼んだ席を閉じて、返さないことになった頼み（roster seat close）: 依頼書の「レビュー待ち」を外す。 */
+export async function markWithdrawn(ctx: Context, asks: Review[]): Promise<string[]> {
+  const lines: string[] = [];
+  for (const brief of new Set(asks.flatMap(r => r.brief === undefined ? [] : [r.brief]))) lines.push(...await replyMark(ctx, brief, 'answered', 'review', '頼んだ席を閉じたので、レビュー待ちを外した', true));
+  return lines;
+}
+
 /** 判定を受けずに TPM 担当に上げた時（roster ask tpm --review）: レビューのページを「上げた」（TPM 担当の返事待ち）にする。TPM 担当が決めたら roster page reply --answered --on tpm で外す。 */
 export async function markEscalated(ctx: Context, page: string): Promise<string[]> {
   return await replyMark(ctx, page, 'waiting', 'tpm', '上げた（TPM 担当の返事待ち）にした');
