@@ -26,4 +26,10 @@ roster hello
 
 ## 2. まだ進めない
 
-- 依頼書を読んだら、`roster ask tpm` で「Tech Lead 担当の手順がまだ無い（AI-45 が済んでいない）ので、進められない」ことと、依頼書の課題を Software Engineer 担当 1 人に振り直す案を送り、答えを待つ。repo は変えない。
+- 依頼書を読んだら、TPM 担当に、進められないことと案を送り、答えを待つ。repo は変えない。
+  ```sh
+  roster ask tpm "<進められない訳と案>" --waiting-for "振り直すかの答え"
+  ```
+  - 訳: Tech Lead 担当の手順がまだ無い（AI-45 が済んでいない）。
+  - 案: 依頼書の課題を Software Engineer 担当 1 人に振り直す。振り直す順も書く: `roster dismiss <Key> --handover`（担当の交代。課題は済みにしない）→ この席の【end】を受ける → `roster close <Key>` → `roster assign <Key> --role software-engineer --brief <URL>`。この席が動いている間に `roster assign` を打つと、役割を替えても、依頼書はこの席に届く（名簿は Key 1 つに 1 行）。
+- 【dismiss】が来たら、片付ける worktree は無いので、そのまま `roster report end --left "なし"` を返す。**担当の交代と書いていない【dismiss】なら、【end】の前に `roster ask tpm` で確かめる**（交代でない【end】は、課題管理の課題を済みにする。この席は、まだ何も済ませていない）。
