@@ -43,11 +43,12 @@ jobs:
       # client の build は cli/node_modules の tsc と @smithy/* で打つ。
       - run: pnpm install --frozen-lockfile
       # Smithy の CLI の zip（gen.sh が毎回 digest を見る）・公開から 2 日たったと見た依存の印・smithy build が Maven Central から
-      # 取る物（~/.m2/repository）を cache に置き、毎回は取りに行かない（下の見張りの試しで何度も流し、429 で落ちたため。#211）。
+      # 取る物（~/.m2/repository）を cache に置き、毎回は取りに行かない（開いた CLI は gen.sh が毎回 zip から開くので入れない。下の見張りの試しで何度も流し、429 で落ちたため。#211）。
       - uses: actions/cache@v6
         with:
           path: |
             ~/.cache/roster-smithy
+            !~/.cache/roster-smithy/*/smithy-cli-*
             ~/.m2/repository
           key: smithy-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('cli/gen/gen.sh', 'cli/gen/smithy-build.json') }}
       - run: gen/gen.sh --check
