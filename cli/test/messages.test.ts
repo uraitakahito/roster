@@ -289,7 +289,7 @@ describe('入口の検査: PR が merge 済みか', () => {
     expect(w.calls.filter(c => c.args[1] === 'comment')).toEqual([]);
     await expect(send(w, ' ')).rejects.toThrow(/--unchecked には/);
     await send(w, 'GitLab の画面で見た');
-    expect(texts(w, 'file:tpm')[0]).toMatch(/（merge は確かめていない: GitLab の画面で見た）$/);
+    expect(texts(w, 'file:tpm')[0]).toMatch(/（merge と main の workflow は確かめていない: GitLab の画面で見た）$/);
     w.prs.set(PR, 'MERGED');
     await send(w);
     expect(texts(w, 'file:tpm')).toHaveLength(2);
@@ -339,6 +339,26 @@ describe('merge の後の main の workflow を、命令が見て本文に足す
     expect(texts(w, 'file:tpm')[0]).toBe(`【merged】${PR} 入れた／main: 落ちた docs（https://github.com/o/r/actions/runs/docs）（ほか: 通った 1）`);
   });
 
+  test('落ちた回があっても、ほかがまだ動いている間・merge から 2 分の内は送らない（みな終わってから送る）', async () => {
+    const w = await started();
+    w.mainRuns.list = [mainRun('test', 'in_progress', ''), mainRun('docs', 'completed', 'failure')];
+    await expect(reportMerged(w.se, { pr: PR, note: '入れた' })).rejects.toThrow(/落ちた物（docs（.*）がありますが、まだ 1 つが動いています.*\n送っていません。みな終わってから送ります/);
+    w.mainRuns.list = [mainRun('test', 'completed', 'success'), mainRun('docs', 'completed', 'failure')];
+    w.mainRuns.mergedAt = new Date(w.se.now().getTime() - 30_000).toISOString();
+    await expect(reportMerged(w.se, { pr: PR, note: '入れた' })).rejects.toThrow(/merge から 2 分の内で、回が作られきっていないかもしれません/);
+    expect(texts(w, 'file:tpm')).toEqual([]);
+    expect(gates(w)).toEqual([`main-running ${PR}`, `main-running ${PR}`]);
+  });
+
+  test('待っても直らない誤り（認証・権限）は、roster watch github を勧めず、gh auth status を勧める', async () => {
+    const w = await started();
+    w.mainRuns.list = undefined;
+    w.mainRuns.error = 'gh: Resource not accessible by integration (HTTP 403)';
+    const stopped = await reportMerged(w.se, { pr: PR, note: '入れた' }).catch((e: unknown) => (e as Error).message);
+    expect(stopped).toMatch(/待っても直らない誤り.*\ngh: Resource not accessible.*\n送っていません。gh auth status/);
+    expect(stopped).not.toContain('roster watch github');
+  });
+
   test('同じ commit に docs が 2 回（落ちた後に、流し直して通った）なら、新しい回で「通った」', async () => {
     const w = await started();
     w.mainRuns.list = [mainRun('docs', 'completed', 'failure', '2020-01-01T00:00:10Z'), mainRun('docs', 'completed', 'success', '2020-01-01T00:05:00Z', 'workflow_dispatch'), mainRun('test', 'completed', 'success')];
@@ -361,7 +381,7 @@ describe('merge の後の main の workflow を、命令が見て本文に足す
     const w = await started();
     w.mainRuns.list = [mainRun('test', 'completed', 'success'), mainRun('docs', 'completed', 'cancelled')];
     await reportMerged(w.se, { pr: PR, note: '入れた' });
-    expect(texts(w, 'file:tpm')[0]).toBe(`【merged】${PR} 入れた／main: workflow 2 つ通った（うち 1 つは取り消し。後の回が済ませたかは見ていない）`);
+    expect(texts(w, 'file:tpm')[0]).toBe(`【merged】${PR} 入れた／main: workflow 1 つ通った・取り消し 1 つ（後の回が済ませたかは見ていない）`);
   });
 
   test('merge から 2 分の内は、在る回がみな終わっていても止まる', async () => {
@@ -383,11 +403,11 @@ describe('merge の後の main の workflow を、命令が見て本文に足す
   test.each(senders)('%s: gh で読めない時は止まって --unchecked を求め、--unchecked があれば見ずに送る', async (_, send) => {
     const w = await started({ tracker: 'github' }, 'gh-12');
     w.mainRuns.list = undefined;
-    await expect(send(w)).rejects.toThrow(/main の workflow を読めません.*\ngh: HTTP 502: Bad Gateway\n送っていません。.*roster watch github.*--unchecked/);
+    await expect(send(w)).rejects.toThrow(/main の workflow を読めません（GitHub が応えない）.*\ngh: HTTP 502: Bad Gateway\n送っていません。roster watch github --repo o\/r .*--unchecked/);
     expect(texts(w, 'file:tpm')).toEqual([]);
     expect(gates(w)).toEqual([`main-unreadable ${PR}`]);
     await send(w, '画面で見た');
-    expect(texts(w, 'file:tpm')[0]).toMatch(/（merge は確かめていない: 画面で見た）$/);
+    expect(texts(w, 'file:tpm')[0]).toMatch(/（merge と main の workflow は確かめていない: 画面で見た）$/);
     expect(texts(w, 'file:tpm')[0]).not.toContain('main:');
   });
 

@@ -671,11 +671,12 @@ interface PrView {
 /**
  * PR が merge 済みかを見る（`gh pr view <URL> --json state`）。MERGED でなければ止まる（merge が断られたのに【merged】を送らない）。
  * unchecked（確かめない訳）があれば見ずに通し、メッセージに添える字を返す。確かめたときは空の字。
+ * what は、確かめなかった物の名（【merged】【doc-fix】は、main の workflow も見ないので UNCHECKED_BOTH を渡す）。
  */
-export function assertMerged(ctx: Context, prs: string[], unchecked?: string): string {
+export function assertMerged(ctx: Context, prs: string[], unchecked?: string, what = 'merge'): string {
   if (unchecked !== undefined) {
     if (unchecked.trim() === '') throw new TpmError('--unchecked には、merge を確かめない訳を書いてください');
-    return `（merge は確かめていない: ${unchecked}）`;
+    return `（${what} は確かめていない: ${unchecked}）`;
   }
   for (const pr of prs) {
     const r = ctx.exec('gh', ['pr', 'view', pr, '--json', 'state']);
@@ -692,13 +693,17 @@ export function assertMerged(ctx: Context, prs: string[], unchecked?: string): s
   return '';
 }
 
+/** --unchecked の時に、【merged】【doc-fix】が確かめなかった物（1 つの旗が、merge の確かめと main の workflow の確かめを、両方とも外す）。 */
+const UNCHECKED_BOTH = 'merge と main の workflow';
+
 /**
  * merge した PR の、merge の commit で main に動いた workflow を見て、知らせの本文に足す字を返す（【merged】と【doc-fix】だけ。【end】は見ない）。
  * 担当が `gh run list` を打って読む回を、命令が受け持つ。判じ方は roster watch main と同じ（workflow ごとに、いちばん新しい回）。
  * - まだ動いている・merge の直後（2 分の内。回が、まだ作られきっていないことがある）: 送らずに止まる（roster watch main で待ってから打ち直す）。
+ *   落ちた回がもう在っても同じ（みな終わってから送る。送った本文が、後から変わらないように）。
  * - みな終わった: 結果を返す。落ちていても止めない（落ちたことを書いて送る決まり）。取り消された回（concurrency で取り消された docs など）は、落ちたと書かず、取り消しの数を足す。
  * - --pr が PR の URL の形でない: repo が分からないので、読めない時と同じく止まる。
- * - 読めない: 送らずに止まり、--unchecked を求める（PR の状態を読めない時と同じ）。
+ * - 読めない: 送らずに止まり、--unchecked を求める（PR の状態を読めない時と同じ）。待てば直る物（GitHub が応えない）と、待っても直らない物（認証・権限）で、勧める手を分ける。
  * - unchecked（確かめない訳）があれば、見ずに空の字を返す（訳は assertMerged が本文に足す）。
  */
 export function mainWorkflows(ctx: Context, pr: string, unchecked?: string): string {
@@ -712,8 +717,12 @@ export function mainWorkflows(ctx: Context, pr: string, unchecked?: string): str
   const look = lookMain(ctx.exec, ref, ctx.now());
   switch (look.state) {
     case 'passed':
-      return `／main: workflow ${look.total} つ通った${look.cancelled === undefined ? '' : `（うち ${look.cancelled} つは取り消し。後の回が済ませたかは見ていない）`}`;
+      return `／main: workflow ${look.total} つ通った${look.cancelled === undefined ? '' : `・取り消し ${look.cancelled} つ（後の回が済ませたかは見ていない）`}`;
     case 'failed':
+      if (look.pending > 0 || look.fresh === true) {
+        recordGateStop(ctx, 'main-running', ref.url);
+        throw new TpmError(`main の workflow に落ちた物（${namedList(look.failed)}）がありますが、${look.pending > 0 ? `まだ ${look.pending} つが動いています` : 'merge から 2 分の内で、回が作られきっていないかもしれません'}: ${ref.url}\n送っていません。みな終わってから送ります。roster watch main ${ref.url} --timeout 0 で今の様子を見て、終わってから打ち直してください。`);
+      }
       return `／main: 落ちた ${namedList(look.failed)}（ほか: 通った ${look.passed}）`;
     case 'none':
       return '／main: この merge で動いた workflow は無い';
@@ -721,9 +730,11 @@ export function mainWorkflows(ctx: Context, pr: string, unchecked?: string): str
       recordGateStop(ctx, 'main-running', ref.url);
       throw new TpmError(`main の workflow が、まだ終わっていません（${look.total === 0 ? 'merge の直後で、回がまだ作られていない' : look.done === look.total ? `merge から 2 分の内。在る ${look.total} つは終わっているが、回が作られきるのを待つ` : `${look.total} つのうち ${look.total - look.done} つが動いている`}）: ${ref.url}\n送っていません。roster watch main ${ref.url} を裏で起こして待ち、終わってから打ち直してください。`);
     case 'unreachable':
+      recordGateStop(ctx, 'main-unreadable', ref.url);
+      throw new TpmError(`main の workflow を読めません（GitHub が応えない）: ${ref.url}\n${look.message}\n送っていません。roster watch github --repo ${ref.repo} を裏で起こして待ち、戻ってから打ち直してください。待てない時は、merge と main の workflow を自分で確かめてから --unchecked "<確かめた方法>" を付けて打ち直してください（--unchecked は、merge の確かめも外す）。`);
     case 'invalid':
       recordGateStop(ctx, 'main-unreadable', ref.url);
-      throw new TpmError(`main の workflow を読めません: ${ref.url}\n${look.message}\n送っていません。GitHub が応えないなら roster watch github を裏で起こして待ち、戻ってから打ち直してください。gh で読めない PR なら、main の workflow を自分で確かめてから --unchecked "<確かめた方法>" を付けて打ち直してください。`);
+      throw new TpmError(`main の workflow を読めません（待っても直らない誤り）: ${ref.url}\n${look.message}\n送っていません。gh auth status で認証と権限を確かめてください。gh で読めない PR なら、merge と main の workflow を自分で確かめてから --unchecked "<確かめた方法>" を付けて打ち直してください（--unchecked は、merge の確かめも外す）。`);
   }
 }
 
@@ -955,7 +966,7 @@ export async function askDevops(ctx: Context, options: { what: string, why: stri
 export async function reportMerged(ctx: Context, options: { pr: string, note: string, unchecked?: string }): Promise<string[]> {
   const self = await sender(ctx);
   notAuditor(self, 'roster report merged');
-  const checked = assertMerged(ctx, [options.pr], options.unchecked);
+  const checked = assertMerged(ctx, [options.pr], options.unchecked, UNCHECKED_BOTH);
   const main = mainWorkflows(ctx, options.pr, options.unchecked);
   return [await toBoss(ctx, self, 'merged', `${options.pr} ${options.note}${main}${checked}`)];
 }
@@ -964,7 +975,7 @@ export async function reportMerged(ctx: Context, options: { pr: string, note: st
 export async function reportDocFix(ctx: Context, options: { pr: string, note: string, unchecked?: string }): Promise<string[]> {
   const self = await sender(ctx);
   notAuditor(self, 'roster report doc-fix');
-  const checked = assertMerged(ctx, [options.pr], options.unchecked);
+  const checked = assertMerged(ctx, [options.pr], options.unchecked, UNCHECKED_BOTH);
   const main = mainWorkflows(ctx, options.pr, options.unchecked);
   const body = `${options.pr}（merge 済み）${options.note}${main}${checked}`;
   await notRepeatToBoss(ctx, self, 'doc-fix', body);

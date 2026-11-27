@@ -203,7 +203,7 @@ describe('roster watch main', () => {
     const s = seat({ 'pr view': [merged()], 'run list': [ok([run('test', 'completed', 'success'), run('docs', 'completed', 'cancelled')])] });
     const r = await watchMain(s.ctx, PR);
     expect(r.code).toBe(WATCH_EXIT.passed);
-    expect(r.lines[0]).toMatch(/^通った: main の workflow 2 つ（うち 1 つは取り消し。後の回が済ませたかは見ていない。/);
+    expect(r.lines[0]).toMatch(/^通った: main の workflow 1 つ・取り消し 1 つ（後の回が済ませたかは見ていない）（/);
   });
 
   test('merge から 2 分を過ぎても回が無ければ、30（付いていない）で終わる', async () => {

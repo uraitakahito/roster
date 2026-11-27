@@ -90,7 +90,7 @@ function report(loop: Loop, look: Look, timedOut: boolean, seconds: number): Wat
     case 'passed':
       if (timedOut) return { code: WATCH_EXIT.timeout, lines: [`まだ: ${loop.kind === 'github' ? 'GitHub は 1 度応えた' : `${loop.noun} ${look.total} つは終わっていた`}が、続けてもう 1 度は見ていない（${waited}）。${retry}`] };
       if (loop.kind === 'github') return { code: WATCH_EXIT.passed, lines: [`戻った: GitHub が応えた（${waited}）`] };
-      return { code: WATCH_EXIT.passed, lines: [`通った: ${loop.noun} ${look.total} つ（${look.cancelled === undefined ? '' : `うち ${look.cancelled} つは取り消し。後の回が済ませたかは見ていない。`}${waited}）`] };
+      return { code: WATCH_EXIT.passed, lines: [`通った: ${loop.noun} ${look.total} つ${look.cancelled === undefined ? '' : `・取り消し ${look.cancelled} つ（後の回が済ませたかは見ていない）`}（${waited}）`] };
     case 'failed':
       return { code: WATCH_EXIT.failed, lines: [`落ちた: ${namedList(look.failed)}`, `ほかの ${loop.noun}: 通った ${look.passed}・まだ ${look.pending}（${waited}）`] };
     case 'pending':
