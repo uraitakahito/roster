@@ -32,13 +32,13 @@ cd </your/workspace> # あなたが作業する場所
 
 担当どうしのメッセージは、メッセージキュー（NATS JetStream）で配る。TPM 担当を起こす前に、roster を動かす機械で NATS が動いていること（起こし方は[運用](/operations/#メッセージキューnats)）。止まっていると、送る命令は「メッセージキューが応えません。送っていません」で止まる（`roster report incident` だけは、台帳に書いて、送っていない事を出して終わる）。
 
-`roster start` は claude を起こさない。folder と、その直下の folder の `.claude/roles/config.jsonc`（[設定](/configuration/#直下の-folder-の設定)）を読み、`skill-sets` を確かめて、次の 1 行を出すだけ。それをそのまま打てばClaude Codeが適切に起動する。`PATH=…` は、TPM 担当が `roster` を名前だけで打てるようにする。`--settings` は、Claude Code に付ける hook（下の例では `{…}` と略した。出る 1 行には全部が書いてある）: shell の命令を実行の前に `roster guard` に見せる hook（[担当のあいだの決まり](/protocol/#guard)）・session の始まりと終わりをアクターの台帳に送る hook（`roster castlist …`。castlist を設定していなければ何もしない）・メッセージを渡す hook（`roster mail …`。[担当のあいだの決まり](/protocol/#メッセージを-nats-で配る道)）。`<repo>` は roster を置いた場所（上の例なら `/foo/bar/roster`）に替わる。違う場所に置いたときも、`<repo>` のところだけが変わる（場所に空白などがあれば `roster start` が引用符も付けるので、出た 1 行をそのまま写す）。
+`roster start` は claude を起こさない。folder と、その直下の folder の `.claude/roles/config.jsonc`（[設定](/configuration/#直下の-folder-の設定)）を読み、`skill-sets` を確かめて、次の 1 行を出すだけ。それをそのまま打てばClaude Codeが適切に起動する。`PATH=…` は、TPM 担当が `roster` を名前だけで打てるようにする。`--settings` は、Claude Code に付ける hook（下の例では `{…}` と略した。出る 1 行には全部が書いてある）: shell の命令を実行の前に `roster guard` に見せる hook（[担当のあいだの決まり](/protocol/#guard)）・session の始まりと終わりをアクターの台帳に送る hook（`roster castlist …`。castlist を設定していなければ何もしない）・メッセージを渡す hook（`roster mail …`。[担当のあいだの決まり](/protocol/#メッセージを-nats-で配る道)）。`--append-system-prompt` は、Claude Code の大本の指示（system prompt）の後ろに、TPM 担当の返事の言葉の 1 文（「画面への返事は、誰の・何への返事でも日本語で書く。…」。`cli/src/command.ts` の `REPLY_LANGUAGE`。手順書の「返事の言葉」と同じ文）を足す（下の例では略した）。手順書の 1 行だけでは、締めの返事が英語に戻ったため（t-jen6）。`<repo>` は roster を置いた場所（上の例なら `/foo/bar/roster`）に替わる。違う場所に置いたときも、`<repo>` のところだけが変わる（場所に空白などがあれば `roster start` が引用符も付けるので、出た 1 行をそのまま写す）。
 
 ```sh
 # skill-sets が無い（既定）
-cd <folder> && PATH=<repo>/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{…}}' --add-dir <repo>/skill-sets/core -- /tpm
+cd <folder> && PATH=<repo>/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{…}}' --append-system-prompt '画面への返事は…' --add-dir <repo>/skill-sets/core -- /tpm
 # "skill-sets": ["dependabot"]
-cd <folder> && PATH=<repo>/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{…}}' --add-dir <repo>/skill-sets/core <repo>/skill-sets/dependabot -- /tpm
+cd <folder> && PATH=<repo>/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{…}}' --append-system-prompt '画面への返事は…' --add-dir <repo>/skill-sets/core <repo>/skill-sets/dependabot -- /tpm
 ```
 
 **最初の入力は `--` の後に置く**（`--add-dir` は後ろの語もまとめて folder として読むため）。
@@ -60,7 +60,7 @@ ROSTER_EFFORT=high /foo/bar/roster/cli/bin/roster start
 
 ```sh
 # ROSTER_EFFORT=high roster start が出す 1 行（skill-sets が無いとき）
-cd <folder> && PATH=<repo>/cli/bin:"$PATH" ROSTER_EFFORT=high claude --model claude-opus-5-5 --effort high --permission-mode bypassPermissions --settings '…' --add-dir <repo>/skill-sets/core -- /tpm
+cd <folder> && PATH=<repo>/cli/bin:"$PATH" ROSTER_EFFORT=high claude --model claude-opus-5-5 --effort high --permission-mode bypassPermissions --settings '…' --append-system-prompt '画面への返事は…' --add-dir <repo>/skill-sets/core -- /tpm
 ```
 
 欄ごとに、命令の旗（`roster assign --model` など）> `.claude/roles/config.jsonc` の担当の欄 > 環境変数 > コードの既定 の順で、先に値がある物が使われる。project の config に `"devops-engineer": { "effort": "low" }` と書いてあれば、`ROSTER_EFFORT=high` でもその project の DevOps Engineer 担当は low のまま。表は[設定](/configuration/#model-などの既定の環境変数任意)。
