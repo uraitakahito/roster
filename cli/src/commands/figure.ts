@@ -90,13 +90,70 @@ function renderFigure(ctx: Context, json: FigureJson, name: string, work: string
   throw new TpmError(`図 ${name} は、字が長く、文書の幅（${PAGE_WIDTH}px）に 13px の字で収まりません。箱の字（label・sublabel）を短くしてください`);
 }
 
+/** Archify の validate の答え（--json）のうち、読む所。 */
+interface ValidateReply {
+  ok?: boolean
+  diagnostics?: { code?: string, severity?: string, message?: string, subject?: { path?: string }, supportedFixes?: string[] }[]
+}
+
+/** 直し方が箱の位置（`/nodes/<n>/col` など）を替える物か。位置でない直し（線の端・帯・字）は、図の意味を変える。 */
+export function isPlacementFix(fix: string): boolean {
+  return /^set \/nodes\/[0-9]+\/(col|row|x|y|order)\b/.test(fix);
+}
+
+/**
+ * roster figure validate: 図の JSON 1 つを、embed と同じ形（standard・凡例を消す・箱の幅）にして Archify で検査する。
+ * 通れば 1 行。落ちれば、誤りの診断ごとに、JSON の場所と、直し方（[位置] は箱の位置の直し、[意味] は図の意味を変える直し）を並べて止まる。
+ */
+export function figureValidate(ctx: Context, file: string): string[] {
+  const path = resolve(file);
+  if (!existsSync(path)) throw new TpmError(`file がありません: ${path}`);
+  let json: FigureJson;
+  try {
+    json = JSON.parse(readFileSync(path, 'utf8')) as FigureJson;
+  }
+  catch (e) {
+    throw new TpmError(`JSON を読めません: ${path}（${(e as Error).message}）`);
+  }
+  const type = json.diagram_type;
+  if (typeof type !== 'string' || type === '') throw new TpmError(`${path} に diagram_type がありません`);
+  const work = mkdtempSync(join(tmpdir(), 'roster-figure-'));
+  try {
+    const input = join(work, basename(path));
+    writeFileSync(input, JSON.stringify(fitFigure(json, 1), null, 2));
+    const r = runArchify(ctx, ['validate', type, input, '--quality', 'standard', '--json']);
+    let reply: ValidateReply;
+    try {
+      reply = JSON.parse(r.stdout) as ValidateReply;
+    }
+    catch {
+      throw new TpmError(`Archify の検査の答えを読めません: ${(r.stderr || r.stdout).trim().split('\n')[0] ?? ''}`);
+    }
+    if (reply.ok === true) return [`通った: ${path}`];
+    const lines = [`落ちた: ${path}`];
+    for (const d of (reply.diagnostics ?? []).filter(x => x.severity === 'error')) {
+      lines.push(`- ${d.code ?? ''}（${d.subject?.path ?? '場所なし'}）: ${(d.message ?? '').split('\n')[0] ?? ''}`);
+      const fixes = d.supportedFixes ?? [];
+      if (fixes.length === 0) lines.push('  直し方: 無し（書き手が直す）');
+      for (const fix of fixes.slice(0, 3)) lines.push(`  直し方: [${isPlacementFix(fix) ? '位置' : '意味'}] ${fix}`);
+    }
+    throw new TpmError(lines.join('\n'));
+  }
+  finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+}
+
 /** roster figure embed のオプション。 */
 export interface FigureEmbedOptions {
   /** 図を埋めた物を書く file（置く用）。 */
   out: string
 }
 
-/** roster figure embed: 書き手の file の目印ごとに図を描いて整え、埋めた物を置く用の file に出す（書き手の file は変えない）。 */
+/**
+ * roster figure embed: 書き手の file の目印ごとに図を描いて整え、埋めた物を置く用の file に出す（書き手の file は変えない）。
+ * 描けない図があっても、ほかの図は埋めて書き、描けない図の目印は残して、図ごとの訳を並べて止まる（ある図の誤りが、ほかの図の直しを止めないように）。
+ */
 export function figureEmbed(ctx: Context, file: string, options: FigureEmbedOptions): string[] {
   const src = resolve(file);
   const out = resolve(options.out);
@@ -107,33 +164,41 @@ export function figureEmbed(ctx: Context, file: string, options: FigureEmbedOpti
   if (marks.length === 0) throw new TpmError(`${file} に図の目印（<!-- figure: <JSON の path> -->）がありません`);
   const work = mkdtempSync(join(tmpdir(), 'roster-figure-'));
   const lines: string[] = [];
+  const failed: string[] = [];
+  const done = new Map<string, string>();
   try {
     const pathOf = (ref: string): string => resolve(isAbsolute(ref) ? ref : join(dirname(src), ref));
-    const done = new Map<string, string>();
     const used = new Set<string>();
     for (const m of marks) {
       const ref = m[1] ?? '';
       const jsonPath = pathOf(ref);
       if (done.has(jsonPath)) throw new TpmError(`同じ図の目印が 2 つあります: ${ref}（1 つの図は 1 か所に置く。2 か所に要るなら JSON を写して別の名にする）`);
-      if (!existsSync(jsonPath)) throw new TpmError(`目印の JSON がありません: ${ref}（${jsonPath}）`);
-      let json: FigureJson;
+      const name = uniqueName(figureName(jsonPath), used);
       try {
-        json = JSON.parse(readFileSync(jsonPath, 'utf8')) as FigureJson;
+        if (!existsSync(jsonPath)) throw new TpmError(`目印の JSON がありません: ${ref}（${jsonPath}）`);
+        let json: FigureJson;
+        try {
+          json = JSON.parse(readFileSync(jsonPath, 'utf8')) as FigureJson;
+        }
+        catch (e) {
+          throw new TpmError(`目印の JSON を読めません: ${ref}（${(e as Error).message}）`);
+        }
+        const r = renderFigure(ctx, json, name, work);
+        done.set(jsonPath, r.svg);
+        lines.push(`図 ${name}: ${Buffer.byteLength(r.svg)} byte・縮める割合 ${r.scale.toFixed(2)}・${r.rounds} 回で決まった`);
       }
       catch (e) {
-        throw new TpmError(`目印の JSON を読めません: ${ref}（${(e as Error).message}）`);
+        if (!(e instanceof TpmError)) throw e;
+        failed.push(`図 ${name}（${ref}）を埋められません: ${e.message}`);
       }
-      const name = uniqueName(figureName(jsonPath), used);
-      const r = renderFigure(ctx, json, name, work);
-      done.set(jsonPath, r.svg);
-      lines.push(`図 ${name}: ${Buffer.byteLength(r.svg)} byte・縮める割合 ${r.scale.toFixed(2)}・${r.rounds} 回で決まった`);
     }
     mkdirSync(dirname(out), { recursive: true });
-    writeFileSync(out, text.replace(MARKER, (_m, ref: string) => done.get(pathOf(ref)) ?? ''));
+    writeFileSync(out, text.replace(MARKER, (m: string, ref: string) => done.get(pathOf(ref)) ?? m));
   }
   finally {
     rmSync(work, { recursive: true, force: true });
   }
+  if (failed.length > 0) throw new TpmError([...lines, ...failed, `書いた: ${out}（図 ${marks.length} つのうち ${done.size} つを埋めた。埋められなかった図の目印は残した。JSON を直してから打ち直す）`].join('\n'));
   return [...lines, `書いた: ${out}`];
 }
 

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vitest';
-import { figureEmbed, figureName, figureShot, figureSetup } from '../src/commands/figure.ts';
+import { figureEmbed, figureName, figureShot, figureSetup, figureValidate, isPlacementFix } from '../src/commands/figure.ts';
 import type { Context } from '../src/context.ts';
 import type { Exec, ExecResult } from '../src/exec.ts';
 import { archifyBin, archifyHome, archifyVersion } from '../src/figure/archify.ts';
@@ -301,12 +301,27 @@ describe('roster figure embed', () => {
     expect(width * scale).toBeGreaterThanOrEqual(113 - 1);
   });
 
-  test('Archify が描けない JSON は、診断を並べて止まる（置く用の file を書かない）', () => {
+  test('Archify が描けない JSON は、診断を並べて止まる。置く用の file には目印を残す', () => {
     const fake: Exec = cmd => cmd === 'env' ? ok(JSON.stringify({ ok: false, diagnostics: [{ code: 'i18n/locale-fallback', message: 'x' }, { code: 'workflow/node-overlap', message: 'Node overlaps\nmore' }] })) : ok();
     const { ctx } = setup(fake);
     const { dir, file } = writer();
-    expect(() => figureEmbed(ctx, file, { out: join(dir, 'out.html') })).toThrow(/描けません[\s\S]*workflow\/node-overlap: Node overlaps$/);
-    expect(existsSync(join(dir, 'out.html'))).toBe(false);
+    expect(() => figureEmbed(ctx, file, { out: join(dir, 'out.html') })).toThrow(/図 fig-flow（flow.json）を埋められません: [^\n]*描けません[\s\S]*workflow\/node-overlap: Node overlaps\n書いた: .*（図 1 つのうち 0 つを埋めた/);
+    expect(readFileSync(join(dir, 'out.html'), 'utf8')).toContain('<!-- figure: flow.json -->');
+  });
+
+  test('描けない図があっても、ほかの図は埋める（ある図の誤りが、ほかの図の直しを止めない）', () => {
+    const fake = fakeArchify(() => FIXTURE);
+    const { ctx } = setup((cmd, args, o) => {
+      const input = args[args.indexOf('export-svg') + 2] ?? '';
+      if (cmd === 'env' && input.endsWith('fig-broken.json')) return ok(JSON.stringify({ ok: false, diagnostics: [{ code: 'workflow/node-overlap', message: 'overlap' }] }));
+      return fake(cmd, args, o);
+    });
+    const { dir } = writer();
+    writeFileSync(join(dir, 'broken.json'), JSON.stringify({ diagram_type: 'workflow', nodes: [] }));
+    writeFileSync(join(dir, 'two.html'), '<!-- figure: broken.json --><!-- figure: flow.json -->');
+    expect(() => figureEmbed(ctx, join(dir, 'two.html'), { out: join(dir, 'out.html') })).toThrow(/^図 fig-flow: [\s\S]*図 fig-broken（broken.json）を埋められません[\s\S]*図 2 つのうち 1 つを埋めた/);
+    const out = readFileSync(join(dir, 'out.html'), 'utf8');
+    expect(out).toMatch(/^<!-- figure: broken.json --><svg [^>]*class="fig-flow"/);
   });
 
   test('縮める割合が決まらない図（字が長すぎる）は、字を短くするよう言って止まる', () => {
@@ -366,6 +381,77 @@ describe('roster figure embed', () => {
   test('図の名は JSON の file の名から（英小文字・数字・-）', () => {
     expect(figureName('/x/Review Flow.json')).toBe('fig-review-flow');
     expect(figureName('/x/図.json')).toBe('fig-x');
+  });
+});
+
+describe('roster figure validate', () => {
+  /** validate の偽物: 渡された JSON を集め、決めた答えを返す。 */
+  function fakeValidate(reply: unknown, seen: Record<string, unknown>[] = [], args: string[][] = []): Exec {
+    return (cmd, a) => {
+      if (cmd !== 'env') return ok();
+      args.push(a);
+      seen.push(JSON.parse(readFileSync(a[a.indexOf('validate') + 2] ?? '', 'utf8')) as Record<string, unknown>);
+      return ok(JSON.stringify(reply));
+    };
+  }
+
+  test('embed と同じ形（standard・箱の幅）にして standard で検査し、通れば 1 行', () => {
+    const seen: Record<string, unknown>[] = [];
+    const args: string[][] = [];
+    const { ctx } = setup(fakeValidate({ ok: true }, seen, args));
+    const dir = temp('validate');
+    writeFileSync(join(dir, 'flow.json'), JSON.stringify({ diagram_type: 'workflow', meta: { locale: 'ja' }, nodes: [{ label: '検査と直し' }] }));
+    expect(figureValidate(ctx, join(dir, 'flow.json'))).toEqual([`通った: ${join(dir, 'flow.json')}`]);
+    expect(seen[0]?.meta).toEqual({ quality_profile: 'standard', legend: { mode: 'hidden' } });
+    expect((seen[0]?.nodes as { width: number }[])[0]?.width).toBe(113);
+    expect(args[0]?.slice(-5)).toEqual(['workflow', args[0]?.at(-4), '--quality', 'standard', '--json']);
+  });
+
+  test('落ちれば、誤りの診断ごとに場所と直し方（[位置]・[意味]・無し）を並べて止まる。警告は出さない', () => {
+    const { ctx } = setup(fakeValidate({ ok: false, diagnostics: [
+      { code: 'i18n/locale-fallback', severity: 'warning', message: 'x', supportedFixes: ['Use a bundled locale'] },
+      { code: 'workflow/node-overlap', severity: 'error', message: 'Nodes overlap\nmore', subject: { path: '/nodes/2' }, supportedFixes: ['set /nodes/2/col to verified free column 2', 'set /nodes/2/col to verified free column 3', 'set /nodes/2/col to verified free column 4', 'set /nodes/2/col to verified free column 5'] },
+      { code: 'workflow/unknown-edge-endpoint', severity: 'error', message: 'unknown target', subject: { path: '/edges/3/to' }, supportedFixes: ['set /edges/3/to to verified node id "draw"'] },
+      { code: 'workflow/x', severity: 'error', message: 'no fix' },
+    ] }));
+    const dir = temp('validate');
+    writeFileSync(join(dir, 'flow.json'), JSON.stringify({ diagram_type: 'workflow', nodes: [] }));
+    let message = '';
+    try {
+      figureValidate(ctx, join(dir, 'flow.json'));
+    }
+    catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message.split('\n')).toEqual([
+      `落ちた: ${join(dir, 'flow.json')}`,
+      '- workflow/node-overlap（/nodes/2）: Nodes overlap',
+      '  直し方: [位置] set /nodes/2/col to verified free column 2',
+      '  直し方: [位置] set /nodes/2/col to verified free column 3',
+      '  直し方: [位置] set /nodes/2/col to verified free column 4',
+      '- workflow/unknown-edge-endpoint（/edges/3/to）: unknown target',
+      '  直し方: [意味] set /edges/3/to to verified node id "draw"',
+      '- workflow/x（場所なし）: no fix',
+      '  直し方: 無し（書き手が直す）',
+    ]);
+  });
+
+  test('箱の位置の直しだけが [位置]。線の端・帯・字は [意味]', () => {
+    expect(isPlacementFix('set /nodes/2/col to verified free column 2')).toBe(true);
+    expect(isPlacementFix('set /nodes/0/row to 1')).toBe(true);
+    expect(isPlacementFix('set /nodes/1/lane to verified lane id "h"')).toBe(false);
+    expect(isPlacementFix('set /edges/3/to to verified node id "draw"')).toBe(false);
+    expect(isPlacementFix('set /nodes/1/label to "x"')).toBe(false);
+  });
+
+  test('file が無い・読めない・diagram_type が無い時は止まる', () => {
+    const { ctx } = setup(fakeValidate({ ok: true }));
+    const dir = temp('validate');
+    expect(() => figureValidate(ctx, join(dir, 'none.json'))).toThrow('file がありません');
+    writeFileSync(join(dir, 'bad.json'), '{');
+    expect(() => figureValidate(ctx, join(dir, 'bad.json'))).toThrow('JSON を読めません');
+    writeFileSync(join(dir, 'x.json'), '{}');
+    expect(() => figureValidate(ctx, join(dir, 'x.json'))).toThrow('diagram_type がありません');
   });
 });
 

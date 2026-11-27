@@ -46,7 +46,8 @@ import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-// 15. fork の skill の本文で打ってよい roster の命令（読むだけの物と、Auditor が証拠に使う時系列のページ）。
+// 15. fork の skill の本文で打ってよい roster の命令（読むだけの物と、Auditor が証拠に使う時系列のページと、
+// file だけを書く図の命令（figure-fix が打つ。知らせ・状態・名簿は変えない）。
 // ここに無い命令は止まるので、roster に命令が増えても、知らせる命令が fork に入り込まない
 const FORK_COMMANDS = [
   "page path",
@@ -64,6 +65,9 @@ const FORK_COMMANDS = [
   "castlist lineage",
   "castlist events",
   "castlist settings",
+  "figure validate",
+  "figure embed",
+  "figure shot",
 ];
 // protocol.ts は型の import だけなので、Node がそのまま読める（check-refs.mjs の 10 と同じ）
 const { COMMANDS } = await import(join(REPO, "cli", "src", "protocol.ts"));
