@@ -34,7 +34,7 @@ roster watch pr <PR の URL> --timeout 0  # 今の様子を 1 回見て、待た
 | 終了コード | 意味 | 出す行 |
 |---|---|---|
 | 0 | 通った（`watch github` は、戻った） | `通った: check 5 つ（4 分 12 秒）` |
-| 10 | 落ちた物がある | 落ちた check・workflow の名と URL。`watch pr` は、ほかがまだ動いていても、1 つ分かった時に終わる。`watch main` と `watch tag` は、みな終わるまで待ってから終わる（`roster report merged` が、みな終わるまで送らないため） |
+| 10 | 落ちた物がある | 落ちた check・workflow の名と URL。`watch pr` は、ほかがまだ動いていても、1 つ分かった時に終わる。`watch main` は、みな終わるまで待ってから終わる（`roster report merged` が、みな終わるまで送らないため）。`watch tag` も、みな終わるまで待つ（release の手順の次の段へ、みな見てから進むため） |
 | 20 | まだ（長さを過ぎた。GitHub が応えないまま過ぎた時も） | まだの数と、もう 1 度見張る命令 |
 | 30 | check・workflow の回が付いていない | 「通ったのではない」と出す。**0 にしない**（GitHub が遅い時に、CI を見ずに merge へ進まないため） |
 | 1 | 見張れない（PR が無い・認証や権限が無い・merge していない PR の `watch main`・PR の URL でない字・`watch tag` の tag が無い） | 訳 |
@@ -42,9 +42,9 @@ roster watch pr <PR の URL> --timeout 0  # 今の様子を 1 回見て、待た
 - **数では待たない。** `watch pr` は、付いている check がみな終わったかで判じる（docs と skill だけの PR は check が 3 つ、など、数は PR で違う）。check が 1 つも付いていない間は 5 分まで待ち、付かなければ 30 で終わる。毎回、先に PR の head と branch の先（push した commit）を比べ、違う間は「まだ」と見て check を読まない（push の直後は、PR の head が前の commit のままで、`gh pr checks` が前の commit の落ちた check を返し、10 で終わっていた。2026-11-27 の roster #270、台帳 #340）。PR が開いていない時（merge・close した PR は、GitHub が head を止めるが、branch は進みうる）・branch が無い時（merge して消した）・head の repo が無いか読めない時は比べない。
 - **1 度見ただけでは「通った」にしない。** みな終わったのを、間を空けて 2 度続けて見てから 0 で終わる（遅れて付く check・遅れて作られる回を待つため。`--timeout 0` は 1 度だけ見る）。
 - `watch main` は、PR の check の回（`pull_request`）を数えず、workflow ごとに、いちばん新しい回で判じる（落ちた `docs` を `gh workflow run docs.yml --ref main` で流し直した時は、新しい回を見る）。merge から 2 分の間は、回が無くても・在る回がみな終わっていても「まだ」と見る（回が、まだ作られきっていないことがある）。取り消された回（`cancelled`）は「落ちた」に数えない: `docs` は同じ concurrency の group で、merge が続くと、後の回が待っている回を取り消して公開する（見張りは、後の回が済ませたかまでは見ない。通った数には入れず、行に「・取り消し 1 つ」と出す）。
-- `watch tag` は、tag の commit の sha を引き（注釈付きの tag も commit の sha になる）、`gh run list --branch <tag> --event push` の回のうち、その sha の物だけを、`watch main` と同じ判じ方で見る（workflow ごとに、いちばん新しい回・取り消しは数えない・みな終わるまで待つ）。sha で絞るのは、消して打ち直した tag の古い回を数えないため。軽い tag には時刻が無いので、回が無い間は見張りを始めてから 2 分、回が在る間はいちばん古い回が作られてから 2 分を、回がまだ作られきっていないと見る。tag で動く workflow の無い repo の tag は、打った直後と見分けられないので、`--timeout 0` では 20（回がまだ作られていない）、既定の長さでは 5 分待って 30 で終わる。castlist・callboard・pagetray は、`v*` の tag の push で `release`（image を作って置く）と `docs` が動く（release は 3〜5 分）。
+- `watch tag` は、tag の commit の sha を引き（注釈付きの tag も commit の sha になる）、`gh run list --branch <tag> --event push` の回のうち、その sha の物だけを、`watch main` と同じ判じ方で見る（workflow ごとに、いちばん新しい回・取り消しは数えない・みな終わるまで待つ）。sha で絞るのは、消して別の commit に打ち直した tag の古い回を数えないため（同じ commit に打ち直すと、前の回も同じ sha なので見る。出した tag は打ち直さないのが release の決まり）。軽い tag には時刻が無いので、回が無い間は見張りを始めてから 2 分、回が在る間はいちばん古い回が作られてから 2 分を、回がまだ作られきっていないと見る。tag で動く workflow の無い repo の tag は、打った直後と見分けられないので、`--timeout 0` では 20（回がまだ作られていない）、既定の長さでは 5 分待って 30 で終わる。castlist・callboard・pagetray は、`v*` の tag の push で `release`（image を作って置く）と `docs` が動く（release は 3〜5 分）。
 - `watch github` は、続けて 2 度応えたら「戻った」とする（戻りかけの揺れで起こさない）。`--repo` があればその repo を読めるかで、無ければ API が応えるかで見る。GitHub の障害は一部だけのことが多いので、落ちた手に近い repo を `--repo` で名指す（API が応えても、merge・push・Actions がまだ落ちていることはある。「戻った」の後に打ち直した命令がまた落ちたら、もう 1 度見張る）。上限（rate limit）に当たった時も、見張りは止まらずに聞き直す。
-- 聞く間は 20 秒から始め、長く待つほど空ける（長くて 60 秒）。GitHub が応えない間も、`watch pr`・`watch main` は止まらずに聞き直す。途中の様子は出さない（担当が読む字を増やさないため）。
+- 聞く間は 20 秒から始め、長く待つほど空ける（長くて 60 秒）。GitHub が応えない間も、`watch pr`・`watch main`・`watch tag` は止まらずに聞き直す。途中の様子は出さない（担当が読む字を増やさないため）。
 - 終わった見張り 1 回につき 1 行が、状態の folder の `watch.jsonl` に残る（始めた時刻とかかった秒を持つ。[決まりの記録](/protocol/)）。課題ごとに、CI を何分待ったかを後から数えられる。途中で止められた見張り（席が閉じた・担当が止めた）は残らない。
 
 ## 移す手順
