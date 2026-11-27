@@ -928,7 +928,7 @@ async function assertSupersede(ctx: Context, self: RoleRecord, url: string, supe
 }
 
 /**
- * Product Manager に決めてほしいことを書いた確認のページを、TPM 担当に送る。ページは開かない（Product Manager は置き場の一覧の UI で見る）。
+ * Product Manager に決めてほしいことを書いた確認のページを、TPM 担当に送る。ページは開かない（Product Manager は callboard のページの一覧で見る）。
  * supersede は、この確認で置き換える古い確認。送った後、その返事待ちの印を外す（答える要が無くなったため）。
  */
 export async function askPm(ctx: Context, options: { url: string, items: string[], waitingFor: string, supersede?: string[] }): Promise<string[]> {
@@ -952,7 +952,7 @@ export async function askPm(ctx: Context, options: { url: string, items: string[
     points: options.items,
   });
   const sent = await toTpm(ctx, self, 'ask-pm', body);
-  // 置き場の確認のページを返事待ちにする（Product Manager が、一覧の UI の印と件数で気づく）。書けなくても、送った事は変わらない。
+  // 置き場の確認のページを返事待ちにする（Product Manager が、callboard のページの一覧の印と件数で気づく）。書けなくても、送った事は変わらない。
   // 置き換えた古い確認は、返事待ちから外す（残すと、答える要の無いページが「返事待ち」に出続ける）。
   const marks = await replyLine(ctx, options.url, 'waiting');
   for (const old of supersede) marks.push(...await replyLine(ctx, old, 'answered', '置き換えたので返事待ちを外した'));

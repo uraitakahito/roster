@@ -169,7 +169,7 @@ figcaption{color:var(--mute);font-size:13px}
 
 ## 画面の写しを撮る（画面を変えた結果）
 
-画面（置き場の一覧の UI・docs の site など）を変えた結果は、前と後の写しを png にして `roster file put <file> --reviewed` で上げ、ページから `<img src="files/<語>-<n>.png">` で参照する（`protocol.md` の「ページ」の file の項）。roster を動かす機械の Chrome の headless で撮れる:
+画面（callboard のページの一覧・docs の site など）を変えた結果は、前と後の写しを png にして `roster file put <file> --reviewed` で上げ、ページから `<img src="files/<語>-<n>.png">` で参照する（`protocol.md` の「ページ」の file の項）。roster を動かす機械の Chrome の headless で撮れる:
 
 ```sh
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --disable-gpu --hide-scrollbars \

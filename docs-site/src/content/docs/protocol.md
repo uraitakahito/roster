@@ -66,17 +66,17 @@ flowchart TB
 
 ## ページの置き場
 
-依頼書・確認・提案・計画・結果の HTML を置く、roster を動かす機械の中だけの置き場。ページを DB に持つサーバー（別の repo の pagetray）の container が、`127.0.0.1` だけで待ち受ける（起こし方は [運用](/operations/#ページの置き場pagetray)。起こす・止めるのは DevOps Engineer 担当）。`http://127.0.0.1:8801/` が一覧の UI で、Product Manager は、置いた担当の役割・居場所（workspace の ID）・Key・種類で絞り、時刻で並べ、題と本文を探して、選んだ 1 枚を同じ画面で読む。
+依頼書・確認・提案・計画・結果の HTML を置く、roster を動かす機械の中だけの置き場。ページを DB に持つサーバー（別の repo の pagetray）の container が、`127.0.0.1` だけで待ち受ける（起こし方は [運用](/operations/#ページの置き場pagetray)。起こす・止めるのは DevOps Engineer 担当）。ページの一覧は callboard の画面（`http://127.0.0.1:8803/pages/`。Key の画面は `/pages/?project=<状態の folder の名>&key=<Key>`）で、Product Manager は、置いた担当の役割・居場所（workspace の ID）・Key・種類で絞り、時刻で並べ、題と本文を探して、選んだ 1 枚を同じ画面で読む。
 
 - `roster page put <file> --kind <種類>` が、file を置き場に送り、URL（`<置き場の URL>/<状態の folder の名>/<Key>/<種類>-<番号>.html`）を出す。置いた担当の役割（`$ROSTER_ROLE`。TPM 担当は `tpm`）と居場所の宛先も、一緒に置き場に入る。同じ中身を、roster を動かす機械の控えの folder（`<控えの folder>/<状態の folder の名>/<Key>/<種類>-<番号>.html`）にも写す。種類は `brief`・`confirm`・`proposal`・`plan`・`result`・`review`（Staff Engineer 担当のレビュー）・`issue`（課題の写し。ふだんは `roster assign` が置く）・`timeline`（時系列。`roster incident timeline` が置く）・`audit`（監査。思わぬ出来事の原因と改善案）。Key は担当なら今の課題の Key（Staff Engineer 担当の席は、見ている課題の Key）、TPM 担当は `--key` で書く。番号は置き場が決める（同じ Key・同じ種類の次の番号。多くの担当が同時に置いても重ならない。消したページの番号も使わない）。置いたページの本文を書き換えるエンドポイントは無い（置き直すと次の番号。置いた後に変わるのは、下の返事の状態だけ）。
 - project は `$ROSTER_PROJECT`、無ければ今いる folder。`.claude/roles/config.jsonc` も TPM 担当が起きた印（状態の folder の `tpm.jsonc`）も無い folder（scratchpad など）から `roster page put` を打つと、置き場に頼む前に止まる（その folder の名が別の project として置かれるのを防ぐ）。project の folder で打つか、`$ROSTER_PROJECT` を付ける。
 - 置き場が応えなければ、ページは置けない。控えにあるページは読める。`roster ask devops` で起こすよう頼む。
-- **送り手**: castlist の設定（[下](#アクターの台帳castlist)）があり、`$CLAUDE_CODE_SESSION_ID` がある時、`roster page put`・`roster file put`（と、`roster assign` の課題の写し・`roster incident timeline` の時系列）は、置く要求の引数に送り手の付随する id（`actor_issuer` は session を登録する時と同じ issuer、`actor_ref` は `claude.session:<session の id>`）を付ける。置き場は、受けたその時に castlist に送り手を聞き、記録の `sender` に残す（一覧の UI に送り手の名が出る）。どちらかが無ければ付けず、今までどおり置く。`roster page import` も付けない（置いた担当はわからない）。置き場が断った時は、ページも file も置かれておらず、`roster` は送り直さない。
+- **送り手**: castlist の設定（[下](#アクターの台帳castlist)）があり、`$CLAUDE_CODE_SESSION_ID` がある時、`roster page put`・`roster file put`（と、`roster assign` の課題の写し・`roster incident timeline` の時系列）は、置く要求の引数に送り手の付随する id（`actor_issuer` は session を登録する時と同じ issuer、`actor_ref` は `claude.session:<session の id>`）を付ける。置き場は、受けたその時に castlist に送り手を聞き、記録の `sender` に残す（callboard のページの一覧に送り手の名が出る）。どちらかが無ければ付けず、今までどおり置く。`roster page import` も付けない（置いた担当はわからない）。置き場が断った時は、ページも file も置かれておらず、`roster` は送り直さない。
   - `503`（置き場が castlist に聞けない）: 「castlist に送り手を聞けませんでした」と出て止まる。castlist が起きてから打ち直す。castlist が起きているのに続く時は、`roster report incident` で台帳に挙げる（置き場から castlist に届いていない。[運用](/operations/#起こす)）。
   - `400`（欄 `/actorRef`。castlist に、この session の登録が無い）: 「castlist に登録が無いと、置き場が答えました（400）」と出て止まる。`/actorRef` の形の誤り（打ち直しても通らない）は、置き場が断った訳をそのまま出す。session は Bash の前に guard が登録するので、打ち直す。続く時は `roster report incident` で台帳に挙げる。
 - `roster page path <URL>` が、置き場の URL を控えの file の path にする（Read tool で読むため）。控えに無ければ、置き場から取って控えに写す。前の置き場の `http://127.0.0.1:8800` の URL も、同じ控えの path になる（browser では、置き場が 8800 でも同じ path で返す）。ページの `src`・`href` が相対で参照する file（下）のうち控えに無い物も取り、ページから同じ相対の所に写して、`参照の file:` の行に path を出す（取れなければ `注意:` の行を出し、ページの path は返す）。
 - `roster page list` が、置き場のページを絞って探す（`--key`・`--role`・`--workspace`・`--kind`・`--q`・`--reply`。`--json` は記録の配列）。既定は今の project の新しい順 50 件で、`--all-projects` でほかの project も出す。
-- **返事の状態**: 置き場は、Product Manager の返事が要るページに「返事待ち」「答えた」の状態を持ち、一覧の UI は、操作の帯の「返事待ち N 件」・行の印・絞り込みの「返事」で出す。書くのは `roster` の命令で、担当は手で書かない。
+- **返事の状態**: 置き場は、Product Manager の返事が要るページに「返事待ち」「答えた」の状態を持ち、callboard のページの一覧は、操作の帯の「返事待ち N 件」・行の印・絞り込みの「返事」で出す。書くのは `roster` の命令で、担当は手で書かない。
   - `roster ask pm --url <確認の URL>` が、【ask-pm】を送った後に、そのページを返事待ちにする（置いただけの確認には印が付かない）。
   - `roster ask pm --supersede <古い確認の URL>`（何度でも）が、この確認で置き換える古い確認の返事待ちを外す。受けるのは同じ Key の返事待ちの確認だけで、別の project・Key・答え済み・送っていない確認・送る確認そのものは、送る前に断る。【ask-pm】の本文に「置き換える確認:」と URL が載る（log に残る）。置き場が応えない時は確かめずに送り、外せなかったことと `roster page reply <URL> --answered` の直し方を出す。
   - `roster answer <Key> "<答え>"` が、【answer】を返した後に、その Key の返事待ちのページを答えたにする。返事待ちが 2 枚以上ある時は、送る前に止まって URL を並べる（別の確認まで答えたにしないため）。どのページへの答えかを `--url <確認の URL>`（何度でも）で書くか、みなへの答えなら `--all` を付ける。
@@ -90,10 +90,10 @@ flowchart TB
   - **写せなくても、送りは止めない**。置き場が応えない・古い版・形の誤りのどれでも、送った事と `log.jsonl` は変わらず、命令の出力にも何も出ない。写せなかった事だけが、状態の folder の `message-records.jsonl` に 1 行残る。後から写し直す命令は無い。
   - 置き場が送り手を castlist に聞けない（503）・castlist に登録が無いと断った時は、送り手の付随する id を外して 1 度だけ置き直す（送り手が空の記録になる）。置けたら、その事を `message-records.jsonl` に `placed` の欄を付けて残す。
   - 置き場が答えない時は、送る命令の終わりが 2 秒（置き直しが入ると長くて 4 秒）遅れる。
-- **レビューの印**: 置き場は、返事待ちの相手（Product Manager・レビューの席・TPM 担当）と、レビューの判定・見た物も持つ。TPM 担当を通らないレビューのやりとりを、Product Manager と TPM 担当が一覧の UI で追うための物。書くのは `roster` の命令で、担当は手で書かない。置き場に写すのは、判定の語・見た物の URL・時刻だけ。
+- **レビューの印**: 置き場は、返事待ちの相手（Product Manager・レビューの席・TPM 担当）と、レビューの判定・見た物も持つ。TPM 担当を通らないレビューのやりとりを、Product Manager と TPM 担当が callboard のページの一覧で追うための物。書くのは `roster` の命令で、担当は手で書かない。置き場に写すのは、判定の語・見た物の URL・時刻だけ。
   - `roster ask review` と、Staff Engineer 担当の席の起こし直し（`roster ask review`・`roster assign --role staff-engineer`）が、依頼書に見る物（置き場のページは path、PR は URL）を書いて「レビュー待ち」にする。起こし直しで置き換えた前の依頼書は、返っていない頼みがほかに無ければ待ちを外す。
-  - `roster report review` が、レビューのページに判定と、済ませた頼みの見る物をみな書き、依頼書を「レビュー済み」にする。一覧の UI は、レビューの行に判定の印と「見た物:」の link、見られたページの行に「レビュー: review-N 判定」を出す。
-  - `roster ask tpm --review <番号>` が、レビューのページを「上げた」（TPM 担当の返事待ち）にする。TPM 担当は、決めたら `roster page reply <URL> --answered --on tpm` で「決まった」にする。一覧の UI の操作の帯に「レビュー待ち N 件」「上げた N 件」が出る。
+  - `roster report review` が、レビューのページに判定と、済ませた頼みの見る物をみな書き、依頼書を「レビュー済み」にする。ページの一覧は、レビューの行に判定の印と「見た物:」の link、見られたページの行に「レビュー: review-N 判定」を出す。
+  - `roster ask tpm --review <番号>` が、レビューのページを「上げた」（TPM 担当の返事待ち）にする。TPM 担当は、決めたら `roster page reply <URL> --answered --on tpm` で「決まった」にする。ページの一覧の操作の帯に「レビュー待ち N 件」「上げた N 件」が出る。
   - 「返事待ち N 件」・`roster answer` の数・`roster ask pm --supersede` の確かめは、Product Manager の待ちだけを見る。`roster page list --reply waiting --on review|tpm` で、ほかの相手の待ちを並べる。`roster dismiss` は、残ったレビュー待ち・上げた件も、相手ごとに並べる。
 - `roster page import` が、控えの folder にあって置き場に無いページを、同じ番号・file の時刻で置き場に入れる（DB を失った後。何度打っても同じ結果）。置いた担当はわからないので、役割は依頼書と課題の写しだけ `roster`、ほかは `unknown` で入る。控えの `<Key>/files/` の file も同じ決まりで入れる（役割は `unknown`）。
 - `roster page delete` が、ページを置き場と控えの folder から消す（戻せない）。**消してよいのは TPM 担当だけ**で、担当の居場所から打つと止まる。Auditor が置いたページ（置いた担当の役割が `auditor`）は、Product Manager の言葉を `--pm "<言葉>"` に添えなければ消せず、消した事は `audits.jsonl` に残る（担当は `roster ask tpm` で、消すページの URL と訳を送って頼む。置き場に消す要求を直に送る `curl` と、置き場の CLI の `pagetray page delete` も guard が止める）。URL を名指すと 1 枚、`--key <Key>` でその Key のページみな、`--project <名>` だけで、その project（状態の folder の名）のページみなを消す（`--key`・`--project` は、合う file も一緒に消す）。まず消す物を一覧で出し、`--yes` を付けたときだけ消す。消したページの URL は `410` を返し、その番号は 2 度使われず、`roster page import` でも入らない。

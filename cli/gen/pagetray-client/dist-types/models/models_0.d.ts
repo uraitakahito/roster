@@ -205,7 +205,7 @@ export interface CreateFileInput {
      */
     name: string | undefined;
     /**
-     * 置いた担当の役割。一覧の UI から上げる時のほかは要る（無ければ server が 400）。
+     * 置いた担当の役割。要る（無ければ server が 400）。
      * @public
      */
     role?: string | undefined;
@@ -797,7 +797,7 @@ export interface ListFilesInput {
      */
     role?: string | undefined;
     /**
-     * 空（`workspace=`）も条件: workspace を書かずに置いた file（一覧の UI から上げた物も）。
+     * 空（`workspace=`）も条件: workspace を書かずに置いた file（画面から上げた物も）。
      * @public
      */
     workspace?: string | undefined;

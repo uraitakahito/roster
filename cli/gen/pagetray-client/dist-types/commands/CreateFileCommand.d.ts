@@ -36,8 +36,8 @@ declare const CreateFileCommand_base: {
  * 番号（`n`）を書かなければ、同じ project・key・語・拡張子の置いた番号と消した番号の最大 + 1（初めは 1）。
  * 書けば（取り込み）その番号で置き、置いた・消した番号なら 409（何も替えない）。
  * 送り手は CreatePage と同じ（castlist には、ほかの検査（400・415）の後に聞く）。
- * 一覧の UI の form から上げた物（守りの層が `Origin` の例外として通した物）は、役割 `product-manager`・workspace 空で残し、
- * `n`・`createdAt`・`actorIssuer`・`actorRef` を読まない（`role` も書かなくてよい）。ほかの要求は `role` が要る（無ければ 400）。
+ * `role` は、いつも要る（無ければ 400）。browser の中のページからは置けない（守りの層が `Origin` の付いた要求を断る）。
+ * 画面（callboard）の form から上げた file は、callboard が `Origin` を付けずに、役割 `product-manager` で置く。
  * @example
  * Use a bare-bones client and the command you need to make an API call.
  * ```javascript
