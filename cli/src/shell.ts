@@ -227,9 +227,10 @@ function head(words: string[]): string[][] {
     break;
   }
   const rest = words.slice(k);
-  const name = rest[0]?.split('/').at(-1);
+  // 命令の名は、置き換えの跡の印を除いて読む（`pkill$(true)` は pkill。印を残すと、名で比べる守りから外れる。t-ta2b の review-2 の指摘 2）。
+  const name = rest[0]?.replaceAll(SUBSTITUTED, '').split('/').at(-1);
   // 命令の名が置き換えだけの語（`$(…) args`）は、名を読めないので命令に数えない（前からの形）。
-  if (name === undefined || name.replaceAll(SUBSTITUTED, '') === '') return [];
+  if (name === undefined || name === '') return [];
   if (name === 'eval') return splitCommands(rest.slice(1).join(' '));
   if (SHELLS.has(name)) {
     const c = rest.findIndex(w => /^-[a-z]*c[a-z]*$/.test(w));

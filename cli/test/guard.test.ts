@@ -474,6 +474,8 @@ describe('pattern で process に合図を送る命令（台帳 #89・#92）', (
     'sh -c "pkill -f x"',
     'x=$(killall -s x)',
     'ROSTER_RAW=1 pkill -f x',
+    // 命令の名の途中の置き換え（t-ta2b の review-2 の指摘 2）。
+    'pkill$(true) -f foo',
     // kill でも、的を名指さない物は、pattern で選んだ物にまとめて送るのと同じ。
     'pgrep -f x | xargs kill',
     'pgrep -f x | xargs kill -9',
@@ -631,6 +633,8 @@ describe('Staff Engineer 担当は repo を変えない', () => {
     ['gh pr comment 141 --body x', false],
     ['gh pr merge 141 --squash', false],
     ['ROSTER_RAW=1 git push', false],
+    // 命令の名の途中の置き換え（t-ta2b の review-2 の指摘 2）。
+    ['git$(true) push', false],
   ])('%s', (command, allow) => {
     expect(ask(command, 'staff-engineer').allow).toBe(allow);
   });
@@ -1064,6 +1068,19 @@ describe('旗の書き方をそろえて読む（t-ta2b。台帳 #300）', () =>
     'ssh host \'container run -d --name "$N" ghcr.io/uraitakahito/castlist:v2.0.0\'',
     // 字の含みは、そろえる前の項目の字のまま（container の語の無い包みも、今までどおり止まる。review-1 の指摘 7）。
     './up.sh --name=castlist.box',
+    // 前の区切りに exec か -- のある container の命令があっても、後ろの ssh の中を読む（review-2 の指摘 1）。
+    'container exec web ls; ssh host \'container run --rm --mount type=volume,source=castlist-data-v1,target=/data docker.io/library/alpine:3.22 sh\'',
+    'container run --rm docker.io/library/alpine:3.22 -- true; ssh host \'container run --rm -v=castlist-data-v1:/data docker.io/library/alpine:3.22 sh\'',
+    // 命令の名の途中の置き換え（review-2 の指摘 2）。
+    'container$(true) stop castlist.box',
+    'timeout 60 container$(true) stop castlist.box',
+    // 値の無い --mount（review-2 の指摘 3）。
+    'echo \'type=volume,source=castlist-data-v1,target=/data docker.io/library/alpine:3.22 sh\' | xargs container run --rm --mount',
+    // 空でありうる path の変数の後ろに字が続く（review-2 の指摘 4）。
+    'container run --rm -v "${OLDPWD}castlist-data-v1:/data" docker.io/library/alpine:3.22 sh',
+    'container run --rm -v "${TMPDIR}castlist-data-v1:/data" docker.io/library/alpine:3.22 sh',
+    // image より後ろの語（container の中の命令）もそろえて読む（image の位置は、値を取る旗を知らないと決まらない。-- を挟めばそろえない。review-2 の指摘 5）。
+    'container run --rm docker.io/library/alpine:3.22 tar -xzv castlist-data-v1.tgz',
   ];
   // 関わりの無い命令・読むだけの命令・文と検索。
   const castlistPasses = [
@@ -1072,7 +1089,14 @@ describe('旗の書き方をそろえて読む（t-ta2b。台帳 #300）', () =>
     'container run --rm --mount type=bind,source=/tmp/x,target=/x docker.io/library/alpine:3.22 sh',
     'container run --rm -v "$PWD:/w" docker.io/library/alpine:3.22 sh',
     'container run --rm -v "$HOME/x:/x" docker.io/library/alpine:3.22 sh',
-    'container run --rm -v "${TMPDIR}x:/x" docker.io/library/alpine:3.22 sh',
+    'container run --rm -v "${TMPDIR}/x:/x" docker.io/library/alpine:3.22 sh',
+    'container run --rm -v "$OLDPWD:/x" docker.io/library/alpine:3.22 sh',
+    // 区切りの外の命令の旗は、container の旗と読まない（review-2 の指摘 1）。
+    'container logs mytest 2>&1 | grep -v "$X"',
+    'container ls | grep -v "$PAT"',
+    'for n in a b; do container logs "$n" | grep -v "$n"; done',
+    'container ls; echo "--name $N"',
+    'mkdir -pv "$OUT" && container ls',
     'container run --rm -v /tmp/x:/x docker.io/library/alpine:3.22 sh',
     'container run --rm --name "test-$N" docker.io/library/alpine:3.22 sh',
     // 字の頭も終わりも読む（"$N"x は、字の分け方が引用の切れ目を持たないので $Nx の 1 つの変数に読み、止まる側に倒れる）。
