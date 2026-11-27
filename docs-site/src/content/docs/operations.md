@@ -358,6 +358,10 @@ NATS の release を見て、`.nats-version` を新しい版と digest にする
 
 castlist と pagetray は、1.0.0 で API も DB も替えた（AI-36 の切り替え。castlist は `castlist-data-v1`、pagetray は `pagetray-data-v1` の volume で動く）。切り替えの前の volume（`castlist-data`・`pagetray-data`）は 2026-11-26 に消したので、1.0.0 より前の版には戻せない。この repo の roster も、1.0.0 からの API だけを話す。
 
+## 図を描く道具（Archify）
+
+文書の図を Archify で描く担当の命令（`roster figure embed`・`roster figure shot`）は、roster を動かす機械に置いた Archify を使う。置くのは `roster figure setup`（どの担当が打ってもよい。置いてあれば何もしない）。初めてと、`.archify-version` を上げる PR を merge した後に 1 度打つ。GitHub から版を固定して取り、commit を確かめて `$XDG_DATA_HOME`（無ければ `~/.local/share`）の `roster/tools/archify/<commit>/` に置く。前の setup が途中で殺されて残した一時の folder（`.tmp-*`）は、次の setup が消す（[開発](/development/#archify図を描く道具とのつなぎ)）。`roster figure shot` は Chrome（`/Applications/Google Chrome.app`。在り処が違えば `$ROSTER_CHROME`）を使う。
+
 ## 手元の builder（buildkit）
 
 担当が手元で image を build する時に、Apple Container の `container build` が使う container（名は `buildkit`）。roster を動かす機械に 1 つで、並べて動いている担当がみな同じ物を使う。止める・消す・作り直すと、ほかの担当の build が途中で落ちる。この repo の `.claude/roles/config.jsonc` が、環境 `builder` を「TPM に相談」の手続きで宣言している（変えてよいのは DevOps Engineer 担当だけ）。
