@@ -8,11 +8,14 @@ const CreateFileCommand_1 = require("./commands/CreateFileCommand");
 const CreatePageCommand_1 = require("./commands/CreatePageCommand");
 const DeleteFilesCommand_1 = require("./commands/DeleteFilesCommand");
 const DeletePagesCommand_1 = require("./commands/DeletePagesCommand");
+const GetFileRulesCommand_1 = require("./commands/GetFileRulesCommand");
 const GetHealthCommand_1 = require("./commands/GetHealthCommand");
 const GetMessageFacetsCommand_1 = require("./commands/GetMessageFacetsCommand");
+const GetPageFacetsCommand_1 = require("./commands/GetPageFacetsCommand");
 const ListFilesCommand_1 = require("./commands/ListFilesCommand");
 const ListMessagesCommand_1 = require("./commands/ListMessagesCommand");
 const ListPagesCommand_1 = require("./commands/ListPagesCommand");
+const ListReviewsCommand_1 = require("./commands/ListReviewsCommand");
 const PutMessageCommand_1 = require("./commands/PutMessageCommand");
 const SetReplyStateCommand_1 = require("./commands/SetReplyStateCommand");
 const PagetrayClient_1 = require("./PagetrayClient");
@@ -25,11 +28,14 @@ const commands = {
     CreatePageCommand: CreatePageCommand_1.CreatePageCommand,
     DeleteFilesCommand: DeleteFilesCommand_1.DeleteFilesCommand,
     DeletePagesCommand: DeletePagesCommand_1.DeletePagesCommand,
+    GetFileRulesCommand: GetFileRulesCommand_1.GetFileRulesCommand,
     GetHealthCommand: GetHealthCommand_1.GetHealthCommand,
     GetMessageFacetsCommand: GetMessageFacetsCommand_1.GetMessageFacetsCommand,
+    GetPageFacetsCommand: GetPageFacetsCommand_1.GetPageFacetsCommand,
     ListFilesCommand: ListFilesCommand_1.ListFilesCommand,
     ListMessagesCommand: ListMessagesCommand_1.ListMessagesCommand,
     ListPagesCommand: ListPagesCommand_1.ListPagesCommand,
+    ListReviewsCommand: ListReviewsCommand_1.ListReviewsCommand,
     PutMessageCommand: PutMessageCommand_1.PutMessageCommand,
     SetReplyStateCommand: SetReplyStateCommand_1.SetReplyStateCommand,
 };

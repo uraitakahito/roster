@@ -39,6 +39,9 @@ service Pagetray {
         PutMessage
         ListMessages
         GetMessageFacets
+        GetPageFacets
+        ListReviews
+        GetFileRules
     ]
 
     // 操作の前の守りの層（server の生成した骨の外）が返す誤り。どの操作の答えにもなり得る。
@@ -1439,6 +1442,229 @@ operation GetMessageFacets {
     ]
 }
 
+/// ページの、絞り込みの候補と件数・待ちの数（ページの一覧の画面が、絞り込みの列と操作の帯の数に使う）。
+/// どれも、置き場の全部を数える（絞らない）。引数は無い。件数が 0 の値は出さない。
+/// - `waiting`・`answered`: Product Manager の返事待ち・答えたページの数。`reviewWaiting`: レビュー待ちのページの数。
+///   `escalated`: TPM 担当に上げて、まだ決まっていないページの数。
+/// - `senders`: 送り手ごとの数。castlist の答えのある送り手だけ。`value` はアクターの id、`note` はその名。多い順に 100 まで。
+/// - `roles`・`kinds`・`projects`・`verdicts`: 役割・種類・project・レビューの判定ごとの数。件数の多い順（同じなら名の順）。
+/// - `workspaces`: workspace の ID ごとの数（書かずに置いた物は空の値）。新しく置かれた順に 100 まで。`note` は、その ID で
+///   置かれた Key（`, ` で繋ぐ。空の値には無い）。
+/// - `keys`: Key ごとの数。新しく置かれた順に 100 まで。
+@readonly
+@http(method: "GET", uri: "/api/pages/facets")
+@httpRequestTests([
+    {
+        id: "PagetrayGetPageFacetsRequest"
+        documentation: "本文も引数も無い"
+        protocol: restJson1
+        method: "GET"
+        uri: "/api/pages/facets"
+    }
+])
+@httpResponseTests([
+    {
+        id: "PagetrayGetPageFacetsResponse"
+        documentation: "待ちの数と、値・件数・添える字の並び。添える字は、ある時だけ"
+        protocol: restJson1
+        code: 200
+        headers: { "Content-Type": "application/json" }
+        body: """
+            {"waiting":1,"answered":2,"reviewWaiting":3,"escalated":4,"senders":[{"value":"019a0000-0000-7000-8000-00000000000a","count":2,"note":"t-1.swe.1"}],"roles":[{"value":"tpm","count":5}],"workspaces":[{"value":"workspace:1","count":3,"note":"AI-25"}],"kinds":[{"value":"plan","count":2}],"keys":[{"value":"AI-25","count":4}],"projects":[{"value":"ai","count":5}],"verdicts":[{"value":"approve","count":1}]}"""
+        bodyMediaType: "application/json"
+        params: {
+            waiting: 1
+            answered: 2
+            reviewWaiting: 3
+            escalated: 4
+            senders: [
+                { value: "019a0000-0000-7000-8000-00000000000a", count: 2, note: "t-1.swe.1" }
+            ]
+            roles: [
+                { value: "tpm", count: 5 }
+            ]
+            workspaces: [
+                { value: "workspace:1", count: 3, note: "AI-25" }
+            ]
+            kinds: [
+                { value: "plan", count: 2 }
+            ]
+            keys: [
+                { value: "AI-25", count: 4 }
+            ]
+            projects: [
+                { value: "ai", count: 5 }
+            ]
+            verdicts: [
+                { value: "approve", count: 1 }
+            ]
+        }
+    }
+])
+operation GetPageFacets {
+    input := {}
+
+    output := {
+        /// Product Manager の返事待ちのページの数。
+        @required
+        waiting: Long
+
+        /// Product Manager が答えたページの数。
+        @required
+        answered: Long
+
+        /// レビュー待ちのページ（レビューの依頼書）の数。
+        @required
+        reviewWaiting: Long
+
+        /// TPM 担当に上げて、まだ決まっていないページ（レビューのページ）の数。
+        @required
+        escalated: Long
+
+        /// 送り手（castlist のアクター）ごとの数。
+        @required
+        senders: FacetCounts
+
+        /// 役割ごとの数。
+        @required
+        roles: FacetCounts
+
+        /// workspace の ID ごとの数。
+        @required
+        workspaces: FacetCounts
+
+        /// 種類ごとの数。
+        @required
+        kinds: FacetCounts
+
+        /// Key ごとの数。
+        @required
+        keys: FacetCounts
+
+        /// project ごとの数。
+        @required
+        projects: FacetCounts
+
+        /// レビューの判定ごとの数。
+        @required
+        verdicts: FacetCounts
+    }
+
+    errors: [
+        Unavailable
+        InternalError
+    ]
+}
+
+/// 名指したページ（`target`。ページの path）を見たレビューのページ（種類が `review` で、見た物にその path を書いた物）。
+/// 置いた古い順。ページの一覧の画面が、行の下に「レビュー」の link と判定を出すのに使う。
+/// - `target` は 1 つから 200 まで（無ければ・超えれば 400）。path の形は見ない（置き場に無い path には、何も返さない）。
+@readonly
+@http(method: "GET", uri: "/api/reviews")
+@httpRequestTests([
+    {
+        id: "PagetrayListReviewsRequest"
+        documentation: "見られたページの path を、引数に並べる"
+        protocol: restJson1
+        method: "GET"
+        uri: "/api/reviews"
+        queryParams: [
+            "target=%2Fai%2FAI-25%2Fplan-1.html"
+            "target=%2Fai%2FAI-25%2Fplan-2.html"
+        ]
+        params: {
+            target: ["/ai/AI-25/plan-1.html", "/ai/AI-25/plan-2.html"]
+        }
+    }
+])
+@httpResponseTests([
+    {
+        id: "PagetrayListReviewsResponse"
+        documentation: "見られたページの path・レビューのページの path・判定（ある時だけ）"
+        protocol: restJson1
+        code: 200
+        headers: { "Content-Type": "application/json" }
+        body: """
+            {"reviews":[{"target":"/ai/AI-25/plan-1.html","path":"/ai/AI-25/review-1.html","verdict":"approve"},{"target":"/ai/AI-25/plan-2.html","path":"/ai/AI-25/review-2.html"}]}"""
+        bodyMediaType: "application/json"
+        params: {
+            reviews: [
+                { target: "/ai/AI-25/plan-1.html", path: "/ai/AI-25/review-1.html", verdict: "approve" }
+                { target: "/ai/AI-25/plan-2.html", path: "/ai/AI-25/review-2.html" }
+            ]
+        }
+    }
+])
+operation ListReviews {
+    input := {
+        /// 見られたページの path（`/<project>/<key>/<kind>-<n>.html`）。
+        @required
+        @httpQuery("target")
+        target: ReviewTargets
+    }
+
+    output := {
+        @required
+        reviews: ReviewsOf
+    }
+
+    errors: [
+        ValidationException
+        Unavailable
+        InternalError
+    ]
+}
+
+/// 受ける file の種類と、1 つの大きさの上限（ページの一覧の画面の、file を上げる枠が、送る前に見る）。
+/// 並びは、置き場が種類を断る時の文と同じ。
+@readonly
+@http(method: "GET", uri: "/api/files/rules")
+@httpRequestTests([
+    {
+        id: "PagetrayGetFileRulesRequest"
+        documentation: "本文も引数も無い"
+        protocol: restJson1
+        method: "GET"
+        uri: "/api/files/rules"
+    }
+])
+@httpResponseTests([
+    {
+        id: "PagetrayGetFileRulesResponse"
+        documentation: "拡張子と Content-Type の並びと、大きさの上限"
+        protocol: restJson1
+        code: 200
+        headers: { "Content-Type": "application/json" }
+        body: """
+            {"types":[{"ext":"png","type":"image/png"}],"maxBytes":16777216}"""
+        bodyMediaType: "application/json"
+        params: {
+            types: [
+                { ext: "png", type: "image/png" }
+            ]
+            maxBytes: 16777216
+        }
+    }
+])
+operation GetFileRules {
+    input := {}
+
+    output := {
+        /// 受ける拡張子と、その file を返す時の `Content-Type`。
+        @required
+        types: FileTypes
+
+        /// file 1 つの大きさの上限（byte）。
+        @required
+        maxBytes: Long
+    }
+
+    errors: [
+        Unavailable
+        InternalError
+    ]
+}
+
 /// file の種類を受けない: 受けない拡張子・拡張子と合わない `Content-Type`・頭が拡張子の形でない中身（CreateFile）。
 /// 生成した層が返す `UnsupportedMediaTypeException`（操作の決めた `Content-Type` でない要求）とは別。
 @error("client")
@@ -1660,6 +1886,48 @@ structure FacetCount {
 
     @required
     count: Long
+
+    /// 値に添える字（送り手の名・workspace の Key）。ある時だけ（1.3.0 から）。
+    note: String
+}
+
+/// 見られたページの path の並び: 1 つから 200 まで。
+@length(min: 1, max: 200)
+list ReviewTargets {
+    member: String
+}
+
+/// 見られたページと、それを見たレビューのページ。
+structure ReviewOf {
+    /// 見られたページの path。
+    @required
+    target: String
+
+    /// レビューのページの path。
+    @required
+    path: String
+
+    /// レビューの判定。書いていなければ無い。
+    verdict: Verdict
+}
+
+list ReviewsOf {
+    member: ReviewOf
+}
+
+/// 受ける file の種類 1 つ。
+structure FileType {
+    /// 拡張子（`.` は付けない）。
+    @required
+    ext: String
+
+    /// その file を返す時の `Content-Type`。
+    @required
+    type: String
+}
+
+list FileTypes {
+    member: FileType
 }
 
 list FacetCounts {
