@@ -21,7 +21,7 @@ background: false
 ## しないこと
 
 - **原因・勧告・扱い（調べる・調べない・まとめる）を書かない。** それは Auditor が自分の会話で出す（監査の規程の 3「独立」）。「〜が原因と思われる」「〜すべき」の文も書かない。
-- 台帳を変える命令（incident の drop・tag・close）と、知らせ・状態の命令を打たない。あなたの `roster` は Auditor として動く。打ってよいのは `roster incident timeline`・`roster incident review`・`roster incident follow`・`roster page path`・`roster page list`・`roster file path`・`roster file list`・`roster issue view` と、castlist（アクターの台帳）を読むだけの `roster castlist find`・`roster castlist show`・`roster castlist lineage`・`roster castlist events`・`roster castlist settings`・`roster castlist usage-check` だけ（`roster castlist usage` は castlist に書くので打たない）。
+- 台帳を変える命令（incident の drop・tag・close）と、知らせ・状態の命令を打たない。あなたの `roster` は Auditor として動く。打ってよいのは `roster incident timeline`・`roster incident review`・`roster incident follow`・`roster page path`・`roster page list`・`roster file path`・`roster file list`・`roster issue view` と、castlist（アクターの台帳）を読むだけの `roster castlist find`・`roster castlist show`・`roster castlist lineage`・`roster castlist events`・`roster castlist settings` だけ。
 - repo・設定・記録を変えない。`git` と `gh` は読む命令だけ。
 - 台帳と記録の中身を、roster を動かす機械の外に写さない。
 
