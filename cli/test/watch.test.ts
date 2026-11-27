@@ -203,7 +203,7 @@ describe('roster watch main', () => {
     const s = seat({ 'pr view': [merged()], 'run list': [ok([run('test', 'completed', 'success'), run('docs', 'completed', 'cancelled')])] });
     const r = await watchMain(s.ctx, PR);
     expect(r.code).toBe(WATCH_EXIT.passed);
-    expect(r.lines[0]).toMatch(/^通った: main の workflow 2 つ（うち 1 つは取り消し。後の回が済ませたかは見ていない。/);
+    expect(r.lines[0]).toMatch(/^通った: main の workflow 1 つ・取り消し 1 つ（後の回が済ませたかは見ていない）（/);
   });
 
   test('merge から 2 分を過ぎても回が無ければ、30（付いていない）で終わる', async () => {
@@ -218,6 +218,24 @@ describe('roster watch main', () => {
     const r = await watchMain(s.ctx, PR, { timeout: 0 });
     expect(r.code).toBe(WATCH_EXIT.timeout);
     expect(r.lines[0]).toMatch(/^まだ: main の workflow 1 つは終わっているが、merge から 2 分の内/);
+  });
+
+  test('落ちた workflow が分かっても、ほかがまだ動いている間は待ち、みな終わってから 10 で終わる', async () => {
+    const s = seat({ 'pr view': [merged()], 'run list': [ok([run('test', 'in_progress', ''), run('docs', 'completed', 'failure')]), ok([run('test', 'in_progress', ''), run('docs', 'completed', 'failure')]), ok([run('test', 'completed', 'success'), run('docs', 'completed', 'failure')])] });
+    const r = await watchMain(s.ctx, PR);
+    expect(r.code).toBe(WATCH_EXIT.failed);
+    expect(r.lines[1]).toMatch(/^ほかの main の workflow: 通った 1・まだ 0/);
+    expect(s.slept).toEqual([20_000, 30_000]);
+  });
+
+  test('落ちた workflow が分かっても、merge から 2 分の内は待つ。長さを過ぎたら、分かっている所で 10', async () => {
+    const fresh = seat({ 'pr view': [merged('2026-11-27T11:59:50Z')], 'run list': [ok([run('docs', 'completed', 'failure')])] });
+    expect((await watchMain(fresh.ctx, PR)).code).toBe(WATCH_EXIT.failed);
+    expect(fresh.slept.reduce((a, b) => a + b, 0)).toBeGreaterThanOrEqual(RUN_GRACE_MS - 10_000);
+    const long = seat({ 'pr view': [merged()], 'run list': [ok([run('test', 'in_progress', ''), run('docs', 'completed', 'failure')])] });
+    const r = await watchMain(long.ctx, PR, { timeout: 2 });
+    expect(r.code).toBe(WATCH_EXIT.failed);
+    expect(r.lines[1]).toMatch(/まだ 1/);
   });
 
   test('落ちた workflow があれば 10 で終わる', async () => {

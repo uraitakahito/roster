@@ -6,7 +6,7 @@ import { collect, incidentTimeline } from '../src/commands/timeline.ts';
 import { assign } from '../src/commands/tpm-side.ts';
 import { readIncidents } from '../src/incidents.ts';
 import { DELIVERED_FILE, type DeliveredLine } from '../src/mail.ts';
-import { BRIEF, world, type World } from './helpers.ts';
+import { BRIEF, world, type World, MAIN_PASSED } from './helpers.ts';
 
 const PR = 'https://github.com/o/r/pull/7';
 const clock = (hhmmss: string) => (): Date => new Date(`2026-11-20T${hhmmss}.000Z`);
@@ -43,7 +43,7 @@ describe('時系列を集める', () => {
       ['12:00:10', 'メッセージ', `【ask-tpm】tag を打ってよいか（id ${w.ask}）`, ['届いた: 12:00:11（1 秒後）'], false],
       ['12:00:10', 'wait', '回答待ち(TPM): 答え', [], false],
       ['12:01:00', 'メッセージ', `【notify】まだ打たないで待つこと（id ${w.note}）`, ['届いた: 12:05:00（240 秒後）', `返事の先: ${w.ask}`, '行き違い: これが届く前に、相手が 1 件送った（【merged】12:02:00）'], true],
-      ['12:02:00', 'メッセージ', `【merged】${PR} 入れた（id ${w.merged}）`, ['届いた時刻: 分からない'], false],
+      ['12:02:00', 'メッセージ', `【merged】${PR} 入れた${MAIN_PASSED}（id ${w.merged}）`, ['届いた時刻: 分からない'], false],
       ['12:02:30', 'wait', '作業中: tag を打つ', [], false],
     ]);
     // ほかの Key の記録は入らない

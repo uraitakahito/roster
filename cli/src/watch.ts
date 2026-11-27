@@ -21,8 +21,8 @@ export function parsePr(url: string): PrRef | undefined {
 
 /**
  * 聞いた 1 回の答え。
- * - passed: みな終わって、落ちた物が無い（cancelled は、そのうち取り消された main の workflow の数）。
- * - failed: 落ちた物がある（ほかがまだ動いていても、分かった時に返す）。
+ * - passed: みな終わって、落ちた物が無い（total は通った数。cancelled は、そのほかに取り消された main の workflow の数）。
+ * - failed: 落ちた物がある（ほかがまだ動いていても、分かった時に返す。pending は、まだ動いている数。fresh は、merge から RUN_GRACE_MS の内で、回が作られきっていないかもしれない時）。
  * - pending: まだ終わっていない物がある。
  * - none: 見る物（check・workflow の回）が 1 つも付いていない。「通った」ではない。
  * - unreachable: GitHub が応えない（繋がらない・5xx など）。聞き直せば変わりうる。
@@ -30,7 +30,7 @@ export function parsePr(url: string): PrRef | undefined {
  */
 export type Look =
   | { state: 'passed', total: number, cancelled?: number }
-  | { state: 'failed', failed: Named[], passed: number, pending: number }
+  | { state: 'failed', failed: Named[], passed: number, pending: number, fresh?: boolean }
   | { state: 'pending', done: number, total: number }
   | { state: 'none' }
   | { state: 'unreachable', message: string }
@@ -131,7 +131,7 @@ const CANCELLED = 'cancelled';
  * - workflow ごとに、いちばん新しい回で判じる（落ちた docs を `gh workflow run` で流し直した時は、新しい回を見る）。
  * - merge から RUN_GRACE_MS の間は、回が無くても・在る回がみな終わっていても「まだ」（回が、まだ作られきっていないことがある）。落ちた回は、その間でも返す。
  * - 回が 1 つも無いまま RUN_GRACE_MS を過ぎていれば none。
- * - 取り消された回（cancelled）は、落ちたに数えず、通った数に入れて、その数を cancelled に返す。
+ * - 取り消された回（cancelled）は、落ちたにも通ったにも数えず、その数を cancelled に返す。
  */
 export function lookMain(exec: Exec, pr: PrRef, now: Date): Look {
   const v = exec('gh', ['pr', 'view', pr.url, '--json', 'state,mergeCommit,mergedAt']);
@@ -161,10 +161,10 @@ export function lookMain(exec: Exec, pr: PrRef, now: Date): Look {
   const cancelled = all.filter(([, run]) => run.status === 'completed' && run.conclusion === CANCELLED).length;
   const failed = all.filter(([, run]) => run.status === 'completed' && run.conclusion !== CANCELLED && !FINE.has(run.conclusion ?? ''));
   if (failed.length > 0) {
-    return { state: 'failed', failed: failed.map(([name, run]) => ({ name, ...(run.url ? { url: run.url } : {}) })), passed: all.length - failed.length - running.length, pending: running.length };
+    return { state: 'failed', failed: failed.map(([name, run]) => ({ name, ...(run.url ? { url: run.url } : {}) })), passed: all.length - failed.length - running.length - cancelled, pending: running.length, ...(fresh ? { fresh } : {}) };
   }
   if (running.length > 0 || fresh) return { state: 'pending', done: all.length - running.length, total: all.length };
-  return { state: 'passed', total: all.length, ...(cancelled === 0 ? {} : { cancelled }) };
+  return { state: 'passed', total: all.length - cancelled, ...(cancelled === 0 ? {} : { cancelled }) };
 }
 
 /** GitHub が応えるかを 1 回見る（repo があればその repo を読めるか。無ければ API が応えるかだけ: API が応えても、merge・push・Actions がまだ落ちていることはある）。 */

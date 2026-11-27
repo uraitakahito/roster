@@ -70,6 +70,8 @@ interface Loop {
   look: () => Look
   /** 「通った」とみなすのに要る、続けて通った回数。 */
   streak: number
+  /** 落ちた物が分かっても、ほかがみな終わるまで待つか（main の workflow。roster report merged が、みな終わるまで送らないため）。 */
+  settle: boolean
   /** 結果の行に書く、見た物の呼び名（check・workflow）。 */
   noun: string
   /** もう 1 度見張る時に打つ命令（長さを過ぎた時の行に書く）。 */
@@ -90,7 +92,7 @@ function report(loop: Loop, look: Look, timedOut: boolean, seconds: number): Wat
     case 'passed':
       if (timedOut) return { code: WATCH_EXIT.timeout, lines: [`まだ: ${loop.kind === 'github' ? 'GitHub は 1 度応えた' : `${loop.noun} ${look.total} つは終わっていた`}が、続けてもう 1 度は見ていない（${waited}）。${retry}`] };
       if (loop.kind === 'github') return { code: WATCH_EXIT.passed, lines: [`戻った: GitHub が応えた（${waited}）`] };
-      return { code: WATCH_EXIT.passed, lines: [`通った: ${loop.noun} ${look.total} つ（${look.cancelled === undefined ? '' : `うち ${look.cancelled} つは取り消し。後の回が済ませたかは見ていない。`}${waited}）`] };
+      return { code: WATCH_EXIT.passed, lines: [`通った: ${loop.noun} ${look.total} つ${look.cancelled === undefined ? '' : `・取り消し ${look.cancelled} つ（後の回が済ませたかは見ていない）`}（${waited}）`] };
     case 'failed':
       return { code: WATCH_EXIT.failed, lines: [`落ちた: ${namedList(look.failed)}`, `ほかの ${loop.noun}: 通った ${look.passed}・まだ ${look.pending}（${waited}）`] };
     case 'pending':
@@ -135,7 +137,9 @@ async function watch(ctx: Context, loop: Loop, options: WatchOptions): Promise<W
     polls++;
     const elapsed = ctx.now().getTime() - start;
     streak = look.state === 'passed' ? streak + 1 : 0;
-    if (look.state === 'failed' || look.state === 'invalid') return finish(look, false);
+    // 落ちた物: PR の check は、1 つ分かった所で終える。main の workflow は、ほかがまだ動いている・merge から 2 分の内なら、みな終わるまで待つ。
+    const settled = look.state === 'failed' && !(loop.settle && (look.pending > 0 || look.fresh === true));
+    if (settled || look.state === 'invalid') return finish(look, false);
     if (look.state === 'passed' && (streak >= loop.streak || limit === 0)) return finish(look, false);
     if (look.state === 'none' && (limit === 0 || elapsed >= Math.min(NONE_GRACE_MS, limit))) return finish(look, false);
     // 長さに達したら終える。残りが聞く間より短ければ、残りだけ眠って、長さの所で最後に 1 度見る。
@@ -154,18 +158,18 @@ function prOf(url: string): PrRef {
 /** PR の今の head の commit の check が、みな終わるまで見張る（みな終わったのを、間を空けて 2 度見たら「通った」）。 */
 export function watchPr(ctx: Context, url: string, options: WatchOptions = {}): Promise<WatchResult> {
   const pr = prOf(url);
-  return watch(ctx, { kind: 'pr', target: pr.url, look: () => lookChecks(ctx.exec, pr), streak: STREAK, noun: 'check', again: `roster watch pr ${pr.url}` }, options);
+  return watch(ctx, { kind: 'pr', target: pr.url, look: () => lookChecks(ctx.exec, pr), streak: STREAK, settle: false, noun: 'check', again: `roster watch pr ${pr.url}` }, options);
 }
 
-/** merge した PR の、merge の commit で main に動いた workflow が、みな終わるまで見張る。 */
+/** merge した PR の、merge の commit で main に動いた workflow が、みな終わるまで見張る（落ちた物が分かっても、ほかが終わるまで待つ。長さを過ぎたら、分かっている所で 10）。 */
 export function watchMain(ctx: Context, url: string, options: WatchOptions = {}): Promise<WatchResult> {
   const pr = prOf(url);
-  return watch(ctx, { kind: 'main', target: pr.url, look: () => lookMain(ctx.exec, pr, ctx.now()), streak: STREAK, noun: 'main の workflow', again: `roster watch main ${pr.url}` }, options);
+  return watch(ctx, { kind: 'main', target: pr.url, look: () => lookMain(ctx.exec, pr, ctx.now()), streak: STREAK, settle: true, noun: 'main の workflow', again: `roster watch main ${pr.url}` }, options);
 }
 
 /** GitHub が応えるようになるまで見張る（続けて 2 度応えたら「戻った」）。 */
 export function watchGithub(ctx: Context, options: WatchOptions & { repo?: string } = {}): Promise<WatchResult> {
   const { repo } = options;
   if (repo !== undefined && !/^[^/\s]+\/[^/\s]+$/.test(repo)) throw new TpmError(`--repo は <owner>/<repo> の形にしてください: ${repo}`);
-  return watch(ctx, { kind: 'github', target: repo ?? 'github', look: () => lookGithub(ctx.exec, repo), streak: STREAK, noun: 'GitHub', again: `roster watch github${repo === undefined ? '' : ` --repo ${repo}`}` }, options);
+  return watch(ctx, { kind: 'github', target: repo ?? 'github', look: () => lookGithub(ctx.exec, repo), streak: STREAK, settle: false, noun: 'GitHub', again: `roster watch github${repo === undefined ? '' : ` --repo ${repo}`}` }, options);
 }

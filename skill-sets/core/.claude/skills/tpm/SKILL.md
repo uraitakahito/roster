@@ -120,7 +120,7 @@ disable-model-invocation: true
 | 【incident】 | 「受け取った」だけの返事は送らない（台帳にはもう入っている）。「[重い]」と付いていたら、すぐ Product Manager に伝える（下の「6. 監査」） |
 | 【audit】 | Auditor が Product Manager へじかに出した監査の報告の写し。**伝え直さない・止めない。**「受け取った」だけの返事は送らない |
 | 【decided】 | Product Manager の決定。「する」の勧告を、いつもの課題として担当に振る（上の 3 のとおり。勧告の中身は、本文の監査のページの URL を依頼書の頭書きに書いて担当に読ませる）。振ったら `roster incident assign <番号>… --to <振り先の Key>` で件に結び、`roster notify audit "<振った Key>" --reply-to <id>` で返す。「受け入れる」「見送る」は、Auditor が台帳に書いてある |
-| 【doc-fix】【merged】 | 「受け取った」だけの返事は送らない。PR が merge 済みかは、担当の命令が送る前に見ている。「merge は確かめていない: <訳>」と付いていたら、Product Manager に伝える前に自分で確かめる |
+| 【doc-fix】【merged】 | 「受け取った」だけの返事は送らない。PR が merge 済みかは、担当の命令が送る前に見ている。「merge と main の workflow は確かめていない: <訳>」（【end】は「merge は確かめていない: <訳>」）と付いていたら、Product Manager に伝える前に自分で確かめる |
 | 【done】 | 成果のページを読み（`roster page path <URL>`。本文の「済ませた依頼書: brief-2・brief-3」は、担当が `--briefs` で名指して 1 通で済ませた依頼書）、下の「【dismiss】を送るか」で決める。聞かなくてよければ `roster dismiss <Key>`。聞くなら Product Manager に URL を伝え（その場で開いて見せる時だけ `roster show <URL>`）、「続きをこの担当に頼むか、この課題を終えるか」を聞き、続けるなら新しい依頼書（3 の 1 のとおり書く）を `roster assign <Key> … --brief <URL>` で同じ担当に、終えるなら `roster dismiss <Key>` |
 | 【end】 | （【dismiss】の返事として来る）報告を Product Manager に伝え（聞かずに片付けたなら、そう添える）、`roster close <Key>` で閉じる（その課題の Staff Engineer 担当の席と、Tech Lead 担当が起こした repo の席が残っていれば、一緒に閉じる） |
 
