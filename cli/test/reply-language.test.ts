@@ -34,6 +34,15 @@ describe('数える', () => {
     expect(isEnglish(countJapanese(text))).toBe(false);
   });
 
+  test('URL を除いても、URL にじかに続く日本語は残す（review-6 の指摘 2）', () => {
+    expect(stripAllowed('PR は https://github.com/example/repo/pull/272を見てください。')).toBe('PR は を見てください。');
+    expect(isEnglish(countJapanese('PR は https://github.com/example/repo/pull/272を見てください。残りは段 2 で一緒にします。'))).toBe(false);
+  });
+
+  test('々・ー・〆・半角カタカナも、仮名と漢字に数える（review-6 の指摘 6）', () => {
+    expect(countJapanese('人々様々ーー〆ｶﾀｶﾅ漢字ひらがなカタカナ日本語です')).toMatchObject({ share: 1 });
+  });
+
   test('20 字に満たない返事は数えない', () => {
     expect(countJapanese('OK, done.')).toEqual({ share: undefined, letters: 6 });
     expect(isEnglish(countJapanese('OK, done.'))).toBe(false);
@@ -65,6 +74,10 @@ describe('roster reply-language check', () => {
     expect(blocked(out)).toBe(true);
     expect((JSON.parse(out ?? '{}') as { reason: string }).reason).toBe(rewriteReason(countJapanese(ENGLISH).share ?? 0));
     expect(log()).toEqual(['block']);
+  });
+
+  test('書き直しの頼みの割合は切り捨てる（2 割に届かない 0.199 を 20% と書かない。review-6 の指摘 5）', () => {
+    expect(rewriteReason(0.199)).toContain('字の 19%');
   });
 
   test('日本語・短い返事は通して、記録に書く', () => {

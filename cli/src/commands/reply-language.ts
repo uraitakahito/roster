@@ -19,8 +19,11 @@ export const MARK_FOLDER = 'reply-language';
 /** 手を止めるたびに 1 行書く記録。 */
 export const LOG_FILE = 'reply-language.jsonl';
 
-/** 書き直させた印が効く長さ。過ぎた印は、書き直しの前に人が割り込んだ・session が替わった物として消す。 */
-export const MARK_MINUTES = 10;
+/**
+ * 書き直させた印が効く長さ。過ぎた印は、書き直しの前に人が割り込んだ・session が替わった物として消す。
+ * 書き直しは新しい手を打たないので、すぐ済む。短くするのは、書き直しの途中で人が Esc で止めて印が残り、その後にメッセージで起こされた回（stop_hook_active が true）の英語を、書き直しの回と取り違えて通す間を狭めるため（review-6 の指摘 1。その間は残る）。
+ */
+export const MARK_MINUTES = 3;
 
 /** 決めた道。ok・short は通した、block は書き直させた、rewritten は書き直しの回（数えて書くが止めない）。 */
 export type Way = 'ok' | 'short' | 'block' | 'rewritten';
@@ -50,7 +53,7 @@ function markFile(id: string): string {
 
 /** 書き直しを頼む文。 */
 export function rewriteReason(share: number): string {
-  return `直前の返事は英語でした（仮名と漢字が字の ${Math.round(share * 100)}%）。TPM 担当の画面への返事は日本語で書く決まりです。同じ中身を日本語で書き直してください（新しい手は打たない）。命令・file の名・原文の写しは元のまま。`;
+  return `直前の返事は英語でした（仮名と漢字が字の ${Math.floor(share * 100)}%）。TPM 担当の画面への返事は日本語で書く決まりです。同じ中身を日本語で書き直してください（新しい手は打たない）。命令・file の名・原文の写しは元のまま。`;
 }
 
 /**

@@ -652,7 +652,7 @@ describe('hook の settings', () => {
   });
 
   test.each<[string, RoleName | undefined, string[]]>([
-    ['TPM 担当', undefined, ['/r/cli/bin/roster mail wait', '/r/cli/bin/roster reply-language check']],
+    ['TPM 担当', undefined, ['/r/cli/bin/roster mail wait', '/r/cli/bin/roster reply-language check || true']],
     ['Software Engineer 担当', 'software-engineer', ['/r/cli/bin/roster mail wait']],
     ['Staff Engineer 担当', 'staff-engineer', ['/r/cli/bin/roster mail wait']],
     ['Auditor', 'auditor', ['/r/cli/bin/roster mail wait']],

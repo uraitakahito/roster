@@ -7,21 +7,21 @@ export const JAPANESE_SHARE = 0.2;
 /** 除いた後の字がこれより少なければ、数えない（「OK」・番号だけの返事などで割合が揺れるため）。 */
 export const MIN_LETTERS = 20;
 
-/** 仮名（ひらがな・カタカナ・長音）と漢字。 */
-const JAPANESE = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/u;
+/** 仮名（ひらがな・カタカナ。半角カタカナも）と漢字（々 も）。長音 ー と 〆 は Script が Common なので、字で足す（review-6 の指摘 6）。 */
+const JAPANESE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}ー〆]/u;
 
 /** 字（文字の類。数字・記号・空白は数えない）。 */
 const LETTER = /\p{L}/u;
 
 /**
- * 決まりの上で英語のまま書いてよい物を除く: コードの枠・`…`・URL・原文の写し（\> で始まる行）・file の path（/ を含む英数字と記号の塊）。
- * path は英数字と記号だけを除く（日本語は空白で区切らないので、塊ごと除くと、path に続く日本語まで消える。review-2 の指摘 3）。
+ * 決まりの上で英語のまま書いてよい物を除く: コードの枠・`…`・原文の写し（\> で始まる行）・URL と file の path（/ を含む英数字と記号の塊）。
+ * 英数字と記号だけを除く（日本語は空白で区切らないので、空白までを除くと、URL や path に続く日本語まで消える。review-2 の指摘 3・review-6 の指摘 2）。
+ * `…` で囲まない file の名と命令の名（guard.ts など）は除かず、英語の字として数える（11-23〜11-27 の記録では、それで日本語の返事を止めた例は無い）。
  */
 export function stripAllowed(text: string): string {
   return text
     .replaceAll(/```[\s\S]*?```/gu, '')
     .replaceAll(/`[^`\n]*`/gu, '')
-    .replaceAll(/https?:\/\/\S+/gu, '')
     .replaceAll(/^\s*>.*$/gmu, '')
     .replaceAll(/[!-~]*\/[!-~]*/gu, '');
 }
