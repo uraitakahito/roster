@@ -32,8 +32,8 @@ sha_for() {
 # 上げる・足す時は行を替えて gen.sh を流し、取った定義と作り直した client を同じ commit に入れる。
 # pagetray の定義（ai.pagetray）は ai.common を使うが、それは castlist の common.smithy を使う（pagetray の tag の model/castlist/ の写しと同じ digest）。
 DEFS="
-castlist v2.0.0 model/model/common.smithy 6425614b79d58d7149f17396cebc3eb30e0e6c511516957d82004eb329fb66d0
-castlist v2.0.0 model/model/castlist.smithy a913649956b5ee00a793f845454b817fa9d6dbebee8704e1a477e5f25cc6473a ai.castlist#Castlist
+castlist v2.1.0 model/model/common.smithy 6425614b79d58d7149f17396cebc3eb30e0e6c511516957d82004eb329fb66d0
+castlist v2.1.0 model/model/castlist.smithy d59d714619fe73e906fac5ab4e872c9f3470714cf44904525754ad0c7ba64f74 ai.castlist#Castlist
 pagetray v1.3.0 model/model/pagetray.smithy 65e05e0bc5c09fcd1b0cb6516c8b2fa2908a5b9988bd7c7ae54fac1c883126ce ai.pagetray#Pagetray
 "
 MIN_AGE_SECONDS=$((2 * 24 * 60 * 60))

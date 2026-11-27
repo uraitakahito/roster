@@ -10,9 +10,11 @@ import { type ListActorsCommandInput, type ListActorsCommandOutput } from "./com
 import { type ListActorSettingsCommandInput, type ListActorSettingsCommandOutput } from "./commands/ListActorSettingsCommand";
 import { type ListEventsCommandInput, type ListEventsCommandOutput } from "./commands/ListEventsCommand";
 import { type ListSettingsCommandInput, type ListSettingsCommandOutput } from "./commands/ListSettingsCommand";
+import { type ListUsageCommandInput, type ListUsageCommandOutput } from "./commands/ListUsageCommand";
 import { type PutEventCommandInput, type PutEventCommandOutput } from "./commands/PutEventCommand";
 import { type PutLinkCommandInput, type PutLinkCommandOutput } from "./commands/PutLinkCommand";
 import { type PutSettingCommandInput, type PutSettingCommandOutput } from "./commands/PutSettingCommand";
+import { type PutUsageCommandInput, type PutUsageCommandOutput } from "./commands/PutUsageCommand";
 import { type RegisterActorCommandInput, type RegisterActorCommandOutput } from "./commands/RegisterActorCommand";
 import { type ResolveActorsCommandInput, type ResolveActorsCommandOutput } from "./commands/ResolveActorsCommand";
 /**
@@ -89,6 +91,12 @@ export interface Castlist {
     listSettings(args: ListSettingsCommandInput, cb: (err: any, data?: ListSettingsCommandOutput) => void): void;
     listSettings(args: ListSettingsCommandInput, options: CastlistRequestOptions, cb: (err: any, data?: ListSettingsCommandOutput) => void): void;
     /**
+     * @see {@link ListUsageCommand}
+     */
+    listUsage(args: ListUsageCommandInput, options?: CastlistRequestOptions): Promise<ListUsageCommandOutput>;
+    listUsage(args: ListUsageCommandInput, cb: (err: any, data?: ListUsageCommandOutput) => void): void;
+    listUsage(args: ListUsageCommandInput, options: CastlistRequestOptions, cb: (err: any, data?: ListUsageCommandOutput) => void): void;
+    /**
      * @see {@link PutEventCommand}
      */
     putEvent(args: PutEventCommandInput, options?: CastlistRequestOptions): Promise<PutEventCommandOutput>;
@@ -106,6 +114,12 @@ export interface Castlist {
     putSetting(args: PutSettingCommandInput, options?: CastlistRequestOptions): Promise<PutSettingCommandOutput>;
     putSetting(args: PutSettingCommandInput, cb: (err: any, data?: PutSettingCommandOutput) => void): void;
     putSetting(args: PutSettingCommandInput, options: CastlistRequestOptions, cb: (err: any, data?: PutSettingCommandOutput) => void): void;
+    /**
+     * @see {@link PutUsageCommand}
+     */
+    putUsage(args: PutUsageCommandInput, options?: CastlistRequestOptions): Promise<PutUsageCommandOutput>;
+    putUsage(args: PutUsageCommandInput, cb: (err: any, data?: PutUsageCommandOutput) => void): void;
+    putUsage(args: PutUsageCommandInput, options: CastlistRequestOptions, cb: (err: any, data?: PutUsageCommandOutput) => void): void;
     /**
      * @see {@link RegisterActorCommand}
      */
@@ -139,6 +153,13 @@ export interface Castlist {
      * @returns AsyncIterable of {@link ListSettingsCommandOutput}.
      */
     paginateListSettings(args?: ListSettingsCommandInput, paginationConfig?: Omit<PaginationConfiguration, "client">): Paginator<ListSettingsCommandOutput>;
+    /**
+     * @see {@link ListUsageCommand}
+     * @param args - command input.
+     * @param paginationConfig - optional pagination config.
+     * @returns AsyncIterable of {@link ListUsageCommandOutput}.
+     */
+    paginateListUsage(args: ListUsageCommandInput, paginationConfig?: Omit<PaginationConfiguration, "client">): Paginator<ListUsageCommandOutput>;
 }
 /**
  * @public

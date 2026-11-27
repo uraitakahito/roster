@@ -14,14 +14,17 @@ const ListActorsCommand_1 = require("./commands/ListActorsCommand");
 const ListActorSettingsCommand_1 = require("./commands/ListActorSettingsCommand");
 const ListEventsCommand_1 = require("./commands/ListEventsCommand");
 const ListSettingsCommand_1 = require("./commands/ListSettingsCommand");
+const ListUsageCommand_1 = require("./commands/ListUsageCommand");
 const PutEventCommand_1 = require("./commands/PutEventCommand");
 const PutLinkCommand_1 = require("./commands/PutLinkCommand");
 const PutSettingCommand_1 = require("./commands/PutSettingCommand");
+const PutUsageCommand_1 = require("./commands/PutUsageCommand");
 const RegisterActorCommand_1 = require("./commands/RegisterActorCommand");
 const ResolveActorsCommand_1 = require("./commands/ResolveActorsCommand");
 const ListActorsPaginator_1 = require("./pagination/ListActorsPaginator");
 const ListEventsPaginator_1 = require("./pagination/ListEventsPaginator");
 const ListSettingsPaginator_1 = require("./pagination/ListSettingsPaginator");
+const ListUsagePaginator_1 = require("./pagination/ListUsagePaginator");
 const commands = {
     GetActorCommand: GetActorCommand_1.GetActorCommand,
     GetActorSettingAtCommand: GetActorSettingAtCommand_1.GetActorSettingAtCommand,
@@ -33,9 +36,11 @@ const commands = {
     ListActorSettingsCommand: ListActorSettingsCommand_1.ListActorSettingsCommand,
     ListEventsCommand: ListEventsCommand_1.ListEventsCommand,
     ListSettingsCommand: ListSettingsCommand_1.ListSettingsCommand,
+    ListUsageCommand: ListUsageCommand_1.ListUsageCommand,
     PutEventCommand: PutEventCommand_1.PutEventCommand,
     PutLinkCommand: PutLinkCommand_1.PutLinkCommand,
     PutSettingCommand: PutSettingCommand_1.PutSettingCommand,
+    PutUsageCommand: PutUsageCommand_1.PutUsageCommand,
     RegisterActorCommand: RegisterActorCommand_1.RegisterActorCommand,
     ResolveActorsCommand: ResolveActorsCommand_1.ResolveActorsCommand,
 };
@@ -43,6 +48,7 @@ const paginators = {
     paginateListActors: ListActorsPaginator_1.paginateListActors,
     paginateListEvents: ListEventsPaginator_1.paginateListEvents,
     paginateListSettings: ListSettingsPaginator_1.paginateListSettings,
+    paginateListUsage: ListUsagePaginator_1.paginateListUsage,
 };
 /**
  * @public

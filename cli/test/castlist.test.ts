@@ -249,7 +249,7 @@ describe('castlist が止まっている時', () => {
     expect(port).toBe(new URL(dead).port);
     expect(volume).toBe(CASTLIST_VOLUME);
     expect(version).toBe(CASTLIST_VERSION);
-    expect(CASTLIST_VERSION).toBe('v2.0.0');
+    expect(CASTLIST_VERSION).toBe('v2.1.0');
     expect(CASTLIST_VOLUME).toBe('castlist-data-v1');
     expect(lines[0]).toContain('https://uraitakahito.github.io/castlist/');
     // 前の volume（castlist-data）から移す案内は、もう出さない。

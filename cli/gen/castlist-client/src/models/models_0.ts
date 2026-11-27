@@ -273,7 +273,7 @@ export interface Setting {
  */
 export interface Event {
   /**
-   * 送り手が付ける id（出来事・線・model と effort）: 空白の無い ASCII の印字できる字で 128 字まで。
+   * 送り手が付ける id（出来事・線・model と effort・トークンの数と費え）: 空白の無い ASCII の印字できる字で 128 字まで。
    * @public
    */
   id: string | undefined;
@@ -318,7 +318,7 @@ export interface Event {
  */
 export interface Link {
   /**
-   * 送り手が付ける id（出来事・線・model と effort）: 空白の無い ASCII の印字できる字で 128 字まで。
+   * 送り手が付ける id（出来事・線・model と effort・トークンの数と費え）: 空白の無い ASCII の印字できる字で 128 字まで。
    * @public
    */
   id: string | undefined;
@@ -1035,7 +1035,7 @@ export interface ListEventsInput {
  */
 export interface EventRow {
   /**
-   * 送り手が付ける id（出来事・線・model と effort）: 空白の無い ASCII の印字できる字で 128 字まで。
+   * 送り手が付ける id（出来事・線・model と effort・トークンの数と費え）: 空白の無い ASCII の印字できる字で 128 字まで。
    * @public
    */
   id: string | undefined;
@@ -1242,6 +1242,258 @@ export interface ListSettingsOutput {
 /**
  * @public
  */
+export interface ListUsageInput {
+  /**
+   * 区間の終わりの時刻（`toAt`）の窓の始め（含む）。
+   * @public
+   */
+  from: Date | undefined;
+
+  /**
+   * 区間の終わりの時刻（`toAt`）の窓の終わり（含まない）。`from` から 31 日まで。
+   * @public
+   */
+  to: Date | undefined;
+
+  /**
+   * ラベル（`鍵:値`）。重ねれば、どれも持つアクターの行。
+   * @public
+   */
+  label?: string[] | undefined;
+
+  /**
+   * そのアクターの行。
+   * @public
+   */
+  actorId?: string | undefined;
+
+  /**
+   * 1 頁の数（既定 100）。
+   * @public
+   */
+  maxResults?: number | undefined;
+
+  /**
+   * 前の答えの `nextToken`。
+   * @public
+   */
+  nextToken?: string | undefined;
+}
+
+/**
+ * トークンの数と費えの行に出てきたアクター（id・名・ラベル）。
+ * @public
+ */
+export interface UsageActor {
+  /**
+   * アクターの id（castlist が出す UUID v7 の字。小文字の 16 進）。
+   * @public
+   */
+  id: string | undefined;
+
+  /**
+   * `<接頭辞>.<番号>`。
+   * @public
+   */
+  name: string | undefined;
+
+  /**
+   * ラベル（JSON の鍵の順は決まらない）。
+   * @public
+   */
+  labels: Record<string, string> | undefined;
+}
+
+/**
+ * 文脈の長さの段 1 つの、回の数と額。
+ * @public
+ */
+export interface UsageBucket {
+  /**
+   * 文脈の長さの段の番号: n 段は n×25,000 以上 (n+1)×25,000 未満のトークン。40 は 1,000,000 以上。
+   * @public
+   */
+  bucket: number | undefined;
+
+  /**
+   * その段の回の数。
+   * @public
+   */
+  turns: number | undefined;
+
+  /**
+   * その段の額（100 万分の 1 ドル）。
+   * @public
+   */
+  costMicroUsd: number | undefined;
+}
+
+/**
+ * トークンの数と費えの 1 行（欄は UsageFields）。
+ * @public
+ */
+export interface Usage {
+  /**
+   * 送り手の id。
+   * @public
+   */
+  id: string | undefined;
+
+  /**
+   * アクターの id（castlist が出す UUID v7 の字。小文字の 16 進）。
+   * @public
+   */
+  actorId: string | undefined;
+
+  /**
+   * 出し手・付随する id の種類・ラベルの鍵・model・effort の名: 英小文字・数字・`-`・`.` で 64 字まで。
+   * @public
+   */
+  model: string | undefined;
+
+  /**
+   * 手伝い（subagent）の種類の名。本体の回なら無い。
+   * @public
+   */
+  agent?: string | undefined;
+
+  /**
+   * 値: 空でなく、制御文字（Unicode の Cc）の無い、256 字までの字。
+   * @public
+   */
+  speed: string | undefined;
+
+  /**
+   * 値: 空でなく、制御文字（Unicode の Cc）の無い、256 字までの字。
+   * @public
+   */
+  serviceTier: string | undefined;
+
+  /**
+   * 区間の始めの回の時刻（ミリ秒まで）。
+   * @public
+   */
+  fromAt: Date | undefined;
+
+  /**
+   * 区間の終わりの回の時刻（ミリ秒まで）。
+   * @public
+   */
+  toAt: Date | undefined;
+
+  /**
+   * 回の数（1 以上）。
+   * @public
+   */
+  turns: number | undefined;
+
+  /**
+   * 0 以上の数（トークンの数・web の検索と取得の回数・額・文脈の長さ）。
+   * @public
+   */
+  inputTokens: number | undefined;
+
+  /**
+   * 0 以上の数（トークンの数・web の検索と取得の回数・額・文脈の長さ）。
+   * @public
+   */
+  outputTokens: number | undefined;
+
+  /**
+   * 0 以上の数（トークンの数・web の検索と取得の回数・額・文脈の長さ）。
+   * @public
+   */
+  cacheReadTokens: number | undefined;
+
+  /**
+   * 0 以上の数（トークンの数・web の検索と取得の回数・額・文脈の長さ）。
+   * @public
+   */
+  cacheWrite5mTokens: number | undefined;
+
+  /**
+   * 0 以上の数（トークンの数・web の検索と取得の回数・額・文脈の長さ）。
+   * @public
+   */
+  cacheWrite1hTokens: number | undefined;
+
+  /**
+   * web の検索の回数。
+   * @public
+   */
+  webSearchRequests: number | undefined;
+
+  /**
+   * web の取得の回数。
+   * @public
+   */
+  webFetchRequests: number | undefined;
+
+  /**
+   * 額（100 万分の 1 ドル）。
+   * @public
+   */
+  costMicroUsd: number | undefined;
+
+  /**
+   * 区間の内でいちばん長い文脈（トークン）。同じ時の行をまとめる時は、大きい方を取る。
+   * @public
+   */
+  maxContext: number | undefined;
+
+  /**
+   * 文脈の長さの段ごとの数（`bucket` の順）。
+   * @public
+   */
+  buckets: UsageBucket[] | undefined;
+
+  /**
+   * 時刻（RFC 3339）。
+   * @public
+   */
+  sentAt: Date | undefined;
+
+  /**
+   * 時刻（RFC 3339）。
+   * @public
+   */
+  receivedAt: Date | undefined;
+
+  clockSkew: boolean | undefined;
+}
+
+/**
+ * @public
+ */
+export interface ListUsageOutput {
+  /**
+   * 読み始める前の castlist の時刻。
+   * @public
+   */
+  asOf: Date | undefined;
+
+  /**
+   * 受けた順。
+   * @public
+   */
+  usage: Usage[] | undefined;
+
+  /**
+   * この頁の行に出てきたアクターを 1 度ずつ（行に初めて出た順）。
+   * @public
+   */
+  actors: UsageActor[] | undefined;
+
+  /**
+   * 次の頁の印。終わりなら無い。
+   * @public
+   */
+  nextToken?: string | undefined;
+}
+
+/**
+ * @public
+ */
 export interface PutEventInput {
   /**
    * 送り手の決める id。
@@ -1290,7 +1542,7 @@ export interface PutEventInput {
  */
 export interface PutEventOutput {
   /**
-   * 送り手が付ける id（出来事・線・model と effort）: 空白の無い ASCII の印字できる字で 128 字まで。
+   * 送り手が付ける id（出来事・線・model と effort・トークンの数と費え）: 空白の無い ASCII の印字できる字で 128 字まで。
    * @public
    */
   id: string | undefined;
@@ -1382,7 +1634,7 @@ export interface PutLinkInput {
  */
 export interface PutLinkOutput {
   /**
-   * 送り手が付ける id（出来事・線・model と effort）: 空白の無い ASCII の印字できる字で 128 字まで。
+   * 送り手が付ける id（出来事・線・model と effort・トークンの数と費え）: 空白の無い ASCII の印字できる字で 128 字まで。
    * @public
    */
   id: string | undefined;
@@ -1522,6 +1774,276 @@ export interface PutSettingOutput {
   clockSkew: boolean | undefined;
   /**
    * 新しく足せば 201、同じ id で同じ本文か、最新と同じなら 200。
+   * @public
+   */
+  status: number | undefined;
+}
+
+/**
+ * @public
+ */
+export interface PutUsageInput {
+  /**
+   * 送り手の決める id。
+   * @public
+   */
+  usageId: string | undefined;
+
+  /**
+   * 出し手。`by` は出し手の中で引く。
+   * @public
+   */
+  issuer: string | undefined;
+
+  /**
+   * トークンを使ったアクター（鍵の付随する id）。
+   * @public
+   */
+  by: string | undefined;
+
+  /**
+   * 出し手・付随する id の種類・ラベルの鍵・model・effort の名: 英小文字・数字・`-`・`.` で 64 字まで。
+   * @public
+   */
+  model: string | undefined;
+
+  /**
+   * 手伝い（subagent）の種類の名。本体の回なら付けない。
+   * @public
+   */
+  agent?: string | undefined;
+
+  /**
+   * 速さの種類の名（例 `standard`）。
+   * @public
+   */
+  speed: string | undefined;
+
+  /**
+   * service tier の名（例 `standard`）。
+   * @public
+   */
+  serviceTier: string | undefined;
+
+  /**
+   * 区間の始めの回の時刻。
+   * @public
+   */
+  fromAt: Date | undefined;
+
+  /**
+   * 区間の終わりの回の時刻。`fromAt` と同じ UTC の時の内。
+   * @public
+   */
+  toAt: Date | undefined;
+
+  /**
+   * 回の数。
+   * @public
+   */
+  turns: number | undefined;
+
+  /**
+   * 0 以上の数（トークンの数・web の検索と取得の回数・額・文脈の長さ）。
+   * @public
+   */
+  inputTokens: number | undefined;
+
+  /**
+   * 0 以上の数（トークンの数・web の検索と取得の回数・額・文脈の長さ）。
+   * @public
+   */
+  outputTokens: number | undefined;
+
+  /**
+   * 0 以上の数（トークンの数・web の検索と取得の回数・額・文脈の長さ）。
+   * @public
+   */
+  cacheReadTokens: number | undefined;
+
+  /**
+   * 5 分の cache に書いたトークンの数。
+   * @public
+   */
+  cacheWrite5mTokens: number | undefined;
+
+  /**
+   * 1 時間の cache に書いたトークンの数。
+   * @public
+   */
+  cacheWrite1hTokens: number | undefined;
+
+  /**
+   * web の検索の回数。
+   * @public
+   */
+  webSearchRequests: number | undefined;
+
+  /**
+   * web の取得の回数。
+   * @public
+   */
+  webFetchRequests: number | undefined;
+
+  /**
+   * 額（100 万分の 1 ドル）。
+   * @public
+   */
+  costMicroUsd: number | undefined;
+
+  /**
+   * 区間の内でいちばん長い文脈（トークン）。
+   * @public
+   */
+  maxContext: number | undefined;
+
+  /**
+   * 文脈の長さの段ごとの数。
+   * @public
+   */
+  buckets: UsageBucket[] | undefined;
+
+  /**
+   * 送り手の時刻。
+   * @public
+   */
+  sentAt: Date | undefined;
+}
+
+/**
+ * トークンの数と費えの欄（PutUsage の答えと、ListUsage の行で同じ形）。
+ * @public
+ */
+export interface PutUsageOutput {
+  /**
+   * 送り手の id。
+   * @public
+   */
+  id: string | undefined;
+
+  /**
+   * アクターの id（castlist が出す UUID v7 の字。小文字の 16 進）。
+   * @public
+   */
+  actorId: string | undefined;
+
+  /**
+   * 出し手・付随する id の種類・ラベルの鍵・model・effort の名: 英小文字・数字・`-`・`.` で 64 字まで。
+   * @public
+   */
+  model: string | undefined;
+
+  /**
+   * 手伝い（subagent）の種類の名。本体の回なら無い。
+   * @public
+   */
+  agent?: string | undefined;
+
+  /**
+   * 値: 空でなく、制御文字（Unicode の Cc）の無い、256 字までの字。
+   * @public
+   */
+  speed: string | undefined;
+
+  /**
+   * 値: 空でなく、制御文字（Unicode の Cc）の無い、256 字までの字。
+   * @public
+   */
+  serviceTier: string | undefined;
+
+  /**
+   * 区間の始めの回の時刻（ミリ秒まで）。
+   * @public
+   */
+  fromAt: Date | undefined;
+
+  /**
+   * 区間の終わりの回の時刻（ミリ秒まで）。
+   * @public
+   */
+  toAt: Date | undefined;
+
+  /**
+   * 回の数（1 以上）。
+   * @public
+   */
+  turns: number | undefined;
+
+  /**
+   * 0 以上の数（トークンの数・web の検索と取得の回数・額・文脈の長さ）。
+   * @public
+   */
+  inputTokens: number | undefined;
+
+  /**
+   * 0 以上の数（トークンの数・web の検索と取得の回数・額・文脈の長さ）。
+   * @public
+   */
+  outputTokens: number | undefined;
+
+  /**
+   * 0 以上の数（トークンの数・web の検索と取得の回数・額・文脈の長さ）。
+   * @public
+   */
+  cacheReadTokens: number | undefined;
+
+  /**
+   * 0 以上の数（トークンの数・web の検索と取得の回数・額・文脈の長さ）。
+   * @public
+   */
+  cacheWrite5mTokens: number | undefined;
+
+  /**
+   * 0 以上の数（トークンの数・web の検索と取得の回数・額・文脈の長さ）。
+   * @public
+   */
+  cacheWrite1hTokens: number | undefined;
+
+  /**
+   * web の検索の回数。
+   * @public
+   */
+  webSearchRequests: number | undefined;
+
+  /**
+   * web の取得の回数。
+   * @public
+   */
+  webFetchRequests: number | undefined;
+
+  /**
+   * 額（100 万分の 1 ドル）。
+   * @public
+   */
+  costMicroUsd: number | undefined;
+
+  /**
+   * 区間の内でいちばん長い文脈（トークン）。同じ時の行をまとめる時は、大きい方を取る。
+   * @public
+   */
+  maxContext: number | undefined;
+
+  /**
+   * 文脈の長さの段ごとの数（`bucket` の順）。
+   * @public
+   */
+  buckets: UsageBucket[] | undefined;
+
+  /**
+   * 時刻（RFC 3339）。
+   * @public
+   */
+  sentAt: Date | undefined;
+
+  /**
+   * 時刻（RFC 3339）。
+   * @public
+   */
+  receivedAt: Date | undefined;
+
+  clockSkew: boolean | undefined;
+  /**
+   * 新しく足せば 201、同じ id で同じ本文なら 200。
    * @public
    */
   status: number | undefined;

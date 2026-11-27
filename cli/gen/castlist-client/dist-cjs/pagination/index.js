@@ -19,3 +19,4 @@ __exportStar(require("./Interfaces"), exports);
 __exportStar(require("./ListActorsPaginator"), exports);
 __exportStar(require("./ListEventsPaginator"), exports);
 __exportStar(require("./ListSettingsPaginator"), exports);
+__exportStar(require("./ListUsagePaginator"), exports);

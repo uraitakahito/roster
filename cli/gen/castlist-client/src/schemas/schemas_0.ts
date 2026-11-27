@@ -46,6 +46,9 @@ const _LEO = "ListEventsOutput";
 const _LS = "ListSettings";
 const _LSI = "ListSettingsInput";
 const _LSO = "ListSettingsOutput";
+const _LU = "ListUsage";
+const _LUI = "ListUsageInput";
+const _LUO = "ListUsageOutput";
 const _Li = "Links";
 const _NF = "NotFound";
 const _PE = "PutEvent";
@@ -58,6 +61,9 @@ const _PS = "PutSetting";
 const _PSI = "PutSettingInput";
 const _PSO = "PutSettingOutput";
 const _PTL = "PayloadTooLarge";
+const _PU = "PutUsage";
+const _PUI = "PutUsageInput";
+const _PUO = "PutUsageOutput";
 const _R = "Resolution";
 const _RA = "RegisterActor";
 const _RAI = "RegisterActorInput";
@@ -74,6 +80,12 @@ const _Se = "Settings";
 const _TE = "TimelineEvent";
 const _TEi = "TimelineEvents";
 const _U = "Unavailable";
+const _UA = "UsageActor";
+const _UAs = "UsageActors";
+const _UB = "UsageBucket";
+const _UBs = "UsageBuckets";
+const _UR = "UsageRows";
+const _Us = "Usage";
 const _VE = "ValidationException";
 const _VEF = "ValidationExceptionField";
 const _VEFL = "ValidationExceptionFieldList";
@@ -86,13 +98,20 @@ const _aT = "activeTo";
 const _ac = "active";
 const _act = "actors";
 const _acto = "actor";
+const _ag = "agent";
 const _b = "bindings";
 const _bi = "binding";
+const _bu = "buckets";
+const _buc = "bucket";
 const _by = "by";
 const _c = "client";
 const _cB = "currentBindings";
+const _cMU = "costMicroUsd";
+const _cRT = "cacheReadTokens";
 const _cS = "clockSkew";
 const _cSu = "currentSettings";
+const _cWT = "cacheWrite5mTokens";
+const _cWTa = "cacheWrite1hTokens";
 const _cr = "created";
 const _d = "detail";
 const _de = "depth";
@@ -105,6 +124,7 @@ const _ed = "edges";
 const _ef = "effort";
 const _ev = "events";
 const _f = "from";
+const _fA = "fromAt";
 const _fEA = "firstEnteredAt";
 const _fL = "fieldList";
 const _h = "http";
@@ -112,6 +132,7 @@ const _hE = "httpError";
 const _hQ = "httpQuery";
 const _i = "issuer";
 const _iK = "isKey";
+const _iT = "inputTokens";
 const _id = "id";
 const _in = "inferred";
 const _k = "kind";
@@ -124,6 +145,7 @@ const _lIi = "linkId";
 const _lO = "linksOut";
 const _la = "label";
 const _m = "message";
+const _mC = "maxContext";
 const _mR = "maxResults";
 const _mi = "mismatch";
 const _mo = "model";
@@ -133,6 +155,7 @@ const _nT = "nextToken";
 const _no = "nodes";
 const _now = "now";
 const _o = "order";
+const _oT = "outputTokens";
 const _p = "present";
 const _pa = "path";
 const _pr = "presence";
@@ -144,20 +167,28 @@ const _res = "results";
 const _s = "smithy.ts.sdk.synthetic.ai.castlist";
 const _sA = "sentAt";
 const _sI = "settingId";
+const _sT = "serviceTier";
 const _se = "server";
 const _set = "settings";
 const _sett = "setting";
 const _sk = "skewed";
 const _so = "sort";
 const _sou = "source";
+const _sp = "speed";
 const _st = "state";
 const _sta = "status";
 const _t = "type";
+const _tA = "toAt";
 const _ti = "time";
 const _to = "to";
+const _tu = "turns";
 const _u = "url";
+const _uI = "usageId";
+const _us = "usage";
 const _v = "value";
 const _ve = "version";
+const _wFR = "webFetchRequests";
+const _wSR = "webSearchRequests";
 const n0 = "ai.common";
 const n1 = "smithy.framework";
 const n2 = "ai.castlist";
@@ -381,6 +412,16 @@ export var ListSettingsOutput$: StaticStructureSchema = [3, n2, _LSO,
   [_aO, _set, _nT],
   [5, () => SettingRows, 0], 2
 ];
+export var ListUsageInput$: StaticStructureSchema = [3, n2, _LUI,
+  0,
+  [_f, _to, _la, _aI, _mR, _nT],
+  [[5, { [_hQ]: _f }], [5, { [_hQ]: _to }], [64 | 0, { [_hQ]: _la }], [0, { [_hQ]: _aI }], [1, { [_hQ]: _mR }], [0, { [_hQ]: _nT }]], 2
+];
+export var ListUsageOutput$: StaticStructureSchema = [3, n2, _LUO,
+  0,
+  [_aO, _us, _act, _nT],
+  [5, () => UsageRows, () => UsageActors, 0], 3
+];
 export var PutEventInput$: StaticStructureSchema = [3, n2, _PEI,
   0,
   [_eI, _i, _by, _t, _sA, _d],
@@ -410,6 +451,16 @@ export var PutSettingOutput$: StaticStructureSchema = [3, n2, _PSO,
   0,
   [_aI, _mo, _ef, _sou, _sA, _rA, _cS, _sta, _id],
   [0, 0, 0, 0, 5, 5, 2, [1, 32], 0], 8
+];
+export var PutUsageInput$: StaticStructureSchema = [3, n2, _PUI,
+  0,
+  [_uI, _i, _by, _mo, _sp, _sT, _fA, _tA, _tu, _iT, _oT, _cRT, _cWT, _cWTa, _wSR, _wFR, _cMU, _mC, _bu, _sA, _ag],
+  [[0, 1], 0, 0, 0, 0, 0, 5, 5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, () => UsageBuckets, 5, 0], 20
+];
+export var PutUsageOutput$: StaticStructureSchema = [3, n2, _PUO,
+  0,
+  [_id, _aI, _mo, _sp, _sT, _fA, _tA, _tu, _iT, _oT, _cRT, _cWT, _cWTa, _wSR, _wFR, _cMU, _mC, _bu, _sA, _rA, _cS, _sta, _ag],
+  [0, 0, 0, 0, 0, 5, 5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, () => UsageBuckets, 5, 5, 2, [1, 32], 0], 22
 ];
 export var RegisterActorInput$: StaticStructureSchema = [3, n2, _RAI,
   0,
@@ -455,6 +506,21 @@ export var TimelineEvent$: StaticStructureSchema = [3, n2, _TE,
   0,
   [_aI, _t, _rA, _in, _r],
   [0, 0, 5, 2, 0], 4
+];
+export var Usage$: StaticStructureSchema = [3, n2, _Us,
+  0,
+  [_id, _aI, _mo, _sp, _sT, _fA, _tA, _tu, _iT, _oT, _cRT, _cWT, _cWTa, _wSR, _wFR, _cMU, _mC, _bu, _sA, _rA, _cS, _ag],
+  [0, 0, 0, 0, 0, 5, 5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, () => UsageBuckets, 5, 5, 2, 0], 21
+];
+export var UsageActor$: StaticStructureSchema = [3, n2, _UA,
+  0,
+  [_id, _n, _l],
+  [0, 0, 128 | 0], 3
+];
+export var UsageBucket$: StaticStructureSchema = [3, n2, _UB,
+  0,
+  [_buc, _tu, _cMU],
+  [1, 1, 1], 3
 ];
 export var ActorSummary$: StaticStructureSchema = [3, n0, _ASc,
   0,
@@ -502,6 +568,15 @@ var Settings: StaticListSchema = [1, n2, _Se,
 var TimelineEvents: StaticListSchema = [1, n2, _TEi,
   0, () => TimelineEvent$
 ];
+var UsageActors: StaticListSchema = [1, n2, _UAs,
+  0, () => UsageActor$
+];
+var UsageBuckets: StaticListSchema = [1, n2, _UBs,
+  0, () => UsageBucket$
+];
+var UsageRows: StaticListSchema = [1, n2, _UR,
+  0, () => Usage$
+];
 var ValidationExceptionFieldList: StaticListSchema = [1, n1, _VEFL,
   0, () => ValidationExceptionField$
 ];
@@ -536,6 +611,9 @@ export var ListEvents$: StaticOperationSchema = [9, n2, _LE,
 export var ListSettings$: StaticOperationSchema = [9, n2, _LS,
   { [_h]: ["GET", "/api/settings", 200] }, () => ListSettingsInput$, () => ListSettingsOutput$
 ];
+export var ListUsage$: StaticOperationSchema = [9, n2, _LU,
+  { [_h]: ["GET", "/api/usage", 200] }, () => ListUsageInput$, () => ListUsageOutput$
+];
 export var PutEvent$: StaticOperationSchema = [9, n2, _PE,
   { [_h]: ["PUT", "/api/events/{eventId}", 200] }, () => PutEventInput$, () => PutEventOutput$
 ];
@@ -544,6 +622,9 @@ export var PutLink$: StaticOperationSchema = [9, n2, _PL,
 ];
 export var PutSetting$: StaticOperationSchema = [9, n2, _PS,
   { [_h]: ["PUT", "/api/settings/{settingId}", 200] }, () => PutSettingInput$, () => PutSettingOutput$
+];
+export var PutUsage$: StaticOperationSchema = [9, n2, _PU,
+  { [_h]: ["PUT", "/api/usage/{usageId}", 200] }, () => PutUsageInput$, () => PutUsageOutput$
 ];
 export var RegisterActor$: StaticOperationSchema = [9, n2, _RA,
   { [_h]: ["POST", "/api/actors", 200] }, () => RegisterActorInput$, () => RegisterActorOutput$
