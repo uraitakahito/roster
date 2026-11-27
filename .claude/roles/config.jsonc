@@ -11,6 +11,8 @@
     // 裸の「pagetray-data」は書かない（container volume inspect のような、volume を読むだけの命令まで止めるため）。
     // 末尾に * の項目は、命令の語で当てる guard（t-7j37）の物で、* の語は前方一致（pagetray-data* は pagetray-data-v1:/data に当たる）。
     // 字の含みで見る前の guard では * の項目は当たらず、* の無い項目が当たる。どちらの guard でも守りに穴が空かないよう、両方を並べて置く。
+    // 今の guard は、container の命令の旗の書き方をそろえてから当てる（t-ta2b）ので、--name=… と --volume … の項目は、--name … と -v … の項目と同じ当たりになる
+    // （--volume=…・-v=…・--mount …,source=… も -v … の項目で当たる）。前の guard のために残す。
     "pagetray": {
       "guard": "tpm",
       // container の名は pagetray.box（pagetray 1.2.0 から。同じ network の callboard が、DNS の domain box で名で引く。AI-32）。
