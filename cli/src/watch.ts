@@ -1,5 +1,5 @@
 // 見張り（roster watch）の判じ方: GitHub に聞いた答えを読み、通った・落ちた・まだ・付いていない・応えない、に分ける。
-// model を使わない。待つ・聞き直すのは commands/watch.ts。merge の後の main の workflow の判じ方は、roster report merged も使う。
+// model を使わない。待つ・聞き直すのは commands/watch.ts。merge の後の main の workflow の判じ方は、roster report merged も使い、tag の push の回も同じ判じ方（judgeRuns）で見る。
 import type { Exec } from './exec.ts';
 
 /** PR の URL から読んだ repo と番号。 */
@@ -147,13 +147,14 @@ interface MergedView {
 }
 
 /** `gh run list --json …` の 1 行（読む欄だけ）。 */
-interface Run {
+export interface Run {
   workflowName?: string
   status?: string
   conclusion?: string
   event?: string
   createdAt?: string
   url?: string
+  headSha?: string
 }
 
 /** merge の直後、workflow の回がまだ作られていないとみなす長さ（ミリ秒）。この間は、回が無くても「まだ」。 */
@@ -187,16 +188,26 @@ export function lookMain(exec: Exec, pr: PrRef, now: Date): Look {
   if (r.status !== 0) return failure(r.status, r.stderr, r.stdout);
   const runs = parsed<Run[]>(r.stdout);
   if (!Array.isArray(runs)) return { state: 'unreachable', message: 'gh run list の答えを読めない' };
+  const merged = view.mergedAt ? Date.parse(view.mergedAt) : Number.NaN;
+  // merge の時刻が読めない時も「merge の直後」に倒す（通った・無い、とは言わない）。
+  const fresh = Number.isNaN(merged) || now.getTime() - merged < RUN_GRACE_MS;
+  return judgeRuns(runs.filter(run => run.event !== 'pull_request' && run.event !== 'pull_request_target'), fresh);
+}
+
+/**
+ * workflow の回の集まりを判じる（main の workflow・tag の push の回）。
+ * - workflow ごとに、いちばん新しい回で判じる（落ちた回を `gh workflow run` で流し直した時は、新しい回を見る）。
+ * - fresh（回が、まだ作られきっていないかもしれない）の間は、回が無くても・在る回がみな終わっていても「まだ」。落ちた回は、その間でも返す。
+ * - 回が 1 つも無いまま fresh でなければ none。
+ * - 取り消された回（cancelled）は、落ちたにも通ったにも数えず、その数を cancelled に返す。
+ */
+export function judgeRuns(runs: Run[], fresh: boolean): Look {
   const latest = new Map<string, Run>();
   for (const run of runs) {
-    if (run.event === 'pull_request' || run.event === 'pull_request_target') continue;
     const name = run.workflowName ?? '（名無し）';
     const seen = latest.get(name);
     if (seen === undefined || (run.createdAt ?? '') > (seen.createdAt ?? '')) latest.set(name, run);
   }
-  const merged = view.mergedAt ? Date.parse(view.mergedAt) : Number.NaN;
-  // merge の時刻が読めない時も「merge の直後」に倒す（通った・無い、とは言わない）。
-  const fresh = Number.isNaN(merged) || now.getTime() - merged < RUN_GRACE_MS;
   if (latest.size === 0) return fresh ? { state: 'pending', done: 0, total: 0 } : { state: 'none' };
   const all = [...latest.entries()];
   const running = all.filter(([, run]) => run.status !== 'completed');
@@ -207,6 +218,41 @@ export function lookMain(exec: Exec, pr: PrRef, now: Date): Look {
   }
   if (running.length > 0 || fresh) return { state: 'pending', done: all.length - running.length, total: all.length };
   return { state: 'passed', total: all.length - cancelled, ...(cancelled === 0 ? {} : { cancelled }) };
+}
+
+/** tag の名として受ける字（git の ref の名に使えない、空白・`~^:?*[` と逆斜線を含まない物）。 */
+const TAG_NAME = /^[^\s~^:?*[\\]+$/;
+
+/** tag を引いた時の、tag が無い答え。 */
+const NO_TAG = /HTTP 404|HTTP 422|No commit found/i;
+
+/**
+ * tag の push で動いた workflow を 1 回見る（`roster watch tag`）。
+ * - tag の commit の sha を引き（注釈付きの tag も commit の sha になる）、`--branch <tag> --event push` の回のうち、その sha の物だけを見る（消して打ち直した tag の古い回を数えない）。
+ * - 判じ方は main と同じ（judgeRuns）。軽い tag には時刻が無いので、回が無い間は見張りを始めてから（since）、回が在る間はいちばん古い回が作られてから、RUN_GRACE_MS を「作られきっていない」とみなす。
+ * - tag が無い: invalid。
+ */
+export function lookTag(exec: Exec, repo: string, tag: string, since: Date, now: Date): Look {
+  const t = exec('gh', ['api', `repos/${repo}/commits/${['refs', 'tags', ...tag.split('/')].map(encodeURIComponent).join('/')}`, '-q', '.sha']);
+  if (t.status !== 0) {
+    if (!LIMITED.test(t.stderr) && NO_TAG.test(t.stderr)) return { state: 'invalid', message: `tag ${tag} が ${repo} に無い（push したか・名と repo が合っているかを見る）` };
+    return failure(t.status, t.stderr, t.stdout);
+  }
+  const sha = t.stdout.trim();
+  if (sha === '') return { state: 'unreachable', message: 'tag の commit を読めない' };
+  const r = exec('gh', ['run', 'list', '--repo', repo, '--branch', tag, '--event', 'push', '--limit', '100', '--json', 'workflowName,status,conclusion,event,createdAt,url,headSha']);
+  if (r.status !== 0) return failure(r.status, r.stderr, r.stdout);
+  const runs = parsed<Run[]>(r.stdout);
+  if (!Array.isArray(runs)) return { state: 'unreachable', message: 'gh run list の答えを読めない' };
+  const ours = runs.filter(run => run.headSha === sha);
+  const first = Math.min(...ours.map(run => Date.parse(run.createdAt ?? '')).filter(n => !Number.isNaN(n)));
+  const from = Number.isFinite(first) ? first : since.getTime();
+  return judgeRuns(ours, now.getTime() - from < RUN_GRACE_MS);
+}
+
+/** tag の名の形を見る（違えば、その訳。合えば undefined）。 */
+export function badTag(tag: string): string | undefined {
+  return TAG_NAME.test(tag) && !tag.startsWith('-') ? undefined : `tag の名（v1.2.3 など）を書いてください: ${tag}`;
 }
 
 /** GitHub が応えるかを 1 回見る（repo があればその repo を読めるか。無ければ API が応えるかだけ: API が応えても、merge・push・Actions がまだ落ちていることはある）。 */
