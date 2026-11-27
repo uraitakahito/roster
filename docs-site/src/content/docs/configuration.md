@@ -138,6 +138,10 @@ infra: pagetray（roster）（手続きは roster infra list）
 
 名を書かずに的を選ぶ命令も当てる（2026-11-27 t-9tac）。環境の名は、名を宣言する項目（`--name db`・`--name=db`・`-v db-data*`）から引き、終わりの語がその名の項目（`container stop db`・`container volume rm db-data*`）の、名の前の語を動詞（`container stop`）と読む。命令の中に動詞の語が続けて並び（間に挟まってよいのは旗とその値だけ）、その後ろの的（旗と `-s`・`-t` などの値を除いた語）が、無い（xargs で渡す・`-a` だけ）か、字で書いた名（英数字・`_`・`.`・`-`）でない語（`$(…)`・変数・glob・`{}`・`%`）を含むか、`--all` があれば、その環境に触るとみなす（`container stop --all`・`container rm -f $(container ls -q)`・`… | xargs container rm`）。名を宣言しない環境と、終わりの語が名でない項目（`container builder stop`）からは動詞を引かないので、`container volume inspect $V` のような読むだけの命令は止まらない。名を取らない命令（`container system stop`・`container prune`・`container volume prune`）は、項目に書いて当てる（roster の設定の `container-system`）。
 
+container の命令（語のどこかの名が `container` の単純な命令）は、旗の書き方をそろえてから当てる（2026-11-27 t-ta2b。台帳 #300）。その語より後ろの旗と、項目の語を、同じ形にそろえる: 長い旗の `=` を割る（`--name=db` → `--name db`）・`--volume` を `-v` に・`-v=x`・`-vx`・束ねた `-dv x` を `-v x` に・`--mount` の `source=`（`src=`）の値を `-v` の値に。だから項目は `--name db`・`-v db-data*` の形で書けば、`--name=db`・`--volume=db-data-v1:/data`・`--mount type=volume,source=db-data-v1,target=/data` にも当たる（`--name=db`・`--volume db-data*` の項目を並べなくてよい）。container の命令でない語はそろえないので、`grep -- "--name=db"` は `--name=db` の項目にも当たらない。字の含みの当たりでも、命令の字を粗く語に割り、container の命令の旗をそろえて、頭が旗の項目と比べる（here-document や `ssh host '…'` の中の `--volume=db-data-v1` も止まる）。
+
+container の命令の `--name`・`-v` の値に、変数（`$N`・`${N}`）・命令の置き換え（`$(…)`・backtick）・glob の字（`*`・`?`）があれば、その所を何でも当たるとみなして項目の値と比べる（`--name "$N"`・`-v "$V":/data` は、名か volume を宣言した環境にみな当たる。`--name "test-$N"` は `db` に当たらない）。同じ行の代入（`N=db; …`）と環境変数は読まない（代入が効くかは shell の形で変わり、guard の process の環境変数は Bash の命令の shell の物と違うため）。`$HOME`・`$PWD`・`$OLDPWD`・`$TMPDIR` は絶対の path と読むので、`-v "$PWD:/w"` は当たらない。
+
 ## model などの既定の環境変数（任意）
 
 shell の profile などで書くと、すべての project・すべての担当（TPM 担当を含む）の model・effort・permissionMode の既定になる。
