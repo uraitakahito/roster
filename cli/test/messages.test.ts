@@ -4,7 +4,7 @@ import { hello, inboxNow } from '../src/commands/role-side.ts';
 import { deliveredLines } from '../src/mail.ts';
 import { assign, close, roles } from '../src/commands/tpm-side.ts';
 import { requireRole } from '../src/roster.ts';
-import { BRIEF, finish, world, type World } from './helpers.ts';
+import { BRIEF, finish, MAIN_PASSED, mainRun, world, type World } from './helpers.ts';
 
 const OUT = 'https://claude.ai/artifact/o1';
 const PR = 'https://github.com/o/r/pull/7';
@@ -61,7 +61,7 @@ describe('1 つの課題の 1 周（課題管理なし）', () => {
 
     expect(texts(w, 'file:tpm')).toEqual([
       '【ask-tpm】案 A と B で迷う。お勧めは A',
-      `【merged】${PR} 段 1 を入れた`,
+      `【merged】${PR} 段 1 を入れた${MAIN_PASSED}`,
       `【done】${OUT} 要点: PR 2 本の計画／残り: なし／決めてほしいこと: なし`,
       `【done】${OUT} 要点: 実装した／残り: なし／決めてほしいこと: なし`,
       `【end】成果: ${OUT}／merge した PR: ${PR}／消した worktree: skills-worktrees/t-x-impl／残っている物: なし`,
@@ -304,6 +304,100 @@ describe('入口の検査: PR が merge 済みか', () => {
     expect(texts(w, 'file:tpm').filter(text => text.startsWith('【end】'))).toEqual([]);
     await reportEnd(w.se, { prs: [], removed: [], left: 'なし', unchecked: '使わない' });
     expect(texts(w, 'file:tpm').filter(text => text.startsWith('【end】'))).toEqual(['【end】成果: なし／merge した PR: なし／消した worktree: なし／残っている物: なし']);
+  });
+});
+
+describe('merge の後の main の workflow を、命令が見て本文に足す', () => {
+  const senders = [
+    ['【merged】', (w: Awaited<ReturnType<typeof started>>, unchecked?: string) => reportMerged(w.se, { pr: PR, note: '入れた', ...(unchecked === undefined ? {} : { unchecked }) })],
+    ['【doc-fix】', (w: Awaited<ReturnType<typeof started>>, unchecked?: string) => reportDocFix(w.se, { pr: PR, note: '直した', ...(unchecked === undefined ? {} : { unchecked }) })],
+  ] as const;
+  const gates = (w: World): string[] => w.tpm.state.lines<{ gate: string, detail: string }>('gate.jsonl').map(g => `${g.gate} ${g.detail}`);
+
+  test.each(senders)('%s: みな通っていれば、結果を足して送る', async (_, send) => {
+    const w = await started({ tracker: 'github' }, 'gh-12');
+    await send(w);
+    expect(texts(w, 'file:tpm')[0]).toMatch(/／main: workflow 2 つ通った$/);
+  });
+
+  test.each(senders)('%s: まだ動いている間は送らずに止まり、roster watch main を勧め、止まった記録を書く', async (_, send) => {
+    const w = await started({ tracker: 'github' }, 'gh-12');
+    w.mainRuns.list = [mainRun('test', 'in_progress', ''), mainRun('docs', 'completed', 'success')];
+    await expect(send(w)).rejects.toThrow(new RegExp(`main の workflow が、まだ終わっていません（2 つのうち 1 つが動いている）: ${PR}\n送っていません。roster watch main ${PR} `));
+    expect(texts(w, 'file:tpm')).toEqual([]);
+    expect(w.calls.filter(c => c.args[1] === 'comment')).toEqual([]);
+    expect(gates(w)).toEqual([`main-running ${PR}`]);
+    w.mainRuns.list = [mainRun('test', 'completed', 'success'), mainRun('docs', 'completed', 'success')];
+    await send(w);
+    expect(texts(w, 'file:tpm')).toHaveLength(1);
+  });
+
+  test('落ちた workflow があっても止めず、落ちた名を足して送る', async () => {
+    const w = await started();
+    w.mainRuns.list = [mainRun('test', 'completed', 'success'), mainRun('docs', 'completed', 'failure')];
+    await reportMerged(w.se, { pr: PR, note: '入れた' });
+    expect(texts(w, 'file:tpm')[0]).toBe(`【merged】${PR} 入れた／main: 落ちた docs（https://github.com/o/r/actions/runs/docs）（ほか: 通った 1）`);
+  });
+
+  test('同じ commit に docs が 2 回（落ちた後に、流し直して通った）なら、新しい回で「通った」', async () => {
+    const w = await started();
+    w.mainRuns.list = [mainRun('docs', 'completed', 'failure', '2020-01-01T00:00:10Z'), mainRun('docs', 'completed', 'success', '2020-01-01T00:05:00Z', 'workflow_dispatch'), mainRun('test', 'completed', 'success')];
+    await reportMerged(w.se, { pr: PR, note: '入れた' });
+    expect(texts(w, 'file:tpm')[0]).toBe(`【merged】${PR} 入れた${MAIN_PASSED}`);
+  });
+
+  test('回が 1 つも無い: merge の直後（2 分の内）は止まり、過ぎていれば「無い」と書いて送る', async () => {
+    const w = await started();
+    w.mainRuns.list = [];
+    w.mainRuns.mergedAt = new Date(w.se.now().getTime() - 60_000).toISOString();
+    await expect(reportMerged(w.se, { pr: PR, note: '入れた' })).rejects.toThrow(/merge の直後で、回がまだ作られていない/);
+    expect(texts(w, 'file:tpm')).toEqual([]);
+    w.mainRuns.mergedAt = new Date(w.se.now().getTime() - 180_000).toISOString();
+    await reportMerged(w.se, { pr: PR, note: '入れた' });
+    expect(texts(w, 'file:tpm')[0]).toBe(`【merged】${PR} 入れた／main: この merge で動いた workflow は無い`);
+  });
+
+  test('取り消された回（後の回に寄った docs）は、落ちたと書かずに送る', async () => {
+    const w = await started();
+    w.mainRuns.list = [mainRun('test', 'completed', 'success'), mainRun('docs', 'completed', 'cancelled')];
+    await reportMerged(w.se, { pr: PR, note: '入れた' });
+    expect(texts(w, 'file:tpm')[0]).toBe(`【merged】${PR} 入れた／main: workflow 2 つ通った（うち 1 つは取り消し。後の回が済ませたかは見ていない）`);
+  });
+
+  test('merge から 2 分の内は、在る回がみな終わっていても止まる', async () => {
+    const w = await started();
+    w.mainRuns.mergedAt = new Date(w.se.now().getTime() - 30_000).toISOString();
+    await expect(reportMerged(w.se, { pr: PR, note: '入れた' })).rejects.toThrow(/merge から 2 分の内。在る 2 つは終わっているが/);
+    expect(texts(w, 'file:tpm')).toEqual([]);
+  });
+
+  test('--pr が PR の URL の形でない時は止まり、--unchecked があれば送る', async () => {
+    const w = await started();
+    await expect(reportMerged(w.se, { pr: '7', note: '入れた' })).rejects.toThrow(/--pr が PR の URL の形でない.*\n送っていません。.*--unchecked/);
+    expect(texts(w, 'file:tpm')).toEqual([]);
+    expect(gates(w)).toEqual(['main-unreadable 7']);
+    await reportMerged(w.se, { pr: '7', note: '入れた', unchecked: '画面で見た' });
+    expect(texts(w, 'file:tpm')).toHaveLength(1);
+  });
+
+  test.each(senders)('%s: gh で読めない時は止まって --unchecked を求め、--unchecked があれば見ずに送る', async (_, send) => {
+    const w = await started({ tracker: 'github' }, 'gh-12');
+    w.mainRuns.list = undefined;
+    await expect(send(w)).rejects.toThrow(/main の workflow を読めません.*\ngh: HTTP 502: Bad Gateway\n送っていません。.*roster watch github.*--unchecked/);
+    expect(texts(w, 'file:tpm')).toEqual([]);
+    expect(gates(w)).toEqual([`main-unreadable ${PR}`]);
+    await send(w, '画面で見た');
+    expect(texts(w, 'file:tpm')[0]).toMatch(/（merge は確かめていない: 画面で見た）$/);
+    expect(texts(w, 'file:tpm')[0]).not.toContain('main:');
+  });
+
+  test('【end】は main の workflow を見ない（動いていても送る）', async () => {
+    const w = await started();
+    await finish(w, 't-x7k2', 'file:1');
+    await dismiss(w.tpm, 't-x7k2', { handover: false });
+    w.mainRuns.list = [mainRun('test', 'in_progress', '')];
+    await reportEnd(w.se, { prs: [PR], removed: [], left: 'なし' });
+    expect(texts(w, 'file:tpm').filter(text => text.startsWith('【end】'))).toHaveLength(1);
   });
 });
 

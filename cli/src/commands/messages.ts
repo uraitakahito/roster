@@ -18,6 +18,7 @@ import { tidyMail } from './mail.ts';
 import { copyMessageRecord } from './message-record.ts';
 import { markEscalated } from './review-marks.ts';
 import { isPageUrl } from './store.ts';
+import { lookMain, namedList, parsePr } from '../watch.ts';
 import { returnedIds, seenTimes, type SeenAt } from '../seen.ts';
 import { envOf } from '../env.ts';
 import { claimNamed, deliveredLines, endedLines, gateFile, markPassed, ownName, passedIds, recipientName, recordDelivered, type Claim, type GateMark } from '../mail.ts';
@@ -691,6 +692,41 @@ export function assertMerged(ctx: Context, prs: string[], unchecked?: string): s
   return '';
 }
 
+/**
+ * merge した PR の、merge の commit で main に動いた workflow を見て、知らせの本文に足す字を返す（【merged】と【doc-fix】だけ。【end】は見ない）。
+ * 担当が `gh run list` を打って読む回を、命令が受け持つ。判じ方は roster watch main と同じ（workflow ごとに、いちばん新しい回）。
+ * - まだ動いている・merge の直後（2 分の内。回が、まだ作られきっていないことがある）: 送らずに止まる（roster watch main で待ってから打ち直す）。
+ * - みな終わった: 結果を返す。落ちていても止めない（落ちたことを書いて送る決まり）。取り消された回（concurrency で取り消された docs など）は、落ちたと書かず、取り消しの数を足す。
+ * - --pr が PR の URL の形でない: repo が分からないので、読めない時と同じく止まる。
+ * - 読めない: 送らずに止まり、--unchecked を求める（PR の状態を読めない時と同じ）。
+ * - unchecked（確かめない訳）があれば、見ずに空の字を返す（訳は assertMerged が本文に足す）。
+ */
+export function mainWorkflows(ctx: Context, pr: string, unchecked?: string): string {
+  if (unchecked !== undefined) return '';
+  const ref = parsePr(pr);
+  if (ref === undefined) {
+    // PR の URL の形でない --pr（番号だけ、など）は、repo が分からず main の workflow を見られない。読めない PR と同じく止める。
+    recordGateStop(ctx, 'main-unreadable', pr);
+    throw new TpmError(`main の workflow を見られません（--pr が PR の URL の形でない）: ${pr}\n送っていません。--pr に PR の URL（https://github.com/<owner>/<repo>/pull/<番号>）を書いて打ち直してください。GitHub の PR でないなら、main の workflow を自分で確かめてから --unchecked "<確かめた方法>" を付けて打ち直してください。`);
+  }
+  const look = lookMain(ctx.exec, ref, ctx.now());
+  switch (look.state) {
+    case 'passed':
+      return `／main: workflow ${look.total} つ通った${look.cancelled === undefined ? '' : `（うち ${look.cancelled} つは取り消し。後の回が済ませたかは見ていない）`}`;
+    case 'failed':
+      return `／main: 落ちた ${namedList(look.failed)}（ほか: 通った ${look.passed}）`;
+    case 'none':
+      return '／main: この merge で動いた workflow は無い';
+    case 'pending':
+      recordGateStop(ctx, 'main-running', ref.url);
+      throw new TpmError(`main の workflow が、まだ終わっていません（${look.total === 0 ? 'merge の直後で、回がまだ作られていない' : look.done === look.total ? `merge から 2 分の内。在る ${look.total} つは終わっているが、回が作られきるのを待つ` : `${look.total} つのうち ${look.total - look.done} つが動いている`}）: ${ref.url}\n送っていません。roster watch main ${ref.url} を裏で起こして待ち、終わってから打ち直してください。`);
+    case 'unreachable':
+    case 'invalid':
+      recordGateStop(ctx, 'main-unreadable', ref.url);
+      throw new TpmError(`main の workflow を読めません: ${ref.url}\n${look.message}\n送っていません。GitHub が応えないなら roster watch github を裏で起こして待ち、戻ってから打ち直してください。gh で読めない PR なら、main の workflow を自分で確かめてから --unchecked "<確かめた方法>" を付けて打ち直してください。`);
+  }
+}
+
 const required = (value: string | undefined, name: string): string => {
   if (value === undefined || value.trim() === '') throw new TpmError(`${name} を書いてください（無ければ「なし」）`);
   return value;
@@ -920,7 +956,8 @@ export async function reportMerged(ctx: Context, options: { pr: string, note: st
   const self = await sender(ctx);
   notAuditor(self, 'roster report merged');
   const checked = assertMerged(ctx, [options.pr], options.unchecked);
-  return [await toBoss(ctx, self, 'merged', `${options.pr} ${options.note}${checked}`)];
+  const main = mainWorkflows(ctx, options.pr, options.unchecked);
+  return [await toBoss(ctx, self, 'merged', `${options.pr} ${options.note}${main}${checked}`)];
 }
 
 /** 文書やコメントの食い違いを直した PR を merge したと知らせ、課題があれば記録を書く（【doc-fix】）。 */
@@ -928,7 +965,8 @@ export async function reportDocFix(ctx: Context, options: { pr: string, note: st
   const self = await sender(ctx);
   notAuditor(self, 'roster report doc-fix');
   const checked = assertMerged(ctx, [options.pr], options.unchecked);
-  const body = `${options.pr}（merge 済み）${options.note}${checked}`;
+  const main = mainWorkflows(ctx, options.pr, options.unchecked);
+  const body = `${options.pr}（merge 済み）${options.note}${main}${checked}`;
   await notRepeatToBoss(ctx, self, 'doc-fix', body);
   const recorded = record(ctx, self, { kind: '文書の修正', role: noteRole(self), summary: options.note, links: [{ label: 'PR（merge 済み）', url: options.pr }], points: [] });
   return [...recorded, await toBoss(ctx, self, 'doc-fix', body)];
