@@ -242,10 +242,10 @@ castlist（アクターの台帳）と pagetray（ページの置き場）の画
 
 - **起こす版**: `.callboard-version` の版。`<版>` は `@` の前。取った image の digest が `@` の後ろと同じかを見る（見方は、上の「ページの置き場」の「起こす」と同じ）。
 - **起こす順**: castlist と pagetray より先に起こしてもよい（聞けない間は、入口に「届きません」と訳を出す）。
-- **確かめる**: callboard の docs の「確かめる」。入口の画面で、castlist と pagetray のどちらも「つながっています」と出ること。「届きません」の時は、`container logs callboard` の `呼ぶ先に聞けない` の行（どの呼ぶ先か・聞く先・訳）を読む。
+- **確かめる**: callboard の docs の「確かめる」を、1 から 6 まで流す（`/healthz` の版・`127.0.0.1:8803` だけに開いているか・入口・記録の行）。入口の画面で、castlist と pagetray のどちらも「つながっています」と出ること。「届きません」の時は、`container logs callboard` の `呼ぶ先に聞けない` の行（どの呼ぶ先か・聞く先・訳）を読む。
 - **止まっている時**: 画面が開けないだけで、担当の仕事（ページを置く・メッセージを送る・アクターの登録）は止まらない。castlist と pagetray の画面（8802・8801）は、そのまま開ける。
 - **版を上げる**: callboard の新しい版が出て、この repo の `.callboard-version` が上がった時（上げ方は [開発](/development/#callboard画面のサーバーとのつなぎ)の「callboard を上げる時」）。callboard の `CHANGELOG.md` の「呼ぶ先の要る版」を見て、castlist・pagetray がその版より古ければ、先にそちらを上げる（castlist を上げるのは Product Manager）。その後、container を消して、新しい版で起こし直す（data が無いので、写しは要らない）。
-- **戻す**: この repo の `.callboard-version` を前の版に戻す PR を先に入れてから、前の版の image で起こし直す（版の file が新しいままだと、次に起こし直す時に、また新しい版で起こしてしまう）。
+- **戻す**: この repo の `.callboard-version` を前の版に戻す PR を先に入れてから、前の版の image で起こし直す（版の file が新しいままだと、次に起こし直す時に、また新しい版で起こしてしまう）。castlist・pagetray も戻す時は、それぞれの版の file の PR を戻して前の版で起こし直してから、callboard を戻す（新しい操作を呼ぶ callboard を、古い castlist・pagetray に向けている間は、その画面が 503 になる。短い間で、data は失わない）。
 
 ## メッセージキュー（NATS）
 
