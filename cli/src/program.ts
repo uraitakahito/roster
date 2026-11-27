@@ -240,9 +240,11 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
     .action((path: string) => print(figureValidate(createContext(), path)));
   figure.command('embed <file>').description('書き手の file の目印（<!-- figure: <JSON> -->）ごとに図を描いて整え、埋めた物を --out の file に書く（書き手の file は変えない）')
     .requiredOption('--out <file>', '図を埋めた物を書く file（roster page put で置く用）')
+    .option('--figure <json>', '名指した図（JSON の path）。ほかの図が描けなくても、この図が埋まれば通る')
     .action((path: string, options: FigureEmbedOptions) => print(figureEmbed(createContext(), path, options)));
   figure.command('shot <file>').description('埋めた図ごとに、寸法の検査（字のはみ出し・重なり・小さい字）をし、明るい・暗いの png を撮る（傷があれば exit 1）')
     .option('--dir <folder>', 'png を書く folder（無ければ一時の folder）')
+    .option('--figure <json>', '名指した図（JSON の path）だけを検査して撮る')
     .action((path: string, options: FigureShotOptions) => print(figureShot(createContext(), path, options)));
 
   program.command('guard').description('（hook が呼ぶ）標準入力の命令を通すか止めるかを決める')
