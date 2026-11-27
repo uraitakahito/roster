@@ -81,7 +81,7 @@ castlist と pagetray の画面をまとめるサーバー（Rust）は、別の
 
 - **合わせる版**: `.callboard-version` に、起こす callboard の版を `v<版>@<image の digest>` の形で書く（digest は callboard の release にある。今は `v0.2.0`）。DevOps Engineer 担当は、この版で起こす。この file を読む試験は無い（callboard を相手にしたつなぎの試験は、この repo に無い。callboard の側が、出した版の castlist と pagetray を相手に試験を流す）。
 - **callboard を上げる時**: callboard で release を出す（callboard の docs の「[release を出す](https://uraitakahito.github.io/callboard/release.html)」）→ この repo で `.callboard-version` を新しい版と digest にする PR を出す → [運用](/operations/#画面のサーバーcallboard)の「版を上げる」で container を作り直す。castlist・pagetray の版も上がる時は、`.castlist-version`・`.pagetray-version` の PR と起こし直しを先に済ませる。
-- **画面の URL**: 担当に渡す画面の URL（castlist のプロフィールの `http://127.0.0.1:8802/actors/<id>`・置き場の一覧の `http://127.0.0.1:8801/` など）は、まだ castlist と pagetray の画面を指す。callboard に画面を移し終え、castlist・pagetray の画面を外す時に、この repo の cli・docs・skill の URL を callboard の物に替える（AI-32 の後の段）。
+- **画面の URL**: アクターのプロフィールの画面の URL（`roster castlist …` と `roster incident timeline` が出す）は、callboard の物（`<callboard>/actors/<id>`。`cli/src/castlist.ts` の `callboardUrl`。既定は `http://127.0.0.1:8803`、`$ROSTER_CALLBOARD_URL` で替えられる）。castlist は 2.0.0 から画面を持たない。置き場の一覧（`http://127.0.0.1:8801/`）とメッセージの画面は、まだ pagetray の画面を指す。pagetray の画面を外す時に、callboard の物に替える（AI-32 の後の段）。
 
 ## NATS JetStream（メッセージキュー）とのつなぎ
 

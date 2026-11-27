@@ -46,7 +46,7 @@ background: false
 |---|---|
 | 時刻 | 記録の時刻（ISO の形のまま） |
 | 事実 | 何が起きたか、1 文。誰がではなく、どの役割・どの命令・どのページか。在り処に書かれた事だけを書き、読み替え（時刻の地域の換算・「〜のため」など）を足さない |
-| 在り処 | ページの URL・state の file の名と記録の id（無ければ時刻）・file の path と行・commit・castlist のアクターのプロフィールの画面の URL（`roster castlist find` などが行ごとに出す `<castlist>/actors/<id>`）。Auditor が開ける形で |
+| 在り処 | ページの URL・state の file の名と記録の id（無ければ時刻）・file の path と行・commit・castlist のアクターのプロフィールの画面の URL（`roster castlist find` などが行ごとに出す `<callboard>/actors/<id>`。画面は callboard にある）。Auditor が開ける形で |
 | 証拠の字 | 在り処の字を、そのまま 1〜3 行 |
 
 3. `読めなかった物:` に、読もうとして読めなかった在り処と、その訳（無ければ「なし」）。

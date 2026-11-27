@@ -189,6 +189,7 @@ export ROSTER_EFFORT=medium
 | 環境変数 | 決める物 | 無いとき |
 |---|---|---|
 | `ROSTER_CASTLIST_URL` | castlist の URL（`http://127.0.0.1:<port>` か `http://localhost:<port>`） | 設定の `castlist`。それも無ければ、castlist に何も送らない |
+| `ROSTER_CALLBOARD_URL` | 画面のサーバー（callboard）の URL（同じ形）。`roster castlist …` と `roster incident timeline` が出す、アクターのプロフィールの画面の URL の頭になる（roster は callboard に何も送らない） | `http://127.0.0.1:8803` |
 
 - `roster` は castlist に、castlist 1.0.0 からの API（`/api/…`）で送る。送るのは、定義から生成した client（[開発](/development/#生成した-clientcastlistpagetray-の定義から)）。
 - 起こす前（`roster start`・`roster assign`・`roster audit start`・`roster hello`）に `/healthz` を見て、castlist が応えなければ起こさずに止まる（[運用](/operations/#アクターの台帳castlist)）。

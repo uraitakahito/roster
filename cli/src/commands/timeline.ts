@@ -1,7 +1,7 @@
 // roster incident timeline <番号|Key>: 件の前後に起きたことを、state の記録から時刻の順に 1 枚のページにして置く。
 // TPM 担当は読まずに、監査の依頼書に URL を貼る（原因を調べるのは担当）。メッセージの本文が入るので、roster を動かす機械の外に写さない。
 // castlist を設定していれば、行ごとに、その時刻にその席に居たアクターを castlist に聞いて欄に出す（聞けなければ、そう書いてページは置く）。
-import { castlistUrl } from '../castlist.ts';
+import { callboardUrl, castlistUrl } from '../castlist.ts';
 import type { Context } from '../context.ts';
 import type { GateStop, GuardStop, WaitChange } from '../evidence.ts';
 import { incidentLine, readIncidents, requireIncident, writeIncident, type Incident } from '../incidents.ts';
@@ -183,7 +183,7 @@ async function actorCells(ctx: Context, url: string, events: TimelineEvent[]): P
       cell = esc(answer.down ? 'castlist に聞けない' : `castlist に聞けない（${answer.reason}）`);
     }
     else {
-      cell = answer.body.actors.length === 0 ? 'castlist に無い' : answer.body.actors.map(a => `<a href="${esc(profileUrl(url, a.id))}">${esc(a.name)}</a>`).join('・');
+      cell = answer.body.actors.length === 0 ? 'castlist に無い' : answer.body.actors.map(a => `<a href="${esc(profileUrl(callboardUrl(ctx), a.id))}">${esc(a.name)}</a>`).join('・');
     }
     asked.set(key, cell);
     cells.push(cell);
@@ -255,7 +255,7 @@ export async function incidentTimeline(ctx: Context, target: string, options: { 
   const actors = castlist === undefined ? undefined : await actorCells(ctx, castlist, events);
   if (castlist !== undefined) {
     const failed = actors?.failed === undefined ? '' : `聞けなかった行がある: ${actors.failed}`;
-    lead.push(`アクターの欄は、castlist（${castlist}）に、その時刻にその席（担当は課題の Key、TPM 担当は tpm）に居たアクターを聞いた答え（名はプロフィールの画面への link）。${failed}`);
+    lead.push(`アクターの欄は、castlist（${castlist}）に、その時刻にその席（担当は課題の Key、TPM 担当は tpm）に居たアクターを聞いた答え（名は、画面のサーバー callboard のプロフィールの画面への link）。${failed}`);
   }
   const { url } = await putPage(ctx, { text: render(title, lead, events, actors?.cells) }, 'timeline', key);
   if (incident !== undefined) writeIncident(ctx, { ...incident, timeline: url });

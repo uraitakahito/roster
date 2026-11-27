@@ -48,7 +48,7 @@ Auditor（`/audit`）が、監査のたびに読む手順。何のために・�
 | 依頼書・成果のページ | `roster page list`（`--key`・`--kind`・`--role` で絞る）と `roster page path <URL>` |
 | コードと skill の文 | repo（読むだけ）。変わった所は git の記録（`git log`・`git diff`） |
 | 課題 | `roster issue view <Key>` |
-| アクター（誰が・誰に起こされ・どの model と effort で） | castlist（アクターの台帳）のプロフィールの画面の URL（`<castlist>/actors/<id>`）。`roster castlist find --label tpm.key:<Key>`・`roster castlist show <名か id>`・`roster castlist lineage <名か id>`・`roster castlist settings --actor <名か id> --at <時刻>`・`roster castlist events`（どれも読むだけ。castlist を設定した project だけ） |
+| アクター（誰が・誰に起こされ・どの model と effort で） | castlist（アクターの台帳）のアクターの、プロフィールの画面の URL（`<callboard>/actors/<id>`。画面は、画面のサーバー callboard にある。既定は `http://127.0.0.1:8803`）。`roster castlist find --label tpm.key:<Key>`・`roster castlist show <名か id>`・`roster castlist lineage <名か id>`・`roster castlist settings --actor <名か id> --at <時刻>`・`roster castlist events`（どれも読むだけ。castlist を設定した project だけ） |
 
 ### 3. 追いかける
 

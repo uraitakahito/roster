@@ -4,7 +4,7 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { CASTLIST_VERSION, castlistClient, requireUp } from '../src/castlist.ts';
+import { CALLBOARD_URL, CASTLIST_VERSION, callboardUrl, castlistClient, requireUp } from '../src/castlist.ts';
 import { castlistEvents, castlistFind, castlistLineage, castlistSettings, castlistShow, seatActorsAt } from '../src/commands/castlist-read.ts';
 import { castlistHello } from '../src/commands/castlist.ts';
 import type { Context } from '../src/context.ts';
@@ -111,7 +111,8 @@ async function thrown(run: () => Promise<unknown>): Promise<string> {
   return '';
 }
 
-const profile = (id: string): string => `${url}/actors/${id}`;
+// プロフィールの画面は、castlist でなく、画面のサーバー（callboard）にある。
+const profile = (id: string): string => `${CALLBOARD_URL}/actors/${id}`;
 const fullLine = (): string => ['t-1-swe.1', 'ai', '停止', '登場 2026-11-20T11:00:00.001Z', '退場 2026-11-20T11:30:00.000Z（exited）', 'claude-opus-5-5・high', 'tpm.key=t-1', profile(A1)].join('  ');
 const bareLine = (): string => ['pm.1', 'human', '稼働中', '登場 -', '退場 -', '-・-', '-', profile(A2)].join('  ');
 
@@ -399,5 +400,17 @@ describe('前の castlist と同じに断る・答える（review-35）', () => 
       const { ctx } = nextWorld(() => answer);
       expect(await thrown(() => castlistFind(ctx, { label: ['a:b'] }))).toMatch(/castlist が、この roster の呼ぶ操作を持たない/);
     }
+  });
+});
+
+describe('画面のサーバー（callboard）の URL', () => {
+  test('既定は http://127.0.0.1:8803。$ROSTER_CALLBOARD_URL があれば、そちら（末尾の / は落とす）。形が違えば止める', () => {
+    const ctx = (value?: string) => ({ env: value === undefined ? {} : { ROSTER_CALLBOARD_URL: value } });
+    expect(CALLBOARD_URL).toBe('http://127.0.0.1:8803');
+    expect(callboardUrl(ctx())).toBe('http://127.0.0.1:8803');
+    expect(callboardUrl(ctx(''))).toBe('http://127.0.0.1:8803');
+    expect(callboardUrl(ctx('http://localhost:18813/'))).toBe('http://localhost:18813');
+    expect(() => callboardUrl(ctx('https://example.com'))).toThrow('$ROSTER_CALLBOARD_URL');
+    expect(() => callboardUrl(ctx('http://127.0.0.1:8803/actors'))).toThrow('$ROSTER_CALLBOARD_URL');
   });
 });
