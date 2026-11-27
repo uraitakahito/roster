@@ -90,7 +90,7 @@ roster watch pr <PR の URL> --timeout 0  # 今の様子を 1 回見て、待た
 
 - **頼み方**: TPM 担当に「この課題は Tech Lead 担当にまとめさせて」と言う。言わなくても、TPM 担当が課題を読んで勧めることがある。席を増やすと使うトークンが増えるので、互いに依らない大きな仕事の組が 2 つ以上ある課題に向く（repo の間に順がある課題は、分けてもあまり縮まない）。
 - **運び**: Tech Lead 担当が、まず計画（並べられる仕事の組・分けるかの見立て・席の数・repo の境の取り決め）を出す。**席の数は Product Manager が決める**（確認のページで聞かれる）。通した数が上限になり、超える席は命令が断る。
-- **画面**: cmux に `Lead <課題の Key>: <題>`（赤の帯）と、`SWE <課題の Key> <名>: <題>`（緑の帯。repo の席）が並ぶ。repo の席の依頼書・成果・問い・レビューは、Tech Lead 担当との間をじかに届き、TPM 担当を通らない。やりとりは、置き場の「メッセージの記録」（`http://127.0.0.1:8801/messages`）と、課題の folder のページ、課題管理の記録（repo の席の記録は `Software Engineer（<名>）` と出る）で見られる。
+- **画面**: cmux に `Lead <課題の Key>: <題>`（赤の帯）と、`SWE <課題の Key> <名>: <題>`（緑の帯。repo の席）が並ぶ。repo の席の依頼書・成果・問い・レビューは、Tech Lead 担当との間をじかに届き、TPM 担当を通らない。やりとりは、「メッセージの記録」の画面（callboard の `http://127.0.0.1:8803/messages`）と、課題の folder のページ、課題管理の記録（repo の席の記録は `Software Engineer（<名>）` と出る）で見られる。
 - **Product Manager への確認**は、Tech Lead 担当がまとめて送る（repo の席は送れない）。
 - **レビュー**: repo の席の計画と PR は Tech Lead 担当が見る。Tech Lead 担当の計画と PR は Staff Engineer 担当が見る。
 - **終わり**: Tech Lead 担当が、repo の席を片付けて閉じてから終える。課題管理の課題が済みになるのは、Tech Lead 担当が終えた時。
@@ -262,7 +262,7 @@ castlist（アクターの台帳）と pagetray（ページの置き場）の画
 |---|---|
 | image | `ghcr.io/uraitakahito/callboard:<版>`。版と digest は、この repo の `.callboard-version`（`v<版>@<digest>`） |
 | container | `callboard`（`127.0.0.1:8803` → 中の 8080。メモリは Apple Container の下限の 200 MiB、CPU は 1） |
-| URL | `http://127.0.0.1:8803/`（入口。castlist と pagetray が生きているかと、画面への link）。castlist の 4 つの画面は、みな callboard にある（0.2.0 から）: アクターの一覧（`/actors/`）・プロフィール（`/actors/<id>`）・タイムライン（`/graph/timeline`）・相関図（`/graph/network`）。pagetray の画面（ページの一覧・メッセージ）は、移すまで pagetray（8801）の画面 |
+| URL | `http://127.0.0.1:8803/`（入口。castlist と pagetray が生きているかと、画面への link）。castlist の 4 つの画面は、みな callboard にある（0.2.0 から）: アクターの一覧（`/actors/`）・プロフィール（`/actors/<id>`）・タイムライン（`/graph/timeline`）・相関図（`/graph/network`）。pagetray の画面のうち、メッセージの記録（`/messages`）も callboard にある（0.3.0 から。新しい記録は、押さずに入る）。ページの一覧は、移すまで pagetray（8801）の画面。pagetray のメッセージの画面（`http://127.0.0.1:8801/messages`）も、外すまでは開く |
 | 聞く先 | castlist は `http://castlist.box:8080`（`CALLBOARD_CASTLIST_URL`）、pagetray は `http://pagetray.box:8080`（`CALLBOARD_PAGETRAY_URL`）。どちらも container の名でつなぐ（Apple Container の DNS は、domain `box` の付いた名だけを答える。container の中の `127.0.0.1` は container 自身なので、host の port には届かない）。pagetray の container が前の名 `pagetray` のままだと、名では届かず、入口は pagetray を「届きません」と出す（castlist の画面には響かない）。その時は、上の「ページの置き場」の「起こす」のとおり、`pagetray.box` の名で作り直す |
 | data | 無い。止めても、消しても、起こし直せば元のまま |
 
@@ -270,7 +270,7 @@ castlist（アクターの台帳）と pagetray（ページの置き場）の画
 
 - **起こす版**: `.callboard-version` の版。`<版>` は `@` の前。取った image の digest が `@` の後ろと同じかを見る（見方は、上の「ページの置き場」の「起こす」と同じ）。
 - **起こす順**: castlist と pagetray より先に起こしてもよい（聞けない間は、入口に「届きません」と訳を出す）。
-- **確かめる**: callboard の docs の「確かめる」を、1 から 6 まで流す（`/healthz` の版・`127.0.0.1:8803` だけに開いているか・入口・記録の行）。入口の画面で、castlist と pagetray が「つながっています」と出ること（pagetray が「届きません」の時は、上の「聞く先」）。castlist の版が、callboard の `CHANGELOG.md` の「呼ぶ先の要る版」より古くないこと（0.2.0 は castlist 1.1.0 から。古いと、タイムラインが「castlist に聞けません（404 が返りました）」になり、一覧とプロフィールの「時刻ずれ」の印と、状態の横の出来事の名が、誤りを出さずに消える）。「届きません」の時は、`container logs callboard` の `呼ぶ先に聞けない` の行（どの呼ぶ先か・聞く先・訳）を読む。
+- **確かめる**: callboard の docs の「確かめる」を、1 から 6 まで流す（`/healthz` の版・`127.0.0.1:8803` だけに開いているか・入口・記録の行）。入口の画面で、castlist と pagetray が「つながっています」と出ること（pagetray が「届きません」の時は、上の「聞く先」）。メッセージの記録の画面（`http://127.0.0.1:8803/messages`）が 200 で開くこと。castlist と pagetray の版が、callboard の `CHANGELOG.md` の「呼ぶ先の要る版」より古くないこと（0.3.0 は castlist 1.1.0 から・pagetray 1.2.0 から。pagetray が古いと、メッセージの記録の画面が「pagetray に聞けません（404 が返りました）」になる。castlist が古いと、タイムラインが「castlist に聞けません（404 が返りました）」になり、一覧とプロフィールの「時刻ずれ」の印と、状態の横の出来事の名が、誤りを出さずに消える）。「届きません」の時は、`container logs callboard` の `呼ぶ先に聞けない` の行（どの呼ぶ先か・聞く先・訳）を読む。
 - **止まっている時**: 画面が開けないだけで、担当の仕事（ページを置く・メッセージを送る・アクターの登録）は止まらない。アクターの画面（一覧・プロフィール・タイムライン・相関図）は callboard だけにある（castlist は 2.0.0 から画面を持たない）ので、止まっている間は見られない。`roster castlist …` の命令（読むだけ）は、そのまま使える。pagetray の画面（8801）は、そのまま開ける。
 - **版を上げる**: callboard の新しい版が出て、この repo の `.callboard-version` が上がった時（上げ方は [開発](/development/#callboard画面のサーバーとのつなぎ)の「callboard を上げる時」）。callboard の `CHANGELOG.md` の「呼ぶ先の要る版」を見て、castlist・pagetray がその版より古ければ、先にそちらを上げる（castlist を上げるのは Product Manager）。その後、container を消して、新しい版で起こし直す（data が無いので、写しは要らない）。
 - **戻す**: この repo の `.callboard-version` を前の版に戻す PR を先に入れてから、前の版の image で起こし直す（版の file が新しいままだと、次に起こし直す時に、また新しい版で起こしてしまう）。castlist・pagetray も戻す時は、それぞれの版の file の PR を戻して前の版で起こし直してから、callboard を戻す（新しい操作を呼ぶ callboard を、古い castlist・pagetray に向けている間は、その画面が 503 になる。短い間で、data は失わない）。
@@ -319,7 +319,7 @@ roster を使う project では、NATS が動いていること（project ごと
 
 1. NATS が起きていることを見る（上の「起こす」）。
 2. 前の版で起こした席（メッセージを渡す hook を持たない席）は、TPM 担当を `roster start` の 1 行で、担当を `roster assign` で起こし直すと、hook を持つ。起こし直すまでも、その席宛ての物は NATS に置かれ、その席の `roster inbox` と送る前の検査が、命令の結果に本文を出す（手を止めている間には届かない）。
-3. 確かめ: 起こした席の状態の folder に `mail/claims/<受け手の名>.jsonc` が出来ていること。その席に送ったメッセージの `log.jsonl` の行に `"carrier":"nats"` が付き、渡った後に `delivered.jsonl` に行が足されること。置き場の一覧の画面（`/messages`）では、状態が `waiting` から `delivered` に替わる。
+3. 確かめ: 起こした席の状態の folder に `mail/claims/<受け手の名>.jsonc` が出来ていること。その席に送ったメッセージの `log.jsonl` の行に `"carrier":"nats"` が付き、渡った後に `delivered.jsonl` に行が足されること。メッセージの記録の画面（callboard の `http://127.0.0.1:8803/messages`）では、状態が「まだ届いていない」から「届いた」に、押さずに替わる。
 
 **見張る物**
 
