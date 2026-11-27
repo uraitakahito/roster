@@ -18,6 +18,7 @@ import { findHook, oldBannerConfigNotice, staleHook } from './banner.ts';
 import { castlistHello, closeLaunch, sweep } from './castlist.ts';
 import { issueCopy, launch, paint, roleDefaults } from './launch.ts';
 import { clearSeat, tidyMail } from './mail.ts';
+import { pushLaunch, tidyUsage } from './usage.ts';
 import { assertRead, assertSettled, brief } from './messages.ts';
 import { pageFolder } from './page.ts';
 import { markBrief } from './review-marks.ts';
@@ -41,6 +42,8 @@ export async function tpmHello(ctx: Context, options: { model?: string, effort?:
   const legacy = legacyEnvNotice(ctx.env).map(line => `${line}（Product Manager に伝える）`);
   // 渡せない物・期限切れを記録して出し、名簿に無い受け手の取り口を掃く。
   const mail = await tidyMail(ctx, { sweep: true });
+  // まだ送っていない席のトークンの数を、castlist へ取り込む（1 時間に 1 度。誤りでも止めない）。
+  await tidyUsage(ctx);
   return [...actor, `TPM 担当の宛先: ${address}`, ...painted, ...configLines(ctx), ...bannerHint(ctx), ...legacy, ...mail, ...await roles(ctx)];
 }
 
@@ -296,6 +299,8 @@ async function assignSeat(ctx: Context, subjectKey: string, options: AssignOptio
 export async function closeSeat(ctx: Context, record: RoleRecord): Promise<string[]> {
   const alive = record.address !== undefined && ctx.seats.seats().some(s => s.address === record.address);
   // 居場所を閉じる前に、castlist に幕引きを送る（閉じた後の SessionEnd の hook が届くかは、閉じ方による）。
+  // 閉じる前に、その席のトークンの数を取り込む（閉じた後の hook が届くかは、閉じ方による）。
+  await pushLaunch(ctx, record);
   const castlist = await closeLaunch(ctx, record);
   if (alive && record.address !== undefined) ctx.seats.close(record.address);
   // この受け手の取り口と残りを消し、残っていた物を記録する。

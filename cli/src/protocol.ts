@@ -85,6 +85,8 @@ export const COMMANDS = [
   'mail left',
   'castlist session-start',
   'castlist session-end',
+  'castlist usage',
+  'castlist usage-check',
   'castlist find',
   'castlist show',
   'castlist lineage',
