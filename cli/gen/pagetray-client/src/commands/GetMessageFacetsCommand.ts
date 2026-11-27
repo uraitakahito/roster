@@ -23,7 +23,7 @@ export interface GetMessageFacetsCommandInput extends GetMessageFacetsInput {}
 export interface GetMessageFacetsCommandOutput extends GetMessageFacetsOutput, __MetadataBearer {}
 
 /**
- * メッセージの記録の、絞り込みの候補と件数（メッセージの一覧の画面が、絞り込みの列と「まだ届いていない n 件」に使う）。
+ * メッセージの記録の、絞り込みの候補と件数（callboard のメッセージの一覧の画面が、絞り込みの列と「まだ届いていない n 件」に使う）。
  * どの並びも、置き場の全部を数える（絞らない）。件数が 0 の値は出さない（下の、引数に書いた値を除く）。
  * - `states`: 状態ごとの数。`waiting`・`delivered`・`undeliverable`・`expired`・`carried` の順。
  * - `to`・`from`: 受け手・送り手の名ごとの数。件数の多い順（同じなら名の順）に 100 まで。

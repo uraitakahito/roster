@@ -1,5 +1,5 @@
 // 送った記録（log.jsonl の 1 行）を、置き場（pagetray 1.1.0 から）に写す（PutMessage）。
-// Product Manager が、置き場の一覧の画面（/messages）で「誰が誰に何を送ったか」を見るための物。
+// Product Manager が、メッセージの記録の画面（callboard の http://127.0.0.1:8803/messages）で「誰が誰に何を送ったか」を見るための物。
 // 写せなくても、送りは止めない: 誤りは投げず、画面にも出さない。写せなかった事だけを、状態の folder の message-records.jsonl に 1 行残す（写せた時は残さない）。
 // 送る命令（messages.ts の deliver）は、写しを待たずに始め、命令の終わり（program.ts の runProgram）で済むのを待つ（送りを止めない・遅らせないため）。
 import { basename } from 'node:path';

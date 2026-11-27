@@ -5,7 +5,7 @@ const commandBuilder_1 = require("../commandBuilder");
 const schemas_0_1 = require("../schemas/schemas_0");
 /**
  * 名指したページ（`target`。ページの path）を見たレビューのページ（種類が `review` で、見た物にその path を書いた物）。
- * 置いた古い順。ページの一覧の画面が、行の下に「レビュー」の link と判定を出すのに使う。
+ * 置いた古い順。callboard のページの一覧の画面が、行の下に「レビュー」の link と判定を出すのに使う。
  * - `target` は 1 つから 200 まで（無ければ・超えれば 400）。path の形は見ない（置き場に無い path には、何も返さない）。
  * @example
  * Use a bare-bones client and the command you need to make an API call.

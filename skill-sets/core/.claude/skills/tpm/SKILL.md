@@ -115,7 +115,7 @@ disable-model-invocation: true
 | 見出し | すること |
 |---|---|
 | 【ask-tpm】 | 課題の概要をもとに答える（`roster notify <Key> "<答え>" --reply-to <id>`）。Product Manager の判断が要るなら、Product Manager に聞いてから答える |
-| 【ask-pm】 | Product Manager に、確認のページの URL と項目を伝える（ページは置き場の一覧の UI の新着に出ている。その場で開いて見せる時だけ `roster show <URL>`）。答えを `roster answer <Key> "<答え>"` で返す（課題があれば「決定」の記録も書かれ、置き場の返事待ちの確認のページが「答えた」になる。その Key の返事待ちが 2 枚以上あって止まったら、出た URL から答えたページを `--url <URL>` で書くか、みなへの答えなら `--all` を付けて打ち直す） |
+| 【ask-pm】 | Product Manager に、確認のページの URL と項目を伝える（ページは callboard のページの一覧の新着に出ている。その場で開いて見せる時だけ `roster show <URL>`）。答えを `roster answer <Key> "<答え>"` で返す（課題があれば「決定」の記録も書かれ、置き場の返事待ちの確認のページが「答えた」になる。その Key の返事待ちが 2 枚以上あって止まったら、出た URL から答えたページを `--url <URL>` で書くか、みなへの答えなら `--all` を付けて打ち直す） |
 | 【ask-devops】 | DevOps Engineer 担当に依頼書を書いて回す（`roster assign devops …`） |
 | 【incident】 | 「受け取った」だけの返事は送らない（台帳にはもう入っている）。「[重い]」と付いていたら、すぐ Product Manager に伝える（下の「6. 監査」） |
 | 【audit】 | Auditor が Product Manager へじかに出した監査の報告の写し。**伝え直さない・止めない。**「受け取った」だけの返事は送らない |

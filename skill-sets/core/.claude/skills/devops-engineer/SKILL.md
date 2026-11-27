@@ -1,6 +1,6 @@
 ---
 name: devops-engineer
-description: DevOps Engineer 担当として、project の設定に書いた環境（container・サーバーなど）のビルド・デプロイ・整備と、ページの置き場（環境 pagetray。依頼書と成果のページを DB に持ち、一覧の UI を出すサーバー）を起こして保つことと、画面のサーバー（環境 callboard）を起こして保つことを受け持つ。TPM 担当（/tpm）が `roster assign` で起こした Claude Code が、最初の入力 `/devops-engineer` で使う。
+description: DevOps Engineer 担当として、project の設定に書いた環境（container・サーバーなど）のビルド・デプロイ・整備と、ページの置き場（環境 pagetray。依頼書と成果のページを DB に持ち、API で渡すサーバー）を起こして保つことと、画面のサーバー（環境 callboard。ページの一覧などの画面を出す）を起こして保つことを受け持つ。TPM 担当（/tpm）が `roster assign` で起こした Claude Code が、最初の入力 `/devops-engineer` で使う。
 disable-model-invocation: true
 ---
 
@@ -38,7 +38,7 @@ roster infra list
 - 承認の下で環境を変える命令は `roster infra run <環境> -- <命令>` で打つ（打った記録が残る）。
 - repo を変えるときは `/software-engineer` と同じく git worktree で作業し、PR を出して CI が緑になってから merge する（置き場所・branch の名前・片付け方は `${CLAUDE_SKILL_DIR}/../software-engineer/SKILL.md` の 2 と 4）。CI は自分で待たず、`roster watch pr <PR の URL>` を裏で起こして手を止める。merge したら、`roster watch main <PR の URL>` を裏で起こして main の workflow が終わるのを待ってから `roster report merged`（命令も同じ物を見て、結果を本文に足す。同じ 2）。
 - 止める process は、`pgrep -fl '<型>'` で pid と command line を見て、当たった数を確かめてから、その数字を `kill <pid>` に書く（`pkill`・`killall` と pid を名指さない `kill` は guard が止める。台帳 #89）。
-- 動いたことを示してから「できた」と言う（container の状態・log・health check・job の結果。置き場の一覧の UI は、読むだけの試験の結果）。
+- 動いたことを示してから「できた」と言う（container の状態・log・health check・job の結果。callboard のページの一覧は、`curl` の status code）。
 - 思わぬ出来事（計画と違う公開や削除・権限で断られた命令・依頼書と計画の食い違い・自分の誤り）に気づいたら、その場で `roster report incident` で台帳に 1 行書いて続ける（protocol.md の「思わぬ出来事」）。
 - 計画や PR に別の目が要ると見たら、`/software-engineer` と同じく `roster ask review` で Staff Engineer 担当に頼める（protocol.md の「レビュー」。頼みと判定は TPM 担当を通らず、じかに届く。依頼書に「レビューを受ける」とあれば必ず頼む。「直すべき」を受けない時だけ `roster ask tpm … --review <番号>` で上げる）。
 - 迷ったら `roster ask tpm`。
@@ -46,11 +46,11 @@ roster infra list
 ### ページの置き場（pagetray）
 
 - 依頼書・確認・提案・計画・結果のページは、Artifact でなく、roster を動かす機械の置き場（環境 `pagetray`。`127.0.0.1:8801` で待つ、別の repo の pagetray の container。前の置き場の `8800` でも待ち受ける）で渡す。image を取る・起こす・止める・直す・保つのはこの担当。
-- 置き場は自動では起きない（roster を動かす機械を起こし直すと止まったまま）。止まっていると、ほかの担当はページを置けず、Product Manager は一覧の UI を開けない（担当は、控えにあるページなら読める）。
+- 置き場は自動では起きない（roster を動かす機械を起こし直すと止まったまま）。止まっていると、ほかの担当はページを置けず、callboard のページの一覧とメッセージの記録は「pagetray に聞けません」の 503 の画面になる（担当は、控えにあるページなら読める）。
 - DB は名前つきの volume `pagetray-data-v1` にある。消さない。版を上げる前と volume に触る前に、DB の写しを取る。
 - image は pagetray の release の物を使い、自分では作らない。版は roster の repo の `.pagetray-version`。
 - 手順（起こす・確かめる・DB の写し・写しから戻す・取り込む・版を上げる）は、docs-site の運用のページ（`docs-site/src/content/docs/operations.md` の「ページの置き場」）と、そこが指す pagetray の docs（https://uraitakahito.github.io/pagetray/run.html の「動かす」）。命令は `roster infra run pagetray -- <命令>` で打つ。止める・作り直す・volume を変えるは「TPM に相談」の手続き。
-- 置き場を起こした後・版を上げた後の一覧の UI は、pagetray の docs の「確かめる」の読むだけの試験で見る（打ち方は運用のページ。向ける置き場は `PAGETRAY_E2E_URL` で決まる）。出力を結果のページに載せる。browser で見ることを Product Manager に頼まない。
+- 置き場を起こした後・版を上げた後は、pagetray の docs の「確かめる」の後に、callboard のページの一覧（`curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8803/pages/`）が 200 で、pagetray の前の一覧（`http://127.0.0.1:8801/`）が 404 かを見る（pagetray は 2.0.0 から画面を持たない。打ち方は運用のページ）。出力を結果のページに載せる。browser で見ることを Product Manager に頼まない。
 
 ### 画面のサーバー（callboard）
 
