@@ -56,7 +56,8 @@ flowchart TB
 | `shown/<宛先>.jsonc` | 前の版の記録（もう書かない。読むだけ）。前の版で、`roster inbox` と送る前の検査が居場所に見せたメッセージの id と、初めて見せた時刻。見た時刻の口（`cli/src/seen.ts`）が、古い行（運んだ道の無い行）の「担当がメッセージを見た時」に使う。今の版が見せた物は、`delivered.jsonl` の `output` の行と `mail/passed/` に残る（下の「[メッセージを NATS で配る道](#メッセージを-nats-で配る道)」） |
 | `incidents/<番号>.jsonc` | 台帳。思わぬ出来事（信頼性・安全性・効率性が落ちた時）の 1 件 1 ファイル。書いた担当・種類・起きた事実・tag・扱い（未決・振った・調べない・済み）と、結んだ振り先・PR |
 | `waits/<宛先>.jsonc` | 居場所が最後に打った `roster wait` の種類と時刻。バナーの hook が「この回に `roster wait pm` を打ったか」を見る |
-| `sessions/<session の id>.jsonc`・`launches/<起こしの id>.jsonc` | castlist に登録した session の本当の id と名・稼働中か・送った出来事の番号・最後に送った見た model と effort（[アクターの台帳](#アクターの台帳castlist)）と、起こし 1 回の session の並び。castlist を設定した project にだけある |
+| `sessions/<session の id>.jsonc`・`launches/<起こしの id>.jsonc` | castlist に登録した session の本当の id と名・稼働中か・送った出来事の番号・最後に送った見た model と effort・写し（Claude Code の session の記録）の path（[アクターの台帳](#アクターの台帳castlist)）と、起こし 1 回の session の並び。castlist を設定した project にだけある |
+| `usage/<session の id>.jsonc`・`usage/<session の id>.lock`・`usage/checked.jsonc`・`usage-refused.jsonl` | トークンの数と費えの取り込み（[下](#トークンの数と費え)）の控え: 写しの file ごとの読んだ所・数えた応答の id・送った行の数・送る前に書く「送る行」と、席ごとの鍵、片付けが判じた時刻・次に聞いてよい時刻・次に回る席、castlist が断った行の記録。数だけを持ち、会話の字は持たない |
 | `banner/last-turn/<宛先>.jsonc`・`banner.jsonl` | バナーの hook が覚える、居場所の前の「答え終わった」の時刻と、決めたことの記録 |
 
 1 件 1 ファイルの物は、`config.jsonc` と同じく JSONC（コメントと末尾のカンマを許す JSON）として読む。`roster` は読んだ値を書き直すので、手で足したコメントは書き直しで消える。足していく記録は 1 行 1 件の JSON（JSON Lines）のまま。記録（`*.jsonl`）は、後から「何が・いつ・誰の手で起きたか」を言うための証拠で、`roster` は消さない（`banner.jsonl` だけは 7 日）。メッセージや命令の字が入るので、roster を動かす機械の外（課題のコメント・PR の本文）には写さない。古い名の `*.json` が残っていれば、`roster` が最初に動いたときに `*.jsonc` に名前を替えて移す。
@@ -113,10 +114,10 @@ flowchart TB
 |---|---|
 | `roster start` | `/healthz` を見て、Product Manager を人のアクター（鍵 `tpm.person:product-manager`・名の接頭辞 `product-manager`）として登録する（何度打っても同じアクター）。1 行の頭に、起こしの印（下）を付ける |
 | session の始まり（SessionStart の hook の `roster castlist session-start`） | session を登録する（鍵は `claude.session:<session の id>`。cmux の連携なら `cmux.workspace.ref`、`$CMUX_WORKSPACE_ID` があれば `cmux.workspace.uuid` も付ける）。ラベルは `tpm.project`・`tpm.launch`・`tpm.key`（担当だけ。名簿の Key）・`tpm.role`（TPM 担当は `tpm`）・`tpm.subject`（Staff Engineer 担当の席だけ。見ている課題の Key。`tpm.key` は `<課題の Key>.staff` で、名の接頭辞は `<課題の Key>-staff`）。続けて、source ごとに: 起こした（startup）→ 登場（`entered`）と、起こした者からの線（`launched`）／続きから開いた（resume）→ 再登場（`reentered`）／要約した（compact）→ 要約（`compacted`）／`/clear` → 新しい session の登場（`entered`・`detail.source` が `clear`）と、同じ起こしの前の session からの継ぐ線（`continued`）／fork → 分身（`forked`）と継ぐ線 |
-| session の終わり（SessionEnd の hook の `roster castlist session-end`） | `/clear` なら交代（`cleared`）、ほかは退場（`exited`）。訳は `detail.reason` |
+| session の終わり（SessionEnd の hook の `roster castlist session-end`） | `/clear` なら交代（`cleared`）、ほかは退場（`exited`）。訳は `detail.reason`。続けて、その session のトークンの数と費えを送る（[下](#トークンの数と費え)） |
 | Bash の前（`roster guard`） | まだ登録していない session を登録する。推しの幕引き（下）で居ないにした session が打てば、生きていたので、今の居場所で登録し直して番号つきの再登場（`reentered`・`detail.source` が `guard`）を送る（退場・交代・`roster close` の後は送らない）。hook の入力の effort と、写し（transcript）の最後の model（`<synthetic>` は飛ばす）が、前に送った物と違えば「見た」model と effort（`source: observed`）を送る。写しから model を読めなければ（写しの形が変わった）、session に 1 度だけ model 不明（`model_unreadable`）を送る（止めない） |
 | `roster hello` | 名乗り（`reported_in`）。出力の頭に `アクター: <名>`（`t-23zs-swe.1` など）。推しの幕引きで居ないにした session なら、名乗りの前に、guard と同じく登録し直して再登場（`detail.source` が `hello`）を送る |
-| `roster close` | その担当の起こしのアクターのうち、まだ居る物に幕引き（`closed`） |
+| `roster close` | その担当の起こしの session のトークンの数と費えを送り（[下](#トークンの数と費え)）、起こしのアクターのうち、まだ居る物に幕引き（`closed`） |
 | `roster hello`（Auditor を除く）・`roster roles`・`roster assign` | 落ちた session の突き合わせ（下の「推しの幕引き」） |
 
 - **名**: castlist が `<接頭辞>.<番号>` で出す（番号は issuer と接頭辞ごと）。接頭辞は、担当が `<Key>-<役割の略>`（`swe`・`lead`・`devops`・`sus`・`staff`。Staff Engineer 担当の席は、名簿の Key でなく、見ている課題の Key から作る: `ai-33-staff`。Tech Lead 担当が起こした repo の席は、名簿の Key から作る: `ai-36-pagetray-swe`）、TPM 担当が `<project の folder の名>-tpm`、Auditor が `<project の folder の名>-audit`。castlist の接頭辞は英小文字・数字・`-` だけなので、`.` でなく `-` でつなぎ、Key の大文字は小文字に、ほかの字は `-` に替える。issuer は `tpm.` と状態の folder の名（英小文字に替える。64 字を超える名は、頭を残して hash を足す）。
@@ -134,6 +135,24 @@ flowchart TB
   - 誤って閉じうるのは、生きている session の復元された居場所で、別の pane から roster の起こした session が始まった時（その session を `superseded` で閉じる）。生きていれば、次の Bash か `roster hello` で再登場して戻る。
 - **ページと file の送り手**: castlist の設定があれば、`roster page put`・`roster file put` が、置き場に送り手（session の付随する id）を付けて置き、置き場が castlist に聞いて記録に残す（[ページの置き場](#ページの置き場)の「送り手」。置き場の側の設定は [運用](/operations/#起こす) の `PAGETRAY_CASTLIST_URL`）。roster は castlist に何も送らない。
 - **時計**: 起こす前に見る `/healthz` の時刻と roster を動かす機械の時計が 2 秒より離れていれば、`roster report incident` で台帳に挙げるよう 1 行出す（止めない。`roster start` は stderr に出す）。
+
+### トークンの数と費え
+
+席（session）の文脈の長さと費えを、定常で測るための記録（castlist 2.1.0 から。castlist の側は API の `PutUsage`・`ListUsage`）。roster が、Claude Code の session の記録（写し）から**数だけ**を読んで castlist に送る（コードは、数える `cli/src/usage.ts` と、読んで送る `cli/src/commands/usage.ts`）。会話の字・命令の出力・path は読まず、送らない。
+
+- **1 行**: 席 1 つの、時計の 1 時間（UTC の時）の内の、同じ種類（model・手伝い（subagent）の種類・speed・service tier）の回のまとめ。回の数・トークンの数（入力・出力・cache の読み・cache の書きの 5 分と 1 時間）・web の検索と取得の回数・額（100 万分の 1 ドル）・いちばん長い文脈・文脈の長さの段（2.5 万刻み）ごとの数。手伝いの回は、親の席のアクターに付ける。
+- **読む側の決まり**: 同じ席・同じ時・同じ種類の行は、2 つ以上在りうる（1 時間の途中で送った後に、増えた分を新しい行で送る）。数は足し、いちばん長い文脈は大きい方を取る。期間で絞る時は、端を時の境に揃える（行が窓に入るかは、行の終わりの時刻で決まる）。
+- **額**: 使った量を、API の値段の表（`cli/src/usage.ts` の `PRICES`。いつから効くかの日付つき）に直した目安。定額の契約で払う額ではない。web の検索の値段と、Claude Code が裏で呼ぶ回（写しに出ない）は入らない。表に無い model の回は、額を 0 で数える（突き合わせの命令が名を出す）。
+- **いつ送るか**（どれも、誤りでも呼んだ命令を止めない）:
+  - 席が閉じる時（SessionEnd の hook の `roster castlist session-end`）。
+  - 席を閉じる命令（`roster close`。閉じる前に送る。閉じた後の hook が届くかは、閉じ方による）。
+  - TPM 担当の側の片付け（TPM 担当が名乗る時と、送る命令を打つ時）。1 時間に 1 度、まだ送っていない席をみな見る。長く続く TPM 担当の席・hook が届かなかった席・前の版で起こした席を、ここで拾う。1 回に掛けるのは 3 秒まで（1 つの送りを待つのも、残りの時間まで）で、残りは次の命令で、止めた席から続ける。castlist が答えない・混んでいる時は、5 分の間、聞き直さない（TPM 担当の命令のたびに、送りの時間切れを待たない）。席は、起こしごとに、起こしの控えの並び（古い順）で回る。
+  - 手で流すなら `roster castlist usage`。
+- **写しの在り処**: その席の hook の入力（`transcript_path`）から、席の控え（`sessions/<session の id>.jsonc` の `transcript`）に書く。控えに無い席は、Claude Code の置き場（`$CLAUDE_CONFIG_DIR`。無ければ `~/.claude`）の `projects/*/<session の id>.jsonl` を探す。手伝いの写しは、その隣の `<session の id>/subagents/`。写しは Claude Code が 30 日で消すので、その前に送る（上の片付けが動いていれば、送られる）。
+- **2 度数えない**: 1 つの応答は、写しの中で何行にも分かれる（間に別の行を挟む）ので、応答の id で 1 つにする。数えた応答の id（送る途中の控えの物も）は控え（`usage/<session の id>.jsonc`）に持ち、読みを分けた時と、同じ起こしのほかの session の写し（resume・fork で写された行）で、同じ応答を除く。同じ席を 2 つの process（席の hook と TPM 担当の片付け）が同時に取り込まないよう、席ごとの鍵（`usage/<session の id>.lock`。10 分より古い物は、落ちて残った物とみなして取り直す）を取る。
+- **送り直し**: 送る前に、送る行（id・送り手の時刻・本文）を控えに書く。途中で落ちたら、次の回に、同じ id・同じ本文で送り直す（castlist は、同じ id で同じ本文なら足さない）。行の id は `u-<issuer の hash>-<session>-<番号>`。castlist が断った行（形の誤り・同じ id で違う本文）は、`usage-refused.jsonl` に残して先へ進む。数の口を持たない版の castlist（2.0.0 まで）には、何も残さず、1 時間後に聞き直す。
+- **突き合わせ**: `roster castlist usage-check [--from <時刻>] [--to <時刻>]` が、窓（既定は 31 日前〜1 時間前。端は時の境）の内の回を、写しから直に数えた値と、castlist の行の合計を、席ごとに並べる（読むだけ）。違う席・写しが見つからない席・値段の表に無い model・castlist が断った行の数を出す。同じ起こしの session が分け合う回は、取り込みが付けた席（その席の控えの id）に数える。
+- **圧縮の出来事**: 要約（`compacted`）の `detail` に、写しの圧縮の印の欄をそのまま載せる（`trigger`（自動か人か）・`preTokens`・`postTokens`。読めなければ空）。
 
 ### 監査の検索を読む
 

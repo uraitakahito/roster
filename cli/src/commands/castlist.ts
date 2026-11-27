@@ -7,12 +7,13 @@
 // 落ちて終わりを送れなかった session は、hello・roles・assign が cmux の居場所の一覧と突き合わせ、推しの幕引き（detail.inferred）を送る（sweep）。
 import { createHash } from 'node:crypto';
 import type { Context } from '../context.ts';
-import { busyMessage, castlistUrl, downMessage, issuerOf, missingCastlistWarning, modelOf, putRecord, registerActor, requireUp, seatOf, sessionRef, type RecordInput, type Reply } from '../castlist.ts';
+import { busyMessage, castlistUrl, downMessage, issuerOf, lastCompaction, missingCastlistWarning, modelOf, putRecord, registerActor, requireUp, seatOf, sessionRef, type RecordInput, type Reply } from '../castlist.ts';
 import { query } from '../castlist-query.ts';
 import type { Verdict } from '../guard.ts';
 import type { RoleRecord } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
 import { envOf } from '../env.ts';
+import { pushOnEnd } from './usage.ts';
 
 /** 控えた session 1 つ（`sessions/<session の id>.jsonc`）。 */
 export interface SessionRecord {
@@ -33,6 +34,8 @@ export interface SessionRecord {
   workspace?: { ref?: string, uuid?: string }
   /** 推しの幕引き（roster が、落ちたと推して送った幕引き）で居ないにした。guard が、その session の Bash で再登場を送る印。 */
   endedBy?: 'inferred'
+  /** 写し（Claude Code の session の記録）の path。その session の hook の入力から控える。TPM 担当の側の、トークンの数の取り込みが読む。 */
+  transcript?: string
 }
 
 /** 起こし 1 回の控え（`launches/<起こしの id>.jsonc`）。 */
@@ -125,7 +128,7 @@ function workspaceRef(ctx: Context): string | undefined {
  * 頼んだ model と effort（$ROSTER_LAUNCH_MODEL・$ROSTER_LAUNCH_EFFORT）は、roster が起こしたばかりの process（$ROSTER_LAUNCH_FRESH）の初めの登録でだけ送る
  * （/clear の後の session は同じ環境変数を持つが、その後に /model で替えたかもしれないので送らない）。
  */
-async function enter(ctx: Context, url: string, sid: string, source: Source, revive = false): Promise<Sent> {
+async function enter(ctx: Context, url: string, sid: string, source: Source, revive = false, transcript?: string): Promise<Sent> {
   const launch = text(envOf(ctx.env, 'LAUNCH'));
   const launched = launch === undefined ? { sessions: [] } : ctx.state.read<LaunchRecord>(launchFile(launch)) ?? { sessions: [] };
   const model = text(envOf(ctx.env, 'LAUNCH_MODEL'));
@@ -160,7 +163,7 @@ async function enter(ctx: Context, url: string, sid: string, source: Source, rev
   const actor = reply.body as { id?: unknown, name?: unknown };
   const had = readSession(ctx, sid);
   const workspace = ref === undefined && uuid === undefined ? had?.workspace : { ...(ref === undefined ? {} : { ref }), ...(uuid === undefined ? {} : { uuid }) };
-  const record: SessionRecord = { ...had, session: sid, id: String(actor.id), name: String(actor.name), ...(launch === undefined ? {} : { launch }), present: had?.present ?? false, seq: had?.seq ?? {}, ...(workspace === undefined ? {} : { workspace }) };
+  const record: SessionRecord = { ...had, session: sid, id: String(actor.id), name: String(actor.name), ...(launch === undefined ? {} : { launch }), present: had?.present ?? false, seq: had?.seq ?? {}, ...(workspace === undefined ? {} : { workspace }), ...(transcript === undefined ? {} : { transcript }) };
   ctx.state.write(sessionFile(sid), record);
   if (revive) return await event(ctx, url, record, 'reentered', { source }, true);
   const previous = launched.sessions.filter(s => s !== sid).at(-1);
@@ -170,7 +173,7 @@ async function enter(ctx: Context, url: string, sid: string, source: Source, rev
       ...(fresh || launched.requested === true ? { requested: true } : {}),
     } satisfies LaunchRecord);
   }
-  const sent = await sourceEvent(ctx, url, record, source);
+  const sent = await sourceEvent(ctx, url, record, source, transcript);
   if (sent !== 'ok') return sent;
   const by = text(envOf(ctx.env, 'LAUNCHED_BY'));
   if (['startup', 'resume', 'guard', 'hello'].includes(source) && previous === undefined && by !== undefined) {
@@ -182,14 +185,15 @@ async function enter(ctx: Context, url: string, sid: string, source: Source, rev
   return 'ok';
 }
 
-/** きっかけの出来事: 起こした・/clear・fork は 1 度きり（決まった id）、続きから開いた・要約したは何度も起きる（番号つき）。 */
-async function sourceEvent(ctx: Context, url: string, record: SessionRecord, source: Source): Promise<Sent> {
+/** きっかけの出来事: 起こした・/clear・fork は 1 度きり（決まった id）、続きから開いた・要約したは何度も起きる（番号つき）。transcript は写しの path（要約の時に、圧縮の印を読む）。 */
+async function sourceEvent(ctx: Context, url: string, record: SessionRecord, source: Source, transcript?: string): Promise<Sent> {
   switch (source) {
     case 'startup': return event(ctx, url, record, 'entered', {});
     case 'clear': case 'guard': case 'hello': return event(ctx, url, record, 'entered', { source });
     case 'fork': return event(ctx, url, record, 'forked', {});
     case 'resume': return event(ctx, url, record, 'reentered', {}, true);
-    case 'compact': return event(ctx, url, record, 'compacted', {}, true);
+    // 圧縮の印の欄（自動か人か・前と後の長さ）を、写しからそのまま載せる（読めなければ空）。
+    case 'compact': return event(ctx, url, record, 'compacted', lastCompaction(transcript), true);
   }
 }
 
@@ -215,11 +219,11 @@ export async function sessionStart(ctx: Context, stdin: string): Promise<void> {
     const sid = text(input.session_id);
     if (sid === undefined) return;
     const source = SOURCES.find(s => s === input.source) ?? 'startup';
-    await enter(ctx, url, sid, source);
+    await enter(ctx, url, sid, source, false, text(input.transcript_path));
   });
 }
 
-/** SessionEnd の hook（`roster castlist session-end`）。/clear は交代、ほかは退場（訳は detail.reason）。 */
+/** SessionEnd の hook（`roster castlist session-end`）。/clear は交代、ほかは退場（訳は detail.reason）。続けて、その session のトークンの数を castlist へ取り込む。 */
 export async function sessionEnd(ctx: Context, stdin: string): Promise<void> {
   await quietly('session-end', async () => {
     const url = castlistUrl(ctx);
@@ -230,6 +234,10 @@ export async function sessionEnd(ctx: Context, stdin: string): Promise<void> {
     if (record === undefined) return;
     const reason = text(input.reason) ?? 'other';
     await event(ctx, url, record, reason === 'clear' ? 'cleared' : 'exited', { reason }, true);
+    // 席が閉じる時に、トークンの数を取り込む（誤りでも止めない）。写しの path が控えに無ければ、hook の入力から控える。
+    const transcript = text(input.transcript_path);
+    if (transcript !== undefined && record.transcript === undefined) ctx.state.write(sessionFile(record.session), { ...readSession(ctx, record.session) ?? record, transcript });
+    await pushOnEnd(ctx, record.session);
   });
 }
 
@@ -258,6 +266,12 @@ export async function castlistGuard(ctx: Context, stdin: string): Promise<Verdic
   }
   const record = readSession(ctx, sid);
   if (record === undefined) return { allow: true };
+  // 写しの path を控える（前の版で起こした席は、SessionStart で控えていない。TPM 担当の側の取り込みが読む）。
+  const transcript = text(input.transcript_path);
+  if (transcript !== undefined && record.transcript !== transcript) {
+    record.transcript = transcript;
+    ctx.state.write(sessionFile(sid), record);
+  }
   const seen = modelOf(input.transcript_path);
   if (seen.kind === 'unreadable' && record.modelUnreadable !== true) {
     const sent = await event(ctx, url, record, 'model_unreadable', { reason: seen.reason });

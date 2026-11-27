@@ -220,6 +220,49 @@ export async function putRecord<K extends keyof RecordInput>(ctx: Sender, url: s
   }, rowOf);
 }
 
+/** トークンの数と費えの 1 行の本文（欄の名は castlist の PutUsage の名。issuer は putUsage が足す）。 */
+export interface UsageInput {
+  by: string
+  model: string
+  agent?: string
+  speed: string
+  serviceTier: string
+  fromAt: Date
+  toAt: Date
+  turns: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWrite5mTokens: number
+  cacheWrite1hTokens: number
+  webSearchRequests: number
+  webFetchRequests: number
+  costMicroUsd: number
+  maxContext: number
+  buckets: { bucket: number, turns: number, costMicroUsd: number }[]
+}
+
+/**
+ * トークンの数と費えを 1 行足す（PutUsage。PUT /api/usage/<id>。castlist 2.1.0 から）。
+ * 送り手の時刻は、呼ぶ側が渡す（castlist は本文の写しに送り手の時刻も入れるので、送り直す時は、控えた時刻で同じ本文にする）。
+ * 同じ id で本文が違えば 409（refused）。数の口を持たない版の castlist は 404（refused）。wait は待つ秒（REQUEST_TIMEOUT まで）。
+ */
+export async function putUsage(ctx: Sender, url: string, id: string, body: UsageInput, sentAt: Date, wait: number = REQUEST_TIMEOUT): Promise<Reply> {
+  const issuer = issuerOf(ctx);
+  return viaNext(ctx, url, (client, api, options) => client.send(new api.PutUsageCommand({ usageId: id, issuer, ...body, sentAt }), options), rowOf, Math.min(wait, REQUEST_TIMEOUT));
+}
+
+/**
+ * トークンの数と費えの行を読む（ListUsage。GET /api/usage）。窓は、from 以上・to 未満の toAt（31 日まで）。
+ * ok の本文は usage（行。時刻は ISO の字）と nextToken。
+ */
+export async function listUsage(ctx: Sender, url: string, input: { from: Date, to: Date, actorId?: string, nextToken?: string }): Promise<Reply> {
+  return viaNext(ctx, url, (client, api, options) => client.send(new api.ListUsageCommand(input), options), out => ({
+    usage: (out.usage ?? []).map(u => ({ ...u, fromAt: u.fromAt?.toISOString(), toAt: u.toAt?.toISOString(), sentAt: u.sentAt?.toISOString(), receivedAt: u.receivedAt?.toISOString() })),
+    ...(out.nextToken === undefined ? {} : { nextToken: out.nextToken }),
+  }));
+}
+
 /** URL の port（書いていなければ http の 80）。 */
 const portOf = (url: string): string => new URL(url).port || '80';
 
@@ -366,4 +409,41 @@ export function modelOf(path: unknown): SeenModel {
   }
   if (lines.length > 0 && parsed === 0) return { kind: 'unreadable', reason: 'not-jsonl' };
   return strange ? { kind: 'unreadable', reason: 'no-model' } : { kind: 'none' };
+}
+
+/**
+ * 写しの終わりから、最後の圧縮の印（`type` が system で `subtype` が compact_boundary の行）の欄を読む: 自動か人か（trigger）・圧縮の前と後の長さ（preTokens・postTokens）。
+ * 写しの欄をそのまま返す（見立ては足さない）。写しが無い・印が終わりの 1MB に無い・欄が無いなら、空の物。
+ */
+export function lastCompaction(path: unknown): Record<string, unknown> {
+  if (typeof path !== 'string' || path === '' || !existsSync(path)) return {};
+  const fd = openSync(path, 'r');
+  let text: string;
+  try {
+    const size = fstatSync(fd).size;
+    const length = Math.min(size, TAIL_BYTES);
+    const buffer = Buffer.alloc(length);
+    readSync(fd, buffer, 0, length, size - length);
+    text = buffer.toString('utf8');
+  }
+  finally {
+    closeSync(fd);
+  }
+  for (const line of text.split('\n').reverse()) {
+    if (!line.includes('compact_boundary')) continue;
+    try {
+      const entry = JSON.parse(line) as { type?: unknown, subtype?: unknown, compactMetadata?: Record<string, unknown> };
+      if (entry.type !== 'system' || entry.subtype !== 'compact_boundary') continue;
+      const meta = entry.compactMetadata ?? {};
+      return {
+        ...(typeof meta.trigger === 'string' ? { trigger: meta.trigger } : {}),
+        ...(typeof meta.preTokens === 'number' ? { preTokens: meta.preTokens } : {}),
+        ...(typeof meta.postTokens === 'number' ? { postTokens: meta.postTokens } : {}),
+      };
+    }
+    catch {
+      continue;
+    }
+  }
+  return {};
 }

@@ -15,6 +15,7 @@ import { TpmError } from '../skill-sets.ts';
 import { MAX_POINTS, type Note, type NoteKind, type NoteLink } from '../tracker/types.ts';
 import { isStorePage, pageOwner, replyLine, samePage, waitingByParty, waitingUrls, WAITING_PAGES } from './reply.ts';
 import { tidyMail } from './mail.ts';
+import { tidyUsage } from './usage.ts';
 import { copyMessageRecord } from './message-record.ts';
 import { markEscalated } from './review-marks.ts';
 import { isPageUrl } from './store.ts';
@@ -252,6 +253,8 @@ async function toRole(ctx: Context, role: RoleRecord, id: HeadingId, body: strin
   // 渡せない物・期限切れを記録し、命令の結果に 1 通につき 1 度だけ出す（TPM 担当の session だけ。担当の session では何もしない）。
   const ended = await tidyMail(ctx, { sweep: false });
   if (ended.length > 0) ctx.print(ended);
+  // まだ送っていない席のトークンの数を、castlist へ取り込む（1 時間に 1 度。TPM 担当の session だけ。誤りでも止めない）。
+  await tidyUsage(ctx);
   return deliver(ctx, id, role.key, from, seatOf(ctx, role), body, partyOf(role), replyTo, extra);
 }
 

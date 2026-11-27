@@ -69,6 +69,7 @@ class Ledger {
   private events: Event[] = [];
   private links: Link[] = [];
   private settings: Setting[] = [];
+  private usage: Record<string, unknown>[] = [];
 
   constructor(now: string) {
     this.now = now;
@@ -91,10 +92,11 @@ class Ledger {
     const q = new Query(seen.query);
     const ok = (body: unknown, status = 200): NextAnswer => ({ status, body });
     if (method === 'GET') {
-      if (path === '/healthz') return ok({ status: 'ok', version: '2.0.0', now: this.now });
+      if (path === '/healthz') return ok({ status: 'ok', version: '2.1.0', now: this.now });
       if (path === '/api/actors') return ok(this.searchActors(q));
       if (path === '/api/settings') return ok(this.searchSettings(q));
       if (path === '/api/events') return ok(this.searchEvents(q));
+      if (path === '/api/usage') return ok(this.searchUsage(q));
       if (parts[1] === 'api' && parts[2] === 'actors' && parts.length >= 4) {
         const a = this.actors.get(parts[3] ?? '');
         if (a === undefined) throw new Refusal(404, 'NotFound', 'そのアクターは無い');
@@ -106,6 +108,8 @@ class Ledger {
     }
     const body = seen.body ?? {};
     if (method === 'POST' && path === '/api/actors') return this.register(body);
+    const usage = /^\/api\/usage\/(.+)$/.exec(path);
+    if (method === 'PUT' && usage !== null) return this.putUsage(decodeURIComponent(usage[1] ?? ''), body, seen.text);
     const put = /^\/api\/(events|links|settings)\/(.+)$/.exec(path);
     if (method === 'PUT' && put !== null) return this.put(put[1] as 'events' | 'links' | 'settings', decodeURIComponent(put[2] ?? ''), body, seen.text);
     return { status: 404, type: 'UnknownOperationException', body: '知らない道' };
@@ -187,6 +191,40 @@ class Ledger {
     }
     this.puts.set(key, text);
     return { status: 201, body: without(added, 'seq') };
+  }
+
+  /** トークンの数と費えの 1 行（PutUsage。2.1.0 から）。本物と同じ決まり: 同じ id で同じ本文は 200・違えば 409・同じ UTC の時の内・段の和が行と合う。 */
+  private putUsage(id: string, b: Record<string, unknown>, text: string | undefined): NextAnswer {
+    const key = `usage ${id}`;
+    if (this.puts.has(key)) {
+      if (this.puts.get(key) !== text) throw new Refusal(409, 'Conflict', '同じ id で本文が違う');
+      return { status: 200, body: without(this.usage.find(r => r.id === id) ?? {}, 'seq') };
+    }
+    const actorId = this.keys.get(`${textOf(b.issuer)} ${String(b.by)}`) ?? bad('指すアクターを知らない');
+    const iso = (v: unknown): string => typeof v === 'number' ? new Date(v * 1000).toISOString() : new Date(String(v)).toISOString();
+    const fromAt = iso(b.fromAt);
+    const toAt = iso(b.toAt);
+    if (fromAt > toAt || fromAt.slice(0, 13) !== toAt.slice(0, 13)) bad('fromAt と toAt は、同じ UTC の時の内にする');
+    const buckets = (b.buckets ?? []) as { bucket: number, turns: number, costMicroUsd: number }[];
+    if (!/^[a-z0-9.-]{1,64}$/.test(String(b.model)) || Number(b.turns) < 1 || new Set(buckets.map(x => x.bucket)).size !== buckets.length
+      || buckets.reduce((n, x) => n + x.turns, 0) !== b.turns || buckets.reduce((n, x) => n + x.costMicroUsd, 0) !== b.costMicroUsd) bad('形が違う');
+    const rest = Object.fromEntries(Object.entries(b).filter(([k]) => k !== 'issuer' && k !== 'by'));
+    const added = { seq: this.seq += 1, id, actorId, ...rest, fromAt, toAt, sentAt: iso(b.sentAt), receivedAt: this.now, clockSkew: false };
+    this.usage.push(added);
+    this.puts.set(key, text);
+    return { status: 201, body: without(added, 'seq') };
+  }
+
+  /** トークンの数と費えの行を読む（ListUsage）: 窓は from <= toAt < to。actorId で絞る。 */
+  private searchUsage(q: Query): Record<string, unknown> {
+    const from = q.time('from') ?? bad('from と to が要る');
+    const to = q.time('to') ?? bad('from と to が要る');
+    if (to - from > 31 * 24 * 60 * 60 * 1000) bad('from から to までは 31 日まで');
+    const actor = q.one('actorId');
+    const rows = this.usage.filter(u => Date.parse(String(u.toAt)) >= from && Date.parse(String(u.toAt)) < to && (actor === undefined || u.actorId === actor));
+    const page = this.page(q, rows.map(u => without(u, 'seq')), 'usage');
+    const ids = [...new Set(page.rows.map(u => String(u.actorId)))];
+    return { asOf: this.now, usage: page.rows, actors: ids.map(id => ({ id, name: this.nameOf(id), labels: {} })), ...(page.nextToken === undefined ? {} : { nextToken: page.nextToken }) };
   }
 
   private current(id: string): Setting | undefined {

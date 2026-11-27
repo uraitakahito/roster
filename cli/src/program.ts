@@ -2,10 +2,11 @@
 import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { Command, CommanderError, Option } from 'commander';
-import { emphasize } from './castlist.ts';
+import { castlistUrl, emphasize } from './castlist.ts';
 import { startTpm } from './command.ts';
 import { registerAudit } from './commands/audit.ts';
 import { sessionEnd, sessionStart } from './commands/castlist.ts';
+import { sweepUsage, usageCheck } from './commands/usage.ts';
 import { showReturned } from './commands/returned.ts';
 import { castlistEvents, castlistFind, castlistLineage, castlistSettings, castlistShow, type EventsOptions, type FindOptions, type JsonOption, type LineageOptions, type SettingsOptions } from './commands/castlist-read.ts';
 import { bannerCheck, bannerHook, bannerLog, bannerSetup } from './commands/banner.ts';
@@ -334,6 +335,18 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
         process.stderr.write(`roster castlist session-end: ${(e as Error).message}\n`);
       }
     });
+  castlist.command('usage').description('まだ送っていない席のトークンの数と費えを、session の記録から数えて castlist へ送る（ふだんは、席が閉じる時と、TPM 担当の 1 時間に 1 度の片付けが送る。手で流す時に使う）')
+    .action(async () => {
+      const ctx = createContext();
+      const url = castlistUrl(ctx);
+      if (url === undefined) return print(['castlist を設定していないので、送る物が無い']);
+      const swept = await sweepUsage(ctx, url, Number.POSITIVE_INFINITY);
+      print([`castlist へ送った行: ${swept.sent}${swept.stopped === undefined ? '' : `（途中でやめた: ${swept.stopped === 'old' ? 'castlist が、数の口を持たない版' : 'castlist が応えない'}）`}`]);
+    });
+  castlist.command('usage-check').description('トークンの数と費えの突き合わせ: session の記録から直に数えた値と、castlist の行の合計を、席ごとに並べる（読むだけ）')
+    .option('--from <時刻>', '窓の始め（回の時刻。既定は --to の 31 日前）')
+    .option('--to <時刻>', '窓の終わり（既定は 1 時間前）')
+    .action(async (options: { from?: string, to?: string }) => print(await usageCheck(createContext(), options)));
   // 監査の検索を読む命令（GET だけ）。旗は castlist の引数にそのまま写す（時刻は RFC 3339。値を確かめて断るのは castlist）。
   const repeat = (value: string, previous: string[] | undefined): string[] => [...previous ?? [], value];
   castlist.command('find').description('アクターを探す（GET /api/actors。条件は AND。行ごとにプロフィールの画面の URL を出す）')
