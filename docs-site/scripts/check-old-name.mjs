@@ -90,6 +90,8 @@ const INNER = [
     "g",
   ),
   /(?<=[／/] ?)tpm(?=: 並べて)/g,
+  // 手続きの表（configuration.md の「環境の手続き」）の 1 列目の値 `tpm`
+  /(?<=^\| `)tpm(?=` \| 並べて)/g,
   // skill の folder と frontmatter の名（TPM 担当の skill）、状態・控え・設定の folder
   /(?<![\w.-])tpm\/(?=brief-template|SKILL|pages|banner|<)/g,
   /(?<=^name: )tpm$/g,
@@ -195,6 +197,10 @@ const MUST_PASS = [
   ["a.md", "（担当は課題の Key、TPM 担当は tpm）"],
   ["a.md", "（担当は課題の Key、TPM 担当は `tpm`）"],
   ["a.md", "tpm.role=tpm・role:tpm"],
+  [
+    "a.md",
+    "| `tpm` | 並べて動いているほかの担当 | DevOps Engineer 担当だけ | TPM 担当に相談 |",
+  ],
 ];
 for (const [file, s] of MUST_HIT)
   if (checkOldName(file, s).length === 0)
