@@ -44,19 +44,29 @@ function seat(answers: Record<string, ExecResult[]>) {
   return { ctx, asked, slept, pass: (ms: number) => void (now += ms), records: () => ctx.state.lines<WatchRecord>(WATCH_LOG) };
 }
 
+/** PR の head（pr view）と branch の先（gh api …/commits/heads/…）の答え。既定は、どちらも new（追いついている）。 */
+const head = (oid: string, state = 'OPEN', headRefName = 't-x/b'): ExecResult => ok({ state, headRefOid: oid, headRefName, headRepository: { name: 'r' }, headRepositoryOwner: { login: 'o' } });
+const tip = (sha: string): ExecResult => ({ status: 0, stdout: `${sha}\n`, stderr: '' });
+/** watch pr の席: PR の head は、既定で branch の先に追いついている。 */
+const prSeat = (answers: Record<string, ExecResult[]>) => seat({ 'pr view': [head('new')], 'api': [tip('new')], ...answers });
+
 describe('roster watch pr', () => {
   test('まだの check が、みな通るまで聞き続け、0 で終わる', async () => {
-    const s = seat({ 'pr checks': [checks(8, 'pass', 'pending'), checks(8, 'pass', 'pending'), checks(0, 'pass', 'pass', 'skipping')] });
+    const s = prSeat({ 'pr checks': [checks(8, 'pass', 'pending'), checks(8, 'pass', 'pending'), checks(0, 'pass', 'pass', 'skipping')] });
     const r = await watchPr(s.ctx, PR);
     expect(r).toEqual({ code: WATCH_EXIT.passed, lines: ['通った: check 3 つ（1 分 35 秒）'] });
     // 聞く間は、初めは短く、だんだん空ける。みな終わったのを見た後、間を空けてもう 1 度見てから終える。
     expect(s.slept).toEqual([20_000, 30_000, 45_000]);
-    expect(s.asked[0]).toBe(`gh pr checks ${PR} --json name,bucket,link`);
+    expect(s.asked.slice(0, 3)).toEqual([
+      `gh pr view ${PR} --json state,headRefOid,headRefName,headRepository,headRepositoryOwner`,
+      'gh api repos/o/r/commits/heads/t-x/b -q .sha',
+      `gh pr checks ${PR} --json name,bucket,link`,
+    ]);
     expect(s.records()).toEqual([{ at: '2026-11-27T12:00:00.000Z', kind: 'pr', target: PR, result: 'passed', code: 0, polls: 4, seconds: 95, key: 'AI-41' }]);
   });
 
   test('落ちた check が 1 つ分かれば、ほかがまだでも、そこで 10 で終わり、名と URL を出す', async () => {
-    const s = seat({ 'pr checks': [checks(8, 'pending', 'pending'), checks(1, 'pass', 'fail', 'pending', 'cancel')] });
+    const s = prSeat({ 'pr checks': [checks(8, 'pending', 'pending'), checks(1, 'pass', 'fail', 'pending', 'cancel')] });
     const r = await watchPr(s.ctx, PR);
     expect(r.code).toBe(WATCH_EXIT.failed);
     expect(r.lines).toEqual(['落ちた: c2（https://x/2）・c4（https://x/4）', 'ほかの check: 通った 1・まだ 1（20 秒）']);
@@ -64,7 +74,7 @@ describe('roster watch pr', () => {
   });
 
   test('check が付かない時は、5 分待ってから 30 で終わる（通ったの 0 にしない）', async () => {
-    const s = seat({ 'pr checks': [NO_CHECKS] });
+    const s = prSeat({ 'pr checks': [NO_CHECKS] });
     const r = await watchPr(s.ctx, PR);
     expect(r.code).toBe(WATCH_EXIT.none);
     expect(r.code).not.toBe(WATCH_EXIT.passed);
@@ -76,7 +86,7 @@ describe('roster watch pr', () => {
 
   test('check が遅れて付いた時（3 分後）は、付いた check で判じる', async () => {
     const none = Array.from({ length: 5 }, () => NO_CHECKS);
-    const s = seat({ 'pr checks': [...none, { status: 0, stdout: '[]', stderr: '' }, checks(8, 'pending'), checks(0, 'pass')] });
+    const s = prSeat({ 'pr checks': [...none, { status: 0, stdout: '[]', stderr: '' }, checks(8, 'pending'), checks(0, 'pass')] });
     const r = await watchPr(s.ctx, PR);
     expect(r.code).toBe(WATCH_EXIT.passed);
     expect(r.lines[0]).toMatch(/^通った: check 1 つ/);
@@ -84,12 +94,12 @@ describe('roster watch pr', () => {
 
   test('push し直して head の commit が替わると、新しい commit の check（まだ）を見て待ち続ける', async () => {
     // gh pr checks は、いつも今の head の commit の check を返す。前の commit で通っていても、替わった後の「まだ」で待つ。
-    const s = seat({ 'pr checks': [checks(8, 'pass', 'pending'), checks(8, 'pending', 'pending', 'pending'), checks(0, 'pass', 'pass', 'pass')] });
+    const s = prSeat({ 'pr checks': [checks(8, 'pass', 'pending'), checks(8, 'pending', 'pending', 'pending'), checks(0, 'pass', 'pass', 'pass')] });
     expect((await watchPr(s.ctx, PR)).lines).toEqual(['通った: check 3 つ（1 分 35 秒）']);
   });
 
   test('GitHub が応えない回（繋がらない・502）を挟んでも、止まらずに聞き直す', async () => {
-    const s = seat({ 'pr checks': [checks(8, 'pending'), DOWN, HTTP_502, checks(0, 'pass')] });
+    const s = prSeat({ 'pr checks': [checks(8, 'pending'), DOWN, HTTP_502, checks(0, 'pass')] });
     const r = await watchPr(s.ctx, PR);
     expect(r.code).toBe(WATCH_EXIT.passed);
     expect(s.records()[0]?.polls).toBe(5);
@@ -98,28 +108,28 @@ describe('roster watch pr', () => {
   test('上限（rate limit）の 403 は「応えない」に数えて聞き直す。権限の無い 403 は、聞き直さずに 1', async () => {
     const limited: ExecResult = { status: 1, stdout: '', stderr: 'gh: API rate limit exceeded for user ID 1. (HTTP 403)' };
     const secondary: ExecResult = { status: 1, stdout: '', stderr: 'gh: You have exceeded a secondary rate limit. (HTTP 403)' };
-    const s = seat({ 'pr checks': [limited, secondary, checks(0, 'pass')] });
+    const s = prSeat({ 'pr checks': [limited, secondary, checks(0, 'pass')] });
     expect((await watchPr(s.ctx, PR)).code).toBe(WATCH_EXIT.passed);
-    const denied = seat({ 'pr checks': [{ status: 1, stdout: '', stderr: 'gh: Resource not accessible by integration (HTTP 403)' }] });
+    const denied = prSeat({ 'pr checks': [{ status: 1, stdout: '', stderr: 'gh: Resource not accessible by integration (HTTP 403)' }] });
     expect((await watchPr(denied.ctx, PR)).code).toBe(WATCH_EXIT.error);
     expect(denied.slept).toEqual([]);
   });
 
   test('1 度「みな終わった」を見ても、次に check が増えていれば（遅れて付く check）、待ち続ける', async () => {
-    const s = seat({ 'pr checks': [checks(0, 'pass'), checks(8, 'pass', 'pending'), checks(0, 'pass', 'pass')] });
+    const s = prSeat({ 'pr checks': [checks(0, 'pass'), checks(8, 'pass', 'pending'), checks(0, 'pass', 'pass')] });
     const r = await watchPr(s.ctx, PR);
     expect(r.lines[0]).toMatch(/^通った: check 2 つ/);
     expect(s.records()[0]?.polls).toBe(4);
   });
 
   test('gh が 0 で終わったのに JSON を読めない時は、「check が無い」と言い切らずに聞き直す', async () => {
-    const s = seat({ 'pr checks': [{ status: 0, stdout: 'x', stderr: '' }, checks(0, 'pass')] });
+    const s = prSeat({ 'pr checks': [{ status: 0, stdout: 'x', stderr: '' }, checks(0, 'pass')] });
     expect((await watchPr(s.ctx, PR)).code).toBe(WATCH_EXIT.passed);
     expect(s.records()[0]?.polls).toBe(3);
   });
 
   test('長さを過ぎたら 20 で終わる（まだの数を出す）', async () => {
-    const s = seat({ 'pr checks': [checks(8, 'pass', 'pending', 'pending')] });
+    const s = prSeat({ 'pr checks': [checks(8, 'pass', 'pending', 'pending')] });
     const r = await watchPr(s.ctx, PR, { timeout: 3 });
     expect(r.code).toBe(WATCH_EXIT.timeout);
     expect(r.lines[0]).toMatch(/^まだ: check 3 つのうち 2 つが終わっていない/);
@@ -130,7 +140,7 @@ describe('roster watch pr', () => {
   });
 
   test('みな終わったのを 1 度見た所で長さを過ぎたら、20 で終わる（字は PR の check の物）', async () => {
-    const s = seat({ 'pr checks': [checks(8, 'pending'), checks(8, 'pending'), checks(0, 'pass')] });
+    const s = prSeat({ 'pr checks': [checks(8, 'pending'), checks(8, 'pending'), checks(0, 'pass')] });
     const r = await watchPr(s.ctx, PR, { timeout: 0.75 });
     expect(r.code).toBe(WATCH_EXIT.timeout);
     expect(r.lines[0]).toMatch(/^まだ: check 1 つは終わっていたが、続けてもう 1 度は見ていない/);
@@ -138,7 +148,7 @@ describe('roster watch pr', () => {
   });
 
   test('GitHub が応えないまま長さを過ぎたら、20 で「応えない」と出す', async () => {
-    const s = seat({ 'pr checks': [DOWN] });
+    const s = prSeat({ 'pr checks': [DOWN] });
     const r = await watchPr(s.ctx, PR, { timeout: 2 });
     expect(r.code).toBe(WATCH_EXIT.timeout);
     expect(r.lines[0]).toContain('GitHub が応えない');
@@ -146,24 +156,93 @@ describe('roster watch pr', () => {
   });
 
   test('--timeout 0 は、今の様子を 1 回見て、待たずに終わる', async () => {
-    const pending = seat({ 'pr checks': [checks(8, 'pass', 'pending')] });
+    const pending = prSeat({ 'pr checks': [checks(8, 'pass', 'pending')] });
     expect((await watchPr(pending.ctx, PR, { timeout: 0 })).code).toBe(WATCH_EXIT.timeout);
     expect(pending.slept).toEqual([]);
-    const passed = seat({ 'pr checks': [checks(0, 'pass')] });
+    const passed = prSeat({ 'pr checks': [checks(0, 'pass')] });
     expect((await watchPr(passed.ctx, PR, { timeout: 0 })).code).toBe(WATCH_EXIT.passed);
-    const none = seat({ 'pr checks': [NO_CHECKS] });
+    const none = prSeat({ 'pr checks': [NO_CHECKS] });
     expect((await watchPr(none.ctx, PR, { timeout: 0 })).code).toBe(WATCH_EXIT.none);
     expect(none.slept).toEqual([]);
   });
 
   test('PR が無い・認証が無い時は、聞き直さずに 1 で終わる', async () => {
-    const s = seat({ 'pr checks': [{ status: 1, stdout: '', stderr: 'GraphQL: Could not resolve to a PullRequest with the number of 7.' }] });
+    const s = prSeat({ 'pr checks': [{ status: 1, stdout: '', stderr: 'GraphQL: Could not resolve to a PullRequest with the number of 7.' }] });
     const r = await watchPr(s.ctx, PR);
     expect(r.code).toBe(WATCH_EXIT.error);
     expect(r.lines[0]).toMatch(/^見張れない: /);
     expect(s.slept).toEqual([]);
-    const auth = seat({ 'pr checks': [{ status: 4, stdout: '', stderr: 'To get started with GitHub CLI, please run:  gh auth login' }] });
+    const auth = prSeat({ 'pr checks': [{ status: 4, stdout: '', stderr: 'To get started with GitHub CLI, please run:  gh auth login' }] });
     expect((await watchPr(auth.ctx, PR)).code).toBe(WATCH_EXIT.error);
+  });
+
+  test('push の直後で PR の head が branch の先に追いついていない間は、前の commit の落ちた check を見ずに待つ（台帳 #340）', async () => {
+    // 1 回目: PR の head は前の commit（old）、branch の先は新しい commit（new）。gh pr checks は前の commit の落ちた check を返すはず。
+    const s = seat({ 'pr view': [head('old'), head('new')], 'api': [tip('new')], 'pr checks': [checks(0, 'pass', 'pass')] });
+    const r = await watchPr(s.ctx, PR);
+    expect(r).toEqual({ code: WATCH_EXIT.passed, lines: ['通った: check 2 つ（50 秒）'] });
+    // 追いついていない回は、gh pr checks を聞かない。
+    expect(s.asked.filter(a => a.startsWith('gh pr checks'))).toHaveLength(2);
+  });
+
+  test('追いつかないまま長さを過ぎたら、20 で「追いついていない」と出す', async () => {
+    const s = seat({ 'pr view': [head('old')], 'api': [tip('new')], 'pr checks': [checks(1, 'fail')] });
+    const r = await watchPr(s.ctx, PR, { timeout: 0 });
+    expect(r.code).toBe(WATCH_EXIT.timeout);
+    expect(r.lines[0]).toMatch(/^まだ: PR の head が、branch の先（push した commit）に追いついていない/);
+    expect(s.asked.some(a => a.startsWith('gh pr checks'))).toBe(false);
+  });
+
+  test('branch が無い（merge して消した: 422・404）・head の repo が無い時は、比べずに check で判じる', async () => {
+    const gone: ExecResult = { status: 1, stdout: '', stderr: 'gh: No commit found for SHA: heads/t-x/b (HTTP 422)' };
+    const s = seat({ 'pr view': [head('old')], 'api': [gone], 'pr checks': [checks(0, 'pass')] });
+    expect((await watchPr(s.ctx, PR, { timeout: 0 })).code).toBe(WATCH_EXIT.passed);
+    const missing = seat({ 'pr view': [head('old')], 'api': [{ status: 1, stdout: '', stderr: 'gh: Not Found (HTTP 404)' }], 'pr checks': [checks(1, 'fail')] });
+    expect((await watchPr(missing.ctx, PR, { timeout: 0 })).code).toBe(WATCH_EXIT.failed);
+    const fork = seat({ 'pr view': [ok({ state: 'OPEN', headRefOid: 'old', headRefName: 'b', headRepository: null, headRepositoryOwner: { login: 'f' } })], 'pr checks': [checks(0, 'pass')] });
+    expect((await watchPr(fork.ctx, PR, { timeout: 0 })).code).toBe(WATCH_EXIT.passed);
+    expect(fork.asked.some(a => a.startsWith('gh api'))).toBe(false);
+  });
+
+  test('merge・close した PR は、branch の先が進んでいても比べずに check で判じる（GitHub は head を止める）', async () => {
+    for (const state of ['MERGED', 'CLOSED']) {
+      const s = seat({ 'pr view': [head('old', state)], 'pr checks': [checks(0, 'pass')] });
+      expect((await watchPr(s.ctx, PR, { timeout: 0 })).code).toBe(WATCH_EXIT.passed);
+      expect(s.asked.some(a => a.startsWith('gh api'))).toBe(false);
+    }
+  });
+
+  test('head の repo を読めない（上限でない 403）時は、見張れないにせず、比べずに check で判じる', async () => {
+    const denied: ExecResult = { status: 1, stdout: '', stderr: 'gh: Resource protected by organization SAML enforcement. (HTTP 403)' };
+    const s = seat({ 'pr view': [head('old')], 'api': [denied], 'pr checks': [checks(0, 'pass')] });
+    expect((await watchPr(s.ctx, PR, { timeout: 0 })).code).toBe(WATCH_EXIT.passed);
+  });
+
+  test('branch の名の # ・ ? ・ % は、片ごとに encode して path に入れる（/ は残す）', async () => {
+    const s = seat({ 'pr view': [head('new', 'OPEN', 'fix/a#12?b%c')], 'api': [tip('new')], 'pr checks': [checks(0, 'pass')] });
+    await watchPr(s.ctx, PR, { timeout: 0 });
+    expect(s.asked).toContain('gh api repos/o/r/commits/heads/fix/a%2312%3Fb%25c -q .sha');
+  });
+
+  test('比べの答え（pr view・branch の先）が 5xx・繋がらない・上限の時は、比べずに進まず、聞き直す', async () => {
+    const limited: ExecResult = { status: 1, stdout: '', stderr: 'gh: API rate limit exceeded for user ID 1. (HTTP 403)' };
+    const s = seat({ 'pr view': [HTTP_502, head('new')], 'api': [DOWN, limited, tip('new')], 'pr checks': [checks(0, 'pass')] });
+    const r = await watchPr(s.ctx, PR);
+    expect(r.code).toBe(WATCH_EXIT.passed);
+    expect(s.records()[0]?.polls).toBe(5);
+    // 前の commit の落ちた check が返る時でも、5xx の間に 10 にしない。
+    const shaky = seat({ 'pr view': [head('old')], 'api': [HTTP_502], 'pr checks': [checks(1, 'fail')] });
+    const t = await watchPr(shaky.ctx, PR, { timeout: 0 });
+    expect(t.code).toBe(WATCH_EXIT.timeout);
+    expect(t.lines[0]).toContain('GitHub が応えない');
+  });
+
+  test('pr view の答えを読めない時は、聞き直す', async () => {
+    const s = seat({ 'pr view': [ok({}), head('new')], 'api': [tip('new')], 'pr checks': [checks(0, 'pass')] });
+    expect((await watchPr(s.ctx, PR)).code).toBe(WATCH_EXIT.passed);
+    // state だけ無い答えも、「開いていない」と見て比べを飛ばさずに聞き直す。
+    const noState = seat({ 'pr view': [ok({ headRefOid: 'old', headRefName: 'b', headRepository: { name: 'r' }, headRepositoryOwner: { login: 'o' } })], 'pr checks': [checks(1, 'fail')] });
+    expect((await watchPr(noState.ctx, PR, { timeout: 0 })).code).toBe(WATCH_EXIT.timeout);
   });
 
   test('PR の URL でない字は断る', () => {
@@ -174,7 +253,7 @@ describe('roster watch pr', () => {
   });
 
   test('負の長さ・数でない長さは断る', async () => {
-    const s = seat({ 'pr checks': [checks(0, 'pass')] });
+    const s = prSeat({ 'pr checks': [checks(0, 'pass')] });
     await expect(watchPr(s.ctx, PR, { timeout: -1 })).rejects.toThrow(TpmError);
     await expect(watchPr(s.ctx, PR, { timeout: Number('x') })).rejects.toThrow(TpmError);
   });
