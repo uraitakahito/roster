@@ -128,7 +128,7 @@ infra: pagetray（roster）（手続きは roster infra list）
 | `guard` | 困る人 | 変えてよい担当 | 先に要ること |
 |---|---|---|---|
 | `free` | 自分だけ | どの担当も | 無し |
-| `roster` | 並べて動いているほかの担当 | DevOps Engineer 担当だけ | TPM 担当に相談 |
+| `tpm` | 並べて動いているほかの担当 | DevOps Engineer 担当だけ | TPM 担当に相談 |
 | `pm` | ほかの人・ほかのチーム | DevOps Engineer 担当だけ | Product Manager の承認（TPM 担当が `roster infra approve <環境> --minutes <分>` で承認を書く） |
 | `pm-only` | Product Manager が自分の手に取っておく物（起こす・止める・data を消すなど） | どの担当も打てない（TPM 担当・DevOps Engineer 担当・Auditor も。`roster infra run` も止まり、`roster infra approve` も書けない） | Product Manager が自分の terminal で直に打つ。担当は、打ってほしい 1 行を確認のページに書いて `roster ask pm` で送る |
 
