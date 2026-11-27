@@ -4,7 +4,7 @@ exports.ListActorSettingsCommand = void 0;
 const commandBuilder_1 = require("../commandBuilder");
 const schemas_0_1 = require("../schemas/schemas_0");
 /**
- * あるアクターの model と effort の行の全部（受けた順）。頁は分けない（1 つのアクターの行は少ない。今の server と同じ）。
+ * あるアクターの model と effort の行の全部（受けた順）。頁は分けない（1 つのアクターの行は少ない）。
  * @example
  * Use a bare-bones client and the command you need to make an API call.
  * ```javascript

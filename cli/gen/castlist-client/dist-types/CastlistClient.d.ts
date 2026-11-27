@@ -10,6 +10,7 @@ import type { GetActorSettingAtCommandInput, GetActorSettingAtCommandOutput } fr
 import type { GetGraphCommandInput, GetGraphCommandOutput } from "./commands/GetGraphCommand";
 import type { GetHealthCommandInput, GetHealthCommandOutput } from "./commands/GetHealthCommand";
 import type { GetLineageCommandInput, GetLineageCommandOutput } from "./commands/GetLineageCommand";
+import type { GetTimelineCommandInput, GetTimelineCommandOutput } from "./commands/GetTimelineCommand";
 import type { ListActorsCommandInput, ListActorsCommandOutput } from "./commands/ListActorsCommand";
 import type { ListActorSettingsCommandInput, ListActorSettingsCommandOutput } from "./commands/ListActorSettingsCommand";
 import type { ListEventsCommandInput, ListEventsCommandOutput } from "./commands/ListEventsCommand";
@@ -25,11 +26,11 @@ export { __Client };
 /**
  * @public
  */
-export type ServiceInputTypes = GetActorCommandInput | GetActorSettingAtCommandInput | GetGraphCommandInput | GetHealthCommandInput | GetLineageCommandInput | ListActorSettingsCommandInput | ListActorsCommandInput | ListEventsCommandInput | ListSettingsCommandInput | PutEventCommandInput | PutLinkCommandInput | PutSettingCommandInput | RegisterActorCommandInput | ResolveActorsCommandInput;
+export type ServiceInputTypes = GetActorCommandInput | GetActorSettingAtCommandInput | GetGraphCommandInput | GetHealthCommandInput | GetLineageCommandInput | GetTimelineCommandInput | ListActorSettingsCommandInput | ListActorsCommandInput | ListEventsCommandInput | ListSettingsCommandInput | PutEventCommandInput | PutLinkCommandInput | PutSettingCommandInput | RegisterActorCommandInput | ResolveActorsCommandInput;
 /**
  * @public
  */
-export type ServiceOutputTypes = GetActorCommandOutput | GetActorSettingAtCommandOutput | GetGraphCommandOutput | GetHealthCommandOutput | GetLineageCommandOutput | ListActorSettingsCommandOutput | ListActorsCommandOutput | ListEventsCommandOutput | ListSettingsCommandOutput | PutEventCommandOutput | PutLinkCommandOutput | PutSettingCommandOutput | RegisterActorCommandOutput | ResolveActorsCommandOutput;
+export type ServiceOutputTypes = GetActorCommandOutput | GetActorSettingAtCommandOutput | GetGraphCommandOutput | GetHealthCommandOutput | GetLineageCommandOutput | GetTimelineCommandOutput | ListActorSettingsCommandOutput | ListActorsCommandOutput | ListEventsCommandOutput | ListSettingsCommandOutput | PutEventCommandOutput | PutLinkCommandOutput | PutSettingCommandOutput | RegisterActorCommandOutput | ResolveActorsCommandOutput;
 /**
  * @public
  */

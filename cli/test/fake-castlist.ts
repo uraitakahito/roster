@@ -91,7 +91,7 @@ class Ledger {
     const q = new Query(seen.query);
     const ok = (body: unknown, status = 200): NextAnswer => ({ status, body });
     if (method === 'GET') {
-      if (path === '/healthz') return ok({ status: 'ok', version: '1.0.0', now: this.now });
+      if (path === '/healthz') return ok({ status: 'ok', version: '1.1.0', now: this.now });
       if (path === '/api/actors') return ok(this.searchActors(q));
       if (path === '/api/settings') return ok(this.searchSettings(q));
       if (path === '/api/events') return ok(this.searchEvents(q));

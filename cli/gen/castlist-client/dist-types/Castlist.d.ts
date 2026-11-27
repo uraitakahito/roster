@@ -5,6 +5,7 @@ import { type GetActorSettingAtCommandInput, type GetActorSettingAtCommandOutput
 import { type GetGraphCommandInput, type GetGraphCommandOutput } from "./commands/GetGraphCommand";
 import { type GetHealthCommandInput, type GetHealthCommandOutput } from "./commands/GetHealthCommand";
 import { type GetLineageCommandInput, type GetLineageCommandOutput } from "./commands/GetLineageCommand";
+import { type GetTimelineCommandInput, type GetTimelineCommandOutput } from "./commands/GetTimelineCommand";
 import { type ListActorsCommandInput, type ListActorsCommandOutput } from "./commands/ListActorsCommand";
 import { type ListActorSettingsCommandInput, type ListActorSettingsCommandOutput } from "./commands/ListActorSettingsCommand";
 import { type ListEventsCommandInput, type ListEventsCommandOutput } from "./commands/ListEventsCommand";
@@ -53,6 +54,13 @@ export interface Castlist {
     getLineage(args: GetLineageCommandInput, options?: CastlistRequestOptions): Promise<GetLineageCommandOutput>;
     getLineage(args: GetLineageCommandInput, cb: (err: any, data?: GetLineageCommandOutput) => void): void;
     getLineage(args: GetLineageCommandInput, options: CastlistRequestOptions, cb: (err: any, data?: GetLineageCommandOutput) => void): void;
+    /**
+     * @see {@link GetTimelineCommand}
+     */
+    getTimeline(): Promise<GetTimelineCommandOutput>;
+    getTimeline(args: GetTimelineCommandInput, options?: CastlistRequestOptions): Promise<GetTimelineCommandOutput>;
+    getTimeline(args: GetTimelineCommandInput, cb: (err: any, data?: GetTimelineCommandOutput) => void): void;
+    getTimeline(args: GetTimelineCommandInput, options: CastlistRequestOptions, cb: (err: any, data?: GetTimelineCommandOutput) => void): void;
     /**
      * @see {@link ListActorsCommand}
      */

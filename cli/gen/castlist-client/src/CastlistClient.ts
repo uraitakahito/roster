@@ -67,6 +67,7 @@ import type {
 import type { GetGraphCommandInput, GetGraphCommandOutput } from "./commands/GetGraphCommand";
 import type { GetHealthCommandInput, GetHealthCommandOutput } from "./commands/GetHealthCommand";
 import type { GetLineageCommandInput, GetLineageCommandOutput } from "./commands/GetLineageCommand";
+import type { GetTimelineCommandInput, GetTimelineCommandOutput } from "./commands/GetTimelineCommand";
 import type { ListActorsCommandInput, ListActorsCommandOutput } from "./commands/ListActorsCommand";
 import type {
   ListActorSettingsCommandInput,
@@ -99,6 +100,7 @@ export type ServiceInputTypes =
   | GetGraphCommandInput
   | GetHealthCommandInput
   | GetLineageCommandInput
+  | GetTimelineCommandInput
   | ListActorSettingsCommandInput
   | ListActorsCommandInput
   | ListEventsCommandInput
@@ -118,6 +120,7 @@ export type ServiceOutputTypes =
   | GetGraphCommandOutput
   | GetHealthCommandOutput
   | GetLineageCommandOutput
+  | GetTimelineCommandOutput
   | ListActorSettingsCommandOutput
   | ListActorsCommandOutput
   | ListEventsCommandOutput

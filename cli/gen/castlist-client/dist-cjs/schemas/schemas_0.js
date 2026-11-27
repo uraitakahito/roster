@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ActorSummary$ = exports.SettingRow$ = exports.Setting$ = exports.ResolveActorsOutput$ = exports.ResolveActorsInput$ = exports.Resolution$ = exports.RequestedSettings$ = exports.RegisterActorOutput$ = exports.RegisterActorInput$ = exports.PutSettingOutput$ = exports.PutSettingInput$ = exports.PutLinkOutput$ = exports.PutLinkInput$ = exports.PutEventOutput$ = exports.PutEventInput$ = exports.ListSettingsOutput$ = exports.ListSettingsInput$ = exports.ListEventsOutput$ = exports.ListEventsInput$ = exports.ListActorsOutput$ = exports.ListActorsInput$ = exports.ListActorSettingsOutput$ = exports.ListActorSettingsInput$ = exports.Link$ = exports.GraphNode$ = exports.GetLineageOutput$ = exports.GetLineageInput$ = exports.GetHealthOutput$ = exports.GetHealthInput$ = exports.GetGraphOutput$ = exports.GetGraphInput$ = exports.GetActorSettingAtOutput$ = exports.GetActorSettingAtInput$ = exports.GetActorOutput$ = exports.GetActorInput$ = exports.EventRow$ = exports.Event$ = exports.Binding$ = exports.ActorState$ = exports.ActorRow$ = exports.ActorBinding$ = exports.errorTypeRegistries = exports.ValidationException$ = exports.Unavailable$ = exports.PayloadTooLarge$ = exports.NotFound$ = exports.InternalError$ = exports.Forbidden$ = exports.Conflict$ = exports.CastlistServiceException$ = void 0;
-exports.ResolveActors$ = exports.RegisterActor$ = exports.PutSetting$ = exports.PutLink$ = exports.PutEvent$ = exports.ListSettings$ = exports.ListEvents$ = exports.ListActorSettings$ = exports.ListActors$ = exports.GetLineage$ = exports.GetHealth$ = exports.GetGraph$ = exports.GetActorSettingAt$ = exports.GetActor$ = exports.ValidationExceptionField$ = void 0;
+exports.Setting$ = exports.ResolveActorsOutput$ = exports.ResolveActorsInput$ = exports.Resolution$ = exports.RequestedSettings$ = exports.RegisterActorOutput$ = exports.RegisterActorInput$ = exports.PutSettingOutput$ = exports.PutSettingInput$ = exports.PutLinkOutput$ = exports.PutLinkInput$ = exports.PutEventOutput$ = exports.PutEventInput$ = exports.ListSettingsOutput$ = exports.ListSettingsInput$ = exports.ListEventsOutput$ = exports.ListEventsInput$ = exports.ListActorsOutput$ = exports.ListActorsInput$ = exports.ListActorSettingsOutput$ = exports.ListActorSettingsInput$ = exports.Link$ = exports.GraphNode$ = exports.GetTimelineOutput$ = exports.GetTimelineInput$ = exports.GetLineageOutput$ = exports.GetLineageInput$ = exports.GetHealthOutput$ = exports.GetHealthInput$ = exports.GetGraphOutput$ = exports.GetGraphInput$ = exports.GetActorSettingAtOutput$ = exports.GetActorSettingAtInput$ = exports.GetActorOutput$ = exports.GetActorInput$ = exports.EventRow$ = exports.Event$ = exports.Binding$ = exports.ActorState$ = exports.ActorRow$ = exports.ActorBinding$ = exports.errorTypeRegistries = exports.ValidationException$ = exports.Unavailable$ = exports.PayloadTooLarge$ = exports.NotFound$ = exports.InternalError$ = exports.Forbidden$ = exports.Conflict$ = exports.CastlistServiceException$ = void 0;
+exports.ResolveActors$ = exports.RegisterActor$ = exports.PutSetting$ = exports.PutLink$ = exports.PutEvent$ = exports.ListSettings$ = exports.ListEvents$ = exports.ListActorSettings$ = exports.ListActors$ = exports.GetTimeline$ = exports.GetLineage$ = exports.GetHealth$ = exports.GetGraph$ = exports.GetActorSettingAt$ = exports.GetActor$ = exports.ValidationExceptionField$ = exports.ActorSummary$ = exports.TimelineEvent$ = exports.SettingRow$ = void 0;
 const _AB = "ActorBinding";
 const _ABc = "ActorBindings";
 const _AR = "ActorRow";
@@ -33,6 +33,9 @@ const _GLI = "GetLineageInput";
 const _GLO = "GetLineageOutput";
 const _GN = "GraphNode";
 const _GNr = "GraphNodes";
+const _GT = "GetTimeline";
+const _GTI = "GetTimelineInput";
+const _GTO = "GetTimelineOutput";
 const _IE = "InternalError";
 const _L = "Link";
 const _LA = "ListActors";
@@ -72,6 +75,8 @@ const _S = "Setting";
 const _SR = "SettingRow";
 const _SRe = "SettingRows";
 const _Se = "Settings";
+const _TE = "TimelineEvent";
+const _TEi = "TimelineEvents";
 const _U = "Unavailable";
 const _VE = "ValidationException";
 const _VEF = "ValidationExceptionField";
@@ -229,8 +234,8 @@ exports.ActorBinding$ = [3, n2, _AB,
 ];
 exports.ActorRow$ = [3, n2, _AR,
     0,
-    [_id, _n, _k, _i, _sA, _rA, _cS, _l, _p, _in, _u, _fEA, _lEA, _lET, _mo, _ef],
-    [0, 0, 0, 0, 5, 5, 2, 128 | 0, 2, 2, 0, 5, 5, 0, 0, 0], 11
+    [_id, _n, _k, _i, _sA, _rA, _cS, _l, _p, _in, _u, _fEA, _lEA, _lET, _pr, _sk, _mo, _ef],
+    [0, 0, 0, 0, 5, 5, 2, 128 | 0, 2, 2, 0, 5, 5, 0, 0, 2, 0, 0], 11
 ];
 exports.ActorState$ = [3, n2, _AS,
     0,
@@ -301,6 +306,16 @@ exports.GetLineageOutput$ = [3, n2, _GLO,
     0,
     [_aO, _aI, _no, _ed],
     [5, 0, () => ActorRows, () => Links], 4
+];
+exports.GetTimelineInput$ = [3, n2, _GTI,
+    0,
+    [_la, _f, _to],
+    [[0, { [_hQ]: _la }], [5, { [_hQ]: _f }], [5, { [_hQ]: _to }]]
+];
+exports.GetTimelineOutput$ = [3, n2, _GTO,
+    0,
+    [_aO, _no, _ed, _ev, _set],
+    [5, () => GraphNodes, () => Links, () => TimelineEvents, () => Settings], 5
 ];
 exports.GraphNode$ = [3, n2, _GN,
     0,
@@ -422,6 +437,11 @@ exports.SettingRow$ = [3, n2, _SR,
     [_aI, _mo, _ef, _sou, _sA, _rA, _cS, _aN, _id],
     [0, 0, 0, 0, 5, 5, 2, 0, 0], 8
 ];
+exports.TimelineEvent$ = [3, n2, _TE,
+    0,
+    [_aI, _t, _rA, _in, _r],
+    [0, 0, 5, 2, 0], 4
+];
 exports.ActorSummary$ = [3, n0, _ASc,
     0,
     [_id, _n, _k],
@@ -465,6 +485,9 @@ var SettingRows = [1, n2, _SRe,
 var Settings = [1, n2, _Se,
     0, () => exports.Setting$
 ];
+var TimelineEvents = [1, n2, _TEi,
+    0, () => exports.TimelineEvent$
+];
 var ValidationExceptionFieldList = [1, n1, _VEFL,
     0, () => exports.ValidationExceptionField$
 ];
@@ -483,6 +506,9 @@ exports.GetHealth$ = [9, n2, _GH,
 ];
 exports.GetLineage$ = [9, n2, _GL,
     { [_h]: ["GET", "/api/actors/{actorId}/lineage", 200] }, () => exports.GetLineageInput$, () => exports.GetLineageOutput$
+];
+exports.GetTimeline$ = [9, n2, _GT,
+    { [_h]: ["GET", "/api/timeline", 200] }, () => exports.GetTimelineInput$, () => exports.GetTimelineOutput$
 ];
 exports.ListActors$ = [9, n2, _LA,
     { [_h]: ["GET", "/api/actors", 200] }, () => exports.ListActorsInput$, () => exports.ListActorsOutput$

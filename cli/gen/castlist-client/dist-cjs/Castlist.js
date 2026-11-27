@@ -9,6 +9,7 @@ const GetActorSettingAtCommand_1 = require("./commands/GetActorSettingAtCommand"
 const GetGraphCommand_1 = require("./commands/GetGraphCommand");
 const GetHealthCommand_1 = require("./commands/GetHealthCommand");
 const GetLineageCommand_1 = require("./commands/GetLineageCommand");
+const GetTimelineCommand_1 = require("./commands/GetTimelineCommand");
 const ListActorsCommand_1 = require("./commands/ListActorsCommand");
 const ListActorSettingsCommand_1 = require("./commands/ListActorSettingsCommand");
 const ListEventsCommand_1 = require("./commands/ListEventsCommand");
@@ -27,6 +28,7 @@ const commands = {
     GetGraphCommand: GetGraphCommand_1.GetGraphCommand,
     GetHealthCommand: GetHealthCommand_1.GetHealthCommand,
     GetLineageCommand: GetLineageCommand_1.GetLineageCommand,
+    GetTimelineCommand: GetTimelineCommand_1.GetTimelineCommand,
     ListActorsCommand: ListActorsCommand_1.ListActorsCommand,
     ListActorSettingsCommand: ListActorSettingsCommand_1.ListActorSettingsCommand,
     ListEventsCommand: ListEventsCommand_1.ListEventsCommand,

@@ -23,7 +23,7 @@ export interface ListActorSettingsCommandInput extends ListActorSettingsInput {}
 export interface ListActorSettingsCommandOutput extends ListActorSettingsOutput, __MetadataBearer {}
 
 /**
- * あるアクターの model と effort の行の全部（受けた順）。頁は分けない（1 つのアクターの行は少ない。今の server と同じ）。
+ * あるアクターの model と effort の行の全部（受けた順）。頁は分けない（1 つのアクターの行は少ない）。
  * @example
  * Use a bare-bones client and the command you need to make an API call.
  * ```javascript

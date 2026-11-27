@@ -3,6 +3,7 @@ export * from "./GetActorSettingAtCommand";
 export * from "./GetGraphCommand";
 export * from "./GetHealthCommand";
 export * from "./GetLineageCommand";
+export * from "./GetTimelineCommand";
 export * from "./ListActorSettingsCommand";
 export * from "./ListActorsCommand";
 export * from "./ListEventsCommand";
