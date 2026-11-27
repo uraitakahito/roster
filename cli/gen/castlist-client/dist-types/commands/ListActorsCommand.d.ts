@@ -86,6 +86,8 @@ declare const ListActorsCommand_base: {
  * //       lastExitType: "STRING_VALUE",
  * //       present: true || false, // required
  * //       inferred: true || false, // required
+ * //       presence: "STRING_VALUE",
+ * //       skewed: true || false,
  * //       model: "STRING_VALUE",
  * //       effort: "STRING_VALUE",
  * //       url: "STRING_VALUE", // required

@@ -230,7 +230,7 @@ describe('castlist が止まっている時', () => {
     expect(message).toContain('https://uraitakahito.github.io/castlist/run.html');
   });
 
-  test('container が無ければ、container run の 1 行だけ（名は castlist.box、port は設定の URL の port、1.0.0 の版と volume。docs の URL つき。移す案内は無い）', async () => {
+  test('container が無ければ、container run の 1 行だけ（名は castlist.box、port は設定の URL の port、今の版と volume。docs の URL つき。移す案内は無い）', async () => {
     const w = world({ castlist: dead });
     w.answers.set('container inspect castlist.box', { status: 1, stdout: '', stderr: 'not found' });
     w.answers.set('container inspect castlist', { status: 1, stdout: '', stderr: 'not found' });
@@ -247,7 +247,7 @@ describe('castlist が止まっている時', () => {
     expect(port).toBe(new URL(dead).port);
     expect(volume).toBe(CASTLIST_VOLUME);
     expect(version).toBe(CASTLIST_VERSION);
-    expect(CASTLIST_VERSION).toBe('v1.0.0');
+    expect(CASTLIST_VERSION).toBe('v1.1.0');
     expect(CASTLIST_VOLUME).toBe('castlist-data-v1');
     expect(lines[0]).toContain('https://uraitakahito.github.io/castlist/');
     // 前の volume（castlist-data）から移す案内は、もう出さない。

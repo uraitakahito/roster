@@ -22,6 +22,11 @@ import {
   GetLineageCommand,
 } from "./commands/GetLineageCommand";
 import {
+  type GetTimelineCommandInput,
+  type GetTimelineCommandOutput,
+  GetTimelineCommand,
+} from "./commands/GetTimelineCommand";
+import {
   type ListActorsCommandInput,
   type ListActorsCommandOutput,
   ListActorsCommand,
@@ -68,6 +73,7 @@ const commands = {
   GetGraphCommand,
   GetHealthCommand,
   GetLineageCommand,
+  GetTimelineCommand,
   ListActorsCommand,
   ListActorSettingsCommand,
   ListEventsCommand,
@@ -177,6 +183,24 @@ export interface Castlist {
     args: GetLineageCommandInput,
     options: CastlistRequestOptions,
     cb: (err: any, data?: GetLineageCommandOutput) => void
+  ): void;
+
+  /**
+   * @see {@link GetTimelineCommand}
+   */
+  getTimeline(): Promise<GetTimelineCommandOutput>;
+  getTimeline(
+    args: GetTimelineCommandInput,
+    options?: CastlistRequestOptions
+  ): Promise<GetTimelineCommandOutput>;
+  getTimeline(
+    args: GetTimelineCommandInput,
+    cb: (err: any, data?: GetTimelineCommandOutput) => void
+  ): void;
+  getTimeline(
+    args: GetTimelineCommandInput,
+    options: CastlistRequestOptions,
+    cb: (err: any, data?: GetTimelineCommandOutput) => void
   ): void;
 
   /**

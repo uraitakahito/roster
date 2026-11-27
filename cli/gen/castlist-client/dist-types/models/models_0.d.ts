@@ -101,6 +101,18 @@ export interface ActorRow {
      */
     inferred: boolean | undefined;
     /**
+     * 稼働を替える出来事（6 種）の最新の種類（GetActor の `state.presence` と同じ）。1 つも無ければ無い。
+     * 1.1.0 で足した欄（前の版の答えには無い）。
+     * @public
+     */
+    presence?: string | undefined;
+    /**
+     * 時刻ずれの行（登録・出来事・model と effort のどれか）を持つか（ListActors の絞りの `skewed` と同じ意味。線は見ない）。
+     * `clockSkew` は登録だけの印で、これとは別。1.1.0 で足した欄（前の版の答えには無い）。
+     * @public
+     */
+    skewed?: boolean | undefined;
+    /**
      * 最新の model（受けた順で）。
      * @public
      */
@@ -607,6 +619,88 @@ export interface GetLineageOutput {
      * @public
      */
     edges: Link[] | undefined;
+}
+/**
+ * @public
+ */
+export interface GetTimelineInput {
+    /**
+     * このラベル（`鍵:値`）を持つアクター。
+     * @public
+     */
+    label?: string | undefined;
+    /**
+     * 登録を受けた時刻の窓の始め（含む）。
+     * @public
+     */
+    from?: Date | undefined;
+    /**
+     * 登録を受けた時刻の窓の終わり（含む）。
+     * @public
+     */
+    to?: Date | undefined;
+}
+/**
+ * タイムラインの出来事 1 つ（帯と印に要る欄だけ。`detail` の全部は GetActor・ListEvents で読む）。
+ * @public
+ */
+export interface TimelineEvent {
+    /**
+     * アクターの id（castlist が出す UUID v7 の字。小文字の 16 進）。
+     * @public
+     */
+    actorId: string | undefined;
+    /**
+     * 出来事の種類（10 種）。
+     * 居る・居ないを替えるのは entered・reentered・forked（居る）と cleared・exited・closed（居ない）。
+     * @public
+     */
+    type: string | undefined;
+    /**
+     * 出来事を受けた castlist の時刻。
+     * @public
+     */
+    receivedAt: Date | undefined;
+    /**
+     * 推しの幕引きか（`closed` で、`detail.inferred` が JSON の true）。
+     * @public
+     */
+    inferred: boolean | undefined;
+    /**
+     * `detail.reason`（字の時だけ）。
+     * @public
+     */
+    reason?: string | undefined;
+}
+/**
+ * @public
+ */
+export interface GetTimelineOutput {
+    /**
+     * 読み始める前の castlist の時刻。
+     * @public
+     */
+    asOf: Date | undefined;
+    /**
+     * 絞った組と、組に触れる線の向こうの端のアクター（受けた順）。GetGraph の `nodes` と同じ。
+     * @public
+     */
+    nodes: GraphNode[] | undefined;
+    /**
+     * 組に触れる線の全部（受けた順）。GetGraph の `edges` と同じ。
+     * @public
+     */
+    edges: Link[] | undefined;
+    /**
+     * 点のアクターの出来事の全部（受けた順）。
+     * @public
+     */
+    events: TimelineEvent[] | undefined;
+    /**
+     * 点のアクターの model と effort の行の全部（受けた順）。
+     * @public
+     */
+    settings: Setting[] | undefined;
 }
 /**
  * @public

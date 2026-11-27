@@ -40,6 +40,7 @@ service Castlist {
         PutSetting
         ListSettings
         GetGraph
+        GetTimeline
     ]
 
     // 操作の前の守りの層（server の生成した骨の外）が返す誤り。どの操作の答えにもなり得る。
@@ -682,6 +683,14 @@ structure ActorRow {
     @required
     inferred: Boolean
 
+    /// 稼働を替える出来事（6 種）の最新の種類（GetActor の `state.presence` と同じ）。1 つも無ければ無い。
+    /// 1.1.0 で足した欄（前の版の答えには無い）。
+    presence: EventType
+
+    /// 時刻ずれの行（登録・出来事・model と effort のどれか）を持つか（ListActors の絞りの `skewed` と同じ意味。線は見ない）。
+    /// `clockSkew` は登録だけの印で、これとは別。1.1.0 で足した欄（前の版の答えには無い）。
+    skewed: Boolean
+
     /// 最新の model（受けた順で）。
     model: Name
 
@@ -813,7 +822,7 @@ string LineageDirection
 @range(min: 1, max: 20)
 integer LineageDepth
 
-/// あるアクターの model と effort の行の全部（受けた順）。頁は分けない（1 つのアクターの行は少ない。今の server と同じ）。
+/// あるアクターの model と effort の行の全部（受けた順）。頁は分けない（1 つのアクターの行は少ない）。
 @readonly
 @http(method: "GET", uri: "/api/actors/{actorId}/settings")
 @httpRequestTests([
@@ -1357,6 +1366,157 @@ operation GetGraph {
     ]
 }
 
+/// タイムラインを描く元の値。点と線は GetGraph と同じ組（同じ引数・同じ絞り・同じ順）で、その点のアクターの出来事
+/// （帯と印に要る欄だけ。受けた順）と、model と effort の行の全部（受けた順）を足す。1 つの読む transaction の中で読むので、
+/// 4 つの並びは揃った写し。並べる計算（帯・切れ・矢印・目盛り）は、呼ぶ側がする。頁は分けない（並べる計算は、組の全部を 1 度に要る）。
+/// 重い読みの接続（2 本）だけを使う。1.1.0 で足した操作。
+@readonly
+@http(method: "GET", uri: "/api/timeline")
+@httpRequestTests([
+    {
+        id: "GetTimelineRequest"
+        documentation: "引数は GetGraph と同じ（ラベルと、登録を受けた時刻の窓）"
+        protocol: restJson1
+        method: "GET"
+        uri: "/api/timeline"
+        queryParams: ["label=tpm.key%3At-23zs", "from=2026-11-24T00%3A00%3A00Z", "to=2026-11-25T00%3A00%3A00Z"]
+        params: { label: "tpm.key:t-23zs", from: 1795478400, to: 1795564800 }
+    }
+    {
+        id: "GetTimelineRequestWithoutParams"
+        documentation: "引数はどれも無くてよい（全部のアクター）"
+        protocol: restJson1
+        method: "GET"
+        uri: "/api/timeline"
+        params: {}
+    }
+])
+@httpResponseTests([
+    {
+        id: "GetTimelineResponse"
+        documentation: "点と線は GetGraph と同じ形。出来事は帯と印に要る欄だけ、model と effort は GetActor の行と同じ形"
+        protocol: restJson1
+        code: 200
+        headers: { "Content-Type": "application/json" }
+        body: """
+            {"asOf":"2026-11-24T00:00:05Z","nodes":[{"id":"019abcde-0000-7000-8000-000000000001","name":"se.1","kind":"ai","issuer":"tpm","sentAt":"2026-11-24T00:00:00Z","receivedAt":"2026-11-24T00:00:01Z","clockSkew":false,"state":{"presence":"closed","present":false,"inferred":true,"enteredAt":"2026-11-24T00:00:02Z","exitedAt":"2026-11-24T00:00:04Z"},"currentSettings":{"actorId":"019abcde-0000-7000-8000-000000000001","model":"claude-opus-5-5","effort":"high","source":"requested","sentAt":"2026-11-24T00:00:00Z","receivedAt":"2026-11-24T00:00:01Z","clockSkew":false}}],"edges":[],"events":[{"actorId":"019abcde-0000-7000-8000-000000000001","type":"entered","receivedAt":"2026-11-24T00:00:02Z","inferred":false},{"actorId":"019abcde-0000-7000-8000-000000000001","type":"closed","receivedAt":"2026-11-24T00:00:04Z","inferred":true,"reason":"workspace_gone"}],"settings":[{"actorId":"019abcde-0000-7000-8000-000000000001","model":"claude-opus-5-5","effort":"high","source":"requested","sentAt":"2026-11-24T00:00:00Z","receivedAt":"2026-11-24T00:00:01Z","clockSkew":false}]}"""
+        bodyMediaType: "application/json"
+        params: {
+            asOf: 1795478405
+            nodes: [
+                {
+                    id: "019abcde-0000-7000-8000-000000000001"
+                    name: "se.1"
+                    kind: "ai"
+                    issuer: "tpm"
+                    sentAt: 1795478400
+                    receivedAt: 1795478401
+                    clockSkew: false
+                    state: { presence: "closed", present: false, inferred: true, enteredAt: 1795478402, exitedAt: 1795478404 }
+                    currentSettings: {
+                        actorId: "019abcde-0000-7000-8000-000000000001"
+                        model: "claude-opus-5-5"
+                        effort: "high"
+                        source: "requested"
+                        sentAt: 1795478400
+                        receivedAt: 1795478401
+                        clockSkew: false
+                    }
+                }
+            ]
+            edges: []
+            events: [
+                { actorId: "019abcde-0000-7000-8000-000000000001", type: "entered", receivedAt: 1795478402, inferred: false }
+                {
+                    actorId: "019abcde-0000-7000-8000-000000000001"
+                    type: "closed"
+                    receivedAt: 1795478404
+                    inferred: true
+                    reason: "workspace_gone"
+                }
+            ]
+            settings: [
+                {
+                    actorId: "019abcde-0000-7000-8000-000000000001"
+                    model: "claude-opus-5-5"
+                    effort: "high"
+                    source: "requested"
+                    sentAt: 1795478400
+                    receivedAt: 1795478401
+                    clockSkew: false
+                }
+            ]
+        }
+    }
+])
+operation GetTimeline {
+    input := {
+        /// このラベル（`鍵:値`）を持つアクター。
+        @httpQuery("label")
+        label: LabelFilter
+
+        /// 登録を受けた時刻の窓の始め（含む）。
+        @httpQuery("from")
+        from: DateTime
+
+        /// 登録を受けた時刻の窓の終わり（含む）。
+        @httpQuery("to")
+        to: DateTime
+    }
+
+    output := {
+        /// 読み始める前の castlist の時刻。
+        @required
+        asOf: DateTime
+
+        /// 絞った組と、組に触れる線の向こうの端のアクター（受けた順）。GetGraph の `nodes` と同じ。
+        @required
+        nodes: GraphNodes
+
+        /// 組に触れる線の全部（受けた順）。GetGraph の `edges` と同じ。
+        @required
+        edges: Links
+
+        /// 点のアクターの出来事の全部（受けた順）。
+        @required
+        events: TimelineEvents
+
+        /// 点のアクターの model と effort の行の全部（受けた順）。
+        @required
+        settings: Settings
+    }
+
+    errors: [
+        ValidationException
+        Unavailable
+        InternalError
+    ]
+}
+
+/// タイムラインの出来事 1 つ（帯と印に要る欄だけ。`detail` の全部は GetActor・ListEvents で読む）。
+structure TimelineEvent {
+    @required
+    actorId: ActorId
+
+    @required
+    type: EventType
+
+    /// 出来事を受けた castlist の時刻。
+    @required
+    receivedAt: DateTime
+
+    /// 推しの幕引きか（`closed` で、`detail.inferred` が JSON の true）。
+    @required
+    inferred: Boolean
+
+    /// `detail.reason`（字の時だけ）。
+    reason: String
+}
+
+list TimelineEvents {
+    member: TimelineEvent
+}
+
 /// 図の点 1 つ: 登録の欄と、今の状態と、最新の model と effort。
 structure GraphNode {
     @required
@@ -1464,7 +1624,7 @@ operation ResolveActors {
     ]
 }
 
-/// 出来事を足す。id は送り手が決める。同じ id で同じ本文（写しは docs/src/next.md の「データ」）なら、足さずに前の行を 200 で返し、
+/// 出来事を足す。id は送り手が決める。同じ id で同じ本文（写しは docs/src/api.md の「データ」）なら、足さずに前の行を 200 で返し、
 /// 本文が違えば 409（前の行はそのまま）。同じ id かは `by` を引くより先に見る。新しく足せば 201。
 /// `by` は出し手の中の鍵の付随する id で引き、引けなければ 400。`detail` は JSON の物（無ければ `{}`）で、ほかの形は 400。
 @idempotent

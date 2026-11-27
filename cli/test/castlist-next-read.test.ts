@@ -4,7 +4,7 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { castlistClient, requireUp } from '../src/castlist.ts';
+import { CASTLIST_VERSION, castlistClient, requireUp } from '../src/castlist.ts';
 import { castlistEvents, castlistFind, castlistLineage, castlistSettings, castlistShow, seatActorsAt } from '../src/commands/castlist-read.ts';
 import { castlistHello } from '../src/commands/castlist.ts';
 import type { Context } from '../src/context.ts';
@@ -299,7 +299,7 @@ describe('起きているか（GetHealth）と版', () => {
     expect((await requireUp(skewed.ctx, '何もしていません。'))[0]).toMatch(/^castlist の時計と、roster を動かす機械の時計が 5 秒ずれています/);
   });
 
-  test('503 は混んでいる、つながらなければ止まっている（Product Manager が打つ 1 行は、1.0.0 の image と castlist-data-v1 の volume。移す案内は添えない）', async () => {
+  test('503 は混んでいる、つながらなければ止まっている（Product Manager が打つ 1 行は、今の版の image と castlist-data-v1 の volume。移す案内は添えない）', async () => {
     const busy = nextWorld(() => ({ status: 503, type: 'Unavailable', body: '混んでいる' }));
     expect(await thrown(() => requireUp(busy.ctx, '名乗っていません。'))).toMatch(/混んでいます（503）。名乗っていません。/);
     const down = nextWorld(() => ({ throws: new Error('connect ECONNREFUSED') }));
@@ -307,7 +307,7 @@ describe('起きているか（GetHealth）と版', () => {
     down.w.answers.set('container inspect castlist', { status: 1, stdout: '', stderr: '' });
     const message = await thrown(() => requireUp(down.ctx, '名乗っていません。'));
     expect(message.split('\n').slice(1)).toEqual([
-      `container run -d --name castlist.box -p 127.0.0.1:${new URL(url).port}:8080 -v castlist-data-v1:/data -m 200M -c 1 ghcr.io/uraitakahito/castlist:v1.0.0`,
+      `container run -d --name castlist.box -p 127.0.0.1:${new URL(url).port}:8080 -v castlist-data-v1:/data -m 200M -c 1 ghcr.io/uraitakahito/castlist:${CASTLIST_VERSION}`,
     ]);
   });
 

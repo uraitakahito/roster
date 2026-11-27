@@ -20,6 +20,7 @@ __exportStar(require("./GetActorSettingAtCommand"), exports);
 __exportStar(require("./GetGraphCommand"), exports);
 __exportStar(require("./GetHealthCommand"), exports);
 __exportStar(require("./GetLineageCommand"), exports);
+__exportStar(require("./GetTimelineCommand"), exports);
 __exportStar(require("./ListActorSettingsCommand"), exports);
 __exportStar(require("./ListActorsCommand"), exports);
 __exportStar(require("./ListEventsCommand"), exports);
