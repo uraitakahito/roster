@@ -922,7 +922,7 @@ describe('名を = で繋ぐ形と、volume の長い旗（t-vp6r。台帳 #291�
   // worktree からでも本体を指すよう、git の common dir（<本体>/.git。絶対の path で取る）の親の親を、repo を並べた folder とみなす。
   // 隣の repo の本体の checkout が無い時は飛ぶ（CI では飛ぶ。手元で流す試験）。git には GIT_DIR などを渡さない（hook の中で流れても読み違えない）。
   const gitEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
-  const common = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: import.meta.dirname, encoding: 'utf8', env: gitEnv }).stdout.trim();
+  const common = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: import.meta.dirname, encoding: 'utf8', env: gitEnv }).stdout?.trim() ?? '';
   const sibling = (repo: string): string => join(dirname(dirname(common)), repo, '.claude', 'roles', 'config.jsonc');
 
   describe.skipIf(common === '' || !existsSync(sibling('castlist')))('castlist の repo の宣言（PM だけ。隣の repo の本体の checkout が無い時は飛ぶ）', () => {
