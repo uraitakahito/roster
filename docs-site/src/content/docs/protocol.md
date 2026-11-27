@@ -141,7 +141,7 @@ Auditor が、件の記録に残っている物（Key・役割・時刻）で ca
 
 | 命令 | 聞く所 | 出す物 |
 |---|---|---|
-| `roster castlist find` | `ListActors`（`GET /api/actors`）。`--label <鍵:値>`（何度でも）・`--binding <種類:値>`・`--at`・`--active-from`・`--active-to`・`--active <true\|false>`・`--model`・`--effort`・`--launched-by`・`--skewed`・`--kind`・`--sort`・`--order`・`--limit`・`--after` | アクター 1 つを 1 行（名・種類・状態（稼働中・停止）・最初の登場と最後の退場・最新の model と effort・ラベル・プロフィールの画面の URL `<castlist>/actors/<id>`）。続きがあれば、`--after` に渡す `next` |
+| `roster castlist find` | `ListActors`（`GET /api/actors`）。`--label <鍵:値>`（何度でも）・`--binding <種類:値>`・`--at`・`--active-from`・`--active-to`・`--active <true\|false>`・`--model`・`--effort`・`--launched-by`・`--skewed`・`--kind`・`--sort`・`--order`・`--limit`・`--after` | アクター 1 つを 1 行（名・種類・状態（稼働中・停止）・最初の登場と最後の退場・最新の model と effort・ラベル・プロフィールの画面の URL `<callboard>/actors/<id>`）。続きがあれば、`--after` に渡す `next` |
 | `roster castlist show <名か id>` | `GetActor`（`GET /api/actors/<id>`）と `GetLineage`（`GET /api/actors/<id>/lineage`） | ラベル・付随する id（種類ごとの最新）・今の状態・最新の model と effort・線の要約（上は人まで、下は 1 段）・プロフィールの画面の URL |
 | `roster castlist lineage <名か id>` | `GetLineage`（`GET /api/actors/<id>/lineage`）。`--direction`・`--depth`・`--type` | 点（名と URL）と線 |
 | `roster castlist events` | `ListEvents`（`GET /api/events`）。`--type`（何度でも）・`--actor`・`--from`・`--to`・`--reason`・`--source`・`--skewed`・`--limit`・`--after` | 出来事 1 つを 1 行（受けた時刻・アクターの名・種類・detail・URL） |
