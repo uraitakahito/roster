@@ -29,6 +29,9 @@ const _GLI = "GetLineageInput";
 const _GLO = "GetLineageOutput";
 const _GN = "GraphNode";
 const _GNr = "GraphNodes";
+const _GT = "GetTimeline";
+const _GTI = "GetTimelineInput";
+const _GTO = "GetTimelineOutput";
 const _IE = "InternalError";
 const _L = "Link";
 const _LA = "ListActors";
@@ -68,6 +71,8 @@ const _S = "Setting";
 const _SR = "SettingRow";
 const _SRe = "SettingRows";
 const _Se = "Settings";
+const _TE = "TimelineEvent";
+const _TEi = "TimelineEvents";
 const _U = "Unavailable";
 const _VE = "ValidationException";
 const _VEF = "ValidationExceptionField";
@@ -243,8 +248,8 @@ export var ActorBinding$: StaticStructureSchema = [3, n2, _AB,
 ];
 export var ActorRow$: StaticStructureSchema = [3, n2, _AR,
   0,
-  [_id, _n, _k, _i, _sA, _rA, _cS, _l, _p, _in, _u, _fEA, _lEA, _lET, _mo, _ef],
-  [0, 0, 0, 0, 5, 5, 2, 128 | 0, 2, 2, 0, 5, 5, 0, 0, 0], 11
+  [_id, _n, _k, _i, _sA, _rA, _cS, _l, _p, _in, _u, _fEA, _lEA, _lET, _pr, _sk, _mo, _ef],
+  [0, 0, 0, 0, 5, 5, 2, 128 | 0, 2, 2, 0, 5, 5, 0, 0, 2, 0, 0], 11
 ];
 export var ActorState$: StaticStructureSchema = [3, n2, _AS,
   0,
@@ -315,6 +320,16 @@ export var GetLineageOutput$: StaticStructureSchema = [3, n2, _GLO,
   0,
   [_aO, _aI, _no, _ed],
   [5, 0, () => ActorRows, () => Links], 4
+];
+export var GetTimelineInput$: StaticStructureSchema = [3, n2, _GTI,
+  0,
+  [_la, _f, _to],
+  [[0, { [_hQ]: _la }], [5, { [_hQ]: _f }], [5, { [_hQ]: _to }]]
+];
+export var GetTimelineOutput$: StaticStructureSchema = [3, n2, _GTO,
+  0,
+  [_aO, _no, _ed, _ev, _set],
+  [5, () => GraphNodes, () => Links, () => TimelineEvents, () => Settings], 5
 ];
 export var GraphNode$: StaticStructureSchema = [3, n2, _GN,
   0,
@@ -436,6 +451,11 @@ export var SettingRow$: StaticStructureSchema = [3, n2, _SR,
   [_aI, _mo, _ef, _sou, _sA, _rA, _cS, _aN, _id],
   [0, 0, 0, 0, 5, 5, 2, 0, 0], 8
 ];
+export var TimelineEvent$: StaticStructureSchema = [3, n2, _TE,
+  0,
+  [_aI, _t, _rA, _in, _r],
+  [0, 0, 5, 2, 0], 4
+];
 export var ActorSummary$: StaticStructureSchema = [3, n0, _ASc,
   0,
   [_id, _n, _k],
@@ -479,6 +499,9 @@ var SettingRows: StaticListSchema = [1, n2, _SRe,
 var Settings: StaticListSchema = [1, n2, _Se,
   0, () => Setting$
 ];
+var TimelineEvents: StaticListSchema = [1, n2, _TEi,
+  0, () => TimelineEvent$
+];
 var ValidationExceptionFieldList: StaticListSchema = [1, n1, _VEFL,
   0, () => ValidationExceptionField$
 ];
@@ -497,6 +520,9 @@ export var GetHealth$: StaticOperationSchema = [9, n2, _GH,
 ];
 export var GetLineage$: StaticOperationSchema = [9, n2, _GL,
   { [_h]: ["GET", "/api/actors/{actorId}/lineage", 200] }, () => GetLineageInput$, () => GetLineageOutput$
+];
+export var GetTimeline$: StaticOperationSchema = [9, n2, _GT,
+  { [_h]: ["GET", "/api/timeline", 200] }, () => GetTimelineInput$, () => GetTimelineOutput$
 ];
 export var ListActors$: StaticOperationSchema = [9, n2, _LA,
   { [_h]: ["GET", "/api/actors", 200] }, () => ListActorsInput$, () => ListActorsOutput$
