@@ -110,7 +110,7 @@ castlist と pagetray の画面をまとめるサーバー（Rust）は、別の
 
 ## 生成した client（castlist・pagetray の定義から）
 
-castlist と pagetray の API は、それぞれの repo の Smithy の定義（`model/`）に書いてある。roster が呼ぶ TypeScript の client は、その定義から smithy-typescript で生成し、`cli/gen/<repo>-client/` に入れる（AI-36）。今は castlist の client（`cli/gen/castlist-client/`）と pagetray の client（`cli/gen/pagetray-client/`）で、castlist は `v1.0.0`、pagetray は `v1.1.0` の定義から作る。roster は、castlist と置き場に送る物をみな、これで送る（置き場の本文を取る curl だけが外）。
+castlist と pagetray の API は、それぞれの repo の Smithy の定義（`model/`）に書いてある。roster が呼ぶ TypeScript の client は、その定義から smithy-typescript で生成し、`cli/gen/<repo>-client/` に入れる（AI-36）。今は castlist の client（`cli/gen/castlist-client/`）と pagetray の client（`cli/gen/pagetray-client/`）で、castlist は `v1.1.0`、pagetray は `v1.1.0` の定義から作る。roster は、castlist と置き場に送る物をみな、これで送る（置き場の本文を取る curl だけが外）。
 
 ```sh
 cd cli

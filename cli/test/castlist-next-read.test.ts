@@ -4,7 +4,7 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { castlistClient, requireUp } from '../src/castlist.ts';
+import { CASTLIST_VERSION, castlistClient, requireUp } from '../src/castlist.ts';
 import { castlistEvents, castlistFind, castlistLineage, castlistSettings, castlistShow, seatActorsAt } from '../src/commands/castlist-read.ts';
 import { castlistHello } from '../src/commands/castlist.ts';
 import type { Context } from '../src/context.ts';
@@ -307,7 +307,7 @@ describe('起きているか（GetHealth）と版', () => {
     down.w.answers.set('container inspect castlist', { status: 1, stdout: '', stderr: '' });
     const message = await thrown(() => requireUp(down.ctx, '名乗っていません。'));
     expect(message.split('\n').slice(1)).toEqual([
-      `container run -d --name castlist.box -p 127.0.0.1:${new URL(url).port}:8080 -v castlist-data-v1:/data -m 200M -c 1 ghcr.io/uraitakahito/castlist:v1.1.0`,
+      `container run -d --name castlist.box -p 127.0.0.1:${new URL(url).port}:8080 -v castlist-data-v1:/data -m 200M -c 1 ghcr.io/uraitakahito/castlist:${CASTLIST_VERSION}`,
     ]);
   });
 
