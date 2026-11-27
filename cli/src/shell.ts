@@ -15,12 +15,10 @@ const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 
 /**
  * 命令の置き換え（`$(…)`・backtick）の跡に、語の中に残す印（値の分からない所）。語の途中の置き換え（`"$(cat f)":/data`・`x$(echo y)`）も、
- * 字で書いた語と見分けられるようにする（t-ta2b の review-1 の指摘 1。前は跡を残さず、`:/data`・`x` の字の語に見えた）。人に見せる時は shownWord で字に戻す。
+ * 字で書いた語と見分けられるようにする（t-ta2b の review-1 の指摘 1。前は跡を残さず、`:/data`・`x` の字の語に見えた）。
+ * 印が見えるのは splitCommandsMarked だけ。splitCommands・rawCommands は印を除いた語を返す（review-3 の指摘 1）。
  */
 export const SUBSTITUTED = '\u0000';
-
-/** 語を、人に見せる字にする（置き換えの跡の印を `$(…)` に戻す）。 */
-export const shownWord = (word: string): string => word.replaceAll(SUBSTITUTED, '$(…)');
 
 /** 字の命令を読む途中の位置と、出てきた単純な命令（語の並び）。 */
 class Lexer {
@@ -137,7 +135,7 @@ class Lexer {
       else if (c === ')') depth -= 1;
     }
     const inner = s.slice(start, depth === 0 ? j - 1 : j);
-    this.commands.push(...splitCommands(inner));
+    this.commands.push(...splitCommandsMarked(inner));
     this.i = j;
     return SUBSTITUTED;
   }
@@ -146,7 +144,7 @@ class Lexer {
   private backtick(): string {
     const s = this.src;
     const end = s.indexOf('`', this.i + 1);
-    this.commands.push(...splitCommands(s.slice(this.i + 1, end === -1 ? s.length : end)));
+    this.commands.push(...splitCommandsMarked(s.slice(this.i + 1, end === -1 ? s.length : end)));
     this.i = end === -1 ? s.length : end + 1;
     return SUBSTITUTED;
   }
@@ -202,40 +200,52 @@ class Lexer {
  * shell を真似るのは「うっかり」を見分けるのに要るところまで（別名・関数・script の中は見ない）。
  */
 export function splitCommands(src: string): string[][] {
+  return splitCommandsMarked(src).map(unmarkAll);
+}
+
+/**
+ * splitCommands と同じ分け方で、命令の置き換えの跡の印（SUBSTITUTED）を語に残した形。値の分からない語を見分けたい所（guard の、名と volume の旗の値と、
+ * 名を書かずに的を選ぶ命令の的）だけが使う。ほかの所は、印の無い splitCommands を使う（語を字のまま比べる守りが、印の付いた語を別の語と読まないため。
+ * t-ta2b の review-3 の指摘 1）。頭を整える所（前置きの語・命令の名・sh -c）は、印を除いた字で読む。
+ */
+export function splitCommandsMarked(src: string): string[][] {
   return new Lexer(src).run().flatMap(head);
 }
 
 /**
  * 字の命令を、単純な命令に分けるが、頭を整えない（頭の代入・前置きの語・命令の名の path を、書いたまま残す）。
- * 命令の名を書いたままの字で見たい時に使う（guard の、字の含みだけの当たりを通してよいか）。$(…)・`…` の中は splitCommands の形で入る。
+ * 命令の名を書いたままの字で見たい時に使う（guard の、字の含みだけの当たりを通してよいか）。$(…)・`…` の中は splitCommands の形で入る。印は除く。
  */
 export function rawCommands(src: string): string[][] {
-  return new Lexer(src).run();
+  return new Lexer(src).run().map(unmarkAll);
 }
 
-/** 単純な命令 1 つの頭を整える。sh -c と eval は、中の字を命令として読む。 */
+/** 語から、置き換えの跡の印を除く（前の形。`x$(…)` は x、`$(…)` は空の語）。 */
+const unmarkAll = (words: string[]): string[] => words.map(word => word.replaceAll(SUBSTITUTED, ''));
+
+/** 単純な命令 1 つの頭を整える。sh -c と eval は、中の字を命令として読む。決めるのは印を除いた字で、返す語には印を残す。 */
 function head(words: string[]): string[][] {
+  const plain = unmarkAll(words);
   let k = 0;
   for (;;) {
-    while (k < words.length && ASSIGNMENT.test(words[k] ?? '')) k += 1;
-    if (k < words.length && PREFIX_WORDS.has(words[k] ?? '')) {
+    while (k < plain.length && ASSIGNMENT.test(plain[k] ?? '')) k += 1;
+    if (k < plain.length && PREFIX_WORDS.has(plain[k] ?? '')) {
       k += 1;
       // sudo -u x・env -i などの旗は飛ばす（旗の値までは見ない）。
-      while (k < words.length && (words[k] ?? '').startsWith('-')) k += 1;
+      while (k < plain.length && (plain[k] ?? '').startsWith('-')) k += 1;
       continue;
     }
     break;
   }
-  const rest = words.slice(k);
-  // 命令の名は、置き換えの跡の印を除いて読む（`pkill$(true)` は pkill。印を残すと、名で比べる守りから外れる。t-ta2b の review-2 の指摘 2）。
-  const name = rest[0]?.replaceAll(SUBSTITUTED, '').split('/').at(-1);
+  const rest = plain.slice(k);
+  const name = rest[0]?.split('/').at(-1);
   // 命令の名が置き換えだけの語（`$(…) args`）は、名を読めないので命令に数えない（前からの形）。
   if (name === undefined || name === '') return [];
-  if (name === 'eval') return splitCommands(rest.slice(1).join(' '));
+  if (name === 'eval') return splitCommandsMarked(rest.slice(1).join(' '));
   if (SHELLS.has(name)) {
     const c = rest.findIndex(w => /^-[a-z]*c[a-z]*$/.test(w));
     const script = c === -1 ? undefined : rest[c + 1];
-    if (script !== undefined) return splitCommands(script);
+    if (script !== undefined) return splitCommandsMarked(script);
   }
-  return [[name, ...rest.slice(1)]];
+  return [[name, ...words.slice(k + 1)]];
 }

@@ -7,7 +7,7 @@ import { guard, infraApprove, infraList, infraRevoke, infraRun } from '../src/co
 import { readRolesConfig, type ConfigSource, type InfraEnv } from '../src/config.ts';
 import { commandOf, guardSettings, judge, hitsWords, judgeWrite, touched, writeOf, type Approval } from '../src/guard.ts';
 import type { RoleName } from '../src/protocol.ts';
-import { splitCommands, SUBSTITUTED } from '../src/shell.ts';
+import { splitCommands, splitCommandsMarked, SUBSTITUTED } from '../src/shell.ts';
 import { world } from './helpers.ts';
 import { withoutRosterEnv } from '../src/env.ts';
 
@@ -24,12 +24,17 @@ describe('splitCommands', () => {
     expect(splitCommands('a=$(b c) d "`e`"\nbash -c \'f; g\'\ncat <<\'E\'\nh i\nE\nj # k')).toEqual([
       ['b', 'c'],
       ['e'],
-      ['d', SUBSTITUTED],
+      ['d', ''],
       ['f'],
       ['g'],
       ['cat'],
       ['j'],
     ]);
+  });
+
+  test('置き換えの跡の印は splitCommandsMarked だけが残す（頭は印を除いた字で整える）', () => {
+    expect(splitCommands('sudo$(true) pkill$(true) -f x"$(y)":/d')).toEqual([['true'], ['true'], ['y'], ['pkill', '-f', 'x:/d']]);
+    expect(splitCommandsMarked('sudo$(true) pkill$(true) -f x"$(y)":/d')).toEqual([['true'], ['true'], ['y'], ['pkill', '-f', `x${SUBSTITUTED}:/d`]]);
   });
 });
 
@@ -474,8 +479,12 @@ describe('pattern で process に合図を送る命令（台帳 #89・#92）', (
     'sh -c "pkill -f x"',
     'x=$(killall -s x)',
     'ROSTER_RAW=1 pkill -f x',
-    // 命令の名の途中の置き換え（t-ta2b の review-2 の指摘 2）。
+    // 命令の名・前置き・-c の途中の置き換え（t-ta2b の review-2 の指摘 2・review-3 の指摘 1）。
     'pkill$(true) -f foo',
+    'sudo$(true) pkill -f x',
+    'nohup$(true) pkill -f x',
+    'pgrep x | xargs$(true) kill',
+    'sh -c$(true) \'pkill -f x\'',
     // kill でも、的を名指さない物は、pattern で選んだ物にまとめて送るのと同じ。
     'pgrep -f x | xargs kill',
     'pgrep -f x | xargs kill -9',
@@ -635,6 +644,8 @@ describe('Staff Engineer 担当は repo を変えない', () => {
     ['ROSTER_RAW=1 git push', false],
     // 命令の名の途中の置き換え（t-ta2b の review-2 の指摘 2）。
     ['git$(true) push', false],
+    ['git push$(true)', false],
+    ['gh pr$(true) merge 141 --squash', false],
   ])('%s', (command, allow) => {
     expect(ask(command, 'staff-engineer').allow).toBe(allow);
   });
@@ -1074,6 +1085,18 @@ describe('旗の書き方をそろえて読む（t-ta2b。台帳 #300）', () =>
     // 命令の名の途中の置き換え（review-2 の指摘 2）。
     'container$(true) stop castlist.box',
     'timeout 60 container$(true) stop castlist.box',
+    // 動詞・旗の途中の置き換え（review-3 の指摘 1）。
+    'container stop$(true) castlist.box',
+    'container run -d --name$(true) castlist.box ghcr.io/uraitakahito/castlist:v2.0.0',
+    'container run -d --name$(true) "$N" ghcr.io/uraitakahito/castlist:v2.0.0',
+    // source の無い mount の値の途中の変数（review-3 の指摘 2）。
+    'container run --rm --mount "type=volume,target=/data,$S" docker.io/library/alpine:3.22 sh',
+    // \ と改行で続けた here-document・ssh の中（review-3 の指摘 3）。
+    'bash <<\'X\'\ncontainer run --rm \\\n  --volume=castlist-data-v1:/data docker.io/library/alpine:3.22 sh\nX',
+    'ssh host \'container run --rm \\\n  --mount type=volume,source=castlist-data-v1,target=/data docker.io/library/alpine:3.22 sh\'',
+    'ssh host \'container run --rm \\\n  -v "$V":/data docker.io/library/alpine:3.22 sh\'',
+    // 字を出す命令でも、字を動かす命令と並べば読む。
+    'cat <<\'X\' | sh\ncontainer run --rm --volume=castlist-data-v1:/data docker.io/library/alpine:3.22 sh\nX',
     // 値の無い --mount（review-2 の指摘 3）。
     'echo \'type=volume,source=castlist-data-v1,target=/data docker.io/library/alpine:3.22 sh\' | xargs container run --rm --mount',
     // 空でありうる path の変数の後ろに字が続く（review-2 の指摘 4）。
@@ -1097,6 +1120,11 @@ describe('旗の書き方をそろえて読む（t-ta2b。台帳 #300）', () =>
     'for n in a b; do container logs "$n" | grep -v "$n"; done',
     'container ls; echo "--name $N"',
     'mkdir -pv "$OUT" && container ls',
+    // PR の本文と commit の文（字を動かさない命令の引数と here-document。review-3 の指摘 4）。
+    'gh pr create --title x --body "container run -d --name \\"$N\\" は止まる"',
+    'gh pr create --title x --body \'container run --volume=castlist-data-v1:/data は止まる\'',
+    'git commit -F - <<\'EOF\'\ncontainer run -v "$V":/data を止める\nEOF',
+    'gh pr create --title x --body "$(cat <<\'EOF\'\ncontainer run -d --name "$N" は止まる\nEOF\n)"',
     'container run --rm -v /tmp/x:/x docker.io/library/alpine:3.22 sh',
     'container run --rm --name "test-$N" docker.io/library/alpine:3.22 sh',
     // 字の頭も終わりも読む（"$N"x は、字の分け方が引用の切れ目を持たないので $Nx の 1 つの変数に読み、止まる側に倒れる）。
