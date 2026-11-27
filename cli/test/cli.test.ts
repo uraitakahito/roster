@@ -8,6 +8,8 @@ import { beforeAll, describe, expect, test, vi } from 'vitest';
 import { missingCastlistWarning } from '../src/castlist.ts';
 import { composeRolesConfig } from '../src/config.ts';
 import { buildProgram, commandPaths, runProgram } from '../src/program.ts';
+import { REPLY_LANGUAGE } from '../src/command.ts';
+import { shellQuote } from '../src/shell.ts';
 import { COMMANDS } from '../src/protocol.ts';
 import { TpmError } from '../src/skill-sets.ts';
 import { withoutRosterEnv } from '../src/env.ts';
@@ -19,7 +21,7 @@ const entry = join(cli, 'bin', 'roster');
 /** 席に付く、メッセージを渡す hook の字（待つ命令と、Bash の後に渡す命令）。 */
 const waiting = `{"type":"command","async":true,"asyncRewake":true,"timeout":86400,"command":"${root}/cli/bin/roster mail wait"}`;
 const gate = `[{"matcher":"Bash","hooks":[{"type":"command","command":"${root}/cli/bin/roster mail gate"}]}]`;
-const head = `PATH=${root}/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"${root}/cli/bin/roster guard"}]}],"SessionStart":[{"hooks":[{"type":"command","command":"${root}/cli/bin/roster castlist session-start"},{"type":"command","command":"${root}/cli/bin/roster mail claim"},${waiting}]}],"SessionEnd":[{"hooks":[{"type":"command","command":"${root}/cli/bin/roster castlist session-end"},{"type":"command","command":"${root}/cli/bin/roster mail release"}]}],"PostToolUse":${gate},"PostToolUseFailure":${gate},"Stop":[{"hooks":[${waiting}]}],"UserPromptSubmit":[{"hooks":[{"type":"command","command":"${root}/cli/bin/roster mail prompt"}]}]}}'`;
+const head = `PATH=${root}/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"${root}/cli/bin/roster guard"}]}],"SessionStart":[{"hooks":[{"type":"command","command":"${root}/cli/bin/roster castlist session-start"},{"type":"command","command":"${root}/cli/bin/roster mail claim"},${waiting}]}],"SessionEnd":[{"hooks":[{"type":"command","command":"${root}/cli/bin/roster castlist session-end"},{"type":"command","command":"${root}/cli/bin/roster mail release"}]}],"PostToolUse":${gate},"PostToolUseFailure":${gate},"Stop":[{"hooks":[${waiting}]}],"UserPromptSubmit":[{"hooks":[{"type":"command","command":"${root}/cli/bin/roster mail prompt"}]}]}}' --append-system-prompt ${shellQuote(REPLY_LANGUAGE)}`;
 let scratch: string;
 const mkdirp = (dir: string): string => {
   mkdirSync(dir, { recursive: true });
