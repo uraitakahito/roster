@@ -45,7 +45,7 @@ function seat(answers: Record<string, ExecResult[]>) {
 }
 
 /** PR の head（pr view）と branch の先（gh api …/commits/heads/…）の答え。既定は、どちらも new（追いついている）。 */
-const head = (oid: string): ExecResult => ok({ headRefOid: oid, headRefName: 't-x/b', headRepository: { name: 'r' }, headRepositoryOwner: { login: 'o' } });
+const head = (oid: string, state = 'OPEN', headRefName = 't-x/b'): ExecResult => ok({ state, headRefOid: oid, headRefName, headRepository: { name: 'r' }, headRepositoryOwner: { login: 'o' } });
 const tip = (sha: string): ExecResult => ({ status: 0, stdout: `${sha}\n`, stderr: '' });
 /** watch pr の席: PR の head は、既定で branch の先に追いついている。 */
 const prSeat = (answers: Record<string, ExecResult[]>) => seat({ 'pr view': [head('new')], 'api': [tip('new')], ...answers });
@@ -58,7 +58,7 @@ describe('roster watch pr', () => {
     // 聞く間は、初めは短く、だんだん空ける。みな終わったのを見た後、間を空けてもう 1 度見てから終える。
     expect(s.slept).toEqual([20_000, 30_000, 45_000]);
     expect(s.asked.slice(0, 3)).toEqual([
-      `gh pr view ${PR} --json headRefOid,headRefName,headRepository,headRepositoryOwner`,
+      `gh pr view ${PR} --json state,headRefOid,headRefName,headRepository,headRepositoryOwner`,
       'gh api repos/o/r/commits/heads/t-x/b -q .sha',
       `gh pr checks ${PR} --json name,bucket,link`,
     ]);
@@ -199,9 +199,29 @@ describe('roster watch pr', () => {
     expect((await watchPr(s.ctx, PR, { timeout: 0 })).code).toBe(WATCH_EXIT.passed);
     const missing = seat({ 'pr view': [head('old')], 'api': [{ status: 1, stdout: '', stderr: 'gh: Not Found (HTTP 404)' }], 'pr checks': [checks(1, 'fail')] });
     expect((await watchPr(missing.ctx, PR, { timeout: 0 })).code).toBe(WATCH_EXIT.failed);
-    const fork = seat({ 'pr view': [ok({ headRefOid: 'old', headRefName: 'b', headRepository: null, headRepositoryOwner: { login: 'f' } })], 'pr checks': [checks(0, 'pass')] });
+    const fork = seat({ 'pr view': [ok({ state: 'OPEN', headRefOid: 'old', headRefName: 'b', headRepository: null, headRepositoryOwner: { login: 'f' } })], 'pr checks': [checks(0, 'pass')] });
     expect((await watchPr(fork.ctx, PR, { timeout: 0 })).code).toBe(WATCH_EXIT.passed);
     expect(fork.asked.some(a => a.startsWith('gh api'))).toBe(false);
+  });
+
+  test('merge・close した PR は、branch の先が進んでいても比べずに check で判じる（GitHub は head を止める）', async () => {
+    for (const state of ['MERGED', 'CLOSED']) {
+      const s = seat({ 'pr view': [head('old', state)], 'pr checks': [checks(0, 'pass')] });
+      expect((await watchPr(s.ctx, PR, { timeout: 0 })).code).toBe(WATCH_EXIT.passed);
+      expect(s.asked.some(a => a.startsWith('gh api'))).toBe(false);
+    }
+  });
+
+  test('head の repo を読めない（上限でない 403）時は、見張れないにせず、比べずに check で判じる', async () => {
+    const denied: ExecResult = { status: 1, stdout: '', stderr: 'gh: Resource protected by organization SAML enforcement. (HTTP 403)' };
+    const s = seat({ 'pr view': [head('old')], 'api': [denied], 'pr checks': [checks(0, 'pass')] });
+    expect((await watchPr(s.ctx, PR, { timeout: 0 })).code).toBe(WATCH_EXIT.passed);
+  });
+
+  test('branch の名の # ・ ? ・ % は、片ごとに encode して path に入れる（/ は残す）', async () => {
+    const s = seat({ 'pr view': [head('new', 'OPEN', 'fix/a#12?b%c')], 'api': [tip('new')], 'pr checks': [checks(0, 'pass')] });
+    await watchPr(s.ctx, PR, { timeout: 0 });
+    expect(s.asked).toContain('gh api repos/o/r/commits/heads/fix/a%2312%3Fb%25c -q .sha');
   });
 
   test('比べの答え（pr view・branch の先）が 5xx・繋がらない・上限の時は、比べずに進まず、聞き直す', async () => {

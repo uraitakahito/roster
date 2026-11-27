@@ -97,33 +97,39 @@ export function lookChecks(exec: Exec, pr: PrRef): Look {
   return { state: 'passed', total: checks.length };
 }
 
-/** `gh pr view --json headRefOid,headRefName,headRepository,headRepositoryOwner` の答え（読む欄だけ）。 */
+/** `gh pr view --json state,headRefOid,headRefName,headRepository,headRepositoryOwner` の答え（読む欄だけ）。 */
 interface HeadView {
+  state?: string
   headRefOid?: string
   headRefName?: string
   headRepository?: { name?: string } | null
   headRepositoryOwner?: { login?: string } | null
 }
 
-/** branch の先を引いた時に、比べずに進む答え（branch が無い: merge して消した・fork が消えた）。 */
-const NO_BRANCH = /HTTP 404|HTTP 422|No commit found/i;
+/**
+ * branch の先を引いた時に、比べずに進む答え。branch が無い（merge して消した・fork が消えた）・head の repo を読めない（上限でない 403。別の org の SAML・token の範囲の外）。
+ * 比べは助けの手なので、読めない時は前のとおり check で判じる（見張れない、にしない）。
+ */
+const NO_BRANCH = /HTTP 404|HTTP 422|HTTP 403|No commit found/i;
 
 /**
  * PR の head が、push した branch の先に追いついているかを 1 回見る（台帳 #340）。
  * push の直後は、PR の head（headRefOid）が前の commit のままで、`gh pr checks` が前の commit の check（落ちた回など）を返す。
  * - 追いついていない: pending（behind）。check は見ない。
- * - 追いついている・branch が無い・head の repo が無い: undefined（今のとおり check で判じる）。
+ * - 追いついている・PR が開いていない・branch が無い・head の repo が無いか読めない: undefined（今のとおり check で判じる）。
+ *   merge・close した PR は、GitHub が head を止めるが branch は進みうるので、比べない（比べると、いつまでも追いつかない）。
  * - GitHub が応えない（5xx・繋がらない・上限）: unreachable（聞き直す。比べずに進むと、揺れた時に #340 が戻る）。
  */
 export function lookHead(exec: Exec, pr: PrRef): Look | undefined {
-  const v = exec('gh', ['pr', 'view', pr.url, '--json', 'headRefOid,headRefName,headRepository,headRepositoryOwner']);
+  const v = exec('gh', ['pr', 'view', pr.url, '--json', 'state,headRefOid,headRefName,headRepository,headRepositoryOwner']);
   if (v.status !== 0) return failure(v.status, v.stderr, v.stdout);
   const view = parsed<HeadView>(v.stdout);
   if (typeof view?.headRefOid !== 'string' || typeof view.headRefName !== 'string') return { state: 'unreachable', message: 'gh pr view の答えを読めない' };
+  if (view.state !== 'OPEN') return undefined;
   const owner = view.headRepositoryOwner?.login;
   const name = view.headRepository?.name;
   if (owner === undefined || name === undefined) return undefined;
-  const t = exec('gh', ['api', `repos/${owner}/${name}/commits/heads/${view.headRefName}`, '-q', '.sha']);
+  const t = exec('gh', ['api', `repos/${owner}/${name}/commits/heads/${view.headRefName.split('/').map(encodeURIComponent).join('/')}`, '-q', '.sha']);
   if (t.status !== 0) {
     if (!LIMITED.test(t.stderr) && NO_BRANCH.test(t.stderr)) return undefined;
     return failure(t.status, t.stderr, t.stdout);
