@@ -57,7 +57,7 @@ flowchart TB
 | `incidents/<番号>.jsonc` | 台帳。思わぬ出来事（信頼性・安全性・効率性が落ちた時）の 1 件 1 ファイル。書いた担当・種類・起きた事実・tag・扱い（未決・振った・調べない・済み）と、結んだ振り先・PR |
 | `waits/<宛先>.jsonc` | 居場所が最後に打った `roster wait` の種類と時刻。バナーの hook が「この回に `roster wait pm` を打ったか」を見る |
 | `sessions/<session の id>.jsonc`・`launches/<起こしの id>.jsonc` | castlist に登録した session の本当の id と名・稼働中か・送った出来事の番号・最後に送った見た model と effort・写し（Claude Code の session の記録）の path（[アクターの台帳](#アクターの台帳castlist)）と、起こし 1 回の session の並び。castlist を設定した project にだけある |
-| `usage/<session の id>.jsonc`・`usage/checked.jsonc`・`usage-refused.jsonl` | トークンの数と費えの取り込み（[下](#トークンの数と費え)）の控え: 写しの file ごとの読んだ所・数えた応答の id・送った行の数・送る前に書く「送る行」と、片付けが判じた時刻、castlist が断った行の記録。数だけを持ち、会話の字は持たない |
+| `usage/<session の id>.jsonc`・`usage/<session の id>.lock`・`usage/checked.jsonc`・`usage-refused.jsonl` | トークンの数と費えの取り込み（[下](#トークンの数と費え)）の控え: 写しの file ごとの読んだ所・数えた応答の id・送った行の数・送る前に書く「送る行」と、席ごとの鍵、片付けが判じた時刻・次に聞いてよい時刻・次に回る席、castlist が断った行の記録。数だけを持ち、会話の字は持たない |
 | `banner/last-turn/<宛先>.jsonc`・`banner.jsonl` | バナーの hook が覚える、居場所の前の「答え終わった」の時刻と、決めたことの記録 |
 
 1 件 1 ファイルの物は、`config.jsonc` と同じく JSONC（コメントと末尾のカンマを許す JSON）として読む。`roster` は読んだ値を書き直すので、手で足したコメントは書き直しで消える。足していく記録は 1 行 1 件の JSON（JSON Lines）のまま。記録（`*.jsonl`）は、後から「何が・いつ・誰の手で起きたか」を言うための証拠で、`roster` は消さない（`banner.jsonl` だけは 7 日）。メッセージや命令の字が入るので、roster を動かす機械の外（課題のコメント・PR の本文）には写さない。古い名の `*.json` が残っていれば、`roster` が最初に動いたときに `*.jsonc` に名前を替えて移す。
@@ -146,12 +146,12 @@ flowchart TB
 - **いつ送るか**（どれも、誤りでも呼んだ命令を止めない）:
   - 席が閉じる時（SessionEnd の hook の `roster castlist session-end`）。
   - 席を閉じる命令（`roster close`。閉じる前に送る。閉じた後の hook が届くかは、閉じ方による）。
-  - TPM 担当の側の片付け（TPM 担当が名乗る時と、送る命令を打つ時）。1 時間に 1 度、まだ送っていない席をみな見る（1 回に掛けるのは 3 秒まで。残りは次の命令で続ける）。長く続く TPM 担当の席・hook が届かなかった席・前の版で起こした席を、ここで拾う。
+  - TPM 担当の側の片付け（TPM 担当が名乗る時と、送る命令を打つ時）。1 時間に 1 度、まだ送っていない席をみな見る。長く続く TPM 担当の席・hook が届かなかった席・前の版で起こした席を、ここで拾う。1 回に掛けるのは 3 秒まで（1 つの送りを待つのも、残りの時間まで）で、残りは次の命令で、止めた席から続ける。castlist が答えない・混んでいる時は、5 分の間、聞き直さない（TPM 担当の命令のたびに、送りの時間切れを待たない）。席は、起こしごとに、起こしの控えの並び（古い順）で回る。
   - 手で流すなら `roster castlist usage`。
 - **写しの在り処**: その席の hook の入力（`transcript_path`）から、席の控え（`sessions/<session の id>.jsonc` の `transcript`）に書く。控えに無い席は、Claude Code の置き場（`$CLAUDE_CONFIG_DIR`。無ければ `~/.claude`）の `projects/*/<session の id>.jsonl` を探す。手伝いの写しは、その隣の `<session の id>/subagents/`。写しは Claude Code が 30 日で消すので、その前に送る（上の片付けが動いていれば、送られる）。
-- **2 度数えない**: 1 つの応答は、写しの中で何行にも分かれる（間に別の行を挟む）ので、応答の id で 1 つにする。数えた応答の id は控え（`usage/<session の id>.jsonc`）に持ち、読みを分けた時と、同じ起こしのほかの session の写し（resume・fork で写された行）で、同じ応答を除く。
+- **2 度数えない**: 1 つの応答は、写しの中で何行にも分かれる（間に別の行を挟む）ので、応答の id で 1 つにする。数えた応答の id（送る途中の控えの物も）は控え（`usage/<session の id>.jsonc`）に持ち、読みを分けた時と、同じ起こしのほかの session の写し（resume・fork で写された行）で、同じ応答を除く。同じ席を 2 つの process（席の hook と TPM 担当の片付け）が同時に取り込まないよう、席ごとの鍵（`usage/<session の id>.lock`。10 分より古い物は、落ちて残った物とみなして取り直す）を取る。
 - **送り直し**: 送る前に、送る行（id・送り手の時刻・本文）を控えに書く。途中で落ちたら、次の回に、同じ id・同じ本文で送り直す（castlist は、同じ id で同じ本文なら足さない）。行の id は `u-<issuer の hash>-<session>-<番号>`。castlist が断った行（形の誤り・同じ id で違う本文）は、`usage-refused.jsonl` に残して先へ進む。数の口を持たない版の castlist（2.0.0 まで）には、何も残さず、1 時間後に聞き直す。
-- **突き合わせ**: `roster castlist usage-check [--from <時刻>] [--to <時刻>]` が、窓（既定は 31 日前〜1 時間前。端は時の境）の内の回を、写しから直に数えた値と、castlist の行の合計を、席ごとに並べる（読むだけ）。違う席・写しが見つからない席・値段の表に無い model・castlist が断った行の数を出す。
+- **突き合わせ**: `roster castlist usage-check [--from <時刻>] [--to <時刻>]` が、窓（既定は 31 日前〜1 時間前。端は時の境）の内の回を、写しから直に数えた値と、castlist の行の合計を、席ごとに並べる（読むだけ）。違う席・写しが見つからない席・値段の表に無い model・castlist が断った行の数を出す。同じ起こしの session が分け合う回は、取り込みが付けた席（その席の控えの id）に数える。
 - **圧縮の出来事**: 要約（`compacted`）の `detail` に、写しの圧縮の印の欄をそのまま載せる（`trigger`（自動か人か）・`preTokens`・`postTokens`。読めなければ空）。
 
 ### 監査の検索を読む

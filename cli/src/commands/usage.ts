@@ -53,6 +53,14 @@ export type Pushed = { kind: 'ok', sent: number } | { kind: 'none' } | { kind: '
 const CHECK_FILE = 'usage/checked.jsonc';
 /** 片付けの間（ミリ秒）。 */
 export const USAGE_CHECK_EVERY_MS = 60 * 60 * 1000;
+/** castlist が答えない・混んでいる時に、片付けが聞き直すまで待つ長さ（ミリ秒）。 */
+export const USAGE_RETRY_MS = 5 * 60 * 1000;
+/** 片付けの控え: 判じた時刻・次に聞いてよい時刻（無ければ at の 1 時間後）・次に回る席。 */
+interface UsageCheck {
+  at: string
+  retryAt?: string
+  next?: string
+}
 /** 片付け 1 回に掛けてよい時間（ミリ秒）。過ぎたら、残りは次の回に回す。 */
 export const USAGE_BUDGET_MS = 3000;
 /** castlist が断った行の記録。 */
@@ -135,11 +143,21 @@ function idOf(ctx: Pick<Context, 'state'>, sid: string, n: number): string {
   return `u-${createHash('sha256').update(issuerOf(ctx)).digest('hex').slice(0, 8)}-${sid}-${n}`;
 }
 
-/** 同じ起こしの、ほかの session が数えた応答の id（resume・fork で写された行を、2 度数えないため）。 */
+/** その控えが数えた応答の id（送り終えた物と、控えて送る途中の物）。 */
+const countedIds = (state: UsageState): string[] => [...state.ids, ...state.pending?.ids ?? []];
+
+/** 同じ起こしの session（起こしの控えの並び。古い順）。起こしが無ければ、その session だけ。 */
+function launchSessions(ctx: Pick<Context, 'state'>, seat: Pick<SeatRecord, 'session' | 'launch'>): string[] {
+  if (seat.launch === undefined) return [seat.session];
+  return ctx.state.read<{ sessions?: string[] }>(`launches/${safe(seat.launch)}.jsonc`)?.sessions ?? [seat.session];
+}
+
+/**
+ * 同じ起こしの、ほかの session が数えた応答の id（resume・fork で写された行を、2 度数えないため）。
+ * 送る途中の控え（pending）の id も入れる（castlist が止まっている間に控えた回を、ほかの session が先に送らないため）。
+ */
 function siblingIds(ctx: Pick<Context, 'state'>, seat: SeatRecord): string[] {
-  if (seat.launch === undefined) return [];
-  const launched = ctx.state.read<{ sessions?: string[] }>(`launches/${safe(seat.launch)}.jsonc`);
-  return (launched?.sessions ?? []).filter(s => s !== seat.session).flatMap(s => readUsageState(ctx, s).ids);
+  return launchSessions(ctx, seat).filter(s => s !== seat.session).flatMap(s => countedIds(readUsageState(ctx, s)));
 }
 
 /** 送る行の控えを外した控え。 */
@@ -152,10 +170,10 @@ function bodyOf(sid: string, row: UsageRow): UsageInput {
 }
 
 /** 控えた行を送る。みな送れたら ok。途中で止まったら、その訳（控えは残す）。断られた行は、記録して先へ進む。 */
-async function sendPending(ctx: Context, url: string, state: UsageState): Promise<'ok' | 'down' | 'busy' | 'old'> {
+async function sendPending(ctx: Context, url: string, state: UsageState, wait?: () => number): Promise<'ok' | 'down' | 'busy' | 'old'> {
   const rows = state.pending?.rows ?? [];
   for (const [index, pending] of rows.entries()) {
-    const reply: Reply = await putUsage(ctx, url, pending.id, bodyOf(state.session, pending.row), new Date(pending.sentAt));
+    const reply: Reply = await putUsage(ctx, url, pending.id, bodyOf(state.session, pending.row), new Date(pending.sentAt), wait?.());
     if (reply.kind === 'down' || reply.kind === 'busy') return reply.kind;
     if (reply.kind === 'refused') {
       // 数の口を持たない版の castlist（404）: 初めの行なら、何も足されていないので、控えを捨てて次の回に読み直す。
@@ -171,13 +189,40 @@ async function sendPending(ctx: Context, url: string, state: UsageState): Promis
  * 席 1 つの取り込み。写しの、まだ読んでいない所から回を読み、行にまとめて castlist へ送る。
  * 送る前に、送る行を控えに書く（pending）。前の回の pending が残っていれば、先にそれを送る。
  */
-export async function pushUsage(ctx: Context, url: string, sid: string): Promise<Pushed> {
+export async function pushUsage(ctx: Context, url: string, sid: string, wait?: () => number): Promise<Pushed> {
   const seat = ctx.state.read<SeatRecord>(`sessions/${safe(sid)}.jsonc`);
   if (seat === undefined) return { kind: 'none' };
+  // 席ごとの鍵（席の hook と TPM 担当の片付けが、同じ席を同時に読んで、同じ回を 2 度送らないため）。取れなければ、その席は飛ばす。
+  if (!takeLock(ctx, sid)) return { kind: 'none' };
+  try {
+    return await pushLocked(ctx, url, seat, wait);
+  }
+  finally {
+    ctx.state.remove(lockFile(sid));
+  }
+}
+
+/** 鍵の file。 */
+const lockFile = (sid: string): string => `usage/${safe(sid)}.lock`;
+/** 鍵を、取った process が落ちて残した物とみなすまでの長さ（ミリ秒）。 */
+const LOCK_STALE_MS = 10 * 60 * 1000;
+
+/** 席の鍵を取る。残った鍵（LOCK_STALE_MS より古い）は、取り直す。 */
+function takeLock(ctx: Pick<Context, 'state' | 'now'>, sid: string): boolean {
+  const now = ctx.now();
+  if (ctx.state.create(lockFile(sid), { at: now.toISOString(), pid: process.pid })) return true;
+  const held = ctx.state.read<{ at?: string }>(lockFile(sid))?.at;
+  if (held === undefined || now.getTime() - Date.parse(held) < LOCK_STALE_MS) return false;
+  ctx.state.remove(lockFile(sid));
+  return ctx.state.create(lockFile(sid), { at: now.toISOString(), pid: process.pid });
+}
+
+async function pushLocked(ctx: Context, url: string, seat: SeatRecord, wait?: () => number): Promise<Pushed> {
+  const sid = seat.session;
   let state = readUsageState(ctx, sid);
   let sent = 0;
   if (state.pending !== undefined) {
-    const result = await sendPending(ctx, url, state);
+    const result = await sendPending(ctx, url, state, wait);
     if (result === 'old') {
       ctx.state.write(stateFile(sid), withoutPending(state));
       return { kind: 'old' };
@@ -211,7 +256,7 @@ export async function pushUsage(ctx: Context, url: string, sid: string): Promise
   const at = ctx.now().toISOString();
   state = { ...state, pending: { rows: rows.map((row, i) => ({ id: idOf(ctx, sid, state.n + i + 1), sentAt: at, row })), files, ids } };
   ctx.state.write(stateFile(sid), state);
-  const result = await sendPending(ctx, url, state);
+  const result = await sendPending(ctx, url, state, wait);
   if (result === 'old') {
     ctx.state.write(stateFile(sid), withoutPending(state));
     return { kind: 'old' };
@@ -222,9 +267,9 @@ export async function pushUsage(ctx: Context, url: string, sid: string): Promise
 }
 
 /** 誤りを呑んで、取り込みを 1 つ流す（hook と、席を閉じる命令から。呼んだ命令を止めない）。 */
-async function quietPush(ctx: Context, url: string, sid: string): Promise<Pushed> {
+async function quietPush(ctx: Context, url: string, sid: string, wait?: () => number): Promise<Pushed> {
   try {
-    return await pushUsage(ctx, url, sid);
+    return await pushUsage(ctx, url, sid, wait);
   }
   catch (e) {
     process.stderr.write(`roster: トークンの数の取り込み（${sid}）: ${(e as Error).message}\n`);
@@ -250,16 +295,47 @@ export async function pushLaunch(ctx: Context, role: RoleRecord): Promise<void> 
 }
 
 /**
- * まだ送っていない席を、みな取り込む。budgetMs を過ぎたら、残りは次の回（done は false）。castlist が応えない・古い版なら、そこでやめる。
+ * 席を回る順: 起こしごとに、起こしの控えの並び（古い順）。同じ起こしの session が写しを分け合う時（fork）、分け合う回は、先に起こした session に付く。
+ * from（前の回に、時間の上限で止めた所）が在れば、その席から回る。
  */
-export async function sweepUsage(ctx: Context, url: string, budgetMs: number): Promise<{ sent: number, done: boolean, stopped?: 'down' | 'busy' | 'old' }> {
+export function sweepOrder(ctx: Pick<Context, 'state'>, from?: string): string[] {
+  const names = ctx.state.list('sessions');
+  const known = new Set(names);
+  const ordered: string[] = [];
+  const placed = new Set<string>();
+  for (const name of names) {
+    if (placed.has(name)) continue;
+    const seat = ctx.state.read<SeatRecord>(`sessions/${name}.jsonc`);
+    for (const sid of seat === undefined ? [name] : launchSessions(ctx, seat)) {
+      const s = safe(sid);
+      if (known.has(s) && !placed.has(s)) {
+        placed.add(s);
+        ordered.push(s);
+      }
+    }
+    if (!placed.has(name)) {
+      placed.add(name);
+      ordered.push(name);
+    }
+  }
+  const at = from === undefined ? -1 : ordered.indexOf(from);
+  return at <= 0 ? ordered : [...ordered.slice(at), ...ordered.slice(0, at)];
+}
+
+/**
+ * まだ送っていない席を、みな取り込む。budgetMs を過ぎたら、残りは次の回（done は false・next は次に回る席）。castlist が応えない・古い版なら、そこでやめる。
+ * 1 つの送りを待つのも、残りの時間まで（castlist が繋がりを受けたまま答えない時に、上限を越えて待たない）。
+ */
+export async function sweepUsage(ctx: Context, url: string, budgetMs: number, from?: string): Promise<{ sent: number, done: boolean, next?: string, stopped?: 'down' | 'busy' | 'old' }> {
   const started = Date.now();
+  const left = (): number => Math.max(1, Math.ceil((budgetMs - (Date.now() - started)) / 1000));
+  const wait = Number.isFinite(budgetMs) ? left : undefined;
   let sent = 0;
-  for (const name of ctx.state.list('sessions')) {
-    if (Date.now() - started > budgetMs) return { sent, done: false };
-    const pushed = await quietPush(ctx, url, name);
+  for (const name of sweepOrder(ctx, from)) {
+    if (Date.now() - started > budgetMs) return { sent, done: false, next: name };
+    const pushed = await quietPush(ctx, url, name, wait);
     if (pushed.kind === 'ok') sent += pushed.sent;
-    if (pushed.kind === 'down' || pushed.kind === 'busy' || pushed.kind === 'old') return { sent, done: false, stopped: pushed.kind };
+    if (pushed.kind === 'down' || pushed.kind === 'busy' || pushed.kind === 'old') return { sent, done: false, next: name, stopped: pushed.kind };
   }
   return { sent, done: true };
 }
@@ -268,7 +344,7 @@ export async function sweepUsage(ctx: Context, url: string, budgetMs: number): P
  * TPM 担当の側の片付け（TPM 担当が名乗る時と、送る命令を打つ時に呼ぶ）。1 時間に 1 度、まだ送っていない席をみな取り込む。
  * 長く続く TPM 担当の席・席が閉じる時の hook が届かなかった席・前の版で起こした席を、ここで拾う。
  * メッセージの片付け（tidyMail）とは別に判じる（写しの遅れの条件に依らない）。誤りでも、何も出さずに終わる（呼んだ命令を止めない）。
- * みな取り込めた時だけ、判じた時刻を控える（時間の上限で残った分は、次の命令で続ける）。
+ * みな取り込めた時は 1 時間後まで聞かない。時間の上限で残った分は、次の命令で、止めた席から続ける。castlist が答えない・混んでいる時は、5 分待つ。
  */
 export async function tidyUsage(ctx: Context, options: { force?: boolean } = {}): Promise<void> {
   if (envOf(ctx.env, 'KEY') !== undefined) return;
@@ -276,11 +352,18 @@ export async function tidyUsage(ctx: Context, options: { force?: boolean } = {})
     const url = castlistUrl(ctx);
     if (url === undefined) return;
     const now = ctx.now().getTime();
-    const checked = ctx.state.read<{ at: string }>(CHECK_FILE)?.at;
-    if (options.force !== true && checked !== undefined && now - Date.parse(checked) < USAGE_CHECK_EVERY_MS) return;
-    const swept = await sweepUsage(ctx, url, USAGE_BUDGET_MS);
-    // 古い版の castlist は、上がるまで何度聞いても同じなので、1 時間待つ。
-    if (swept.done || swept.stopped === 'old') ctx.state.write(CHECK_FILE, { at: ctx.now().toISOString() });
+    const checked = ctx.state.read<UsageCheck>(CHECK_FILE);
+    if (options.force !== true && checked !== undefined) {
+      if (checked.retryAt !== undefined ? now < Date.parse(checked.retryAt) : now - Date.parse(checked.at) < USAGE_CHECK_EVERY_MS) return;
+    }
+    const swept = await sweepUsage(ctx, url, USAGE_BUDGET_MS, checked?.next);
+    const at = ctx.now().toISOString();
+    // みな回った・古い版の castlist（上がるまで何度聞いても同じ）: 1 時間待つ。
+    if (swept.done || swept.stopped === 'old') ctx.state.write(CHECK_FILE, { at } satisfies UsageCheck);
+    // castlist が答えない・混んでいる: 続けて聞かず、少し待つ（TPM 担当の命令のたびに、送りの時間切れを待たないため）。
+    else if (swept.stopped !== undefined) ctx.state.write(CHECK_FILE, { at: checked?.at ?? at, retryAt: new Date(ctx.now().getTime() + USAGE_RETRY_MS).toISOString(), ...(swept.next === undefined ? {} : { next: swept.next }) } satisfies UsageCheck);
+    // 時間の上限で止めた: 次の命令で、止めた席から続ける。
+    else ctx.state.write(CHECK_FILE, { at: checked?.at ?? at, retryAt: at, ...(swept.next === undefined ? {} : { next: swept.next }) } satisfies UsageCheck);
   }
   catch {
     // 呼んだ命令を止めない。
@@ -336,22 +419,28 @@ export async function usageCheck(ctx: Context, options: { from?: string, to?: st
   const compared: Compared[] = [];
   const missing: string[] = [];
   const unpriced = new Set<string>();
-  // 同じ起こしの session は、写しを分け合うことが在る（resume・fork）。取り込みと同じく、起こしごとに、数えた応答の id を持ち回る。
-  const seenByLaunch = new Map<string, Set<string>>();
-  const seats = ctx.state.list('sessions')
+  // 同じ起こしの session は、写しを分け合うことが在る（resume・fork）。分け合う回は、取り込みが実際に付けた席（その席の控えの id）に数える。
+  // まだ取り込んでいない回は、取り込みと同じ順（sweepOrder。起こしの古い順）で、先に読んだ席に数える。
+  const owner = new Map<string, string>();
+  const seats = sweepOrder(ctx)
     .map(name => ctx.state.read<SeatRecord>(`sessions/${name}.jsonc`))
     .filter((s): s is SeatRecord => s !== undefined);
+  for (const seat of seats) {
+    for (const id of countedIds(readUsageState(ctx, seat.session))) if (!owner.has(id)) owner.set(id, seat.session);
+  }
+  const seenByLaunch = new Map<string, Set<string>>();
   for (const seat of seats) {
     const transcript = transcriptOf(ctx, seat);
     let turns: Turn[] = [];
     if (transcript === undefined) missing.push(seat.name);
     else {
-      const skip = seenByLaunch.get(seat.launch ?? seat.session) ?? new Set<string>();
-      seenByLaunch.set(seat.launch ?? seat.session, skip);
+      const seen = seenByLaunch.get(seat.launch ?? seat.session) ?? new Set<string>();
+      seenByLaunch.set(seat.launch ?? seat.session, seen);
+      const mine = (id: string): boolean => (owner.get(id) ?? (seen.has(id) ? undefined : seat.session)) === seat.session;
       for (const file of [{ path: transcript, agent: undefined }, ...agentFiles(transcript, seat.session)]) {
-        const reading = readTurns(readFrom(file.path, 0).lines, { skip, ...(file.agent === undefined ? {} : { agent: file.agent }) });
-        for (const id of reading.ids) skip.add(id);
-        turns.push(...reading.turns);
+        const reading = readTurns(readFrom(file.path, 0).lines, file.agent === undefined ? {} : { agent: file.agent });
+        turns.push(...reading.turns.filter(t => mine(t.id)));
+        for (const id of reading.ids) seen.add(id);
       }
       turns = turns.filter(t => inWindow(t.at));
     }

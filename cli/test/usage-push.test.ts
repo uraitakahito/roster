@@ -8,7 +8,7 @@ import { sessionEnd, sessionStart, readSession } from '../src/commands/castlist.
 import { guard } from '../src/commands/infra.ts';
 import { hello } from '../src/commands/role-side.ts';
 import { assign, close } from '../src/commands/tpm-side.ts';
-import { pushUsage, readUsageState, sweepUsage, tidyUsage, usageCheck, USAGE_CHECK_EVERY_MS } from '../src/commands/usage.ts';
+import { pushUsage, readUsageState, sweepOrder, sweepUsage, tidyUsage, usageCheck, USAGE_CHECK_EVERY_MS, USAGE_RETRY_MS } from '../src/commands/usage.ts';
 import { startTpm } from '../src/command.ts';
 import type { Context } from '../src/context.ts';
 import { requireRole } from '../src/roster.ts';
@@ -236,6 +236,53 @@ describe('同じ起こしの、ほかの session の写し（resume・fork）', 
     expect(await pushUsage(forked, fake.url, SID2)).toEqual({ kind: 'ok', sent: 1 });
     expect(puts().map(r => [(r.body as { by: string }).by, (r.body as { turns: number }).turns])).toEqual([[`claude.session:${SID2}`, 1]]);
   });
+
+  test('前の session が、castlist の止まっている間に控えて送れていない回も、次の session は 2 度数えない（review-10 の #1）', async () => {
+    const { se, project, transcript } = await launched();
+    await sessionStart(se, startInput('startup', SID, transcript));
+    writeFileSync(transcript, line('m1', '2026-11-20T10:05:00.000Z'));
+    fake.intercept = seen => seen.path.startsWith('/api/usage/') ? 'drop' : undefined;
+    expect(await pushUsage(se, fake.url, SID)).toEqual({ kind: 'down' });
+    fake.intercept = undefined;
+    const forked: Context = { ...se, env: { ...se.env, CLAUDE_CODE_SESSION_ID: SID2 } };
+    const copy = join(project, `${SID2}.jsonl`);
+    writeFileSync(copy, line('m1', '2026-11-20T10:05:00.000Z') + line('m3', '2026-11-20T10:30:00.000Z'));
+    await sessionStart(forked, startInput('fork', SID2, copy));
+    const puts = mark();
+    // fork の席が先に取り込まれても、控えの残った m1 は数えない。
+    expect(await pushUsage(forked, fake.url, SID2)).toEqual({ kind: 'ok', sent: 1 });
+    expect(await pushUsage(se, fake.url, SID)).toEqual({ kind: 'ok', sent: 1 });
+    expect(puts().map(r => [(r.body as { by: string }).by, (r.body as { turns: number }).turns])).toEqual([[`claude.session:${SID2}`, 1], [`claude.session:${SID}`, 1]]);
+  });
+
+  test('片付けは、起こしの古い順に回り、突き合わせも、取り込みが付けた席で数える（review-10 の #4）', async () => {
+    const { tpm, se, project, transcript } = await launched();
+    await sessionStart(se, startInput('startup', SID, transcript));
+    writeFileSync(transcript, line('m1', '2026-11-20T10:05:00.000Z'));
+    const forked: Context = { ...se, env: { ...se.env, CLAUDE_CODE_SESSION_ID: SID2 } };
+    const copy = join(project, `${SID2}.jsonl`);
+    writeFileSync(copy, line('m1', '2026-11-20T10:05:00.000Z') + line('m3', '2026-11-20T10:30:00.000Z'));
+    await sessionStart(forked, startInput('fork', SID2, copy));
+    const order = sweepOrder(tpm);
+    expect(order.indexOf(SID)).toBeLessThan(order.indexOf(SID2));
+    // fork の席が先に閉じて、m1 を持っていった時も、突き合わせは合う。
+    await pushUsage(forked, fake.url, SID2);
+    await pushUsage(se, fake.url, SID);
+    expect((await usageCheck({ ...tpm, now: () => new Date('2026-11-20T13:00:00.000Z') }, {})).at(-1)).toBe('合った: どの席も、回の数と額が一致');
+  });
+});
+
+describe('席の鍵', () => {
+  test('ほかの process が同じ席を取り込んでいる間（鍵が在る）は、その席を飛ばす。落ちて残った古い鍵は、取り直す（review-10 の #3）', async () => {
+    const { se, transcript } = await launched();
+    await sessionStart(se, startInput('startup', SID, transcript));
+    writeFileSync(transcript, line('m1', '2026-11-20T10:05:00.000Z'));
+    se.state.write(`usage/${SID}.lock`, { at: NOW, pid: 1 });
+    expect(await pushUsage(se, fake.url, SID)).toEqual({ kind: 'none' });
+    const later: Context = { ...se, now: () => new Date(Date.parse(NOW) + 11 * 60 * 1000) };
+    expect(await pushUsage(later, fake.url, SID)).toEqual({ kind: 'ok', sent: 1 });
+    expect(se.state.read(`usage/${SID}.lock`)).toBeUndefined();
+  });
 });
 
 describe('席を閉じる命令（roster close）', () => {
@@ -278,17 +325,43 @@ describe('TPM 担当の側の片付け', () => {
     await tidyUsage(later);
     expect(tpm.state.read<{ at: string }>('usage/checked.jsonc')?.at).toBe(NOW);
     fake.intercept = undefined;
-    await tidyUsage(later);
+    // 答えなかった後は、5 分待ってから聞き直す（下の試験）。
+    const retry: Context = { ...tpm, now: () => new Date(Date.parse(NOW) + USAGE_CHECK_EVERY_MS + USAGE_RETRY_MS) };
+    await tidyUsage(retry);
     expect(puts().filter(r => r.status === 201)).toHaveLength(1);
-    expect(tpm.state.read<{ at: string }>('usage/checked.jsonc')?.at).toBe(new Date(Date.parse(NOW) + USAGE_CHECK_EVERY_MS).toISOString());
+    expect(tpm.state.read<{ at: string, retryAt?: string }>('usage/checked.jsonc')).toEqual({ at: new Date(Date.parse(NOW) + USAGE_CHECK_EVERY_MS + USAGE_RETRY_MS).toISOString() });
   });
 
-  test('時間の上限を過ぎたら、残りは次の回に回す', async () => {
+  test('時間の上限を過ぎたら、残りは次の回に回し、次は止めた席から続ける（review-10 の #5）', async () => {
     const { tpm, se, transcript } = await launched();
     await sessionStart(se, startInput('startup', SID, transcript));
     writeFileSync(transcript, line('m1', '2026-11-20T10:05:00.000Z'));
-    expect(await sweepUsage(tpm, fake.url, -1)).toEqual({ sent: 0, done: false });
-    expect(await sweepUsage(tpm, fake.url, 10_000)).toEqual({ sent: 1, done: true });
+    const stopped = await sweepUsage(tpm, fake.url, -1);
+    expect(stopped).toMatchObject({ sent: 0, done: false });
+    expect(sweepOrder(tpm, stopped.next)[0]).toBe(stopped.next);
+    expect(await sweepUsage(tpm, fake.url, 10_000, stopped.next)).toEqual({ sent: 1, done: true });
+  });
+
+  test('castlist が答えない時は、5 分の間、聞き直さない（TPM 担当の命令のたびに待たない。review-10 の #2）', async () => {
+    const { tpm, se, transcript } = await launched();
+    await sessionStart(se, startInput('startup', SID, transcript));
+    writeFileSync(transcript, line('m1', '2026-11-20T10:05:00.000Z'));
+    const t1: Context = { ...tpm, now: () => new Date(Date.parse(NOW) + USAGE_CHECK_EVERY_MS) };
+    let asked = 0;
+    fake.intercept = (seen) => {
+      if (!seen.path.startsWith('/api/usage/')) return undefined;
+      asked += 1;
+      return 'drop';
+    };
+    await tidyUsage(t1);
+    expect(asked).toBe(1);
+    await tidyUsage(t1);
+    await tidyUsage({ ...tpm, now: () => new Date(Date.parse(NOW) + USAGE_CHECK_EVERY_MS + USAGE_RETRY_MS - 1) });
+    expect(asked).toBe(1);
+    fake.intercept = undefined;
+    const puts = mark();
+    await tidyUsage({ ...tpm, now: () => new Date(Date.parse(NOW) + USAGE_CHECK_EVERY_MS + USAGE_RETRY_MS) });
+    expect(puts().filter(r => r.status === 201)).toHaveLength(1);
   });
 });
 

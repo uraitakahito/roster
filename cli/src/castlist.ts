@@ -245,11 +245,11 @@ export interface UsageInput {
 /**
  * トークンの数と費えを 1 行足す（PutUsage。PUT /api/usage/<id>。castlist 2.1.0 から）。
  * 送り手の時刻は、呼ぶ側が渡す（castlist は本文の写しに送り手の時刻も入れるので、送り直す時は、控えた時刻で同じ本文にする）。
- * 同じ id で本文が違えば 409（refused）。数の口を持たない版の castlist は 404（refused）。
+ * 同じ id で本文が違えば 409（refused）。数の口を持たない版の castlist は 404（refused）。wait は待つ秒（REQUEST_TIMEOUT まで）。
  */
-export async function putUsage(ctx: Sender, url: string, id: string, body: UsageInput, sentAt: Date): Promise<Reply> {
+export async function putUsage(ctx: Sender, url: string, id: string, body: UsageInput, sentAt: Date, wait: number = REQUEST_TIMEOUT): Promise<Reply> {
   const issuer = issuerOf(ctx);
-  return viaNext(ctx, url, (client, api, options) => client.send(new api.PutUsageCommand({ usageId: id, issuer, ...body, sentAt }), options), rowOf);
+  return viaNext(ctx, url, (client, api, options) => client.send(new api.PutUsageCommand({ usageId: id, issuer, ...body, sentAt }), options), rowOf, Math.min(wait, REQUEST_TIMEOUT));
 }
 
 /**
