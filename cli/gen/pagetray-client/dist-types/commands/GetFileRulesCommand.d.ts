@@ -24,7 +24,7 @@ declare const GetFileRulesCommand_base: {
     getEndpointParameterInstructions(): import("@smithy/types").EndpointParameterInstructions;
 };
 /**
- * 受ける file の種類と、1 つの大きさの上限（ページの一覧の画面の、file を上げる枠が、送る前に見る）。
+ * 受ける file の種類と、1 つの大きさの上限（callboard のページの一覧の画面の、file を上げる枠が、送る前に見る）。
  * 並びは、置き場が種類を断る時の文と同じ。
  * @example
  * Use a bare-bones client and the command you need to make an API call.

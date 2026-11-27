@@ -23,7 +23,7 @@ export interface GetPageFacetsCommandInput extends GetPageFacetsInput {}
 export interface GetPageFacetsCommandOutput extends GetPageFacetsOutput, __MetadataBearer {}
 
 /**
- * ページの、絞り込みの候補と件数・待ちの数（ページの一覧の画面が、絞り込みの列と操作の帯の数に使う）。
+ * ページの、絞り込みの候補と件数・待ちの数（callboard のページの一覧の画面が、絞り込みの列と操作の帯の数に使う）。
  * どれも、置き場の全部を数える（絞らない）。引数は無い。件数が 0 の値は出さない。
  * - `waiting`・`answered`: Product Manager の返事待ち・答えたページの数。`reviewWaiting`: レビュー待ちのページの数。
  *   `escalated`: TPM 担当に上げて、まだ決まっていないページの数。

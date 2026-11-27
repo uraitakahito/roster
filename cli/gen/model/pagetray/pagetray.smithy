@@ -692,8 +692,8 @@ operation DeletePages {
 /// 番号（`n`）を書かなければ、同じ project・key・語・拡張子の置いた番号と消した番号の最大 + 1（初めは 1）。
 /// 書けば（取り込み）その番号で置き、置いた・消した番号なら 409（何も替えない）。
 /// 送り手は CreatePage と同じ（castlist には、ほかの検査（400・415）の後に聞く）。
-/// 一覧の UI の form から上げた物（守りの層が `Origin` の例外として通した物）は、役割 `product-manager`・workspace 空で残し、
-/// `n`・`createdAt`・`actorIssuer`・`actorRef` を読まない（`role` も書かなくてよい）。ほかの要求は `role` が要る（無ければ 400）。
+/// `role` は、いつも要る（無ければ 400）。browser の中のページからは置けない（守りの層が `Origin` の付いた要求を断る）。
+/// 画面（callboard）の form から上げた file は、callboard が `Origin` を付けずに、役割 `product-manager` で置く。
 @http(method: "POST", uri: "/api/projects/{project}/keys/{key}/files", code: 201)
 @httpRequestTests([
     {
@@ -784,7 +784,7 @@ operation CreateFile {
         @httpQuery("name")
         name: FileName
 
-        /// 置いた担当の役割。一覧の UI から上げる時のほかは要る（無ければ server が 400）。
+        /// 置いた担当の役割。要る（無ければ server が 400）。
         @httpQuery("role")
         role: Name
 
@@ -919,7 +919,7 @@ operation ListFiles {
         @httpQuery("role")
         role: Name
 
-        /// 空（`workspace=`）も条件: workspace を書かずに置いた file（一覧の UI から上げた物も）。
+        /// 空（`workspace=`）も条件: workspace を書かずに置いた file（画面から上げた物も）。
         @httpQuery("workspace")
         workspace: Workspace
 
@@ -1344,7 +1344,7 @@ operation ListMessages {
     ]
 }
 
-/// メッセージの記録の、絞り込みの候補と件数（メッセージの一覧の画面が、絞り込みの列と「まだ届いていない n 件」に使う）。
+/// メッセージの記録の、絞り込みの候補と件数（callboard のメッセージの一覧の画面が、絞り込みの列と「まだ届いていない n 件」に使う）。
 /// どの並びも、置き場の全部を数える（絞らない）。件数が 0 の値は出さない（下の、引数に書いた値を除く）。
 /// - `states`: 状態ごとの数。`waiting`・`delivered`・`undeliverable`・`expired`・`carried` の順。
 /// - `to`・`from`: 受け手・送り手の名ごとの数。件数の多い順（同じなら名の順）に 100 まで。
@@ -1442,7 +1442,7 @@ operation GetMessageFacets {
     ]
 }
 
-/// ページの、絞り込みの候補と件数・待ちの数（ページの一覧の画面が、絞り込みの列と操作の帯の数に使う）。
+/// ページの、絞り込みの候補と件数・待ちの数（callboard のページの一覧の画面が、絞り込みの列と操作の帯の数に使う）。
 /// どれも、置き場の全部を数える（絞らない）。引数は無い。件数が 0 の値は出さない。
 /// - `waiting`・`answered`: Product Manager の返事待ち・答えたページの数。`reviewWaiting`: レビュー待ちのページの数。
 ///   `escalated`: TPM 担当に上げて、まだ決まっていないページの数。
@@ -1557,7 +1557,7 @@ operation GetPageFacets {
 }
 
 /// 名指したページ（`target`。ページの path）を見たレビューのページ（種類が `review` で、見た物にその path を書いた物）。
-/// 置いた古い順。ページの一覧の画面が、行の下に「レビュー」の link と判定を出すのに使う。
+/// 置いた古い順。callboard のページの一覧の画面が、行の下に「レビュー」の link と判定を出すのに使う。
 /// - `target` は 1 つから 200 まで（無ければ・超えれば 400）。path の形は見ない（置き場に無い path には、何も返さない）。
 @readonly
 @http(method: "GET", uri: "/api/reviews")
@@ -1615,7 +1615,7 @@ operation ListReviews {
     ]
 }
 
-/// 受ける file の種類と、1 つの大きさの上限（ページの一覧の画面の、file を上げる枠が、送る前に見る）。
+/// 受ける file の種類と、1 つの大きさの上限（callboard のページの一覧の画面の、file を上げる枠が、送る前に見る）。
 /// 並びは、置き場が種類を断る時の文と同じ。
 @readonly
 @http(method: "GET", uri: "/api/files/rules")
