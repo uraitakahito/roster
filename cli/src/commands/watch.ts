@@ -1,10 +1,10 @@
-// roster watch: PR の CI・merge の後の main の workflow・GitHub の戻りを、model を使わずに見張る。
+// roster watch: PR の CI・merge の後の main の workflow・tag の push で動いた workflow・GitHub の戻りを、model を使わずに見張る。
 // 担当は、この命令を裏で起こして手を止める（Claude Code の Bash の「裏で動かす」。命令が終わると、Claude Code が担当を起こし、終了コードを渡す）。
 // 出す字は短くする（結果の 1〜数行だけ。途中の様子は出さない）。通ったかは、終了コードで分かる。
 import type { Context } from '../context.ts';
 import { envOf } from '../env.ts';
 import { TpmError } from '../skill-sets.ts';
-import { lookChecks, lookGithub, lookHead, lookMain, namedList, parsePr, span, type Look, type PrRef } from '../watch.ts';
+import { badTag, lookChecks, lookGithub, lookHead, lookMain, lookTag, namedList, parsePr, span, type Look, type PrRef } from '../watch.ts';
 
 /**
  * 見張りの終了コード。使い方の誤りは commander が 2、決まりの誤り（TpmError）は 1 で終わるので、結果はそれと重ならない数にする。
@@ -13,7 +13,7 @@ import { lookChecks, lookGithub, lookHead, lookMain, namedList, parsePr, span, t
 export const WATCH_EXIT = { passed: 0, error: 1, failed: 10, timeout: 20, none: 30 } as const;
 
 /** 見張りの種類。 */
-export type WatchKind = 'pr' | 'main' | 'github';
+export type WatchKind = 'pr' | 'main' | 'tag' | 'github';
 
 /** 見張りの結果（出す行と終了コード）。 */
 export interface WatchResult {
@@ -28,7 +28,7 @@ export interface WatchOptions {
 }
 
 /** 既定の長さ（分）。 */
-export const WATCH_MINUTES: Readonly<Record<WatchKind, number>> = { pr: 30, main: 30, github: 120 };
+export const WATCH_MINUTES: Readonly<Record<WatchKind, number>> = { pr: 30, main: 30, tag: 30, github: 120 };
 
 /** 聞く間（ミリ秒）: 初めの間・延ばす倍率・長くてもこの間。 */
 const FIRST_MS = 20_000;
@@ -47,7 +47,7 @@ export interface WatchRecord {
   /** 始めた時刻。 */
   at: string
   kind: WatchKind
-  /** 見張った物（PR の URL・repo）。 */
+  /** 見張った物（PR の URL・repo・`<owner/repo>@<tag>`）。 */
   target: string
   /** 結果（Look の state。長さを過ぎた時は timeout）。 */
   result: Look['state'] | 'timeout'
@@ -76,6 +76,8 @@ interface Loop {
   noun: string
   /** もう 1 度見張る時に打つ命令（長さを過ぎた時の行に書く）。 */
   again: string
+  /** 回が作られきるのを待っている間の、待つ訳（main は「merge から 2 分の内」）。 */
+  grace?: string
 }
 
 function minutes(kind: WatchKind, options: WatchOptions): number {
@@ -96,7 +98,7 @@ function report(loop: Loop, look: Look, timedOut: boolean, seconds: number): Wat
     case 'failed':
       return { code: WATCH_EXIT.failed, lines: [`落ちた: ${namedList(look.failed)}`, `ほかの ${loop.noun}: 通った ${look.passed}・まだ ${look.pending}（${waited}）`] };
     case 'pending':
-      return { code: WATCH_EXIT.timeout, lines: [look.behind === true ? `まだ: PR の head が、branch の先（push した commit）に追いついていない（${waited}）。${retry}` : look.total === 0 ? `まだ: ${loop.noun} の回がまだ作られていない（${waited}）。${retry}` : look.done === look.total ? `まだ: ${loop.noun} ${look.total} つは終わっているが、merge から 2 分の内なので、回が作られきるのを待っている（${waited}）。${retry}` : `まだ: ${loop.noun} ${look.total} つのうち ${look.total - look.done} つが終わっていない（${waited}）。${retry}`] };
+      return { code: WATCH_EXIT.timeout, lines: [look.behind === true ? `まだ: PR の head が、branch の先（push した commit）に追いついていない（${waited}）。${retry}` : look.total === 0 ? `まだ: ${loop.noun} の回がまだ作られていない（${waited}）。${retry}` : look.done === look.total ? `まだ: ${loop.noun} ${look.total} つは終わっているが、${loop.grace ?? 'merge から 2 分の内'}なので、回が作られきるのを待っている（${waited}）。${retry}` : `まだ: ${loop.noun} ${look.total} つのうち ${look.total - look.done} つが終わっていない（${waited}）。${retry}`] };
     case 'none':
       return { code: WATCH_EXIT.none, lines: [`${loop.noun} が付いていない（${waited}）。通ったのではない。repo に、ここで動く workflow が在るはずなら、${loop.again} でもう 1 度見張る`] };
     case 'unreachable':
@@ -170,9 +172,27 @@ export function watchMain(ctx: Context, url: string, options: WatchOptions = {})
   return watch(ctx, { kind: 'main', target: pr.url, look: () => lookMain(ctx.exec, pr, ctx.now()), streak: STREAK, settle: true, noun: 'main の workflow', again: `roster watch main ${pr.url}` }, options);
 }
 
+/** `--repo` の形を見る。 */
+function repoOf(repo: string): string {
+  if (!/^[^/\s]+\/[^/\s]+$/.test(repo)) throw new TpmError(`--repo は <owner>/<repo> の形にしてください: ${repo}`);
+  return repo;
+}
+
+/**
+ * tag の push で動いた workflow（release・docs など）が、みな終わるまで見張る。判じ方は main と同じ（workflow ごとに、いちばん新しい回。落ちた物が分かっても、みな終わるまで待つ）。
+ * 回が作られきるのを待つ間は、回が無い間は見張りを始めてから 2 分、回が在る間はいちばん古い回が作られてから 2 分。
+ */
+export function watchTag(ctx: Context, tag: string, options: WatchOptions & { repo: string }): Promise<WatchResult> {
+  const repo = repoOf(options.repo);
+  const bad = badTag(tag);
+  if (bad !== undefined) throw new TpmError(bad);
+  const since = ctx.now();
+  return watch(ctx, { kind: 'tag', target: `${repo}@${tag}`, look: () => lookTag(ctx.exec, repo, tag, since, ctx.now()), streak: STREAK, settle: true, noun: 'tag の workflow', again: `roster watch tag ${tag} --repo ${repo}`, grace: '回が作られてから 2 分の内' }, options);
+}
+
 /** GitHub が応えるようになるまで見張る（続けて 2 度応えたら「戻った」）。 */
 export function watchGithub(ctx: Context, options: WatchOptions & { repo?: string } = {}): Promise<WatchResult> {
   const { repo } = options;
-  if (repo !== undefined && !/^[^/\s]+\/[^/\s]+$/.test(repo)) throw new TpmError(`--repo は <owner>/<repo> の形にしてください: ${repo}`);
+  if (repo !== undefined) repoOf(repo);
   return watch(ctx, { kind: 'github', target: repo ?? 'github', look: () => lookGithub(ctx.exec, repo), streak: STREAK, settle: false, noun: 'GitHub', again: `roster watch github${repo === undefined ? '' : ` --repo ${repo}`}` }, options);
 }

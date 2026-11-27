@@ -46,6 +46,7 @@ roster hello
     2. 新しい回が作られたのを見る: `gh run list --workflow <workflow の file> --branch main --event workflow_dispatch --limit 1 --json databaseId,createdAt,url`。`createdAt` が 1 で控えた時刻より後なら、その回。前の時刻なら、まだ作られていないので、もう 1 度引く（打ってすぐは、新しい回が無い。ここで `roster watch main` を打つと、前の落ちた回を見てすぐ 10 で終わり、流し直しも落ちたと読み違える）。
     3. `gh run watch <2 の id> --exit-status` を裏で起こして手を止める（protocol.md の「待つ・見張る」の、ただ 1 つの例外。0 = 通った）。
     4. `roster report merged` を打ち、流し直したこと・その回の URL と結果を一言に書く。命令は workflow ごとに新しい回で判じるので、流し直した回が merge の commit に載っていれば「通った」と足す。**流し直す前に main へ別の merge が入っていたら**、流し直した回は別の commit に載り、命令からは見えない（「落ちた docs」のまま出る）。一言に書いた URL と結果が、その時の知らせになる。落ちた回の `gh run rerun` は使わない（roster の `docs` では、前の試みの artifact が残って重なり、また落ちる）。
+- release の tag を push したら（その repo の release の手順）、`roster watch tag <tag> --repo <owner/repo>` を裏で起こして手を止める（`gh run watch` で待たない。protocol.md の「待つ・見張る」）。0 を見てから、release の手順の次の段へ進む。
 - `git add -A`・`git add .` は使わない。ファイルを名指して add する。
 - 止める process は、`pgrep -fl '<型>'` で pid と command line を見て、当たった数を確かめてから、その数字を `kill <pid>` に書く（`pkill`・`killall` と pid を名指さない `kill` は guard が止める。台帳 #89）。
 - 動くことを示してから「できた」と言う。試験を流し、要るなら実際に起こして見る。

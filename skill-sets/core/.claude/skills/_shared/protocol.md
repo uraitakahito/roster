@@ -280,16 +280,18 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 
 ## 待つ・見張る
 
-GitHub の側が終わるのを待つ仕事（PR の CI・merge の後の main の workflow・GitHub の戻り）は、自分（model）で待たず、見張りの命令 `roster watch` に任せる。待つ間、トークンを使わず、メッセージも届く。
+GitHub の側が終わるのを待つ仕事（PR の CI・merge の後の main の workflow・release の tag の push で動いた workflow・GitHub の戻り）は、自分（model）で待たず、見張りの命令 `roster watch` に任せる。待つ間、トークンを使わず、メッセージも届く。
 
 | 待つ物 | 命令 | 既定の長さ |
 |---|---|---|
 | PR の CI（今の head の commit の check が、みな終わるまで） | `roster watch pr <PR の URL>` | 30 分 |
 | merge の後の main の workflow | `roster watch main <PR の URL>` | 30 分 |
+| tag の push で動いた workflow（release・docs など） | `roster watch tag <tag> --repo <owner/repo>` | 30 分 |
 | GitHub が応えるようになるまで | `roster watch github [--repo <owner/repo>]` | 120 分 |
 
 - **裏で起こして、手を止める。**Bash の `run_in_background` で打つ（表で打つと、終わるまで手が塞がり、メッセージが届かない）。命令が終わると起こされ、終了コードが渡る。**通ったかは、終了コードで決める**: 0 = 通った（戻った）・10 = 落ちた・20 = まだ（長さを過ぎた）・30 = check や回が付いていない・1 = 見張れない。0 のほかは、出力の file を読む（落ちた check の名と URL が出ている）。
-- **30 は「通った」ではない。**check が付いていないだけ。repo に、PR で動く workflow が在るなら、もう 1 度見張る。無い repo なら、そう確かめてから進む。
+- **30 は「通った」ではない。**check が付いていないだけ。repo に、PR で動く workflow（`watch tag` では、tag で動く workflow）が在るなら、もう 1 度見張る。無い repo なら、そう確かめてから進む。
+- `watch tag` が 10 で終わったら、出力の落ちた回を読み、その repo の release の手順（`docs/src/release.md` など）に従う。tag を打ち直さない（出した tag は打ち直さず、直す時は次の版、が castlist・callboard・pagetray の決まり）。
 - 20（まだ）で終わったら、もう 1 度見張る。2 度続けて過ぎたら、`roster ask tpm` で知らせる。
 - 今の様子を 1 回だけ見るなら `--timeout 0`（待たずに終わる）。
 - `gh pr checks --watch`・`gh run watch`・`sleep` で待たない。check の数でも待たない。例外は 1 つ: main で落ちた workflow を `gh workflow run` で流し直した回は、新しい回が作られたのを `createdAt` で確かめてから、`gh run watch <回の id> --exit-status` を裏で起こして待つ（表で打たない。打ってすぐの `roster watch main` は、前の落ちた回を見て終わる。手順は `/software-engineer` の 2）。
