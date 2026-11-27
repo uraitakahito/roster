@@ -28,6 +28,11 @@ export interface Review {
   askedAt: string
   /** Staff Engineer 担当に渡した依頼書の URL（roster ask review が、頼みから作って置く）。 */
   brief?: string
+  /**
+   * 依頼書を渡した席の起こしの id（席の名簿の launch。castlist の無い project と前の版の頼みには無い）。【ask-review】は起こした回の受け箱へ届くので、
+   * 席の今の id と違えば、前の回に渡した頼み（roster review list が見分ける）。
+   */
+  launch?: string
   verdict?: Verdict
   /** レビューのページの URL。 */
   page?: string

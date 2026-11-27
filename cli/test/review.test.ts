@@ -14,7 +14,7 @@ import { collect } from '../src/commands/timeline.ts';
 import { assign, close } from '../src/commands/tpm-side.ts';
 import type { Context } from '../src/context.ts';
 import { readReviews, reviewLabel, type Review } from '../src/reviews.ts';
-import { requireRole } from '../src/roster.ts';
+import { readRole, requireRole, writeRole } from '../src/roster.ts';
 import { DELIVERED_FILE, type DeliveredLine } from '../src/mail.ts';
 import type { MessageTrace } from '../src/seen.ts';
 import { BRIEF, staffRoot, world, type World } from './helpers.ts';
@@ -430,6 +430,24 @@ describe('roster review list', () => {
       '結果の【done】を出した課題 0 件のうち、レビューを頼んでいない課題: 0 件',
     ]);
     expect(reviewList(w.tpm, { key: 'AI-9' })).toEqual(['AI-9 のレビューの頼みは無い']);
+  });
+
+  test('席の起こしの id が、頼みを渡した回と違えば「前の回の席に渡した」と出す（t-9tac）', async () => {
+    const w = await asked();
+    writeRole(w.tpm, { ...readRole(w.tpm, 'AI-8.staff')!, launch: 'S1' });
+    w.se.now = () => new Date('2026-11-20T12:10:00.000Z');
+    await askReview(w.se, { url: PR });
+    expect(readReviews(w.tpm).map(r => r.launch)).toEqual([undefined, 'S1']);
+    expect(reviewList(w.tpm, { key: 'AI-8' }).slice(0, 2)).toEqual([
+      `#1  AI-8  まだ（席が見ている）  ${w.plan}  11-20 12:00 に頼んだ`,
+      `#2  AI-8  まだ（席が見ている）  ${PR}  11-20 12:10 に頼んだ`,
+    ]);
+    writeRole(w.tpm, { ...readRole(w.tpm, 'AI-8.staff')!, launch: 'S2' });
+    // 起こしの id を持たない前の頼みは、今までどおり
+    expect(reviewList(w.tpm, { key: 'AI-8' }).slice(0, 2)).toEqual([
+      `#1  AI-8  まだ（席が見ている）  ${w.plan}  11-20 12:00 に頼んだ`,
+      `#2  AI-8  まだ（前の回の席に渡した）  ${PR}  11-20 12:10 に頼んだ`,
+    ]);
   });
 
   test('レビューを頼まずに結果の【done】を出した課題を数える', async () => {
