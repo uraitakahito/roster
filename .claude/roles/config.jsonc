@@ -18,6 +18,9 @@
       // 前の名の項目だけでは、新しい名を旗を挟んで名指す命令（container rm -f pagetray.box）が、語でも字でも当たらない。
       "match": [
         "--name pagetray.box",
+        // 名を = で繋ぐ形（--name=…）。語も字も、空白で繋ぐ形の項目とは別なので、並べて置く（callboard の宣言と同じ形。review-18）。
+        "--name=pagetray.box",
+        "--name=pagetray",
         "container start pagetray.box",
         "container stop pagetray.box",
         "container kill pagetray.box",
@@ -35,6 +38,9 @@
         "container volume delete pagetray-data*",
         "container volume rm pagetray-data*",
         "-v pagetray-data*",
+        // volume を付ける旗の、長い形（--volume …）。
+        "--volume pagetray-data",
+        "--volume pagetray-data*",
         // volume の略の v（container v rm …）。字も語も volume と違うので、略の形も並べる（t-9tac）。
         "container v delete pagetray-data*",
         "container v rm pagetray-data*",
