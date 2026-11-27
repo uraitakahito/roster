@@ -78,7 +78,7 @@
     // system stop は仕組みごと止め、prune は止めてある container を、volume prune は container の無い volume（作り直しの間の castlist-data-v1 など）を消す。
     // castlist より緩くできないので pm-only。s・v・n は system・volume・network の略。
     // --all・-a・$(…)・xargs で名を書かずに選ぶ stop・kill・rm・volume rm は、guard が、名を書いた項目の動詞から引いて当てる（ここには書かない）。
-    // container prune の項目は、間に語が挟まっても順に当たるので、container image prune も止まる（害は小さいが、止める方に倒れる）。
+    // 名を宣言しないこの環境の項目は、語が続けて並ぶ時だけ当たる（間は旗とその値だけ）。container image prune・container exec x make clean は当たらない。
     "container-system": {
       "guard": "pm-only",
       "match": [

@@ -198,6 +198,12 @@ describe('touched: 名を書かずに的を選ぶ命令（t-9tac）', () => {
     expect(hit(command)).toEqual(expected);
   });
 
+  test('名を宣言しない環境の項目も、旗の値が挟まる形には当たる（ssh -p 22 staging）', () => {
+    const plain: Record<string, InfraEnv> = { staging: { guard: 'tpm', match: ['ssh staging'] } };
+    expect(touched('ssh -p 22 staging uptime', plain)).toEqual(['staging']);
+    expect(touched('ssh staging uptime', plain)).toEqual(['staging']);
+  });
+
   test('名を書かない命令を止めた訳には、名を書いて打つ案内が付く', () => {
     const verdict = judge({ command: 'container stop --all', role: 'software-engineer', config: { infra: real, trackers: { jira: [], github: [] } }, approvals: {}, now: new Date() });
     expect(verdict.allow).toBe(false);
@@ -836,7 +842,22 @@ describe('この repo の設定の、名を書かない命令と container-syste
     expect(judgeOwn(command, 'software-engineer')).toBe(true);
   });
 
-  test('container image prune も止まる（container prune の項目は、間に語が挟まっても順に当たる。止める方に倒れる）', () => {
-    expect(judgeOwn('container image prune -a', 'software-engineer')).toBe(false);
+  // 名を宣言しない環境の項目は、語が続けて並ぶ時だけ当たる（間は旗とその値だけ。review-2 の指摘 1）。
+  test.each([
+    'container image prune -a',
+    'container exec mybox make clean',
+    'container run --rm img npm run clean',
+    'container build --target clean .',
+    'container exec mybox git worktree prune',
+  ])('%s は、container-system に当たらず通す', (command) => {
+    expect(judgeOwn(command, 'software-engineer')).toBe(true);
+  });
+
+  test.each([
+    'container --debug system stop',
+    'timeout 60 /opt/homebrew/bin/container stop --all',
+    'container ls -q | xargs -I {} /opt/homebrew/bin/container rm -f {}',
+  ])('%s は止める', (command) => {
+    expect(judgeOwn(command, 'software-engineer')).toBe(false);
   });
 });

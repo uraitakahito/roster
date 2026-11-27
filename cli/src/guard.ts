@@ -250,19 +250,21 @@ function verbsOf(env: InfraEnv): string[] {
 
 /**
  * 単純な命令の語で、動詞に当たった所より後ろの語。当たらなければ undefined。
- * 動詞の語の間に挟まってよいのは旗だけ（`container --debug stop`）。旗でない語が挟まる `container builder stop` は、
+ * 動詞の語の間に挟まってよいのは旗とその値だけ（`container --debug stop`）。旗でない語が挟まる `container builder stop` は、
  * `container stop` の動詞に当てない（別の動詞）。
  */
 function argsAfter(words: string[], verb: string): string[] | undefined {
   const [head, ...rest] = verb.split(' ');
   for (let i = 0; i < words.length; i += 1) {
-    if (words[i] !== head) continue;
+    // 頭でない位置の path で書いた道具（`timeout 60 /opt/homebrew/bin/container …`）も、名で比べる（review-2 の指摘 4）。
+    if ((words[i] ?? '').split('/').at(-1) !== head) continue;
     let j = i + 1;
     let k = 0;
     while (j < words.length && k < rest.length) {
       const word = words[j] ?? '';
+      // 旗と、旗の直後の語（旗の値。`ssh -p 22 staging` の 22）は挟まってよい。旗でも値でもない語（`container exec x make clean` の exec）で切る。
       if (word === rest[k]) k += 1;
-      else if (!word.startsWith('-')) break;
+      else if (!word.startsWith('-') && !(words[j - 1] ?? '').startsWith('-')) break;
       j += 1;
     }
     if (k === rest.length) return words.slice(j);
@@ -279,7 +281,8 @@ const TARGET_VALUE_FLAGS = new Set(['-s', '--signal', '-t', '--time']);
  * 動詞の後ろの引数が、名を書かずに的を選ぶ形か（t-9tac）。通す形を数える（killsByPattern と同じく、疑わしければ止める。review-1 の指摘 1）:
  * 的（旗と、値を取る旗の値を除いた語）が 1 つ以上あり、どれも字で書いた名（WRITTEN_NAME）で、`--all` が無い時だけ通す。
  * 的が無い（xargs で渡す・`-a` だけ）・置き換えの跡（空の語）・変数・glob・`{}`・`%` は当てる。help（`-h`・`--help`）は何も変えないので当てない。
- * `-a` は名を書いた的と並ぶ時は当てない（container start の `-a` は attach）。
+ * `-a` は名を書いた的と並ぶ時は当てない（container start の `-a` は attach）。stop・rm などで名と `-a`・`--all` を一緒に渡すと、
+ * container（1.7.1）が「explicitly supplied container ID(s) conflict with the --all flag」で断るので、害は無い（review-2 の指摘 3）。
  */
 function unnamedTarget(args: string[]): boolean {
   if (args.some(a => a === '-h' || a === '--help')) return false;
@@ -308,13 +311,18 @@ export function touched(command: string, infra: Record<string, InfraEnv>): strin
 function touchOf(command: string, env: InfraEnv): 'named' | 'unnamed' | undefined {
   const commands = splitCommands(command);
   const textOnly = !feedsOrWrites(command) && rawCommands(command).every(inert);
-  const hits = (match: string): boolean => commands.some(words => hitsWords(words, match)) || (!textOnly && command.includes(match.replaceAll('*', '')));
+  // 名を宣言しない環境（container-system）の、頭が旗でない項目は、語が命令の中に続けて並ぶ時だけ語で当てる（間は旗だけ）。
+  // 間に何が挟まってもよい hitsWords では、`container exec x make clean` が `container clean` に当たる（review-2 の指摘 1）。
+  const verbs = verbsOf(env);
+  const wordHit = (words: string[], match: string): boolean =>
+    verbs.length === 0 && !match.trim().startsWith('-') ? argsAfter(words, match.trim().split(/\s+/).join(' ')) !== undefined : hitsWords(words, match);
+  const hits = (match: string): boolean => commands.some(words => wordHit(words, match)) || (!textOnly && command.includes(match.replaceAll('*', '')));
   if (env.match.some(hits)) return 'named';
   const unnamed = (verb: string): boolean => commands.some((words) => {
     const args = argsAfter(words, verb);
     return args !== undefined && unnamedTarget(args);
   });
-  return verbsOf(env).some(unnamed) ? 'unnamed' : undefined;
+  return verbs.some(unnamed) ? 'unnamed' : undefined;
 }
 
 /** 環境 1 つについて、この担当が今、変えてよいか。 */
