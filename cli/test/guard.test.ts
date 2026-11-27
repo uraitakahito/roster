@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { guard, infraApprove, infraList, infraRevoke, infraRun } from '../src/commands/infra.ts';
 import { readRolesConfig, type ConfigSource, type InfraEnv } from '../src/config.ts';
@@ -919,13 +919,18 @@ describe('名を = で繋ぐ形と、volume の長い旗（t-vp6r。台帳 #291�
   });
 
   // 隣の repo の本物の宣言。guard は、TPM 担当を起こした folder の直下の folder の宣言も読むので、本体の checkout の file が効く。
-  // worktree からでも本体を指すよう、git の common dir（<本体>/.git）の 2 つ上を、repo を並べた folder とみなす。
-  // CI には隣の repo が無いので skip する（手元で流す試験）。
-  const common = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: import.meta.dirname, encoding: 'utf8' }).stdout.trim();
-  const sibling = (repo: string): string => join(common, '..', '..', repo, '.claude', 'roles', 'config.jsonc');
+  // worktree からでも本体を指すよう、git の common dir（<本体>/.git。絶対の path で取る）の親の親を、repo を並べた folder とみなす。
+  // 隣の repo の本体の checkout が無い時は飛ぶ（CI では飛ぶ。手元で流す試験）。git には GIT_DIR などを渡さない（hook の中で流れても読み違えない）。
+  const gitEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
+  const common = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: import.meta.dirname, encoding: 'utf8', env: gitEnv }).stdout.trim();
+  const sibling = (repo: string): string => join(dirname(dirname(common)), repo, '.claude', 'roles', 'config.jsonc');
 
-  describe.skipIf(common === '' || !existsSync(sibling('castlist')))('castlist の repo の宣言（PM だけ）', () => {
-    const judgeCastlist = judgeIn(readRolesConfig(sibling('castlist')).infra);
+  describe.skipIf(common === '' || !existsSync(sibling('castlist')))('castlist の repo の宣言（PM だけ。隣の repo の本体の checkout が無い時は飛ぶ）', () => {
+    const castlist = readRolesConfig(sibling('castlist')).infra;
+    const judgeCastlist = judgeIn(castlist);
+    test('手続きは PM だけ', () => {
+      expect(castlist.castlist?.guard).toBe('pm-only');
+    });
     test.each([
       'container run -d --name=castlist.box -p 127.0.0.1:8802:8080 --volume castlist-data-v1:/data ghcr.io/uraitakahito/castlist:v2.0.0',
       'container run -d --name=castlist.box ghcr.io/uraitakahito/castlist:v2.0.0',
@@ -934,9 +939,12 @@ describe('名を = で繋ぐ形と、volume の長い旗（t-vp6r。台帳 #291�
       // 前からの形も、今までどおり止まる。
       'container stop castlist.box',
       'container run -d --name castlist.box -p 127.0.0.1:8802:8080 -v castlist-data-v1:/data ghcr.io/uraitakahito/castlist:v2.0.0',
-    ])('%s は、DevOps Engineer 担当も止める', (command) => {
+    ])('%s は、どの担当も止める（DevOps Engineer 担当・TPM 担当も）', (command) => {
       expect(judgeCastlist(command, 'software-engineer')).toBe(false);
       expect(judgeCastlist(command, 'devops-engineer')).toBe(false);
+      expect(judgeCastlist(command, 'auditor')).toBe(false);
+      // TPM 担当（と roster が起こしていない session）は役が無い。
+      expect(judgeCastlist(command, undefined)).toBe(false);
     });
     test.each([
       'container run --rm --name=mytest --volume mytest-data:/data docker.io/library/alpine:3.22 sh',
@@ -946,7 +954,7 @@ describe('名を = で繋ぐ形と、volume の長い旗（t-vp6r。台帳 #291�
     });
   });
 
-  describe.skipIf(common === '' || !existsSync(sibling('pagetray')))('pagetray の repo の宣言（TPM に相談）', () => {
+  describe.skipIf(common === '' || !existsSync(sibling('pagetray')))('pagetray の repo の宣言（TPM に相談。隣の repo の本体の checkout が無い時は飛ぶ）', () => {
     const judgePagetray = judgeIn(readRolesConfig(sibling('pagetray')).infra);
     test.each([
       'container run -d --name=pagetray.box --volume pagetray-data-v1:/data ghcr.io/uraitakahito/pagetray:v1.2.0',
