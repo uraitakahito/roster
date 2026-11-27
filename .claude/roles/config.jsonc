@@ -9,6 +9,8 @@
     // volume は pagetray-data-v1。guard は字の含みで見るので、「-v pagetray-data」は pagetray-data-v1 を付けて起こす
     // container run（写しから戻す時の書き込みも）に当たり、消す命令の 2 つも pagetray-data-v1 に当たる。
     // 裸の「pagetray-data」は書かない（container volume inspect のような、volume を読むだけの命令まで止めるため）。
+    // 末尾に * の項目は、命令の語で当てる guard（t-7j37）の物で、* の語は前方一致（pagetray-data* は pagetray-data-v1:/data に当たる）。
+    // 字の含みで見る前の guard では * の項目は当たらず、* の無い項目が当たる。どちらの guard でも守りに穴が空かないよう、両方を並べて置く。
     "pagetray": {
       "guard": "tpm",
       "match": [
@@ -21,6 +23,9 @@
         "container volume delete pagetray-data",
         "container volume rm pagetray-data",
         "-v pagetray-data",
+        "container volume delete pagetray-data*",
+        "container volume rm pagetray-data*",
+        "-v pagetray-data*",
       ],
     },
     // メッセージキュー（NATS JetStream の container と、預かった物を置く volume）。担当どうしのメッセージを預かって配る
@@ -39,6 +44,10 @@
         "container volume delete roster-nats-data",
         "container volume rm roster-nats-data",
         "-v roster-nats-data",
+        // * の項目は pagetray と同じ（-v の値は roster-nats-data:/data の 1 語なので、命令の語で当てる guard では * が要る）。
+        "container volume delete roster-nats-data*",
+        "container volume rm roster-nats-data*",
+        "-v roster-nats-data*",
       ],
     },
     // 手元で image を build する builder（Apple Container の container build が使う container。名は buildkit）。
