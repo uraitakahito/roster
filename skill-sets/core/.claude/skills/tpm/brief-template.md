@@ -12,7 +12,7 @@ TPM 担当が Software Engineer 担当・Tech Lead 担当・DevOps Engineer 担�
 | 頭書き | 課題の Key（`SKILL.md` の 2。Jira・GitHub の Issue の Key なら、担当は `roster issue view` で課題を読む）・repo か folder・前の依頼書や成果の URL |
 | 課題の概要 | 新しい担当を起こす依頼書だけ。何が求められているか（あなたの言葉で 3〜8 行）・受け入れの条件（原文のまま）・わからない所（無ければ「なし」）。形は下の「課題の概要の節」 |
 | やること | 番号付きで。どこまでやるか（提案まで・計画まで・実装まで）をはっきり書く |
-| 前提 | その課題だけの決まり（破壊的でよいか・後方互換を考えるか・触ってはいけない物・使う model の指示）。レビューを必ず受けさせる課題は、渡す相手で書き分ける: Software Engineer 担当・DevOps Engineer 担当には「レビューを受ける: 計画と PR を Staff Engineer 担当に頼む」、Tech Lead 担当（分けた課題）には「レビューを受ける: Tech Lead 担当の計画と PR は Staff Engineer 担当に頼む。repo の席の計画と PR は Tech Lead 担当が見る」、Tech Lead 担当が repo の席に渡す依頼書には「レビューを受ける: 計画と PR を Tech Lead 担当に頼む」（`SKILL.md` の 2・protocol.md の「レビュー」） |
+| 前提 | その課題だけの決まり（破壊的でよいか・後方互換を考えるか・触ってはいけない物・使う model の指示）。レビューを必ず受けさせる課題は、渡す相手で書き分ける: Software Engineer 担当・DevOps Engineer 担当には「レビューを受ける: 計画と PR を Staff Engineer 担当に頼む」、Tech Lead 担当（分けた課題）には「レビューを受ける: Tech Lead 担当の計画と PR は Staff Engineer 担当に頼む。repo の席の計画と PR は Tech Lead 担当が見る」、Tech Lead 担当が repo の席に渡す依頼書には「レビューを受ける: 計画と PR を Tech Lead 担当に頼む」（これは、必ず受けさせる課題に限らず、どの repo の席の依頼書にも書く。`tech-lead/SKILL.md` の 4。`SKILL.md` の 2・protocol.md の「レビュー」） |
 | 材料 | 読む物（貼られた文・ファイル・URL）。長い文は `<pre>` でそのまま |
 | TPM が知っていること | 調べ済みのこと・試して駄目だったこと |
 | 成果の形 | 何を出せば終わりか（`roster page put` で置く提案・計画・結果のページ・PR）。担当は【done】の後に次の【brief】か【dismiss】を待つので、「【done】の後は待つ」とは書かなくてよい |
