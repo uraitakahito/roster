@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { BUCKET_WIDTH, LAST_BUCKET, bucketOf, contextOf, costMicroUsd, priceOf, readTurns, sumRows, toRows, type Price, type Turn } from '../src/usage.ts';
+import { BUCKET_WIDTH, LAST_BUCKET, bucketOf, contextOf, costMicroUsd, priceOf, readTurns, sumRows, toRows, unpricedModels, type Price, type Turn } from '../src/usage.ts';
 
 /** 写しの assistant の行（見本）。usage は、要る欄だけ上書きする。 */
 function line(id: string, at: string, usage: Record<string, unknown> = {}, extra: Record<string, unknown> = {}): string {
@@ -28,6 +28,8 @@ function turn(over: Partial<Turn> = {}): Turn {
     cacheReadTokens: 0,
     cacheWrite5mTokens: 0,
     cacheWrite1hTokens: 0,
+    webSearchRequests: 0,
+    webFetchRequests: 0,
     ...over,
   };
 }
@@ -94,18 +96,34 @@ describe('readTurns: 写しから回を読む', () => {
     expect(turns).toEqual([]);
   });
 
-  test('本体の写しでは、ほかの session から写された行（resume・fork）を数えない', () => {
-    const lines = [
-      line('old', '2026-11-26T01:00:00.000Z', {}, { sessionId: 's-0' }),
-      line('new', '2026-11-27T01:00:00.000Z'),
+  test('同じ席のほかの写しで数えた応答（resume・fork の写し）は、id を渡せば、行の形に依らずに除ける', () => {
+    const old = readTurns([line('m1', '2026-11-26T01:00:00.000Z'), line('m2', '2026-11-26T01:10:00.000Z')]);
+    // 写された行の session の id が、元のままでも、新しい id に書き替わっていても、同じ。
+    const copied = [
+      line('m1', '2026-11-26T01:00:00.000Z', {}, { sessionId: 's-0' }),
+      line('m2', '2026-11-26T01:10:00.000Z', {}, { sessionId: 's-2' }),
+      line('m3', '2026-11-27T01:00:00.000Z', {}, { sessionId: 's-2' }),
     ];
-    expect(readTurns(lines, { sessionId: 's-1' }).turns.map(t => t.id)).toEqual(['new']);
-    // session の id を渡さなければ、見分けない。
-    expect(readTurns(lines).turns.map(t => t.id)).toEqual(['old', 'new']);
+    expect(readTurns(copied, { skip: new Set(old.ids) }).turns.map(t => t.id)).toEqual(['m3']);
   });
 
-  test('手伝いの写しは、行の session の id を見ず、種類を回に付ける', () => {
-    const { turns } = readTurns([line('a1', '2026-11-27T01:00:00.000Z', {}, { sessionId: 'agent-x', isSidechain: true })], { sessionId: 's-1', agent: 'Explore' });
+  test('読めない時刻の行は飛ばし、時刻は UTC の字に揃える', () => {
+    const { turns } = readTurns([
+      line('bad', 'きのう'),
+      line('jst', '2026-11-27T10:30:00+09:00'),
+    ]);
+    expect(turns.map(t => [t.id, t.at])).toEqual([['jst', '2026-11-27T01:30:00.000Z']]);
+    expect(() => toRows(turns)).not.toThrow();
+  });
+
+  test('web の検索と取得の回数を読む', () => {
+    const { turns } = readTurns([line('m1', '2026-11-27T01:00:00.000Z', { server_tool_use: { web_search_requests: 5, web_fetch_requests: 2 } })]);
+    expect(turns[0]).toMatchObject({ webSearchRequests: 5, webFetchRequests: 2 });
+    expect(toRows(turns)[0]).toMatchObject({ webSearchRequests: 5, webFetchRequests: 2 });
+  });
+
+  test('手伝いの写しは、種類を回に付ける', () => {
+    const { turns } = readTurns([line('a1', '2026-11-27T01:00:00.000Z', {}, { sessionId: 'agent-x', isSidechain: true })], { agent: 'Explore' });
     expect(turns).toHaveLength(1);
     expect(turns[0]?.agent).toBe('Explore');
   });
@@ -117,7 +135,7 @@ describe('readTurns: 写しから回を読む', () => {
       timestamp: '2026-11-27T02:00:00.000Z',
       sessionId: 's-1',
       compactMetadata: { trigger: 'auto', preTokens: 300000, postTokens: 60000, durationMs: 1 },
-    })], { sessionId: 's-1' });
+    })]);
     expect(turns).toEqual([]);
     expect(compactions).toEqual([{ at: '2026-11-27T02:00:00.000Z', trigger: 'auto', preTokens: 300000, postTokens: 60000 }]);
   });
@@ -132,6 +150,17 @@ describe('値段', () => {
     expect(costMicroUsd(turn({ cacheWrite5mTokens: 1_000_000 }))).toBe(5_000_000);
     expect(costMicroUsd(turn({ cacheWrite1hTokens: 1_000_000 }))).toBe(8_000_000);
     expect(costMicroUsd(turn({ model: 'claude-fable-5-2', inputTokens: 1_000_000, cacheWrite1hTokens: 1_000_000 }))).toBe(24_000_000);
+  });
+
+  test('速い回（fast）は、Opus 5.5 と Fable 5.2 が 2 倍。倍の無い model は、そのまま', () => {
+    expect(costMicroUsd(turn({ speed: 'fast', inputTokens: 1_000_000, outputTokens: 1_000_000 }))).toBe(48_000_000);
+    expect(costMicroUsd(turn({ speed: 'fast', model: 'claude-fable-5-2', inputTokens: 1_000_000, outputTokens: 1_000_000 }))).toBe(96_000_000);
+    expect(costMicroUsd(turn({ speed: 'fast', model: 'claude-sonnet-5-5', inputTokens: 1_000_000 }))).toBe(2_000_000);
+  });
+
+  test('値段の表に無い model の名を知らせる', () => {
+    expect(unpricedModels([turn(), turn({ model: 'claude-zzz-1' }), turn({ model: 'claude-aaa-1' }), turn({ model: 'claude-zzz-1' })])).toEqual(['claude-aaa-1', 'claude-zzz-1']);
+    expect(unpricedModels([turn()])).toEqual([]);
   });
 
   test('Haiku 5.5 は、文脈が 10 万を越えた回だけ 5 倍', () => {
@@ -229,13 +258,12 @@ describe('toRows: 時計の 1 時間と種類ごとに 1 行', () => {
     expect(rows.filter(r => r.agent === 'Explore')).toHaveLength(1);
   });
 
-  test('時刻の書き方が違っても（+09:00）、UTC の時で分ける。並びは、回の順に依らない', () => {
-    const a = turn({ id: 'a', at: '2026-11-27T10:30:00+09:00' });
+  test('並びは、回の順に依らない', () => {
+    const a = turn({ id: 'a', at: '2026-11-27T01:30:00.000Z' });
     const b = turn({ id: 'b', at: '2026-11-27T01:40:00.000Z' });
     const c = turn({ id: 'c', at: '2026-11-27T03:00:00.000Z', model: 'claude-fable-5-2' });
     expect(toRows([a, b, c])).toEqual(toRows([c, b, a]));
     expect(toRows([a, b])).toHaveLength(1);
-    expect(toRows([a, b])[0]?.fromAt).toBe('2026-11-27T01:30:00.000Z');
   });
 
   test('回が無ければ、行も無い', () => {
