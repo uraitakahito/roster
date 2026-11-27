@@ -29,6 +29,16 @@ export function figureSetup(ctx: Context): string[] {
   return setupArchify(ctx);
 }
 
+/**
+ * roster figure guide: Archify の guide（場面を一言で渡すと、勧める図の種類・入れる物・書き方の手がかりを返す）を打つ。
+ * Archify の guide は、日本語の場面を中国語で答えるので、英語（--lang en）で答えさせる。
+ */
+export function figureGuide(ctx: Context, scenario: string): string[] {
+  const r = runArchify(ctx, ['guide', scenario, '--lang', 'en']);
+  if (r.status !== 0) throw new TpmError(`Archify の guide が落ちました（終了コード ${r.status}）: ${(r.stderr || r.stdout).trim().split('\n')[0] ?? ''}`);
+  return [r.stdout.trimEnd()];
+}
+
 /** 図の名（JSON の file の名から。id と class の頭・shot の png の名になる）。英字の無い名は fig-x。 */
 export function figureName(jsonPath: string): string {
   const stem = basename(jsonPath).replace(/\.json$/i, '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');

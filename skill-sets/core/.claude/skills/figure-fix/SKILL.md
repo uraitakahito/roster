@@ -1,7 +1,7 @@
 ---
 name: figure-fix
 description: 文書に Archify で描く図 1 つを、検査が通るまで直し（箱の位置だけ）、整えて置く用の file に埋め、寸法の検査の結果と画像の助言を返す。図の意味（線の端・帯・字）は変えない。
-when_to_use: 提案・計画・結果の文書で、「流れ」「前と後」の図の JSON を書いた（変えた）後に、図ごとに 1 つずつ Skill tool で呼ぶ（並べて呼ばない。引数は書き手の file と図の JSON の path で、どちらも空白の無い path）。呼ばないのは、JSON を変えずに文書の字だけを直した時（roster figure embed を直に打つ）・確認の選ぶ問いの木と監査の図（手で描く）・Staff Engineer 担当と Auditor の居場所。
+when_to_use: 提案・計画・結果の文書で、「流れ」「前と後」の図の JSON を書いた（変えた）後に、図ごとに 1 つずつ Skill tool で呼ぶ（並べて呼ばない。引数は書き手の file と図の JSON の path で、どちらも空白の無い path。手順は _shared/figures.md の「6. Archify で描く」）。呼ばないのは、JSON を変えずに文書の字だけを直した時（roster figure embed を直に打つ）・確認の選ぶ問いの木と監査の図（手で描く）・Staff Engineer 担当と Auditor の居場所。
 user-invocable: false
 argument-hint: "<書き手の file> <図の JSON>"
 context: fork

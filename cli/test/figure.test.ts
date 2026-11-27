@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vitest';
-import { figureEmbed, figureId, figureName, figureShot, figureSetup, figureValidate, isPlacementFix } from '../src/commands/figure.ts';
+import { figureEmbed, figureGuide, figureId, figureName, figureShot, figureSetup, figureValidate, isPlacementFix } from '../src/commands/figure.ts';
 import type { Context } from '../src/context.ts';
 import type { Exec, ExecResult } from '../src/exec.ts';
 import { archifyBin, archifyHome, archifyVersion } from '../src/figure/archify.ts';
@@ -381,6 +381,20 @@ describe('roster figure embed', () => {
   test('図の名は JSON の file の名から（英小文字・数字・-）', () => {
     expect(figureName('/x/Review Flow.json')).toBe('fig-review-flow');
     expect(figureName('/x/図.json')).toBe('fig-x');
+  });
+});
+
+describe('roster figure guide', () => {
+  test('Archify の guide を英語で打ち、出力をそのまま返す。落ちれば止まる', () => {
+    const calls: string[][] = [];
+    const { ctx } = setup((cmd, args) => {
+      calls.push([cmd, ...args]);
+      return ok('Recommended: workflow\n');
+    });
+    expect(figureGuide(ctx, '計画の段の流れ')).toEqual(['Recommended: workflow']);
+    expect(calls[0]?.slice(-4)).toEqual(['guide', '計画の段の流れ', '--lang', 'en']);
+    const bad = setup(() => ({ status: 2, stdout: '', stderr: 'boom' }));
+    expect(() => figureGuide(bad.ctx, 'x')).toThrow('Archify の guide が落ちました（終了コード 2）: boom');
   });
 });
 
