@@ -136,6 +136,8 @@ infra: pagetray（roster）（手続きは roster infra list）
 
 語で当たらなくても、命令の字全体に項目の字（`*` を除く）が含まれれば止める（`sh -c`・`ssh`・here-document など、字を命令として動かす道は数えきれないので、疑わしければ止める）。字の含みだけの当たりを通すのは、どの単純な命令も引数の字を命令として動かさない物（`roster`（`roster infra run` を除く）・直後が `commit` の `git`・`grep`・`rg`。頭の代入・前置き・path の付いた名は除く）で、file への書き出し（`>`・`>>`・`>& file`・`&> file`。`2>&1`・`>&2` と `/dev/null` は除く）・`<<`・`<(`・命令の置き換え（`$(…)`・backtick。中の命令の頭の代入や path を見られないため）が無い時だけ。だから `roster file put x --name db-x.png` や commit の文に環境の名を書いても止まらない。広すぎると読むだけの命令も止まり、狭すぎるとすり抜けるので、その環境を変える命令の頭を書く。名の一部で当てていた項目（`ssh staging` が `ssh staging-01` に当たるなど）は、語で当てると当たらず、字の含みで止まる（`ssh` は通す命令に無いので、今は止まる）。前方一致で当てたい語には `*` を付ける（2026-11-27 t-7j37 で、語で当てる形に替えた。台帳 #253）。
 
+名を書かずに的を選ぶ命令も当てる（2026-11-27 t-9tac）。環境の名は、名を宣言する項目（`--name db`・`--name=db`・`-v db-data*`）から引き、終わりの語がその名の項目（`container stop db`・`container volume rm db-data*`）の、名の前の語を動詞（`container stop`）と読む。命令の中に動詞の語が続けて並び（間に挟まってよいのは旗だけ）、その後ろの的（旗と `-s`・`-t` などの値を除いた語）が、無い（xargs で渡す・`-a` だけ）か、字で書いた名（英数字・`_`・`.`・`-`）でない語（`$(…)`・変数・glob・`{}`・`%`）を含むか、`--all` があれば、その環境に触るとみなす（`container stop --all`・`container rm -f $(container ls -q)`・`… | xargs container rm`）。名を宣言しない環境と、終わりの語が名でない項目（`container builder stop`）からは動詞を引かないので、`container volume inspect $V` のような読むだけの命令は止まらない。名を取らない命令（`container system stop`・`container prune`・`container volume prune`）は、項目に書いて当てる（roster の設定の `container-system`）。
+
 ## model などの既定の環境変数（任意）
 
 shell の profile などで書くと、すべての project・すべての担当（TPM 担当を含む）の model・effort・permissionMode の既定になる。

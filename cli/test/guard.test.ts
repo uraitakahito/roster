@@ -138,6 +138,75 @@ describe('touched: 命令の語で当てる（t-7j37。台帳 #253）', () => {
   });
 });
 
+describe('touched: 名を書かずに的を選ぶ命令（t-9tac）', () => {
+  const real: Record<string, InfraEnv> = {
+    callboard: { guard: 'tpm', match: ['--name callboard', 'container start callboard', 'container stop callboard', 'container kill callboard', 'container rm callboard'] },
+    castlist: { guard: 'pm-only', match: ['--name castlist.box', 'container stop castlist.box', 'container delete castlist.box', 'container volume delete castlist-data*', 'container v rm castlist-data*', '-v castlist-data*'] },
+    builder: { guard: 'tpm', match: ['--name buildkit', 'container builder start', 'container builder stop', 'container stop buildkit'] },
+  };
+  const hit = (command: string): string[] => touched(command, real);
+
+  test.each<[string, string[]]>([
+    // 名を書かない形は、その動詞を持つ環境にみな当たる。
+    ['container stop --all', ['callboard', 'castlist', 'builder']],
+    ['container stop -a', ['callboard', 'castlist', 'builder']],
+    ['container stop -t 5 --all', ['callboard', 'castlist', 'builder']],
+    ['container --debug stop --all', ['callboard', 'castlist', 'builder']],
+    ['container kill -a', ['callboard']],
+    ['container delete -af', ['castlist']],
+    ['container delete -fa', ['castlist']],
+    ['container stop $(container ls -q)', ['callboard', 'castlist', 'builder']],
+    ['container stop `container ls -q`', ['callboard', 'castlist', 'builder']],
+    ['container ls -q | xargs container stop', ['callboard', 'castlist', 'builder']],
+    ['container ls -q | xargs -n1 container rm -f', ['callboard']],
+    ['container ls -q | xargs -I{} container rm -f {}', ['callboard']],
+    ['container ls -q | xargs -I % container stop %', ['callboard', 'castlist', 'builder']],
+    ['container ls -q | xargs container stop -t 5', ['callboard', 'castlist', 'builder']],
+    ['container ls -q | xargs container kill -s KILL', ['callboard']],
+    ['container stop --all mytest', ['callboard', 'castlist', 'builder']],
+    ['for c in a b; do container stop "$c"; done', ['callboard', 'castlist', 'builder']],
+    ['container stop callboard-*', ['callboard', 'castlist', 'builder']],
+    ['container volume delete --all', ['castlist']],
+    ['container v rm $(container v ls -q)', ['castlist']],
+    ['sudo container stop --all', ['callboard', 'castlist', 'builder']],
+    // 名を書いた自分の container・読むだけ・help・別の動詞は通す。
+    ['container stop mytest', []],
+    ['container rm -f mytest other', []],
+    ['container start -a mytest', []],
+    ['container stop -t 5 mytest', []],
+    ['container stop --help', []],
+    ['container ls -a', []],
+    ['container logs $(cat id)', []],
+    ['container builder status', []],
+    // 名を宣言しない項目・終わりの語が名でない項目からは動詞を引かない（review-1 の指摘 2）。
+    ['container volume inspect $V', []],
+    ['container volume', []],
+    ['container builder status $(x)', []],
+    // 動詞の語は続けて並ぶ物だけ（container の中で打つ命令は当てない。review-1 の指摘 3）。
+    ['container exec mytest rm -f /tmp/*.log', []],
+    ['container run --rm alpine rm -rf /w/*', []],
+    ['container run --rm alpine kill -a', []],
+    ['container stop -t 5 -s TERM mytest', []],
+    ['container image prune -a', []],
+    ['container run --rm -d img', []],
+    ['grep -rn "container stop --all" docs', []],
+    ['git commit -m "container stop --all を止める"', []],
+    ['roster ask tpm "container stop $(container ls -q) を打ちたい"', []],
+    // 動詞の間に旗でない語が挟まる形は、別の動詞（builder stop は builder の項目だけに当たる）。
+    ['container builder stop', ['builder']],
+  ])('%s', (command, expected) => {
+    expect(hit(command)).toEqual(expected);
+  });
+
+  test('名を書かない命令を止めた訳には、名を書いて打つ案内が付く', () => {
+    const verdict = judge({ command: 'container stop --all', role: 'software-engineer', config: { infra: real, trackers: { jira: [], github: [] } }, approvals: {}, now: new Date() });
+    expect(verdict.allow).toBe(false);
+    if (!verdict.allow) expect(verdict.reason).toContain('名を書いて打って');
+    const named = judge({ command: 'container stop callboard', role: 'software-engineer', config: { infra: real, trackers: { jira: [], github: [] } }, approvals: {}, now: new Date() });
+    if (!named.allow) expect(named.reason).not.toContain('名を書いて打って');
+  });
+});
+
 describe('環境の手続き', () => {
   test.each<[string, string, RoleName | undefined, Approval | undefined, boolean]>([
     ['どの環境にも当たらない', 'git status', 'software-engineer', undefined, true],
@@ -714,5 +783,60 @@ describe('この repo の設定の builder（手元で image を build する bu
   ])('%s は、どの担当も通す', (command) => {
     expect(judgeOwn(command, 'software-engineer')).toBe(true);
     expect(judgeOwn(command, undefined)).toBe(true);
+  });
+});
+
+describe('この repo の設定の、名を書かない命令と container-system（t-9tac）', () => {
+  const own = readRolesConfig(join(import.meta.dirname, '..', '..', '.claude', 'roles', 'config.jsonc')).infra;
+  const judgeOwn = (command: string, role: RoleName | undefined) =>
+    judge({ command, role, config: { infra: own, trackers: { jira: [], github: [] } }, approvals: {}, now }).allow;
+
+  test('container-system の手続きは PM だけ', () => {
+    expect(own['container-system']?.guard).toBe('pm-only');
+  });
+
+  test.each([
+    'container system stop',
+    'container s stop',
+    'container prune',
+    'container clean x',
+    'container volume prune',
+    'container v prune',
+    'container network prune',
+    'container n delete --all',
+    'container v rm pagetray-data-v1',
+    'container v delete roster-nats-data',
+  ])('%s を、DevOps Engineer 担当も止める', (command) => {
+    expect(judgeOwn(command, 'software-engineer')).toBe(false);
+    // 略の v で名を書いた pagetray・nats の volume は、今までどおり TPM に相談（DevOps Engineer 担当は通る）。
+    expect(judgeOwn(command, 'devops-engineer')).toBe(/^container v (?:rm|delete) /.test(command));
+  });
+
+  test.each([
+    'container stop --all',
+    'container rm -af',
+    'container stop $(container ls -q)',
+    'container ls -q | xargs container rm -f',
+    'container volume delete --all',
+    'container v rm $(container v ls -q)',
+  ])('%s（名を書かない）は、その動詞を持つ環境に当たり、ほかの担当を止める', (command) => {
+    expect(judgeOwn(command, 'software-engineer')).toBe(false);
+  });
+
+  test.each([
+    'container stop mytest',
+    'container rm -f mytest',
+    'container v rm mytest-data',
+    'container system status',
+    'container system df',
+    'container volume ls',
+    'container network ls',
+    'container builder status',
+  ])('%s は、どの担当も通す', (command) => {
+    expect(judgeOwn(command, 'software-engineer')).toBe(true);
+  });
+
+  test('container image prune も止まる（container prune の項目は、間に語が挟まっても順に当たる。止める方に倒れる）', () => {
+    expect(judgeOwn('container image prune -a', 'software-engineer')).toBe(false);
   });
 });

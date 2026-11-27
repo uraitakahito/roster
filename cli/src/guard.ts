@@ -227,16 +227,94 @@ function feedsOrWrites(command: string): boolean {
   return rest.includes('>') || rest.includes('<<') || rest.includes('<(') || rest.includes('$(') || rest.includes('`');
 }
 
+/** 名を宣言する項目（`--name X`・`--name=X`・`-v X`）。X が環境の container か volume の名。 */
+const DECLARES_NAME = /^(?:--name[ =]|-v )(\S+)$/;
+
+/** 名の字（末尾の * は前方一致の印なので除いて比べる）。 */
+const bareName = (name: string): string => name.replace(/\*$/, '');
+
+/**
+ * 環境の、名を書いた項目の動詞（t-9tac）。名は、名を宣言する項目（DECLARES_NAME）から引き、終わりの語がその名の項目
+ * （`container stop callboard`・`container volume rm castlist-data*`）だけを「動詞＋名」と読む（`container stop`・`container volume rm`）。
+ * 名を宣言しない環境（container-system）と、終わりの語が名でない項目（`container builder stop`・`container volume prune`）からは引かない
+ * （引くと `container volume inspect $V` のような読むだけの命令まで止まる。review-1 の指摘 2）。
+ */
+function verbsOf(env: InfraEnv): string[] {
+  const names = new Set(env.match.flatMap(m => DECLARES_NAME.exec(m.trim())?.[1] ?? []).map(bareName));
+  return [...new Set(env.match.flatMap((m) => {
+    const words = m.trim().split(/\s+/);
+    const last = words.at(-1) ?? '';
+    return words.length >= 3 && !(words[0] ?? '').startsWith('-') && names.has(bareName(last)) ? [words.slice(0, -1).join(' ')] : [];
+  }))];
+}
+
+/**
+ * 単純な命令の語で、動詞に当たった所より後ろの語。当たらなければ undefined。
+ * 動詞の語の間に挟まってよいのは旗だけ（`container --debug stop`）。旗でない語が挟まる `container builder stop` は、
+ * `container stop` の動詞に当てない（別の動詞）。
+ */
+function argsAfter(words: string[], verb: string): string[] | undefined {
+  const [head, ...rest] = verb.split(' ');
+  for (let i = 0; i < words.length; i += 1) {
+    if (words[i] !== head) continue;
+    let j = i + 1;
+    let k = 0;
+    while (j < words.length && k < rest.length) {
+      const word = words[j] ?? '';
+      if (word === rest[k]) k += 1;
+      else if (!word.startsWith('-')) break;
+      j += 1;
+    }
+    if (k === rest.length) return words.slice(j);
+  }
+  return undefined;
+}
+
+/** 字で書いた名（的として通す形）。 */
+const WRITTEN_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
+/** 値を取る旗（container の stop・kill の `-s KILL`・`-t 5`）。値の語は的に数えない。 */
+const TARGET_VALUE_FLAGS = new Set(['-s', '--signal', '-t', '--time']);
+
+/**
+ * 動詞の後ろの引数が、名を書かずに的を選ぶ形か（t-9tac）。通す形を数える（killsByPattern と同じく、疑わしければ止める。review-1 の指摘 1）:
+ * 的（旗と、値を取る旗の値を除いた語）が 1 つ以上あり、どれも字で書いた名（WRITTEN_NAME）で、`--all` が無い時だけ通す。
+ * 的が無い（xargs で渡す・`-a` だけ）・置き換えの跡（空の語）・変数・glob・`{}`・`%` は当てる。help（`-h`・`--help`）は何も変えないので当てない。
+ * `-a` は名を書いた的と並ぶ時は当てない（container start の `-a` は attach）。
+ */
+function unnamedTarget(args: string[]): boolean {
+  if (args.some(a => a === '-h' || a === '--help')) return false;
+  if (args.includes('--all')) return true;
+  const targets: string[] = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i] ?? '';
+    if (TARGET_VALUE_FLAGS.has(arg)) i += 1;
+    else if (!arg.startsWith('-')) targets.push(arg);
+  }
+  return targets.length === 0 || !targets.every(t => WRITTEN_NAME.test(t));
+}
+
 /**
  * 命令が触る環境。命令を単純な命令に分け、match の項目が命令の語に当たれば触る（hitsWords）。
  * 語で当たらなくても、命令の字全体に match の字（* を除く）が含まれれば、今までどおり触るとみなす。
  * ただし、どの単純な命令も inert で、書き出し・here-document などが無い時だけは、字の含みでは当てない。
+ * 名を書いた項目の動詞に当たり、名を書かずに的を選ぶ命令（`container stop --all`・`container rm $(…)`・`xargs container rm`）も、
+ * その環境に触るとみなす（unnamedTarget。どの環境の名にも当たらないので、前は通っていた）。
  */
 export function touched(command: string, infra: Record<string, InfraEnv>): string[] {
+  return Object.entries(infra).filter(([, env]) => touchOf(command, env) !== undefined).map(([name]) => name);
+}
+
+/** 命令が環境に触る当たり方: 名を書いた項目に当たる（named）か、名を書かずに的を選ぶ（unnamed）か。触らなければ undefined。 */
+function touchOf(command: string, env: InfraEnv): 'named' | 'unnamed' | undefined {
   const commands = splitCommands(command);
   const textOnly = !feedsOrWrites(command) && rawCommands(command).every(inert);
   const hits = (match: string): boolean => commands.some(words => hitsWords(words, match)) || (!textOnly && command.includes(match.replaceAll('*', '')));
-  return Object.entries(infra).filter(([, env]) => env.match.some(hits)).map(([name]) => name);
+  if (env.match.some(hits)) return 'named';
+  const unnamed = (verb: string): boolean => commands.some((words) => {
+    const args = argsAfter(words, verb);
+    return args !== undefined && unnamedTarget(args);
+  });
+  return verbsOf(env).some(unnamed) ? 'unnamed' : undefined;
 }
 
 /** 環境 1 つについて、この担当が今、変えてよいか。 */
@@ -257,13 +335,16 @@ export function judgeEnv(name: string, env: InfraEnv, role: RoleName | undefined
   };
 }
 
+/** 名を書かずに的を選ぶ命令を止めた時に、訳に添える字。 */
+const UNNAMED_HINT = '（名を書かずに的を選ぶ命令（--all・-a・$(…)・xargs・変数・glob）は、その動詞を持つ環境にみな当たるとみなします。自分の container は、container ls で名を見て、名を書いて打ってください）';
+
 /** 命令を通すか。環境の手続きを先に見て、次に道具の直打ちを見る。 */
 export function judge(asked: Asked): Verdict {
   for (const name of touched(asked.command, asked.config.infra)) {
     const env = asked.config.infra[name];
     if (env === undefined) continue;
     const verdict = judgeEnv(name, env, asked.role, asked.approvals[name], asked.now);
-    if (!verdict.allow) return verdict;
+    if (!verdict.allow) return touchOf(asked.command, env) === 'unnamed' ? { allow: false, reason: `${verdict.reason}${UNNAMED_HINT}` } : verdict;
   }
   const commands = splitCommands(asked.command);
   if (commands.some(words => AUDIT_START.test(words.join(' ')))) {
