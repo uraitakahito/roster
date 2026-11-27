@@ -470,17 +470,20 @@ interface VerbTargets {
  * exec の的の候補（argsAfter と同じ読み方。review-1 の指摘 2）: 旗と、旗の直後の語（値かもしれない）を読み進め、旗の直後でない初めの語までを候補にする。
  * 値を取る旗を数えないので、束ねた短い旗の値（`-iu root castlist.box`）でも的を見落とさない。後ろは container の中の命令なので見ない。`--` の後ろは初めの語。
  */
-function execTargets(args: string[]): string[] {
+function execTargets(args: string[]): { targets: string[], help: boolean } {
   const plain = args.map(unmark);
-  const candidates: string[] = [];
+  const targets: string[] = [];
+  let help = false;
   for (let k = 0; k < args.length; k += 1) {
     const arg = plain[k] ?? '';
-    if (arg === '--') return [...candidates, ...args.slice(k + 1, k + 2)];
+    if (arg === '--') return { targets: [...targets, ...args.slice(k + 1, k + 2)], help };
+    // help は exec 自身の旗（候補を読み終える前）だけで見る。後ろの -h・--help は container の中の命令の旗（review-2 の指摘 2）。
+    if (arg === '-h' || arg === '--help') help = true;
     if (arg.startsWith('-')) continue;
-    candidates.push(args[k] ?? '');
+    targets.push(args[k] ?? '');
     if (!(plain[k - 1] ?? '').startsWith('-')) break;
   }
-  return candidates;
+  return { targets, help };
 }
 
 /**
@@ -506,12 +509,12 @@ function verbTargets(words: string[]): VerbTargets | undefined {
   }
   const args = words.slice(i);
   const plain = args.map(unmark);
-  if (plain.some(a => a === '-h' || a === '--help')) return undefined;
   const names: VerbTargets['names'] = volume ? ['volume'] : CONTAINER_VERBS.has(verb) ? ['container'] : ['container', 'volume'];
   if (verb === 'exec') {
-    const targets = execTargets(args);
-    return { names, targets, unnamed: targets.length === 0 };
+    const { targets, help } = execTargets(args);
+    return help ? undefined : { names, targets, unnamed: targets.length === 0 };
   }
+  if (plain.some(a => a === '-h' || a === '--help')) return undefined;
   const operands: string[] = [];
   for (let k = 0; k < args.length; k += 1) {
     const arg = plain[k] ?? '';
@@ -525,7 +528,9 @@ function verbTargets(words: string[]): VerbTargets | undefined {
     }
     operands.push(args[k] ?? '');
   }
-  const unnamed = operands.length === 0 || plain.includes('--all');
+  // 的の語が無いのを「名を書かずに選ぶ」と読むのは、的を取ると分かっている動詞だけ。知らない動詞は、container の語を引数に持つ検索
+  // （`git grep -n container -- docs`・`find . -name container`。container の後ろの語を動詞と読む）と見分けられないので、的の語が無ければ当てない（review-2 の指摘 1）。
+  const unnamed = ((volume || CONTAINER_VERBS.has(verb)) && operands.length === 0) || plain.includes('--all');
   if (verb === 'cp' || verb === 'copy') {
     return { names, targets: operands.flatMap(o => o.includes(':') ? [o.slice(0, o.indexOf(':'))] : UNKNOWN.test(o) ? [o] : []), unnamed };
   }
@@ -600,7 +605,8 @@ function touchOf(command: string, env: InfraEnv): Touch | undefined {
   const names = { container: declared('--name'), volume: declared('-v') };
   // 字を粗く割った区切り（`ssh host '…'` の中）は、字で書いた名だけを当てる（区切りは `$(…)` の中を割るので、`roster ask tpm "container stop $(…)"` の跡を的と読まない。
   // 名を書かずに選ぶ形を単純な命令だけで見る t-9tac と同じ）。
-  const parsed = markedContainers.filter((words): words is string[] => words !== undefined).map(words => ({ words, coarse: false }));
+  // 字を動かさない単純な命令（grep・rg・git commit・cat・echo・printf・roster など）は、container の語を引数に持っても container の命令と読まない（review-2 の指摘 1）。
+  const parsed = markedContainers.flatMap((words, i) => words === undefined || quietForSegments((markedRaw[i] ?? []).map(unmark)) ? [] : [{ words, coarse: false }]);
   for (const { words, coarse } of [...parsed, ...segments.map(words => ({ words, coarse: true }))]) {
     const verb = verbTargets(words);
     const own = verb === undefined ? [] : verb.names.flatMap(kind => names[kind]);

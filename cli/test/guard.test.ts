@@ -1241,6 +1241,13 @@ describe('宣言に無い動詞で、環境の名を的にする命令（t-d37r�
     'container frobnicate castlist-data-v1',
     'container cp "$(cat src)" ./y',
     'container commit mytest "$IMG"',
+    // container の中の命令の -h・--help は、exec の help ではない（review-2 の指摘 2）。
+    'container exec castlist.box ls --help',
+    'container exec -it castlist.box sqlite3 /data/castlist.db --help',
+    'container exec castlist.box sh -c \'cat /data/castlist.db\' -h',
+    // 字を出す命令でも、字を動かす命令と並べば読む。
+    'cat <<\'X\' | sh\ncontainer exec castlist.box sh\nX',
+    'echo x; container exec castlist.box sh',
     'container exec castlist sh',
     'container --debug exec castlist.box sh',
     'timeout 60 /opt/homebrew/bin/container exec castlist.box sh',
@@ -1298,7 +1305,16 @@ describe('宣言に無い動詞で、環境の名を的にする命令（t-d37r�
     'container image inspect castlist.box',
     'container help exec',
     'container exec --help',
+    'container exec -h',
     'container cp -h',
+    // container の語を引数に持つ、読むだけの検索（review-2 の指摘 1）。
+    'grep -n container cli/src/guard.ts',
+    'grep -rn container docs',
+    'rg container .',
+    'git grep -n container -- docs',
+    'git log --oneline --grep container -- docs',
+    'find . -name container -type d',
+    'echo container exec castlist.box',
     // 文と検索。
     'grep -rn "container exec castlist.box" docs',
     'git commit -m "container exec castlist.box を止める"',
