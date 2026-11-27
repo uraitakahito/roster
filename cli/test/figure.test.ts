@@ -1,9 +1,9 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vitest';
-import { figureEmbed, figureName, figureShot, figureSetup } from '../src/commands/figure.ts';
+import { figureEmbed, figureId, figureName, figureShot, figureSetup, figureValidate, isPlacementFix } from '../src/commands/figure.ts';
 import type { Context } from '../src/context.ts';
 import type { Exec, ExecResult } from '../src/exec.ts';
 import { archifyBin, archifyHome, archifyVersion } from '../src/figure/archify.ts';
@@ -278,7 +278,7 @@ describe('roster figure embed', () => {
     const { dir, file } = writer();
     const before = readFileSync(file, 'utf8');
     const lines = figureEmbed(ctx, file, { out: join(dir, 'out.html') });
-    expect(lines[0]).toMatch(/^図 fig-flow: [0-9]+ byte・縮める割合 0\.94・2 回で決まった$/);
+    expect(lines[0]).toMatch(/^図 fig-flow（flow.json）: [0-9]+ byte・縮める割合 0\.94・2 回で決まった$/);
     expect(readFileSync(file, 'utf8')).toBe(before);
     const out = readFileSync(join(dir, 'out.html'), 'utf8');
     expect(out).toMatch(/^<p>前<\/p><figure><svg [^>]*class="fig-flow"[\s\S]*<\/svg><figcaption>図 1<\/figcaption><\/figure><p>後<\/p>$/);
@@ -301,12 +301,27 @@ describe('roster figure embed', () => {
     expect(width * scale).toBeGreaterThanOrEqual(113 - 1);
   });
 
-  test('Archify が描けない JSON は、診断を並べて止まる（置く用の file を書かない）', () => {
+  test('Archify が描けない JSON は、診断を並べて止まる。置く用の file には目印を残す', () => {
     const fake: Exec = cmd => cmd === 'env' ? ok(JSON.stringify({ ok: false, diagnostics: [{ code: 'i18n/locale-fallback', message: 'x' }, { code: 'workflow/node-overlap', message: 'Node overlaps\nmore' }] })) : ok();
     const { ctx } = setup(fake);
     const { dir, file } = writer();
-    expect(() => figureEmbed(ctx, file, { out: join(dir, 'out.html') })).toThrow(/描けません[\s\S]*workflow\/node-overlap: Node overlaps$/);
-    expect(existsSync(join(dir, 'out.html'))).toBe(false);
+    expect(() => figureEmbed(ctx, file, { out: join(dir, 'out.html') })).toThrow(/図 fig-flow（flow.json）を埋められません: [^\n]*描けません[\s\S]*workflow\/node-overlap（場所なし）: Node overlaps\n {2}直し方: 無し（書き手が直す）\n書いた: .*（図 1 つのうち 0 つを埋めた/);
+    expect(readFileSync(join(dir, 'out.html'), 'utf8')).toContain('<!-- figure: flow.json -->');
+  });
+
+  test('描けない図があっても、ほかの図は埋める（ある図の誤りが、ほかの図の直しを止めない）', () => {
+    const fake = fakeArchify(() => FIXTURE);
+    const { ctx } = setup((cmd, args, o) => {
+      const input = args[args.indexOf('export-svg') + 2] ?? '';
+      if (cmd === 'env' && input.endsWith('fig-broken.json')) return ok(JSON.stringify({ ok: false, diagnostics: [{ code: 'workflow/node-overlap', message: 'overlap' }] }));
+      return fake(cmd, args, o);
+    });
+    const { dir } = writer();
+    writeFileSync(join(dir, 'broken.json'), JSON.stringify({ diagram_type: 'workflow', nodes: [] }));
+    writeFileSync(join(dir, 'two.html'), '<!-- figure: broken.json --><!-- figure: flow.json -->');
+    expect(() => figureEmbed(ctx, join(dir, 'two.html'), { out: join(dir, 'out.html') })).toThrow(/^図 fig-flow（flow.json）: [\s\S]*図 fig-broken（broken.json）を埋められません[\s\S]*図 2 つのうち 1 つを埋めた/);
+    const out = readFileSync(join(dir, 'out.html'), 'utf8');
+    expect(out).toMatch(/^<!-- figure: broken.json --><svg [^>]*class="fig-flow"/);
   });
 
   test('縮める割合が決まらない図（字が長すぎる）は、字を短くするよう言って止まる', () => {
@@ -329,7 +344,7 @@ describe('roster figure embed', () => {
     writeFileSync(join(dir, 'none.html'), '<p>図なし</p>');
     expect(() => figureEmbed(ctx, join(dir, 'none.html'), { out: join(dir, 'o.html') })).toThrow('目印');
     writeFileSync(join(dir, 'lost.html'), '<!-- figure: lost.json -->');
-    expect(() => figureEmbed(ctx, join(dir, 'lost.html'), { out: join(dir, 'o.html') })).toThrow('目印の JSON がありません: lost.json');
+    expect(() => figureEmbed(ctx, join(dir, 'lost.html'), { out: join(dir, 'o.html') })).toThrow('図 fig-lost（lost.json）を埋められません: JSON がありません: lost.json');
     expect(() => figureEmbed(ctx, file, { out: file })).toThrow('同じ path');
     const bare = setup(fakeArchify(() => FIXTURE), { placed: false });
     expect(() => figureEmbed(bare.ctx, file, { out: join(dir, 'o.html') })).toThrow('roster figure setup を打ってから');
@@ -342,7 +357,7 @@ describe('roster figure embed', () => {
     writeFileSync(join(dir, '流れ.json'), JSON.stringify({ diagram_type: 'workflow', meta: { title: 'a' }, nodes: [] }));
     writeFileSync(join(dir, 'b', '図.json'), JSON.stringify({ diagram_type: 'workflow', meta: { title: 'b' }, nodes: [] }));
     writeFileSync(join(dir, 'page.html'), '<!-- figure: 流れ.json --><!-- figure: b/図.json -->');
-    expect(figureEmbed(ctx, join(dir, 'page.html'), { out: join(dir, 'out.html') }).slice(0, 2).map(l => l.split(':')[0])).toEqual(['図 fig-x', '図 fig-x-2']);
+    expect(figureEmbed(ctx, join(dir, 'page.html'), { out: join(dir, 'out.html') }).slice(0, 2).map(l => l.split('（')[0])).toEqual(['図 fig-x', '図 fig-x-2']);
     const ids = [...readFileSync(join(dir, 'out.html'), 'utf8').matchAll(/\sid="([^"]+)"/g)].map(m => m[1]);
     expect(new Set(ids).size).toBe(ids.length);
   });
@@ -354,18 +369,145 @@ describe('roster figure embed', () => {
     expect(() => figureEmbed(ctx, join(dir, 'twice.html'), { out: join(dir, 'o.html') })).toThrow('同じ図の目印が 2 つあります: ./flow.json');
     writeFileSync(join(dir, 'bad.json'), '{ 壊れた');
     writeFileSync(join(dir, 'bad.html'), '<!-- figure: bad.json -->');
-    expect(() => figureEmbed(ctx, join(dir, 'bad.html'), { out: join(dir, 'o.html') })).toThrow('目印の JSON を読めません: bad.json');
+    expect(() => figureEmbed(ctx, join(dir, 'bad.html'), { out: join(dir, 'o.html') })).toThrow('図 fig-bad（bad.json）を埋められません: JSON を読めません: bad.json');
   });
 
   test('workflow でない図は、描く幅が 760 を超えれば止まる（箱の幅を合わせないので、字が収まらない）', () => {
     const { ctx } = setup(fakeArchify(() => '<svg viewBox="0 0 1000 300"><title id="t">x</title></svg>'));
     const { dir, file } = writer({ diagram_type: 'lifecycle', meta: { title: 'x' }, states: [] });
-    expect(() => figureEmbed(ctx, file, { out: join(dir, 'out.html') })).toThrow(/（lifecycle）は、Archify の描く幅が 1000 で[\s\S]*workflow で描いてください/);
+    expect(() => figureEmbed(ctx, file, { out: join(dir, 'out.html') })).toThrow(/lifecycle の図は、Archify の描く幅が 1000 で[\s\S]*workflow で描いてください/);
   });
 
   test('図の名は JSON の file の名から（英小文字・数字・-）', () => {
     expect(figureName('/x/Review Flow.json')).toBe('fig-review-flow');
     expect(figureName('/x/図.json')).toBe('fig-x');
+  });
+});
+
+describe('roster figure validate', () => {
+  test('embed と同じ形（standard・箱の幅を割合が決まるまで決め直す）で描かせ、通れば 1 行', () => {
+    const seen: Record<string, unknown>[] = [];
+    const { ctx } = setup(fakeArchify(() => FIXTURE, seen));
+    const dir = temp('validate');
+    writeFileSync(join(dir, 'flow.json'), JSON.stringify({ diagram_type: 'workflow', meta: { locale: 'ja' }, nodes: [{ label: '検査と直し' }] }));
+    expect(figureValidate(ctx, join(dir, 'flow.json'))).toEqual([`通った: ${join(dir, 'flow.json')}（縮める割合 0.94）`]);
+    expect(seen[0]?.meta).toEqual({ quality_profile: 'standard', legend: { mode: 'hidden' } });
+    // embed と同じく、2 回目は 805 → 760 の割合で箱の幅を決め直して描いた。
+    expect(seen.map(j => (j.nodes as { width: number }[])[0]?.width)).toEqual([113, 120]);
+  });
+
+  test('描けなければ、誤りの診断ごとに場所と直し方（[位置] を先に 3 つまで・[意味]・無し）を並べて止まる。警告は出さない', () => {
+    const { ctx } = setup(cmd => cmd === 'env'
+      ? ok(JSON.stringify({ ok: false, diagnostics: [
+          { code: 'i18n/locale-fallback', severity: 'warning', message: 'x', supportedFixes: ['Use a bundled locale'] },
+          { code: 'workflow/node-overlap', severity: 'error', message: 'Nodes overlap\nmore', subject: { path: '/nodes/2' }, supportedFixes: ['set /nodes/2/lane to verified lane id "h"', 'set /nodes/2/lane to verified lane id "w"', 'set /nodes/2/lane to verified lane id "z"', 'set /nodes/2/col to verified free column 2'] },
+          { code: 'workflow/unknown-edge-endpoint', severity: 'error', message: 'unknown target', subject: { path: '/edges/3/to' }, supportedFixes: ['set /edges/3/to to verified node id "draw"'] },
+          { code: 'workflow/x', severity: 'error', message: 'no fix' },
+        ] }))
+      : ok());
+    const dir = temp('validate');
+    writeFileSync(join(dir, 'flow.json'), JSON.stringify({ diagram_type: 'workflow', nodes: [] }));
+    let message = '';
+    try {
+      figureValidate(ctx, join(dir, 'flow.json'));
+    }
+    catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message.split('\n')).toEqual([
+      `落ちた: ${join(dir, 'flow.json')}`,
+      '- workflow/node-overlap（/nodes/2）: Nodes overlap',
+      '  直し方: [位置] set /nodes/2/col to verified free column 2',
+      '  直し方: [意味] set /nodes/2/lane to verified lane id "h"',
+      '  直し方: [意味] set /nodes/2/lane to verified lane id "w"',
+      '- workflow/unknown-edge-endpoint（/edges/3/to）: unknown target',
+      '  直し方: [意味] set /edges/3/to to verified node id "draw"',
+      '- workflow/x（場所なし）: no fix',
+      '  直し方: 無し（書き手が直す）',
+    ]);
+  });
+
+  test('誤りの診断が無いのに描けない・字が長すぎる・答えが読めない時も「落ちた」で止まる', () => {
+    const dir = temp('validate');
+    writeFileSync(join(dir, 'flow.json'), JSON.stringify({ diagram_type: 'workflow', nodes: [{ label: 'a' }] }));
+    const none = setup(cmd => cmd === 'env' ? ok(JSON.stringify({ ok: false, diagnostics: [] })) : ok());
+    expect(() => figureValidate(none.ctx, join(dir, 'flow.json'))).toThrow('- 誤りの診断が出なかった');
+    const long = setup(fakeArchify(json => `<svg viewBox="0 0 ${20 * ((json.nodes as { width: number }[])[0]?.width ?? 0)} 300"><title id="t">x</title></svg>`));
+    expect(() => figureValidate(long.ctx, join(dir, 'flow.json'))).toThrow(/落ちた: .*\n- 字が長く[\s\S]*直し方: 無し（書き手が直す）/);
+    const broken = setup(cmd => cmd === 'env' ? { status: 2, stdout: 'Error', stderr: 'boom' } : ok());
+    expect(() => figureValidate(broken.ctx, join(dir, 'flow.json'))).toThrow('Archify の答えを読めません（終了コード 2）: boom');
+  });
+
+  test('箱の位置の直しだけが [位置]。線の端・帯・字は [意味]', () => {
+    expect(isPlacementFix('set /nodes/2/col to verified free column 2')).toBe(true);
+    expect(isPlacementFix('set /nodes/0/row to 1')).toBe(true);
+    expect(isPlacementFix('set /nodes/1/lane to verified lane id "h"')).toBe(false);
+    expect(isPlacementFix('set /edges/3/to to verified node id "draw"')).toBe(false);
+    expect(isPlacementFix('set /nodes/1/label to "x"')).toBe(false);
+  });
+
+  test('file が無い・読めない・diagram_type が無い時は止まる', () => {
+    const { ctx } = setup(fakeArchify(() => FIXTURE));
+    const dir = temp('validate');
+    expect(() => figureValidate(ctx, join(dir, 'none.json'))).toThrow('JSON がありません');
+    writeFileSync(join(dir, 'bad.json'), '{');
+    expect(() => figureValidate(ctx, join(dir, 'bad.json'))).toThrow('JSON を読めません');
+    writeFileSync(join(dir, 'x.json'), '{}');
+    expect(() => figureValidate(ctx, join(dir, 'x.json'))).toThrow('diagram_type がありません');
+  });
+});
+
+describe('--figure（図を名指す）', () => {
+  /** 図 2 つ（流れ.json と broken.json）の書き手の file。broken は描けない。 */
+  function two(): { ctx: Context, dir: string } {
+    const fake = fakeArchify(() => FIXTURE);
+    const { ctx } = setup((cmd, args, o) => {
+      const input = args[args.indexOf('export-svg') + 2] ?? '';
+      if (cmd === 'env' && input.endsWith('fig-broken.json')) return ok(JSON.stringify({ ok: false, diagnostics: [{ code: 'workflow/node-overlap', severity: 'error', message: 'overlap' }] }));
+      return fake(cmd, args, o);
+    });
+    const dir = temp('figure');
+    mkdirSync(join(dir, 'figs'));
+    writeFileSync(join(dir, 'figs', '流れ.json'), JSON.stringify({ diagram_type: 'workflow', nodes: [] }));
+    writeFileSync(join(dir, 'figs', 'broken.json'), JSON.stringify({ diagram_type: 'workflow', nodes: [] }));
+    writeFileSync(join(dir, 'page.html'), '<!-- figure: figs/broken.json --><!-- figure: figs/流れ.json -->');
+    return { ctx, dir };
+  }
+
+  test('embed: 名指した図が埋まれば、ほかの図が描けなくても通り、ほかの図が欠けていることを書く。埋めた図の根に JSON の印（path の hash）を書き、path は書かない', () => {
+    const { ctx, dir } = two();
+    const lines = figureEmbed(ctx, join(dir, 'page.html'), { out: join(dir, 'page.out.html'), figure: join(dir, 'figs', '流れ.json') });
+    expect(lines[0]).toMatch(/^図 fig-x（figs\/流れ.json）: /);
+    expect(lines[1]).toMatch(/^ほかの図: 図 fig-broken（figs\/broken.json）を埋められません: [\s\S]*（置く用の file には、この図が欠けている。置く前に直す）$/);
+    expect(lines.at(-1)).toMatch(/（図 2 つのうち 1 つを埋めた）$/);
+    const out = readFileSync(join(dir, 'page.out.html'), 'utf8');
+    expect(out).toContain(`data-src="${figureId(join(dir, 'figs', '流れ.json'))}"`);
+    expect(out).not.toContain(dir);
+  });
+
+  test('embed: 名指した図が描けなければ、その訳を頭に並べて止まる。目印に無い図は断る', () => {
+    const { ctx, dir } = two();
+    expect(() => figureEmbed(ctx, join(dir, 'page.html'), { out: join(dir, 'page.out.html'), figure: join(dir, 'figs', 'broken.json') })).toThrow(/^図 fig-broken（figs\/broken.json）を埋められません/);
+    expect(() => figureEmbed(ctx, join(dir, 'page.html'), { out: join(dir, 'page.out.html'), figure: join(dir, 'none.json') })).toThrow('--figure の図の目印がありません');
+  });
+
+  test('shot: 名指した図だけを検査して撮る（symlink を通した path でも同じ図）', () => {
+    const { dir, ctx } = two();
+    figureEmbed(ctx, join(dir, 'page.html'), { out: join(dir, 'page.out.html'), figure: join(dir, 'figs', '流れ.json') });
+    const shots: string[] = [];
+    const chrome: Exec = (_cmd, args) => {
+      const shot = args.find(a => a.startsWith('--screenshot='));
+      if (shot !== undefined) {
+        shots.push(shot);
+        writeFileSync(shot.slice('--screenshot='.length), 'png');
+      }
+      return ok(args.includes('--dump-dom') ? '<pre id="roster-figure-check">[]</pre>' : '');
+    };
+    symlinkSync(join(dir, 'figs'), join(dir, 'link'));
+    const lines = figureShot({ ...ctx, exec: chrome }, join(dir, 'page.out.html'), { dir: join(dir, 'png'), figure: join(dir, 'link', '流れ.json') });
+    expect(lines[0]).toBe(`図 fig-x（${join(dir, 'link', '流れ.json')}）: 寸法の検査 0 件`);
+    expect(shots).toHaveLength(2);
+    expect(() => figureShot({ ...ctx, exec: chrome }, join(dir, 'page.out.html'), { figure: join(dir, 'figs', 'broken.json') })).toThrow('--figure の図がありません');
   });
 });
 

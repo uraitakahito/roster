@@ -250,6 +250,18 @@ describe('環境の手続き', () => {
   });
 });
 
+describe('figure-fix の skill が打つ命令（AI-43）', () => {
+  // fork の中の roster は呼んだ担当として動き、guard も効く。書き手になりうる担当で、skill の本文が打つ命令を止めないこと。
+  test.each<[RoleName | undefined]>([['software-engineer'], ['tech-lead'], ['devops-engineer'], [undefined]])('%s', (role) => {
+    for (const command of [
+      'roster figure validate /w/figs/flow.json',
+      'roster figure embed /w/plan.html --out /w/plan.out.html',
+      'roster figure shot /w/plan.out.html',
+      'roster figure setup',
+    ]) expect(ask(command, role)).toEqual({ allow: true });
+  });
+});
+
 describe('道具の直打ち', () => {
   test.each([
     'cmux agent message workspace:1 --from x -- "【done】…"',

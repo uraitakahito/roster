@@ -15,7 +15,7 @@ import { guard, infraApprove, infraList, infraRevoke, infraRun } from './command
 import { issueView } from './commands/issue.ts';
 import { messageRecordsSettled } from './commands/message-record.ts';
 import { fileDelete, fileList, filePath, filePut, type FileListOptions, type FilePutOptions } from './commands/file.ts';
-import { figureEmbed, figureSetup, figureShot, type FigureEmbedOptions, type FigureShotOptions } from './commands/figure.ts';
+import { figureEmbed, figureSetup, figureShot, figureValidate, type FigureEmbedOptions, type FigureShotOptions } from './commands/figure.ts';
 import { PAGE_KINDS, pageDelete, pageImport, pageList, pagePath, pagePut, pageReply, type PageDeleteOptions, type PageListOptions } from './commands/page.ts';
 import { mailArm, mailCheck, mailClaim, mailGate, mailLeft, mailPrompt, mailRelease, mailWait, WAIT_STEP, type StepResult, type WaitResult } from './commands/mail.ts';
 import { registerMessages } from './commands/register.ts';
@@ -236,11 +236,15 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
   const figure = program.command('figure').description('文書の図を Archify で描いて整える（手順は _shared/figures.md の「Archify で描く」）');
   figure.command('setup').description('Archify を、.archify-version の版に固定して取って置く（置いてあれば何もしない）')
     .action(() => print(figureSetup(createContext())));
+  figure.command('validate <json>').description('図の JSON 1 つを、embed と同じ形にして Archify で検査する（落ちれば、診断ごとに直し方を [位置]・[意味] に分けて並べ、exit 1）')
+    .action((path: string) => print(figureValidate(createContext(), path)));
   figure.command('embed <file>').description('書き手の file の目印（<!-- figure: <JSON> -->）ごとに図を描いて整え、埋めた物を --out の file に書く（書き手の file は変えない）')
     .requiredOption('--out <file>', '図を埋めた物を書く file（roster page put で置く用）')
+    .option('--figure <json>', '名指した図（JSON の path）。ほかの図が描けなくても、この図が埋まれば通る')
     .action((path: string, options: FigureEmbedOptions) => print(figureEmbed(createContext(), path, options)));
   figure.command('shot <file>').description('埋めた図ごとに、寸法の検査（字のはみ出し・重なり・小さい字）をし、明るい・暗いの png を撮る（傷があれば exit 1）')
     .option('--dir <folder>', 'png を書く folder（無ければ一時の folder）')
+    .option('--figure <json>', '名指した図（JSON の path）だけを検査して撮る')
     .action((path: string, options: FigureShotOptions) => print(figureShot(createContext(), path, options)));
 
   program.command('guard').description('（hook が呼ぶ）標準入力の命令を通すか止めるかを決める')
