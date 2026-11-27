@@ -141,9 +141,9 @@ describe('SVG を整える（tidy）', () => {
   });
 
   test('題の " を逃がし、viewBox の , 区切りも読む', () => {
-    const src = FIXTURE.replace(/<title id="([^"]*)">[^<]*<\/title>/, '<title id="$1">「a" b」</title>').replace(/viewBox="0 0 805 316"/, 'viewBox="0,0,805,316"');
+    const src = FIXTURE.replace(/<title id="([^"]*)">[^<]*<\/title>/, '<title id="$1">「a" &amp; b」</title>').replace(/viewBox="0 0 805 316"/, 'viewBox="0,0,805,316"');
     const t = tidySvg(src, { prefix: 'fig-q', version: 'v3.3.2' });
-    expect(t).toContain('aria-label="「a&quot; b」"');
+    expect(t).toContain('aria-label="「a&quot; &amp; b」"');
     expect(t).toContain('style="max-width:760px"');
     expect(t).toContain('font-size="13.8"');
     expect(viewBoxOf('<svg viewBox=" 0, 0 ,805, 316 ">')).toEqual([0, 0, 805, 316]);

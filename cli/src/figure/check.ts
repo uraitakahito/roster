@@ -44,6 +44,8 @@ export const CHECK_SCRIPT = `(() => {
       const b = m.getBBox();
       const label = m.parentNode.querySelector('text');
       for (const n of nodes) if (hit(b, n.r.getBBox())) out.push({ kind: '線の字の地が箱に重なる', text: label ? label.textContent : '', node: n.g.getAttribute('data-node-id') });
+      // 地が字より狭いと、字の端に線が透ける。
+      if (label && !inside(label.getBBox(), b, -tol)) out.push({ kind: '線の字が地からはみ出す', text: label.textContent });
     }
     for (const g of svg.querySelectorAll('g[data-edge-label]')) for (const t of g.querySelectorAll('text')) {
       const b = t.getBBox();

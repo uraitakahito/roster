@@ -48,7 +48,14 @@ export function setupArchify(ctx: Context): string[] {
   // 前の setup が途中で殺されて残した一時の folder（1 時間より前の物）を消す。
   for (const name of readdirSync(parent)) {
     const old = join(parent, name);
-    if (name.startsWith('.tmp-') && ctx.now().getTime() - statSync(old).mtimeMs > 60 * 60 * 1000) rmSync(old, { recursive: true, force: true });
+    if (!name.startsWith('.tmp-')) continue;
+    try {
+      if (ctx.now().getTime() - statSync(old).mtimeMs > 60 * 60 * 1000) rmSync(old, { recursive: true, force: true });
+    }
+    catch (e) {
+      // 同じ時にほかの席が消した物は飛ばす。
+      if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+    }
   }
   const tmp = mkdtempSync(join(parent, '.tmp-'));
   try {

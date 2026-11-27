@@ -88,9 +88,9 @@ function growEdgeMasks(svg: string, scale: number): string {
   });
 }
 
-/** 属性の値に入れる字（`"`・`&`・`<` を逃がす）。 */
+/** SVG から取り出した字（XML の字なので `&`・`<` は逃がしてある）を、属性の値に入れる形にする（`"` だけを逃がす）。 */
 function attr(text: string): string {
-  return text.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;');
+  return text.replaceAll('"', '&quot;');
 }
 
 /** Archify の SVG（明るい用の 1 枚）を整える。 */
