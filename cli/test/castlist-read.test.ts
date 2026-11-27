@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
-import { castlistIssuer, PM_REF } from '../src/castlist.ts';
+import { CALLBOARD_URL, castlistIssuer, PM_REF } from '../src/castlist.ts';
 import { sessionStart } from '../src/commands/castlist.ts';
 import { castlistEvents, castlistFind, castlistLineage, castlistSettings, castlistShow } from '../src/commands/castlist-read.ts';
 import { incidentTimeline } from '../src/commands/timeline.ts';
@@ -97,7 +97,8 @@ function auditorWorld(url = fake.url): { w: World, auditor: Context } {
   return { w, auditor: { ...base, env: { ...base.env, ROSTER_KEY: 'audit', ROSTER_ROLE: 'auditor' } } };
 }
 
-const page = (url: string): string => `${fake.url}${url}`;
+// プロフィールの画面は、castlist でなく、画面のサーバー（callboard）にある（castlist は 2.0.0 から画面を持たない）。
+const page = (url: string): string => `${CALLBOARD_URL}${url}`;
 
 describe('命令の一覧', () => {
   test('roster castlist find・show・lineage・events・settings が命令の木と COMMANDS に在る', () => {
