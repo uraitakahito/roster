@@ -23,7 +23,7 @@ export function parsePr(url: string): PrRef | undefined {
  * 聞いた 1 回の答え。
  * - passed: みな終わって、落ちた物が無い（total は通った数。cancelled は、そのほかに取り消された main の workflow の数）。
  * - failed: 落ちた物がある（ほかがまだ動いていても、分かった時に返す。pending は、まだ動いている数。fresh は、merge から RUN_GRACE_MS の内で、回が作られきっていないかもしれない時）。
- * - pending: まだ終わっていない物がある。
+ * - pending: まだ終わっていない物がある（behind は、PR の head が、push した branch の先にまだ追いついていない時。done・total は 0）。
  * - none: 見る物（check・workflow の回）が 1 つも付いていない。「通った」ではない。
  * - unreachable: GitHub が応えない（繋がらない・5xx など）。聞き直せば変わりうる。
  * - invalid: 聞き直しても変わらない誤り（PR が無い・認証が無い・merge していない）。
@@ -31,7 +31,7 @@ export function parsePr(url: string): PrRef | undefined {
 export type Look =
   | { state: 'passed', total: number, cancelled?: number }
   | { state: 'failed', failed: Named[], passed: number, pending: number, fresh?: boolean }
-  | { state: 'pending', done: number, total: number }
+  | { state: 'pending', done: number, total: number, behind?: boolean }
   | { state: 'none' }
   | { state: 'unreachable', message: string }
   | { state: 'invalid', message: string };
@@ -95,6 +95,48 @@ export function lookChecks(exec: Exec, pr: PrRef): Look {
   }
   if (pending > 0) return { state: 'pending', done: checks.length - pending, total: checks.length };
   return { state: 'passed', total: checks.length };
+}
+
+/** `gh pr view --json state,headRefOid,headRefName,headRepository,headRepositoryOwner` の答え（読む欄だけ）。 */
+interface HeadView {
+  state?: string
+  headRefOid?: string
+  headRefName?: string
+  headRepository?: { name?: string } | null
+  headRepositoryOwner?: { login?: string } | null
+}
+
+/**
+ * branch の先を引いた時に、比べずに進む答え。branch が無い（merge して消した・fork が消えた）・head の repo を読めない（上限でない 403。別の org の SAML・token の範囲の外）。
+ * 比べは助けの手なので、読めない時は前のとおり check で判じる（見張れない、にしない）。
+ */
+const NO_BRANCH = /HTTP 404|HTTP 422|HTTP 403|No commit found/i;
+
+/**
+ * PR の head が、push した branch の先に追いついているかを 1 回見る（台帳 #340）。
+ * push の直後は、PR の head（headRefOid）が前の commit のままで、`gh pr checks` が前の commit の check（落ちた回など）を返す。
+ * - 追いついていない: pending（behind）。check は見ない。
+ * - 追いついている・PR が開いていない・branch が無い・head の repo が無いか読めない: undefined（今のとおり check で判じる）。
+ *   merge・close した PR は、GitHub が head を止めるが branch は進みうるので、比べない（比べると、いつまでも追いつかない）。
+ * - GitHub が応えない（5xx・繋がらない・上限）: unreachable（聞き直す。比べずに進むと、揺れた時に #340 が戻る）。
+ */
+export function lookHead(exec: Exec, pr: PrRef): Look | undefined {
+  const v = exec('gh', ['pr', 'view', pr.url, '--json', 'state,headRefOid,headRefName,headRepository,headRepositoryOwner']);
+  if (v.status !== 0) return failure(v.status, v.stderr, v.stdout);
+  const view = parsed<HeadView>(v.stdout);
+  if (typeof view?.state !== 'string' || typeof view.headRefOid !== 'string' || typeof view.headRefName !== 'string') return { state: 'unreachable', message: 'gh pr view の答えを読めない' };
+  if (view.state !== 'OPEN') return undefined;
+  const owner = view.headRepositoryOwner?.login;
+  const name = view.headRepository?.name;
+  if (owner === undefined || name === undefined) return undefined;
+  const t = exec('gh', ['api', `repos/${owner}/${name}/commits/heads/${view.headRefName.split('/').map(encodeURIComponent).join('/')}`, '-q', '.sha']);
+  if (t.status !== 0) {
+    if (!LIMITED.test(t.stderr) && NO_BRANCH.test(t.stderr)) return undefined;
+    return failure(t.status, t.stderr, t.stdout);
+  }
+  const tip = t.stdout.trim();
+  if (tip === '') return { state: 'unreachable', message: 'branch の先の commit を読めない' };
+  return tip === view.headRefOid ? undefined : { state: 'pending', done: 0, total: 0, behind: true };
 }
 
 /** `gh pr view --json state,mergeCommit,mergedAt` の答え（読む欄だけ）。 */

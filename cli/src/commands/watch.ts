@@ -4,7 +4,7 @@
 import type { Context } from '../context.ts';
 import { envOf } from '../env.ts';
 import { TpmError } from '../skill-sets.ts';
-import { lookChecks, lookGithub, lookMain, namedList, parsePr, span, type Look, type PrRef } from '../watch.ts';
+import { lookChecks, lookGithub, lookHead, lookMain, namedList, parsePr, span, type Look, type PrRef } from '../watch.ts';
 
 /**
  * 見張りの終了コード。使い方の誤りは commander が 2、決まりの誤り（TpmError）は 1 で終わるので、結果はそれと重ならない数にする。
@@ -96,7 +96,7 @@ function report(loop: Loop, look: Look, timedOut: boolean, seconds: number): Wat
     case 'failed':
       return { code: WATCH_EXIT.failed, lines: [`落ちた: ${namedList(look.failed)}`, `ほかの ${loop.noun}: 通った ${look.passed}・まだ ${look.pending}（${waited}）`] };
     case 'pending':
-      return { code: WATCH_EXIT.timeout, lines: [look.total === 0 ? `まだ: ${loop.noun} の回がまだ作られていない（${waited}）。${retry}` : look.done === look.total ? `まだ: ${loop.noun} ${look.total} つは終わっているが、merge から 2 分の内なので、回が作られきるのを待っている（${waited}）。${retry}` : `まだ: ${loop.noun} ${look.total} つのうち ${look.total - look.done} つが終わっていない（${waited}）。${retry}`] };
+      return { code: WATCH_EXIT.timeout, lines: [look.behind === true ? `まだ: PR の head が、branch の先（push した commit）に追いついていない（${waited}）。${retry}` : look.total === 0 ? `まだ: ${loop.noun} の回がまだ作られていない（${waited}）。${retry}` : look.done === look.total ? `まだ: ${loop.noun} ${look.total} つは終わっているが、merge から 2 分の内なので、回が作られきるのを待っている（${waited}）。${retry}` : `まだ: ${loop.noun} ${look.total} つのうち ${look.total - look.done} つが終わっていない（${waited}）。${retry}`] };
     case 'none':
       return { code: WATCH_EXIT.none, lines: [`${loop.noun} が付いていない（${waited}）。通ったのではない。repo に、ここで動く workflow が在るはずなら、${loop.again} でもう 1 度見張る`] };
     case 'unreachable':
@@ -155,10 +155,13 @@ function prOf(url: string): PrRef {
   return pr;
 }
 
-/** PR の今の head の commit の check が、みな終わるまで見張る（みな終わったのを、間を空けて 2 度見たら「通った」）。 */
+/**
+ * PR の今の head の commit の check が、みな終わるまで見張る（みな終わったのを、間を空けて 2 度見たら「通った」）。
+ * 毎回、先に PR の head が branch の先に追いついているかを見る（push の直後に、前の commit の落ちた check で 10 にしない。台帳 #340）。
+ */
 export function watchPr(ctx: Context, url: string, options: WatchOptions = {}): Promise<WatchResult> {
   const pr = prOf(url);
-  return watch(ctx, { kind: 'pr', target: pr.url, look: () => lookChecks(ctx.exec, pr), streak: STREAK, settle: false, noun: 'check', again: `roster watch pr ${pr.url}` }, options);
+  return watch(ctx, { kind: 'pr', target: pr.url, look: () => lookHead(ctx.exec, pr) ?? lookChecks(ctx.exec, pr), streak: STREAK, settle: false, noun: 'check', again: `roster watch pr ${pr.url}` }, options);
 }
 
 /** merge した PR の、merge の commit で main に動いた workflow が、みな終わるまで見張る（落ちた物が分かっても、ほかが終わるまで待つ。長さを過ぎたら、分かっている所で 10）。 */
