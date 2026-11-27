@@ -412,10 +412,10 @@ describe('hook の入力と settings', () => {
     expect(commandOf(JSON.stringify({ tool_name: 'Read', tool_input: { file_path: '/x' } }))).toBeUndefined();
   });
 
-  test('settings は Bash の前に roster guard を呼ぶ hook と、session の始まりと終わりに roster castlist を呼ぶ hook と、メッセージを渡す hook（roster mail …）', () => {
+  test('settings は Bash の前に roster guard を呼ぶ hook と、session の始まりと終わりに roster castlist を呼ぶ hook と、メッセージを渡す hook（roster mail …）と、TPM 担当の席の返事の言葉を数える hook', () => {
     const waiting = { type: 'command', async: true, asyncRewake: true, timeout: 86400, command: '/r/cli/bin/roster mail wait' };
     const gate = [{ matcher: 'Bash', hooks: [{ type: 'command', command: '/r/cli/bin/roster mail gate' }] }];
-    expect(JSON.parse(guardSettings('/r/cli/bin/roster'))).toEqual({ hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: '/r/cli/bin/roster guard' }] }], SessionStart: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-start' }, { type: 'command', command: '/r/cli/bin/roster mail claim' }, waiting] }], SessionEnd: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-end' }, { type: 'command', command: '/r/cli/bin/roster mail release' }] }], PostToolUse: gate, PostToolUseFailure: gate, Stop: [{ hooks: [waiting] }], UserPromptSubmit: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster mail prompt' }] }] } });
+    expect(JSON.parse(guardSettings('/r/cli/bin/roster'))).toEqual({ hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: '/r/cli/bin/roster guard' }] }], SessionStart: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-start' }, { type: 'command', command: '/r/cli/bin/roster mail claim' }, waiting] }], SessionEnd: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-end' }, { type: 'command', command: '/r/cli/bin/roster mail release' }] }], PostToolUse: gate, PostToolUseFailure: gate, Stop: [{ hooks: [waiting, { type: 'command', command: '/r/cli/bin/roster reply-language check' }] }], UserPromptSubmit: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster mail prompt' }] }] } });
   });
 
   test('path に空白などがあれば、hook の命令の中で引用する', () => {

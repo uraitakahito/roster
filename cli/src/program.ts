@@ -18,6 +18,7 @@ import { fileDelete, fileList, filePath, filePut, type FileListOptions, type Fil
 import { PAGE_KINDS, pageDelete, pageImport, pageList, pagePath, pagePut, pageReply, type PageDeleteOptions, type PageListOptions } from './commands/page.ts';
 import { mailArm, mailCheck, mailClaim, mailGate, mailLeft, mailPrompt, mailRelease, mailWait, WAIT_STEP, type StepResult, type WaitResult } from './commands/mail.ts';
 import { registerMessages } from './commands/register.ts';
+import { replyLanguageCheck } from './commands/reply-language.ts';
 import { registerReview } from './commands/review.ts';
 import { hello, inboxNow } from './commands/role-side.ts';
 import { seatAdd, seatBrief, seatClose, seatDismiss, seatNotify } from './commands/seat.ts';
@@ -246,6 +247,18 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
   returned.command('check').description('前の版が起こした席の hook が呼ぶ。何もしない').action(() => undefined);
   returned.command('show').description('返った物（前の版の【returned】の id）の宛先と全文を、送った記録から出す（TPM 担当。読むだけ）').argument('<id>', 'メッセージの id（頭の数字だけでもよい）')
     .action((id: string) => print(showReturned(createContext(), id)));
+  // 返事の言葉を数える hook の命令（TPM 担当の席の Stop にだけ付く。guard.ts の guardSettings）。どの誤りでも何も返さずに 0 で終わる。
+  const replyLanguage = program.command('reply-language').description('TPM 担当の返事の言葉を数える hook の命令（Claude Code の hook が呼ぶ。人は打たない）');
+  replyLanguage.command('check').description('（TPM 担当の席の Stop の hook が呼ぶ）最後の返事の仮名と漢字の割合を数え、2 割より少なければ 1 回だけ日本語で書き直させる')
+    .action(() => {
+      try {
+        const out = replyLanguageCheck(createContext(), readStdin());
+        if (out !== undefined) console.log(out);
+      }
+      catch (e) {
+        process.stderr.write(`roster reply-language check: ${(e as Error).message}\n`);
+      }
+    });
   // メッセージを NATS で渡す hook の命令（どの席にも付く。guard.ts の guardSettings）。
   // hook なので、どんな誤りでも何も出さずに 0 で終わる（Claude Code の作業を止めない）。
   const quiet = (name: string, run: () => void | Promise<void>) => async (): Promise<void> => {

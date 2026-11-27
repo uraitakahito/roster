@@ -77,6 +77,7 @@ export const COMMANDS = [
   'guard',
   'returned check',
   'returned show',
+  'reply-language check',
   'mail claim',
   'mail release',
   'mail gate',
