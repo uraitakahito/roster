@@ -8,10 +8,10 @@
 
 - 図の中の字は SVG の `<text>` で書く（画像の中の字にしない）。`<svg>` に `role="img"` と `aria-label="<何の図か>"` を付け、図の下に `<figcaption>` で「図 N: …」と書く。
 - 色は下の色の変数だけを使う（`fill="var(--ok)"` など）。明るい画面と暗い画面の両方で読める。字は `svg text{fill:var(--fg)}` で色が付くので、字に色を書かない（色を付けるときは `style="fill:var(--ng)"`）。
-- `viewBox` の幅は 760 まで、`width="100%"` と `style="max-width:<幅>px"` を付ける（狭い画面では縮む）。字は 13〜14px（「6. Archify で描く」の図だけは、箱の補いと線の字を 10px にしてよい）。日本語の字は 1 字がおよそ字の大きさの幅になるので、枠や棒の幅は字の数 × 14 より広く取る。
+- `viewBox` の幅は 760 まで、`width="100%"` と `style="max-width:<幅>px"` を付ける（狭い画面では縮む）。字は 13〜14px（「6. Archify で描く」の図だけは、`viewBox` の幅が 760 を超えてよい（映すのは 760 まで）・箱の補いと線の字を 10px にしてよい）。日本語の字は 1 字がおよそ字の大きさの幅になるので、枠や棒の幅は字の数 × 14 より広く取る。
 - 色だけで違いを示さない。棒や枠の横に、字（「0 回」「お勧め」など）も書く。
 - 図は 1 つに言うことを 1 つ。表で言える細かい数は表に任せる。
-- 描いたら、置く前に Chrome の headless で撮って Read で見て、字のはみ出しと重なりがないかを確かめる（下の「画面の写しを撮る」の 1 行。撮った png は上げなくてよい）。
+- 描いたら、置く前に Chrome の headless で撮って Read で見て、字のはみ出しと重なりがないかを確かめる（下の「画面の写しを撮る」の 1 行。撮った png は上げなくてよい）。「6. Archify で描く」の図は、`figure-fix` が寸法の検査と撮影をするので、書き手は撮らない・開かない。
 
 ## 色の変数（ページの `<style>` に 1 度書く）
 
@@ -177,23 +177,23 @@ figcaption{color:var(--mute);font-size:13px}
 
 ### 初めに 1 度
 
-`roster figure setup`（roster を動かす機械に Archify を置く。置いてあれば何もしない）。
+`roster figure setup`（roster を動かす機械に Archify を置く。置いてあれば何もしない）。初めてと、Archify の版が上がった後（命令が「roster figure setup を打ってから」と言って止まった時）に打つ。
 
 ### 手順
 
 1. **種類を見る**: 図ごとに `roster figure guide "<何の図か一言>"` を打ち、Archify の勧める図の種類と、入れる物の手がかりを見る（Archify の `guide`。英語で答える）。文書の図は workflow で描く（勧めが architecture などでも、流れと前と後は workflow で言える）。
-2. **JSON を書く**: 書き手の file の隣に、図ごとに JSON を書く（例 `figs/flow.json`。file の名が図の名になる: `fig-flow`）。下の例を写し、字と数だけ替える。
+2. **JSON を書く**: 書き手の file の隣に、図ごとに JSON を書く（例 `figs/flow.json`。file の名は英小文字・数字・- で付ける。file の名が図の名になる: `fig-flow`）。下の例を写し、字と数だけ替える。
    - `type` で箱の色が決まる: `external` = 今の物・変えない物（灰）、`backend` = 変える物・新しい物（青）、`security` = 悪い（赤）、`cloud` = 中ほど（黄）、`database` = 良い（緑）。
    - 「前と後」は帯（`lanes`）を 2 本（今・後）にし、同じ `col` に並べる。
    - 字は短く: 箱の名は 8 字・補い（`sublabel`）は 12 字まで、1 本の帯の箱は 4 つまでを目安にする（文書の幅 760px に、箱の名 13px・補いと線の字 10px で収める。収まらなければ命令が止まる）。
    - `meta.title` は図の題（読み上げの字になる）。`meta.locale`・`meta.viewBox` は書かない。
 3. **目印を書く**: 書き手の file の、図を置く所に `<figure><!-- figure: figs/flow.json --><figcaption>図 N: …</figcaption></figure>` と書く（path は書き手の file からの相対。書き手の file・JSON の path に空白を入れない）。
 4. **直しと検査を任せる**: 図ごとに 1 つずつ（並べずに）Skill tool で `figure-fix` を呼ぶ（引数は `<書き手の file> <図の JSON>`）。返りが「直せない」なら、訳のとおりに JSON（線の端・帯・字を短くする・箱を減らす）を直して、もう 1 度呼ぶ。「画像の助言」は助言なので、直すかは書き手が決める。
-5. **置く**: どの図の skill の返りにも「ほかの図」の行が無くなってから、skill が書いた置く用の file（`<書き手の file の名>.out.html`）を `roster page put` で置く（「ほかの図」があるうちは、置く用の file にその図が欠けている）。書き手の file には目印だけが残り、SVG は入らない。
+5. **置く**: 置く前に `roster figure embed <書き手の file> --out <置く用の file>`（`--figure` を付けない）を打ち、exit 0（図をみな埋めた）を見てから、置く用の file（`<書き手の file の名>.out.html`）を `roster page put` で置く（exit 1 なら、出た図の JSON を直して、その図の skill を呼び直す）。書き手の file には目印だけが残り、SVG は入らない。
 6. **字だけを直した時**: JSON を変えずに文書の字だけを直したら、skill を呼ばずに `roster figure embed <書き手の file> --out <置く用の file>` を打って置き直す（exit 1 の間は置かない）。
 
 - 置く用の file と、skill が撮った png は、書き手は開かない（埋めた SVG は図 1 つ 6〜9 KB あり、開くと高い model の文脈に入る）。図の見た目は skill の返りの「寸法の検査」と「画像の助言」で知る。
-- Archify の図の字は、箱の名・帯の名が 13px、補いと線の字が 10px で映る（命令が字の大きさと箱の幅を決める）。この図に限り、10px の字を認める（「描き方の決まり」の 13〜14px の外）。
+- Archify の図の字は、箱の名・帯の名が 13px、補いと線の字が 10px で映る（命令が字の大きさと箱の幅を決める）。この図に限り、10px の字と、760 を超える `viewBox` の幅（`max-width:760px` で縮めて映す）を認める（「描き方の決まり」の外）。
 
 JSON の例（帯 2 本の「前と後」）:
 
