@@ -892,3 +892,77 @@ describe('この repo の設定の、名を書かない命令と container-syste
     expect(judgeOwn(command, 'software-engineer')).toBe(false);
   });
 });
+
+// 名を = で繋ぐ形（--name=…）と、volume を付ける長い旗（--volume …）で起こす命令（t-vp6r。台帳 #291）。
+// pagetray の宣言は PR #256（review-18）で塞いだ。同じ形を、nats・builder と、隣の repo（castlist・pagetray）の宣言にも足す。
+describe('名を = で繋ぐ形と、volume の長い旗（t-vp6r。台帳 #291）', () => {
+  const judgeIn = (infra: Record<string, InfraEnv>) => (command: string, role: RoleName | undefined) =>
+    judge({ command, role, config: { infra, trackers: { jira: [], github: [] } }, approvals: {}, now }).allow;
+  const judgeOwn = judgeIn(readRolesConfig(join(import.meta.dirname, '..', '..', '.claude', 'roles', 'config.jsonc')).infra);
+
+  test.each([
+    'container run -d --name=roster-nats -p 127.0.0.1:4222:4222 --volume roster-nats-data:/data docker.io/library/nats:2.12 -js',
+    'container run -d --name=roster-nats docker.io/library/nats:2.12 -js',
+    'container run --rm --volume roster-nats-data:/data docker.io/library/alpine:3.22 sh',
+    'container run -d --name=buildkit x',
+  ])('この repo の設定: %s は、ほかの担当を止め、DevOps Engineer 担当は通す（TPM に相談）', (command) => {
+    expect(judgeOwn(command, 'software-engineer')).toBe(false);
+    expect(judgeOwn(command, 'devops-engineer')).toBe(true);
+  });
+
+  test.each([
+    'container run --rm --name=mytest --volume mytest-data:/data docker.io/library/alpine:3.22 sh',
+    'container volume inspect roster-nats-data',
+    'container logs roster-nats',
+  ])('この repo の設定: %s（関わりの無い・読むだけの命令）は、どの担当も通す', (command) => {
+    expect(judgeOwn(command, 'software-engineer')).toBe(true);
+  });
+
+  // 隣の repo の本物の宣言。guard は、TPM 担当を起こした folder の直下の folder の宣言も読むので、本体の checkout の file が効く。
+  // worktree からでも本体を指すよう、git の common dir（<本体>/.git）の 2 つ上を、repo を並べた folder とみなす。
+  // CI には隣の repo が無いので skip する（手元で流す試験）。
+  const common = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: import.meta.dirname, encoding: 'utf8' }).stdout.trim();
+  const sibling = (repo: string): string => join(common, '..', '..', repo, '.claude', 'roles', 'config.jsonc');
+
+  describe.skipIf(common === '' || !existsSync(sibling('castlist')))('castlist の repo の宣言（PM だけ）', () => {
+    const judgeCastlist = judgeIn(readRolesConfig(sibling('castlist')).infra);
+    test.each([
+      'container run -d --name=castlist.box -p 127.0.0.1:8802:8080 --volume castlist-data-v1:/data ghcr.io/uraitakahito/castlist:v2.0.0',
+      'container run -d --name=castlist.box ghcr.io/uraitakahito/castlist:v2.0.0',
+      'container run -d --name=castlist -p 127.0.0.1:8802:8080 ghcr.io/uraitakahito/castlist:v2.0.0',
+      'container run --rm --volume castlist-data-v1:/data docker.io/library/rust:1.100.0-alpine sh',
+      // 前からの形も、今までどおり止まる。
+      'container stop castlist.box',
+      'container run -d --name castlist.box -p 127.0.0.1:8802:8080 -v castlist-data-v1:/data ghcr.io/uraitakahito/castlist:v2.0.0',
+    ])('%s は、DevOps Engineer 担当も止める', (command) => {
+      expect(judgeCastlist(command, 'software-engineer')).toBe(false);
+      expect(judgeCastlist(command, 'devops-engineer')).toBe(false);
+    });
+    test.each([
+      'container run --rm --name=mytest --volume mytest-data:/data docker.io/library/alpine:3.22 sh',
+      'container logs castlist.box',
+    ])('%s は、どの担当も通す', (command) => {
+      expect(judgeCastlist(command, 'software-engineer')).toBe(true);
+    });
+  });
+
+  describe.skipIf(common === '' || !existsSync(sibling('pagetray')))('pagetray の repo の宣言（TPM に相談）', () => {
+    const judgePagetray = judgeIn(readRolesConfig(sibling('pagetray')).infra);
+    test.each([
+      'container run -d --name=pagetray.box --volume pagetray-data-v1:/data ghcr.io/uraitakahito/pagetray:v1.2.0',
+      'container run -d --name=pagetray.box ghcr.io/uraitakahito/pagetray:v1.2.0',
+      'container run -d --name=pagetray -p 127.0.0.1:8801:8080 ghcr.io/uraitakahito/pagetray:v1.2.0',
+      'container run --rm --volume pagetray-data-v1:/data docker.io/library/rust:1.100.0-alpine sh',
+      'container rm -f pagetray.box',
+    ])('%s は、ほかの担当を止め、DevOps Engineer 担当は通す', (command) => {
+      expect(judgePagetray(command, 'software-engineer')).toBe(false);
+      expect(judgePagetray(command, 'devops-engineer')).toBe(true);
+    });
+    test.each([
+      'container run --rm --name=mytest --volume mytest-data:/data docker.io/library/alpine:3.22 sh',
+      'container logs pagetray.box',
+    ])('%s は、どの担当も通す', (command) => {
+      expect(judgePagetray(command, 'software-engineer')).toBe(true);
+    });
+  });
+});
