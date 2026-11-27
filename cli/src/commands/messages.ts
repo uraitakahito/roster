@@ -721,7 +721,7 @@ export function mainWorkflows(ctx: Context, pr: string, unchecked?: string): str
     case 'failed':
       if (look.pending > 0 || look.fresh === true) {
         recordGateStop(ctx, 'main-running', ref.url);
-        throw new TpmError(`main の workflow に落ちた物（${namedList(look.failed)}）がありますが、${look.pending > 0 ? `まだ ${look.pending} つが動いています` : 'merge から 2 分の内で、回が作られきっていないかもしれません'}: ${ref.url}\n送っていません。みな終わってから送ります。roster watch main ${ref.url} --timeout 0 で今の様子を見て、終わってから打ち直してください。`);
+        throw new TpmError(`main の workflow に落ちた物（${namedList(look.failed)}）がありますが、${look.pending > 0 ? `まだ ${look.pending} つが動いています` : 'merge から 2 分の内で、回が作られきっていないかもしれません'}: ${ref.url}\n送っていません。みな終わってから送ります。roster watch main ${ref.url} を裏で起こして待ち（みな終わるまで待つ）、終わってから打ち直してください。`);
       }
       return `／main: 落ちた ${namedList(look.failed)}（ほか: 通った ${look.passed}）`;
     case 'none':

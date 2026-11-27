@@ -143,7 +143,7 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
   watching.command('pr <url>').description('PR の今の head の commit の check が、みな終わるまで見張る（数では待たない。落ちた check が 1 つ分かれば、そこで終わる）')
     .option(...timeout('pr'))
     .action(async (url: string, options: { timeout?: string }) => watched(await watchPr(createContext(), url, options.timeout === undefined ? {} : { timeout: Number(options.timeout) })));
-  watching.command('main <url>').description('merge した PR の、merge の commit で main に動いた workflow が、みな終わるまで見張る（workflow ごとに、いちばん新しい回で判じる）')
+  watching.command('main <url>').description('merge した PR の、merge の commit で main に動いた workflow が、みな終わるまで見張る（workflow ごとに、いちばん新しい回で判じる。落ちた物が分かっても、みな終わるまで待つ）')
     .option(...timeout('main'))
     .action(async (url: string, options: { timeout?: string }) => watched(await watchMain(createContext(), url, options.timeout === undefined ? {} : { timeout: Number(options.timeout) })));
   watching.command('github').description('GitHub が応えるようになるまで見張る（gh・git push が 5xx や繋がらない誤りで落ちた時。続けて 2 度応えたら「戻った」）')

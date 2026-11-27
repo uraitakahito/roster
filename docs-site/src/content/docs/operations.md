@@ -33,7 +33,7 @@ roster watch pr <PR の URL> --timeout 0  # 今の様子を 1 回見て、待た
 | 終了コード | 意味 | 出す行 |
 |---|---|---|
 | 0 | 通った（`watch github` は、戻った） | `通った: check 5 つ（4 分 12 秒）` |
-| 10 | 落ちた物がある | 落ちた check・workflow の名と URL。ほかがまだ動いていても、1 つ分かった時に終わる |
+| 10 | 落ちた物がある | 落ちた check・workflow の名と URL。`watch pr` は、ほかがまだ動いていても、1 つ分かった時に終わる。`watch main` は、みな終わるまで待ってから終わる（`roster report merged` が、みな終わるまで送らないため） |
 | 20 | まだ（長さを過ぎた。GitHub が応えないまま過ぎた時も） | まだの数と、もう 1 度見張る命令 |
 | 30 | check・workflow の回が付いていない | 「通ったのではない」と出す。**0 にしない**（GitHub が遅い時に、CI を見ずに merge へ進まないため） |
 | 1 | 見張れない（PR が無い・認証や権限が無い・merge していない PR の `watch main`・PR の URL でない字） | 訳 |
