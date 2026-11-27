@@ -1,9 +1,10 @@
 // roster figure …: 文書の図を Archify で描いて整える（setup・embed・shot）。手順と決まりは _shared/figures.md の「Archify で描く」。
 // 書き手の file には目印（<!-- figure: <JSON の path> -->）だけを書き、embed が整えた SVG を埋めた物を別の file（置く用）に出す。
 // 書き手（高い model）が SVG の字を書き写さず、文書を直す時も SVG が書き手の文脈に戻らないように。
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { Context } from '../context.ts';
 import { archifyVersion, runArchify, setupArchify } from '../figure/archify.ts';
@@ -172,16 +173,17 @@ export interface FigureEmbedOptions {
   figure?: string
 }
 
-/** 属性の値に入れる字（`"`・`&`・`<` を逃がす）。 */
-function attr(text: string): string {
-  return text.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;');
+/** 図の JSON の印（symlink を解いた path の hash の頭 12 字）。置く用の file の図の根に書き、shot が図を名指すのに使う（path そのものは書かない。置くページに機械の path を載せないため）。 */
+export function figureId(jsonPath: string): string {
+  const path = existsSync(jsonPath) ? realpathSync(jsonPath) : resolve(jsonPath);
+  return createHash('sha256').update(path).digest('hex').slice(0, 12);
 }
 
 /**
  * roster figure embed: 書き手の file の目印ごとに図を描いて整え、埋めた物を置く用の file に出す（書き手の file は変えない）。
  * 描けない図があっても、ほかの図は埋めて書き、描けない図の目印は残して、図ごとの訳を並べる。--figure が無ければ、描けない図があれば止まる。
  * --figure があれば、その図が描けない時だけ止まり、ほかの図だけが描けない時は通る（置く用の file にその図が欠けていることを書く）。
- * 埋めた図の根には、置く用の file からの JSON の path（data-src）を書く（shot が図を名指すため）。
+ * 埋めた図の根には、JSON の印（data-src。figureId）を書く（shot が図を名指すため）。
  */
 export function figureEmbed(ctx: Context, file: string, options: FigureEmbedOptions): string[] {
   const src = resolve(file);
@@ -199,7 +201,7 @@ export function figureEmbed(ctx: Context, file: string, options: FigureEmbedOpti
     seen.add(pathOf(ref));
   }
   const target = options.figure === undefined ? undefined : resolve(options.figure);
-  if (target !== undefined && !seen.has(target)) throw new TpmError(`${file} に、--figure の図の目印がありません: ${options.figure}`);
+  if (target !== undefined && ![...seen].some(p => figureId(p) === figureId(target))) throw new TpmError(`${file} に、--figure の図の目印がありません: ${options.figure}`);
   const work = mkdtempSync(join(tmpdir(), 'roster-figure-'));
   const lines: string[] = [];
   const failed: { path: string, line: string }[] = [];
@@ -212,7 +214,7 @@ export function figureEmbed(ctx: Context, file: string, options: FigureEmbedOpti
       const name = uniqueName(figureName(jsonPath), used);
       try {
         const r = renderFigure(ctx, readFigureJson(jsonPath, ref), name, work);
-        const svg = r.svg.replace('data-fig="archify"', `data-fig="archify" data-src="${attr(relative(dirname(out), jsonPath))}"`);
+        const svg = r.svg.replace('data-fig="archify"', `data-fig="archify" data-src="${figureId(jsonPath)}"`);
         done.set(jsonPath, svg);
         lines.push(`図 ${name}（${ref}）: ${Buffer.byteLength(svg)} byte・縮める割合 ${r.scale.toFixed(2)}・${r.rounds} 回で決まった`);
       }
@@ -232,8 +234,8 @@ export function figureEmbed(ctx: Context, file: string, options: FigureEmbedOpti
     if (failed.length > 0) throw new TpmError([...lines, ...failed.map(f => f.line), `${wrote}。埋められなかった図の目印は残した。JSON を直してから打ち直す`].join('\n'));
     return [...lines, wrote];
   }
-  const mine = failed.find(f => f.path === target);
-  const others = failed.filter(f => f.path !== target).map(f => `ほかの図: ${f.line}（置く用の file には、この図が欠けている。置く前に直す）`);
+  const mine = failed.find(f => figureId(f.path) === figureId(target));
+  const others = failed.filter(f => figureId(f.path) !== figureId(target)).map(f => `ほかの図: ${f.line}（置く用の file には、この図が欠けている。置く前に直す）`);
   if (mine !== undefined) throw new TpmError([mine.line, ...others, wrote].join('\n'));
   return [...lines.filter(l => !l.includes('を埋められません')), ...others, wrote];
 }
@@ -263,9 +265,9 @@ export function figureShot(ctx: Context, file: string, options: FigureShotOption
   const style = /<style>([\s\S]*?)<\/style>/.exec(text.slice(0, Math.max(0, text.search(/<svg\b/))))?.[1] ?? DEFAULT_STYLE;
   const all = [...text.matchAll(/<svg\b[^>]*data-fig="archify"[\s\S]*?<\/svg>/g)].map(m => m[0]);
   if (all.length === 0) throw new TpmError(`${file} に Archify で描いた図（data-fig="archify" の svg）がありません。先に roster figure embed を打つ`);
-  const srcOf = (svg: string): string => (/\bdata-src="([^"]*)"/.exec(/<svg\b[^>]*>/.exec(svg)?.[0] ?? '')?.[1] ?? '').replaceAll('&quot;', '"').replaceAll('&lt;', '<').replaceAll('&amp;', '&');
-  const target = options.figure === undefined ? undefined : resolve(options.figure);
-  const svgs = target === undefined ? all : all.filter(svg => srcOf(svg) !== '' && resolve(dirname(path), srcOf(svg)) === target);
+  const srcOf = (svg: string): string => /\bdata-src="([^"]*)"/.exec(/<svg\b[^>]*>/.exec(svg)?.[0] ?? '')?.[1] ?? '';
+  const target = options.figure === undefined ? undefined : figureId(resolve(options.figure));
+  const svgs = target === undefined ? all : all.filter(svg => srcOf(svg) === target);
   if (svgs.length === 0) throw new TpmError(`${file} に、--figure の図がありません（roster figure embed で埋められていない）: ${options.figure ?? ''}`);
   const chrome = ctx.env.ROSTER_CHROME || DEFAULT_CHROME;
   const dir = options.dir === undefined ? mkdtempSync(join(tmpdir(), 'roster-figure-shot-')) : resolve(options.dir);
@@ -275,7 +277,7 @@ export function figureShot(ctx: Context, file: string, options: FigureShotOption
   const shotNames = new Set<string>();
   for (const svg of svgs) {
     const name = uniqueName(/\bclass="([^"]+)"/.exec(svg)?.[1] ?? 'fig', shotNames);
-    const label = srcOf(svg) === '' ? name : `${name}（${srcOf(svg)}）`;
+    const label = options.figure === undefined ? name : `${name}（${options.figure}）`;
     const box = viewBoxOf(svg);
     const vb = box.length === 4 ? box : [0, 0, PAGE_WIDTH, 280];
     const shown = Math.min(PAGE_WIDTH, vb[2] ?? PAGE_WIDTH);

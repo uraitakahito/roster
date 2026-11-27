@@ -1,9 +1,9 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vitest';
-import { figureEmbed, figureName, figureShot, figureSetup, figureValidate, isPlacementFix } from '../src/commands/figure.ts';
+import { figureEmbed, figureId, figureName, figureShot, figureSetup, figureValidate, isPlacementFix } from '../src/commands/figure.ts';
 import type { Context } from '../src/context.ts';
 import type { Exec, ExecResult } from '../src/exec.ts';
 import { archifyBin, archifyHome, archifyVersion } from '../src/figure/archify.ts';
@@ -474,13 +474,15 @@ describe('--figure（図を名指す）', () => {
     return { ctx, dir };
   }
 
-  test('embed: 名指した図が埋まれば、ほかの図が描けなくても通り、ほかの図が欠けていることを書く。埋めた図の根に置く用の file からの path を書く', () => {
+  test('embed: 名指した図が埋まれば、ほかの図が描けなくても通り、ほかの図が欠けていることを書く。埋めた図の根に JSON の印（path の hash）を書き、path は書かない', () => {
     const { ctx, dir } = two();
     const lines = figureEmbed(ctx, join(dir, 'page.html'), { out: join(dir, 'page.out.html'), figure: join(dir, 'figs', '流れ.json') });
     expect(lines[0]).toMatch(/^図 fig-x（figs\/流れ.json）: /);
     expect(lines[1]).toMatch(/^ほかの図: 図 fig-broken（figs\/broken.json）を埋められません: [\s\S]*（置く用の file には、この図が欠けている。置く前に直す）$/);
     expect(lines.at(-1)).toMatch(/（図 2 つのうち 1 つを埋めた）$/);
-    expect(readFileSync(join(dir, 'page.out.html'), 'utf8')).toContain('data-src="figs/流れ.json"');
+    const out = readFileSync(join(dir, 'page.out.html'), 'utf8');
+    expect(out).toContain(`data-src="${figureId(join(dir, 'figs', '流れ.json'))}"`);
+    expect(out).not.toContain(dir);
   });
 
   test('embed: 名指した図が描けなければ、その訳を頭に並べて止まる。目印に無い図は断る', () => {
@@ -489,7 +491,7 @@ describe('--figure（図を名指す）', () => {
     expect(() => figureEmbed(ctx, join(dir, 'page.html'), { out: join(dir, 'page.out.html'), figure: join(dir, 'none.json') })).toThrow('--figure の図の目印がありません');
   });
 
-  test('shot: 名指した図だけを検査して撮り、行に JSON の path を出す', () => {
+  test('shot: 名指した図だけを検査して撮る（symlink を通した path でも同じ図）', () => {
     const { dir, ctx } = two();
     figureEmbed(ctx, join(dir, 'page.html'), { out: join(dir, 'page.out.html'), figure: join(dir, 'figs', '流れ.json') });
     const shots: string[] = [];
@@ -501,8 +503,9 @@ describe('--figure（図を名指す）', () => {
       }
       return ok(args.includes('--dump-dom') ? '<pre id="roster-figure-check">[]</pre>' : '');
     };
-    const lines = figureShot({ ...ctx, exec: chrome }, join(dir, 'page.out.html'), { dir: join(dir, 'png'), figure: join(dir, 'figs', '流れ.json') });
-    expect(lines[0]).toBe('図 fig-x（figs/流れ.json）: 寸法の検査 0 件');
+    symlinkSync(join(dir, 'figs'), join(dir, 'link'));
+    const lines = figureShot({ ...ctx, exec: chrome }, join(dir, 'page.out.html'), { dir: join(dir, 'png'), figure: join(dir, 'link', '流れ.json') });
+    expect(lines[0]).toBe(`図 fig-x（${join(dir, 'link', '流れ.json')}）: 寸法の検査 0 件`);
     expect(shots).toHaveLength(2);
     expect(() => figureShot({ ...ctx, exec: chrome }, join(dir, 'page.out.html'), { figure: join(dir, 'figs', 'broken.json') })).toThrow('--figure の図がありません');
   });
