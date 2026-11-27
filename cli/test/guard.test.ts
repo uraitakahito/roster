@@ -1229,6 +1229,18 @@ describe('宣言に無い動詞で、環境の名を的にする命令（t-d37r�
     'container exec -e K=V castlist.box sh',
     'container exec --env=K=V -w /data castlist.box sh',
     'container exec -ite K=V castlist.box sh',
+    // 束ねた短い旗の値・-- の後ろ（review-1 の指摘 2）。
+    'container exec -iu root castlist.box sh',
+    'container exec -ie K=V castlist.box sh',
+    'container exec -- castlist.box sh',
+    // 区切りの中で、宣言の動詞と名の間に旗や値を挟む（review-1 の指摘 1。前は通っていた）。
+    'ssh host \'container stop -t 5 castlist.box\'',
+    'ssh host \'container delete --force castlist.box\'',
+    'ssh host \'container rm -f castlist.box\'',
+    // 知らない動詞は、volume の名とも比べる（review-1 の指摘 4）。
+    'container frobnicate castlist-data-v1',
+    'container cp "$(cat src)" ./y',
+    'container commit mytest "$IMG"',
     'container exec castlist sh',
     'container --debug exec castlist.box sh',
     'timeout 60 /opt/homebrew/bin/container exec castlist.box sh',
@@ -1276,6 +1288,10 @@ describe('宣言に無い動詞で、環境の名を的にする命令（t-d37r�
     'container cp mytest:/a "$HOME/a"',
     'container commit mytest mine:1',
     'container export -o "$OUT" mytest',
+    // container の動詞の的は container の名とだけ比べる（castlist-data* の前方一致に当てない。review-1 の指摘 4）。
+    // （container stop castlist-data-restore は、前の名の項目 container stop castlist の字の含みで、前から止まる）
+    'container kill -s TERM castlist-data-restore',
+    'container exec castlist-data-restore sh',
     // 名の container を的にしない群（run・create の名は --name の項目が当てる）。
     'container run --rm ghcr.io/uraitakahito/castlist:v2.0.0 --version',
     'container image push castlist:v2.0.0',
@@ -1423,6 +1439,9 @@ describe('設定の項目を外しても、止まる形が変わらない（t-d3
     'container delete --force callboard',
     'ssh host \'container rm -f callboard\'',
     'ssh host \'container delete --force callboard\'',
+    'ssh host \'container stop -t 5 callboard\'',
+    'ssh host \'container stop -t 5 castlist.box\'',
+    'ssh host \'container delete --force castlist.box\'',
     './down.sh container rm -f callboard',
     'container run -d --name=callboard x',
     './up.sh --name=callboard',

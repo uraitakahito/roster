@@ -449,27 +449,45 @@ const READ_VERBS = new Set(['logs', 'inspect', 'stats', 'list', 'ls']);
 const VOLUME_READ_VERBS = new Set(['inspect', 'list', 'ls']);
 /** volume の群の名（`container volume …`・略の `container v …`）。 */
 const VOLUME_GROUPS = new Set(['volume', 'v']);
+/** container を的に取る、知っている動詞（1.7.1 の help から）。的は container の名とだけ比べる。知らない動詞は container と volume の名の両方と比べる。 */
+const CONTAINER_VERBS = new Set(['exec', 'cp', 'copy', 'commit', 'export', 'clean', 'start', 'stop', 'kill', 'delete', 'rm', 'prune']);
 /**
- * 名の container を的にしない動詞と群。run・create の名は `--name` の項目が当てる（image の名 `pagetray:1.2.0` を的と読まない）。
+ * 名の container を的にしない動詞と群（略の i・r・m・n・s も）。run・create は、名と volume を `--name`・`-v` の項目が当て、image より後ろは container の中の命令の語。
  * image・network・system などは、環境の container・volume を名で的にしない（system stop・prune は container-system の宣言が当てる）。
  */
 const NOT_TARGETING = new Set(['run', 'create', 'image', 'i', 'registry', 'r', 'machine', 'm', 'network', 'n', 'system', 's', 'cluster', 'build', 'builder', 'help']);
-/** 値を取る旗（動詞ごとの help から。値の語は的に数えない）。知らない旗は値を取らないと読む（後ろの語を的に数え、止める側に倒れる）。 */
-const VERB_VALUE_FLAGS = new Set(['-e', '--env', '--env-file', '--gid', '-u', '--user', '--uid', '-w', '--workdir', '--cwd', '--ulimit', '-o', '--output', '-n', '--format', ...TARGET_VALUE_FLAGS]);
-/** exec の、束ねた短い旗の終わりが値を取る字（`-ite K=V` の e）。 */
-const EXEC_VALUE_SHORT = /^-[A-Za-z]*[euw]$/;
+/** 値を取る旗（値の語を的に数えない）。知らない旗は値を取らないと読む（値の語も的に数え、止める側に倒れる）。 */
+const VERB_VALUE_FLAGS = new Set([...TARGET_VALUE_FLAGS, '-o', '--output']);
 
-/** 宣言に無い動詞の命令の的。volume は的が volume の名か、unnamed は名を書かずに選ぶ（的の語が無い・`--all`）か。 */
+/** 宣言に無い動詞の命令の的。names は的と比べる名の種類、unnamed は名を書かずに選ぶ（的の語が無い・`--all`）か。 */
 interface VerbTargets {
-  volume: boolean
+  names: ('container' | 'volume')[]
   targets: string[]
   unnamed: boolean
 }
 
 /**
+ * exec の的の候補（argsAfter と同じ読み方。review-1 の指摘 2）: 旗と、旗の直後の語（値かもしれない）を読み進め、旗の直後でない初めの語までを候補にする。
+ * 値を取る旗を数えないので、束ねた短い旗の値（`-iu root castlist.box`）でも的を見落とさない。後ろは container の中の命令なので見ない。`--` の後ろは初めの語。
+ */
+function execTargets(args: string[]): string[] {
+  const plain = args.map(unmark);
+  const candidates: string[] = [];
+  for (let k = 0; k < args.length; k += 1) {
+    const arg = plain[k] ?? '';
+    if (arg === '--') return [...candidates, ...args.slice(k + 1, k + 2)];
+    if (arg.startsWith('-')) continue;
+    candidates.push(args[k] ?? '');
+    if (!(plain[k - 1] ?? '').startsWith('-')) break;
+  }
+  return candidates;
+}
+
+/**
  * container の命令（containerWords の後の語）の、環境を変えうる動詞の的（t-d37r）。動詞が無い・読むだけの動詞・名の container を的にしない動詞・help なら undefined。
- * 的: exec・commit・export は旗を除いた初めの語（exec の後ろは container の中の命令）、cp・copy は `:` を含む語の `:` より前（`:` の無い語は手元の path。
- * 値の分からない語は container:path かもしれないので、語ごと）、ほかは旗を除いたどの語も（`--` の後ろはみな的）。volume の群は、その次の語を動詞として読み、的は volume の名。
+ * 宣言にある動詞（stop・rm など）も除かない（`ssh host 'container stop -t 5 x'` の区切りの中は、宣言の項目が語で当たらない。review-1 の指摘 1）。
+ * 的: exec は execTargets、cp・copy は `:` を含む語の `:` より前（`:` の無い語は手元の path。値の分からない語は container:path かもしれないので、語ごと）、
+ * ほかは旗とその値を除いたどの語も（`--` の後ろはみな的）。volume の群は、その次の語を動詞として読み、的は volume の名。
  */
 function verbTargets(words: string[]): VerbTargets | undefined {
   const at = words.findIndex(word => toolName(word) === 'container');
@@ -479,17 +497,21 @@ function verbTargets(words: string[]): VerbTargets | undefined {
     i += 1;
     return words[i - 1] === undefined ? undefined : unmark(words[i - 1] ?? '');
   };
-  let verb = nextVerb();
-  if (verb === undefined || NOT_TARGETING.has(verb)) return undefined;
+  const verb = nextVerb();
+  if (verb === undefined || NOT_TARGETING.has(verb) || READ_VERBS.has(verb)) return undefined;
   const volume = VOLUME_GROUPS.has(verb);
   if (volume) {
-    verb = nextVerb();
-    if (verb === undefined || VOLUME_READ_VERBS.has(verb)) return undefined;
+    const sub = nextVerb();
+    if (sub === undefined || VOLUME_READ_VERBS.has(sub)) return undefined;
   }
-  else if (READ_VERBS.has(verb)) return undefined;
   const args = words.slice(i);
   const plain = args.map(unmark);
   if (plain.some(a => a === '-h' || a === '--help')) return undefined;
+  const names: VerbTargets['names'] = volume ? ['volume'] : CONTAINER_VERBS.has(verb) ? ['container'] : ['container', 'volume'];
+  if (verb === 'exec') {
+    const targets = execTargets(args);
+    return { names, targets, unnamed: targets.length === 0 };
+  }
   const operands: string[] = [];
   for (let k = 0; k < args.length; k += 1) {
     const arg = plain[k] ?? '';
@@ -498,17 +520,16 @@ function verbTargets(words: string[]): VerbTargets | undefined {
       break;
     }
     if (arg.startsWith('-')) {
-      if (VERB_VALUE_FLAGS.has(arg) || (verb === 'exec' && EXEC_VALUE_SHORT.test(arg))) k += 1;
+      if (VERB_VALUE_FLAGS.has(arg)) k += 1;
       continue;
     }
     operands.push(args[k] ?? '');
   }
   const unnamed = operands.length === 0 || plain.includes('--all');
-  if (verb === 'exec' || verb === 'commit' || verb === 'export') return { volume, targets: operands.slice(0, 1), unnamed };
   if (verb === 'cp' || verb === 'copy') {
-    return { volume, targets: operands.flatMap(o => o.includes(':') ? [o.slice(0, o.indexOf(':'))] : UNKNOWN.test(o) ? [o] : []), unnamed };
+    return { names, targets: operands.flatMap(o => o.includes(':') ? [o.slice(0, o.indexOf(':'))] : UNKNOWN.test(o) ? [o] : []), unnamed };
   }
-  return { volume, targets: operands, unnamed };
+  return { names, targets: operands, unnamed };
 }
 
 /** 命令が環境に触る当たり方: 名を書いた項目に当たる（named）か、名を書かずに的を選ぶ（unnamed）か、名や volume を変数で渡す（variable）か、宣言に無い動詞で名を的にする（verb）か。 */
@@ -582,7 +603,7 @@ function touchOf(command: string, env: InfraEnv): Touch | undefined {
   const parsed = markedContainers.filter((words): words is string[] => words !== undefined).map(words => ({ words, coarse: false }));
   for (const { words, coarse } of [...parsed, ...segments.map(words => ({ words, coarse: true }))]) {
     const verb = verbTargets(words);
-    const own = verb === undefined ? [] : verb.volume ? names.volume : names.container;
+    const own = verb === undefined ? [] : verb.names.flatMap(kind => names[kind]);
     if (verb === undefined || own.length === 0) continue;
     if (own.some(name => verb.targets.some(target => wordHits(name, unmark(target))))) return 'verb';
     if (!coarse && (verb.unnamed || own.some(name => verb.targets.some(target => unknownValueHits(name, readPaths(target)))))) return 'unnamed';
