@@ -19,14 +19,22 @@ const _DPO = "DeletePagesOutput";
 const _F = "Forbidden";
 const _FC = "FacetCount";
 const _FCa = "FacetCounts";
+const _FT = "FileType";
+const _FTi = "FileTypes";
 const _Fi = "File";
 const _Fil = "Files";
+const _GFR = "GetFileRules";
+const _GFRI = "GetFileRulesInput";
+const _GFRO = "GetFileRulesOutput";
 const _GH = "GetHealth";
 const _GHI = "GetHealthInput";
 const _GHO = "GetHealthOutput";
 const _GMF = "GetMessageFacets";
 const _GMFI = "GetMessageFacetsInput";
 const _GMFO = "GetMessageFacetsOutput";
+const _GPF = "GetPageFacets";
+const _GPFI = "GetPageFacetsInput";
+const _GPFO = "GetPageFacetsOutput";
 const _H = "Html";
 const _IE = "InternalError";
 const _L = "Location";
@@ -39,6 +47,9 @@ const _LMO = "ListMessagesOutput";
 const _LP = "ListPages";
 const _LPI = "ListPagesInput";
 const _LPO = "ListPagesOutput";
+const _LR = "ListReviews";
+const _LRI = "ListReviewsInput";
+const _LRO = "ListReviewsOutput";
 const _M = "Message";
 const _Me = "Messages";
 const _NF = "NotFound";
@@ -48,6 +59,8 @@ const _PMI = "PutMessageInput";
 const _PMO = "PutMessageOutput";
 const _PTL = "PayloadTooLarge";
 const _Pa = "Pages";
+const _RO = "ReviewOf";
+const _ROe = "ReviewsOf";
 const _S = "Sender";
 const _SRS = "SetReplyState";
 const _SRSI = "SetReplyStateInput";
@@ -57,11 +70,12 @@ const _UMT = "UnsupportedMediaType";
 const _VE = "ValidationException";
 const _VEF = "ValidationExceptionField";
 const _VEFL = "ValidationExceptionFieldList";
-const _a = "actor";
+const _a = "answered";
 const _aA = "askedAt";
 const _aAn = "answeredAt";
 const _aI = "actorIssuer";
 const _aR = "actorRef";
+const _ac = "actor";
 const _b = "body";
 const _c = "client";
 const _cA = "createdAt";
@@ -70,6 +84,7 @@ const _co = "count";
 const _d = "deliveries";
 const _dA = "deliveredAt";
 const _e = "error";
+const _es = "escalated";
 const _ex = "ext";
 const _f = "from";
 const _fL = "fieldList";
@@ -84,14 +99,17 @@ const _is = "issuer";
 const _k = "kind";
 const _ke = "key";
 const _key = "keys";
+const _ki = "kinds";
 const _l = "location";
 const _m = "message";
+const _mB = "maxBytes";
 const _mR = "maxResults";
 const _mT = "mediaType";
 const _me = "messages";
 const _n = "name";
 const _nT = "nextToken";
 const _n_ = "n";
+const _no = "note";
 const _o = "on";
 const _p = "project";
 const _pa = "path";
@@ -101,13 +119,17 @@ const _q = "q";
 const _r = "role";
 const _rA = "resolvedAt";
 const _rT = "replyTo";
+const _rW = "reviewWaiting";
 const _re = "removed";
 const _ref = "ref";
 const _rep = "reply";
+const _rev = "reviews";
+const _ro = "roles";
 const _s = "smithy.ts.sdk.synthetic.ai.pagetray";
 const _sA = "sentAt";
 const _se = "server";
 const _sen = "sender";
+const _send = "senders";
 const _sh = "sha256";
 const _si = "size";
 const _so = "sort";
@@ -116,18 +138,23 @@ const _sta = "states";
 const _stat = "state";
 const _t = "text/html";
 const _ta = "targets";
+const _tar = "target";
 const _te = "text";
 const _ti = "title";
 const _to = "to";
 const _ty = "type";
+const _typ = "types";
 const _u = "url";
 const _uA = "updatedAt";
 const _v = "verdict";
 const _va = "value";
 const _ve = "version";
+const _ver = "verdicts";
 const _vi = "via";
 const _w = "workspace";
 const _wO = "waitsOn";
+const _wa = "waiting";
+const _wo = "workspaces";
 const n0 = "ai.common";
 const n1 = "ai.pagetray";
 const n2 = "smithy.framework";
@@ -278,13 +305,28 @@ export var DeletePagesOutput$: StaticStructureSchema = [3, n1, _DPO,
 ];
 export var FacetCount$: StaticStructureSchema = [3, n1, _FC,
   0,
-  [_va, _co],
-  [0, 1], 2
+  [_va, _co, _no],
+  [0, 1, 0], 2
 ];
 export var File$: StaticStructureSchema = [3, n1, _Fi,
   0,
   [_p, _ke, _n, _ex, _n_, _ty, _si, _sh, _r, _w, _cA, _pa, _sen],
   [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 5, 0, () => Sender$], 12
+];
+export var FileType$: StaticStructureSchema = [3, n1, _FT,
+  0,
+  [_ex, _ty],
+  [0, 0], 2
+];
+export var GetFileRulesInput$: StaticStructureSchema = [3, n1, _GFRI,
+  0,
+  [],
+  []
+];
+export var GetFileRulesOutput$: StaticStructureSchema = [3, n1, _GFRO,
+  0,
+  [_typ, _mB],
+  [() => FileTypes, 1], 2
 ];
 export var GetHealthInput$: StaticStructureSchema = [3, n1, _GHI,
   0,
@@ -306,10 +348,20 @@ export var GetMessageFacetsOutput$: StaticStructureSchema = [3, n1, _GMFO,
   [_sta, _to, _f, _key, _pr],
   [() => FacetCounts, () => FacetCounts, () => FacetCounts, () => FacetCounts, () => FacetCounts], 5
 ];
+export var GetPageFacetsInput$: StaticStructureSchema = [3, n1, _GPFI,
+  0,
+  [],
+  []
+];
+export var GetPageFacetsOutput$: StaticStructureSchema = [3, n1, _GPFO,
+  0,
+  [_wa, _a, _rW, _es, _send, _ro, _wo, _ki, _key, _pr, _ver],
+  [1, 1, 1, 1, () => FacetCounts, () => FacetCounts, () => FacetCounts, () => FacetCounts, () => FacetCounts, () => FacetCounts, () => FacetCounts], 11
+];
 export var ListFilesInput$: StaticStructureSchema = [3, n1, _LFI,
   0,
-  [_p, _ke, _r, _w, _q, _a, _so, _mR, _nT],
-  [[0, { [_hQ]: _p }], [0, { [_hQ]: _ke }], [0, { [_hQ]: _r }], [0, { [_hQ]: _w }], [0, { [_hQ]: _q }], [0, { [_hQ]: _a }], [0, { [_hQ]: _so }], [1, { [_hQ]: _mR }], [0, { [_hQ]: _nT }]]
+  [_p, _ke, _r, _w, _q, _ac, _so, _mR, _nT],
+  [[0, { [_hQ]: _p }], [0, { [_hQ]: _ke }], [0, { [_hQ]: _r }], [0, { [_hQ]: _w }], [0, { [_hQ]: _q }], [0, { [_hQ]: _ac }], [0, { [_hQ]: _so }], [1, { [_hQ]: _mR }], [0, { [_hQ]: _nT }]]
 ];
 export var ListFilesOutput$: StaticStructureSchema = [3, n1, _LFO,
   0,
@@ -328,13 +380,23 @@ export var ListMessagesOutput$: StaticStructureSchema = [3, n1, _LMO,
 ];
 export var ListPagesInput$: StaticStructureSchema = [3, n1, _LPI,
   0,
-  [_p, _ke, _k, _r, _w, _q, _rep, _o, _v, _a, _so, _mR, _nT],
-  [[0, { [_hQ]: _p }], [0, { [_hQ]: _ke }], [0, { [_hQ]: _k }], [0, { [_hQ]: _r }], [0, { [_hQ]: _w }], [0, { [_hQ]: _q }], [0, { [_hQ]: _rep }], [0, { [_hQ]: _o }], [0, { [_hQ]: _v }], [0, { [_hQ]: _a }], [0, { [_hQ]: _so }], [1, { [_hQ]: _mR }], [0, { [_hQ]: _nT }]]
+  [_p, _ke, _k, _r, _w, _q, _rep, _o, _v, _ac, _so, _mR, _nT],
+  [[0, { [_hQ]: _p }], [0, { [_hQ]: _ke }], [0, { [_hQ]: _k }], [0, { [_hQ]: _r }], [0, { [_hQ]: _w }], [0, { [_hQ]: _q }], [0, { [_hQ]: _rep }], [0, { [_hQ]: _o }], [0, { [_hQ]: _v }], [0, { [_hQ]: _ac }], [0, { [_hQ]: _so }], [1, { [_hQ]: _mR }], [0, { [_hQ]: _nT }]]
 ];
 export var ListPagesOutput$: StaticStructureSchema = [3, n1, _LPO,
   0,
   [_pag, _nT],
   [() => Pages, 0], 1
+];
+export var ListReviewsInput$: StaticStructureSchema = [3, n1, _LRI,
+  0,
+  [_tar],
+  [[64 | 0, { [_hQ]: _tar }]], 1
+];
+export var ListReviewsOutput$: StaticStructureSchema = [3, n1, _LRO,
+  0,
+  [_rev],
+  [() => ReviewsOf], 1
 ];
 export var Message$: StaticStructureSchema = [3, n1, _M,
   0,
@@ -356,9 +418,14 @@ export var PutMessageOutput$: StaticStructureSchema = [3, n1, _PMO,
   [_p, _i, _h, _f, _to, _te, _sA, _stat, _cA, _uA, _st, _ke, _dA, _vi, _d, _rT, _sen],
   [0, 0, 0, 0, 0, 0, 5, 0, 5, 5, [1, 32], 0, 5, 0, 1, 0, () => Sender$], 11
 ];
+export var ReviewOf$: StaticStructureSchema = [3, n1, _RO,
+  0,
+  [_tar, _pa, _v],
+  [0, 0, 0], 2
+];
 export var Sender$: StaticStructureSchema = [3, n1, _S,
   0,
-  [_is, _ref, _a, _rA],
+  [_is, _ref, _ac, _rA],
   [0, 0, () => ActorSummary$, 5], 2
 ];
 export var SetReplyStateInput$: StaticStructureSchema = [3, n1, _SRSI,
@@ -382,6 +449,9 @@ var FacetCounts: StaticListSchema = [1, n1, _FCa,
 var Files: StaticListSchema = [1, n1, _Fil,
   0, () => File$
 ];
+var FileTypes: StaticListSchema = [1, n1, _FTi,
+  0, () => FileType$
+];
 var Messages: StaticListSchema = [1, n1, _Me,
   0, () => Message$
 ];
@@ -389,6 +459,10 @@ var Pages: StaticListSchema = [1, n1, _Pa,
   0, () => Page$
 ];
 var Paths = 64 | 0;
+var ReviewsOf: StaticListSchema = [1, n1, _ROe,
+  0, () => ReviewOf$
+];
+var ReviewTargets = 64 | 0;
 var Targets = 64 | 0;
 var ValidationExceptionFieldList: StaticListSchema = [1, n2, _VEFL,
   0, () => ValidationExceptionField$
@@ -408,11 +482,17 @@ export var DeleteFiles$: StaticOperationSchema = [9, n1, _DF,
 export var DeletePages$: StaticOperationSchema = [9, n1, _DP,
   { [_ht]: ["DELETE", "/api/pages", 200] }, () => DeletePagesInput$, () => DeletePagesOutput$
 ];
+export var GetFileRules$: StaticOperationSchema = [9, n1, _GFR,
+  { [_ht]: ["GET", "/api/files/rules", 200] }, () => GetFileRulesInput$, () => GetFileRulesOutput$
+];
 export var GetHealth$: StaticOperationSchema = [9, n1, _GH,
   { [_ht]: ["GET", "/healthz", 200] }, () => GetHealthInput$, () => GetHealthOutput$
 ];
 export var GetMessageFacets$: StaticOperationSchema = [9, n1, _GMF,
   { [_ht]: ["GET", "/api/messages/facets", 200] }, () => GetMessageFacetsInput$, () => GetMessageFacetsOutput$
+];
+export var GetPageFacets$: StaticOperationSchema = [9, n1, _GPF,
+  { [_ht]: ["GET", "/api/pages/facets", 200] }, () => GetPageFacetsInput$, () => GetPageFacetsOutput$
 ];
 export var ListFiles$: StaticOperationSchema = [9, n1, _LF,
   { [_ht]: ["GET", "/api/files", 200] }, () => ListFilesInput$, () => ListFilesOutput$
@@ -422,6 +502,9 @@ export var ListMessages$: StaticOperationSchema = [9, n1, _LM,
 ];
 export var ListPages$: StaticOperationSchema = [9, n1, _LP,
   { [_ht]: ["GET", "/api/pages", 200] }, () => ListPagesInput$, () => ListPagesOutput$
+];
+export var ListReviews$: StaticOperationSchema = [9, n1, _LR,
+  { [_ht]: ["GET", "/api/reviews", 200] }, () => ListReviewsInput$, () => ListReviewsOutput$
 ];
 export var PutMessage$: StaticOperationSchema = [9, n1, _PM,
   { [_ht]: ["PUT", "/api/projects/{project}/messages/{id}", 200] }, () => PutMessageInput$, () => PutMessageOutput$

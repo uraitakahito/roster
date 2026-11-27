@@ -32,12 +32,22 @@ import {
   type DeletePagesCommandOutput,
   DeletePagesCommand,
 } from "./commands/DeletePagesCommand";
+import {
+  type GetFileRulesCommandInput,
+  type GetFileRulesCommandOutput,
+  GetFileRulesCommand,
+} from "./commands/GetFileRulesCommand";
 import { type GetHealthCommandInput, type GetHealthCommandOutput, GetHealthCommand } from "./commands/GetHealthCommand";
 import {
   type GetMessageFacetsCommandInput,
   type GetMessageFacetsCommandOutput,
   GetMessageFacetsCommand,
 } from "./commands/GetMessageFacetsCommand";
+import {
+  type GetPageFacetsCommandInput,
+  type GetPageFacetsCommandOutput,
+  GetPageFacetsCommand,
+} from "./commands/GetPageFacetsCommand";
 import { type ListFilesCommandInput, type ListFilesCommandOutput, ListFilesCommand } from "./commands/ListFilesCommand";
 import {
   type ListMessagesCommandInput,
@@ -45,6 +55,11 @@ import {
   ListMessagesCommand,
 } from "./commands/ListMessagesCommand";
 import { type ListPagesCommandInput, type ListPagesCommandOutput, ListPagesCommand } from "./commands/ListPagesCommand";
+import {
+  type ListReviewsCommandInput,
+  type ListReviewsCommandOutput,
+  ListReviewsCommand,
+} from "./commands/ListReviewsCommand";
 import {
   type PutMessageCommandInput,
   type PutMessageCommandOutput,
@@ -66,11 +81,14 @@ const commands = {
   CreatePageCommand,
   DeleteFilesCommand,
   DeletePagesCommand,
+  GetFileRulesCommand,
   GetHealthCommand,
   GetMessageFacetsCommand,
+  GetPageFacetsCommand,
   ListFilesCommand,
   ListMessagesCommand,
   ListPagesCommand,
+  ListReviewsCommand,
   PutMessageCommand,
   SetReplyStateCommand,
 };
@@ -174,6 +192,24 @@ export interface Pagetray {
   ): void;
 
   /**
+   * @see {@link GetFileRulesCommand}
+   */
+  getFileRules(): Promise<GetFileRulesCommandOutput>;
+  getFileRules(
+    args: GetFileRulesCommandInput,
+    options?: PagetrayRequestOptions
+  ): Promise<GetFileRulesCommandOutput>;
+  getFileRules(
+    args: GetFileRulesCommandInput,
+    cb: (err: any, data?: GetFileRulesCommandOutput) => void
+  ): void;
+  getFileRules(
+    args: GetFileRulesCommandInput,
+    options: PagetrayRequestOptions,
+    cb: (err: any, data?: GetFileRulesCommandOutput) => void
+  ): void;
+
+  /**
    * @see {@link GetHealthCommand}
    */
   getHealth(): Promise<GetHealthCommandOutput>;
@@ -207,6 +243,24 @@ export interface Pagetray {
     args: GetMessageFacetsCommandInput,
     options: PagetrayRequestOptions,
     cb: (err: any, data?: GetMessageFacetsCommandOutput) => void
+  ): void;
+
+  /**
+   * @see {@link GetPageFacetsCommand}
+   */
+  getPageFacets(): Promise<GetPageFacetsCommandOutput>;
+  getPageFacets(
+    args: GetPageFacetsCommandInput,
+    options?: PagetrayRequestOptions
+  ): Promise<GetPageFacetsCommandOutput>;
+  getPageFacets(
+    args: GetPageFacetsCommandInput,
+    cb: (err: any, data?: GetPageFacetsCommandOutput) => void
+  ): void;
+  getPageFacets(
+    args: GetPageFacetsCommandInput,
+    options: PagetrayRequestOptions,
+    cb: (err: any, data?: GetPageFacetsCommandOutput) => void
   ): void;
 
   /**
@@ -261,6 +315,23 @@ export interface Pagetray {
     args: ListPagesCommandInput,
     options: PagetrayRequestOptions,
     cb: (err: any, data?: ListPagesCommandOutput) => void
+  ): void;
+
+  /**
+   * @see {@link ListReviewsCommand}
+   */
+  listReviews(
+    args: ListReviewsCommandInput,
+    options?: PagetrayRequestOptions
+  ): Promise<ListReviewsCommandOutput>;
+  listReviews(
+    args: ListReviewsCommandInput,
+    cb: (err: any, data?: ListReviewsCommandOutput) => void
+  ): void;
+  listReviews(
+    args: ListReviewsCommandInput,
+    options: PagetrayRequestOptions,
+    cb: (err: any, data?: ListReviewsCommandOutput) => void
   ): void;
 
   /**

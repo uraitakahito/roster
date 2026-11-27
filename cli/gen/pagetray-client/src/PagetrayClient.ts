@@ -64,11 +64,14 @@ import type { CreateFileCommandInput, CreateFileCommandOutput } from "./commands
 import type { CreatePageCommandInput, CreatePageCommandOutput } from "./commands/CreatePageCommand";
 import type { DeleteFilesCommandInput, DeleteFilesCommandOutput } from "./commands/DeleteFilesCommand";
 import type { DeletePagesCommandInput, DeletePagesCommandOutput } from "./commands/DeletePagesCommand";
+import type { GetFileRulesCommandInput, GetFileRulesCommandOutput } from "./commands/GetFileRulesCommand";
 import type { GetHealthCommandInput, GetHealthCommandOutput } from "./commands/GetHealthCommand";
 import type { GetMessageFacetsCommandInput, GetMessageFacetsCommandOutput } from "./commands/GetMessageFacetsCommand";
+import type { GetPageFacetsCommandInput, GetPageFacetsCommandOutput } from "./commands/GetPageFacetsCommand";
 import type { ListFilesCommandInput, ListFilesCommandOutput } from "./commands/ListFilesCommand";
 import type { ListMessagesCommandInput, ListMessagesCommandOutput } from "./commands/ListMessagesCommand";
 import type { ListPagesCommandInput, ListPagesCommandOutput } from "./commands/ListPagesCommand";
+import type { ListReviewsCommandInput, ListReviewsCommandOutput } from "./commands/ListReviewsCommand";
 import type { PutMessageCommandInput, PutMessageCommandOutput } from "./commands/PutMessageCommand";
 import type { SetReplyStateCommandInput, SetReplyStateCommandOutput } from "./commands/SetReplyStateCommand";
 import {
@@ -91,11 +94,14 @@ export type ServiceInputTypes =
   | CreatePageCommandInput
   | DeleteFilesCommandInput
   | DeletePagesCommandInput
+  | GetFileRulesCommandInput
   | GetHealthCommandInput
   | GetMessageFacetsCommandInput
+  | GetPageFacetsCommandInput
   | ListFilesCommandInput
   | ListMessagesCommandInput
   | ListPagesCommandInput
+  | ListReviewsCommandInput
   | PutMessageCommandInput
   | SetReplyStateCommandInput;
 
@@ -108,11 +114,14 @@ export type ServiceOutputTypes =
   | CreatePageCommandOutput
   | DeleteFilesCommandOutput
   | DeletePagesCommandOutput
+  | GetFileRulesCommandOutput
   | GetHealthCommandOutput
   | GetMessageFacetsCommandOutput
+  | GetPageFacetsCommandOutput
   | ListFilesCommandOutput
   | ListMessagesCommandOutput
   | ListPagesCommandOutput
+  | ListReviewsCommandOutput
   | PutMessageCommandOutput
   | SetReplyStateCommandOutput;
 

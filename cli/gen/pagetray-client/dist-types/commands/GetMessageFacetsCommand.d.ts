@@ -52,30 +52,35 @@ declare const GetMessageFacetsCommand_base: {
  * //     { // FacetCount
  * //       value: "STRING_VALUE", // required
  * //       count: Number("long"), // required
+ * //       note: "STRING_VALUE",
  * //     },
  * //   ],
  * //   to: [ // required
  * //     {
  * //       value: "STRING_VALUE", // required
  * //       count: Number("long"), // required
+ * //       note: "STRING_VALUE",
  * //     },
  * //   ],
  * //   from: [ // required
  * //     {
  * //       value: "STRING_VALUE", // required
  * //       count: Number("long"), // required
+ * //       note: "STRING_VALUE",
  * //     },
  * //   ],
  * //   keys: [ // required
  * //     {
  * //       value: "STRING_VALUE", // required
  * //       count: Number("long"), // required
+ * //       note: "STRING_VALUE",
  * //     },
  * //   ],
  * //   projects: [ // required
  * //     {
  * //       value: "STRING_VALUE", // required
  * //       count: Number("long"), // required
+ * //       note: "STRING_VALUE",
  * //     },
  * //   ],
  * // };
