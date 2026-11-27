@@ -40,7 +40,7 @@ build は無い。`cli/bin/roster` は `cli/src/cli.ts` を node で直に動か
 | `cli/src/mail.ts`・`cli/src/commands/mail.ts` | メッセージを NATS で配る道の、手元の物（受け手の名・名乗り・印・渡した記録）と、hook の命令（`roster mail …`）・TPM 担当の側の片付け |
 | `cli/src/tracker/` | 課題管理の口（`types.ts`）と adapter（`jira.ts`・`github.ts`）、課題の Key の形で adapter を選ぶ `routed.ts` |
 | `cli/src/guard.ts` | guard |
-| `cli/src/usage.ts` | 席の「トークンの数と費え」を、Claude Code の session の記録から数える純な関数（回を読む・値段の表・時計の 1 時間と種類ごとの行にまとめる）。castlist の数の表へ送る行の形を作る。file も castlist も触らない。写しを読んで castlist へ送る取り込み・片付け・突き合わせは `cli/src/commands/usage.ts`（[決まりの実装](/protocol/#トークンの数と費え)） |
+| `cli/src/usage.ts` | 席の「トークンの使用量」を、Claude Code の session の記録から数える純な関数（回を読む・値段の表・時計の 1 時間と種類ごとの行にまとめる）。castlist の数の表へ送る行の形を作る。file も castlist も触らない。写しを読んで castlist へ送る取り込み・片付け・突き合わせは `cli/src/commands/usage.ts`（[決まりの実装](/protocol/#トークンの使用量)） |
 | `cli/src/run-role.ts` | 連携の道具が担当の居場所で動かす `roster run-role`（名簿を読んで claude を起こす） |
 
 - **担当の種類を足す**: `cli/src/protocol.ts` の `ROLES` に足し、名の略（`cli/src/castlist.ts`）を書く。skill は `skill-sets/<名前>/.claude/skills/<役割>/SKILL.md`。合わせる物は、次の 3 つに分かれる。

@@ -1,4 +1,4 @@
-// トークンの数と費えの取り込み（session の記録から数えて castlist へ送る）。偽の castlist（fake-castlist.ts）と、一時の folder に作った写しを使う。
+// トークンの使用量の取り込み（session の記録から数えて castlist へ送る）。偽の castlist（fake-castlist.ts）と、一時の folder に作った写しを使う。
 // 本物の castlist と、本物の Claude Code の置き場（~/.claude・$CLAUDE_CONFIG_DIR）には触らない（置き場は、試験ごとの一時の folder に向ける）。
 import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
