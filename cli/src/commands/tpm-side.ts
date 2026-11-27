@@ -21,7 +21,7 @@ import { clearSeat, tidyMail } from './mail.ts';
 import { assertRead, assertSettled, brief } from './messages.ts';
 import { pageFolder } from './page.ts';
 import { markBrief } from './review-marks.ts';
-import { launchStaff, markBriefed, putStaffBrief, relabelStaff, STAFF, staffSubject } from './staff.ts';
+import { launchStaff, markBriefed, markDelivered, putStaffBrief, relabelStaff, STAFF, staffSubject } from './staff.ts';
 
 /**
  * TPM 担当が名乗る（$ROSTER_KEY の無い roster hello）: 居場所の題と状態を出し、自分の宛先を状態に書く。続けて名簿を出す。
@@ -239,6 +239,7 @@ async function assignSeat(ctx: Context, subjectKey: string, options: AssignOptio
     const url = subject === undefined ? options.brief ?? '' : await putStaffBrief(ctx, subject, asks);
     const sent = await brief(ctx, existing, url, options.note, settled === undefined || choice === undefined ? undefined : { text: settled, choice });
     const previous = markBriefed(ctx, asks, url);
+    markDelivered(ctx, asks, existing);
     return subject === undefined ? sent : [...sent, ...relabelStaff(ctx, existing, subjectKey, asks), ...await markBrief(ctx, url, asks, previous)];
   }
   if (options.issue !== undefined && !ctx.tracker.owns(options.issue)) {

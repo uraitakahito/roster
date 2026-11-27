@@ -117,6 +117,9 @@ describe('Tech Lead 担当の roster report review', () => {
     await askReview(w.castlist, { url: PR2 });
     // 今の席の名乗りにも並ぶ。
     expect((await hello(first)).some(l => l.startsWith('返していないレビューの頼み'))).toBe(true);
+    // 頼みは、渡した席の起こしの id を持つ（t-9tac）。今の回に渡した頼みは「見ている」。
+    expect(readReviews(w.tpm).map(r => r.launch)).toEqual(launched ? ['L1', 'L1'] : [undefined, undefined]);
+    expect(reviewList(w.tpm, { key: 'AI-36' })[0]).toContain('まだ（Tech Lead 担当が見ている）');
     w.wire.close('file:1');
     await assign(w.tpm, 'AI-36', { role: 'tech-lead', brief: BRIEF, wait: 0 });
     const address = readRole(w.tpm, 'AI-36')?.address ?? '';
@@ -126,6 +129,8 @@ describe('Tech Lead 担当の roster report review', () => {
     expect(asks).toEqual(launched ? ['AI-36__L1', 'AI-36__L1'] : ['AI-36', 'AI-36']);
     // 起こしの id があれば、前の回の頼みは新しい席の受け箱に無い（直したい不具合の形）。
     if (launched) expect(w.texts(address).filter(t => t.startsWith('【ask-review】'))).toEqual([]);
+    // review list は、前の回に渡した頼みを「見ている」と出さない（起こしの id が無い形は、受け箱が Key ごとで今の回に届くので、今までどおり）。
+    expect(reviewList(w.tpm, { key: 'AI-36' })[0]).toContain(launched ? 'まだ（前の回の Tech Lead 担当に渡した。今の回には roster hello が並べる）' : 'まだ（Tech Lead 担当が見ている）');
     const out = await hello(relaunched);
     const at = out.findIndex(l => l.startsWith('返していないレビューの頼み'));
     expect(out[at]).toBe('返していないレビューの頼み: 2 件（前の回の席に届いた物も。/tech-lead の 6 のとおり見て、roster report review --review <番号> で返す）');

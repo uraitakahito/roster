@@ -12,7 +12,16 @@ const minutes = (from: string, to: string): number => Math.round((Date.parse(to)
 function line(ctx: Context, r: Review): string {
   // 見る席: repo の席の頼みは親の課題の Tech Lead 担当、ほかは、その課題の Staff Engineer 担当の席。
   const seat = r.reviewer === 'tech-lead' ? (r.lead === undefined ? undefined : readRole(ctx, r.lead)) : readRole(ctx, staffKey(r.key));
-  const waiting = r.brief === undefined ? '席に渡していない' : seat === undefined ? '渡したが、席がもう無い' : r.reviewer === 'tech-lead' ? 'Tech Lead 担当が見ている' : '席が見ている';
+  const lead = r.reviewer === 'tech-lead';
+  // 渡した回と席の今の回が違えば、頼みは前の回の受け箱に届いたまま（Tech Lead 担当は、今の回の roster hello が並べる）。
+  const earlier = seat !== undefined && r.launch !== undefined && seat.launch !== r.launch;
+  const waiting = r.brief === undefined
+    ? '席に渡していない'
+    : seat === undefined
+      ? '渡したが、席がもう無い'
+      : earlier
+        ? (lead ? '前の回の Tech Lead 担当に渡した。今の回には roster hello が並べる' : '前の回の席に渡した')
+        : lead ? 'Tech Lead 担当が見ている' : '席が見ている';
   const state = `${r.verdict !== undefined ? VERDICTS[r.verdict] : `まだ（${waiting}）`}${r.escalatedAt === undefined ? '' : '・TPM 担当に上げた'}`;
   const when = `${short(r.askedAt)} に頼んだ${r.reviewedAt === undefined ? '' : `・${minutes(r.askedAt, r.reviewedAt)} 分で返った`}`;
   return [`#${r.n}`, r.key, state, r.url, when, ...(r.page === undefined ? [] : [r.page])].join('  ');

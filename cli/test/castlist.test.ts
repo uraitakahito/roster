@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vitest';
 import { castlistIssuer, CASTLIST_VERSION, CASTLIST_VOLUME, emphasize, seatPrefix } from '../src/castlist.ts';
 import { auditStart } from '../src/commands/audit.ts';
+import { reviewList } from '../src/commands/review.ts';
 import { readSession, sessionEnd, sessionStart } from '../src/commands/castlist.ts';
 import { guard } from '../src/commands/infra.ts';
 import { hello } from '../src/commands/role-side.ts';
@@ -19,6 +20,7 @@ import { guardSettings } from '../src/guard.ts';
 import type { RoleName } from '../src/protocol.ts';
 import { requireRole, readRole, type RoleRecord } from '../src/roster.ts';
 import { roleEnv } from '../src/run-role.ts';
+import { readReviews } from '../src/reviews.ts';
 import { resolveSettings } from '../src/settings.ts';
 import { startCastlist, type CastlistSeen, type FakeCastlist } from './fake-castlist.ts';
 import { deadUrl } from './next-fake.ts';
@@ -381,6 +383,22 @@ describe('課題の担当が roster ask review で起こした Staff Engineer �
     const staff = requireRole(w.tpm, 't-x7k2.staff');
     expect(staff.launch).toMatch(/^[0-9a-f-]{36}$/);
     expect(staff.launchedBy).toBe(`claude.session:${SID}`);
+  });
+
+  test('頼みは、渡した席の起こしの id を持つ。席が落ちて起こし直すと、返っていない頼みは新しい回の id になり「席が見ている」（t-9tac。review-1 の指摘 4）', async () => {
+    const { w } = await launched();
+    const se = { ...seat(w, 't-x7k2', SID), root: staffRoot() };
+    await sessionStart(se, startInput('startup', SID));
+    await hello(se);
+    await askReview(se, { url: 'https://github.com/o/r/pull/7', wait: 0 });
+    const first = requireRole(w.tpm, 't-x7k2.staff');
+    expect(readReviews(w.tpm).map(r => r.launch)).toEqual([first.launch]);
+    w.wire.close(first.address ?? '');
+    await askReview(se, { url: 'https://github.com/o/r/pull/8', wait: 0 });
+    const second = requireRole(w.tpm, 't-x7k2.staff');
+    expect(second.launch).not.toBe(first.launch);
+    expect(readReviews(w.tpm).map(r => r.launch)).toEqual([second.launch, second.launch]);
+    expect(reviewList(w.tpm, { key: 't-x7k2' }).slice(0, 2).map(l => l.split('  ')[2])).toEqual(['まだ（席が見ている）', 'まだ（席が見ている）']);
   });
 });
 

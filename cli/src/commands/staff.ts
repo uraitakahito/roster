@@ -75,6 +75,14 @@ export function markBriefed(ctx: Context, asks: Review[], url: string): string[]
 }
 
 /**
+ * 頼みに、依頼書を渡した席の起こしの id を書く（受け箱は起こした回ごとなので、roster review list が、今の回に届いた頼みかを見分ける）。
+ * 席が起こしの id を持たない（castlist の無い project。受け箱は Key ごと）なら、前の id を消す。
+ */
+export function markDelivered(ctx: Context, asks: Review[], seat: Pick<RoleRecord, 'launch'>): void {
+  for (const r of asks) patchReview(ctx, r.n, { launch: seat.launch });
+}
+
+/**
  * 起きている Staff Engineer 担当の席の題と説明を、新しい依頼書の頼みに替え、名簿の題も同じ字にする（通知のバナーは、居場所の題と名簿の題で席を探す）。
  * 替えられなければ名簿は替えずに、そのことを 1 行返す（依頼書はもう渡してあるので、止めない）。
  * 送る前の検査（assertRead）と通知のバナーは、相手を題で見分ける。この関数より前に Staff の席が前の題で送ったメッセージは、後の検査で拾われない（1 回の assign の中の短い間だけ）。
@@ -147,11 +155,15 @@ export async function launchStaff(ctx: Context, subject: RoleRecord, asks: Revie
   let out: string[];
   try {
     out = await launch(ctx, seat, options.again, options.wait, [...(options.more?.(issue) ?? []), ...skew], sid ? sessionRef(sid) : undefined, label.description);
+    markDelivered(ctx, asks, seat);
   }
   catch (e) {
     // 居場所ができた後の失敗（名乗らない など）は、頼みが残るので印も付ける。居場所を作る前に止まった回は付けない（依頼書の待ちを残さない）。
     const after = readRole(ctx, seat.key)?.address;
-    if (e instanceof NotStartedError || (after !== undefined && after !== before)) await markBrief(ctx, briefUrl, asks, previous);
+    if (e instanceof NotStartedError || (after !== undefined && after !== before)) {
+      markDelivered(ctx, asks, seat);
+      await markBrief(ctx, briefUrl, asks, previous);
+    }
     throw e;
   }
   // 置き場の印は、居場所ができた後に付ける。
@@ -213,6 +225,7 @@ export async function askReview(ctx: Context, options: { url: string, focus?: st
       throw e;
     }
     const previous = markBriefed(ctx, asks, url);
+    markDelivered(ctx, asks, seat);
     seat.brief = url;
     writeRole(ctx, seat);
     // 席の題は、返っていない頼みをみな数える（新しい頼みと +<残りの数>）。
@@ -273,6 +286,7 @@ async function askLeadReview(ctx: Context, self: RoleRecord, options: { url: str
     throw e;
   }
   const previous = markBriefed(ctx, [review], url);
+  markDelivered(ctx, [review], lead);
   return [sent, ...await markBrief(ctx, url, [review], previous), ...wait(ctx, 'review', reviewLabel([review]).target)];
 }
 
