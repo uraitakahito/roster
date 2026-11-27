@@ -113,7 +113,7 @@ repo の席の `roster ask review` は、あなたに【ask-review】で届く�
 
 **起こし直された時**: 【ask-review】は起こした回の席へ届くので、前の席に届いた頼みは、あなたには届かない。`roster hello` が「返していないレビューの頼み: N 件」の下に、頼みの番号・頼んだ席・見る物・依頼書の URL を並べたら、それを【ask-review】と同じく下の 1〜3 で見て、`--review <番号>` で返す。
 
-1. 依頼書と見る物を読む（ページは `roster page path <URL>`、PR は `gh pr view`・`gh pr diff`・`gh pr checks`）。
+1. 依頼書と見る物を読む（ページは `roster page path <URL>`、PR は `gh pr view`・`gh pr diff`。CI の結果は `roster watch pr <URL> --timeout 0`）。
 2. **自分の計画・境の取り決め・その席の依頼書に照らして見る。**見る所: 取り決めの名と形のとおりか・ほかの repo とぶつからないか・受け持ちの外を触っていないか・試験が受け入れの条件を見ているか。
 3. レビューのページを書いて置き（`roster page put <file> --kind review`）、返す。
    ```sh
@@ -130,7 +130,7 @@ repo の席の `roster ask review` は、あなたに【ask-review】で届く�
 repo ごとの実装が済んだら、またぐ合わせ（切り替え・版を上げる PR・またぐ試験）を自分でする。
 
 - **repo を変えるときは git worktree で作業する。**置き場所は repo の決まり（`CLAUDE.md` など）に従い、無ければ `<repo の親>/<repo の名前>-worktrees/<branch の / を - に>`。branch は `<課題の Key を小文字に>/<段>`。本体の checkout は動かさない。
-- PR は main から切った branch で出し、題か本文に課題の Key。**あなたの PR は、Staff Engineer 担当にレビューを頼む**（`roster ask review --url <PR の URL>`）。判定が届くまで merge しない。CI が緑になってから自分で merge し、main の workflow が通ったのを見てから `roster report merged` を打つ。
+- PR は main から切った branch で出し、題か本文に課題の Key。**あなたの PR は、Staff Engineer 担当にレビューを頼む**（`roster ask review --url <PR の URL>`）。判定が届くまで merge しない。CI が緑になってから自分で merge し、`roster report merged` を打つ。CI は自分で待たず、`roster watch pr <PR の URL>` を裏で起こして手を止める。main の workflow は `roster report merged` が見る（止まったら `roster watch main`。`${CLAUDE_SKILL_DIR}/../software-engineer/SKILL.md` の 2）。
 - `git add -A`・`git add .` は使わない。process を止める時は、pid を名指す（protocol.md の「共有の環境」）。
 - 環境を変える前に、protocol.md の「共有の環境」を見る。自分が変えてよくない環境は `roster ask devops`。
 - 思わぬ出来事に気づいたら、その場で `roster report incident` で台帳に 1 行書いて続ける。

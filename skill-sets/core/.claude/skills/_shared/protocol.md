@@ -33,7 +33,7 @@ TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・Te
 
 - 【done】の「残り」は、依頼の外で直すとよい物・やらなかった物・merge していない PR。「決めてほしいこと」は、【ask-pm】で送った項目の題。どちらも無ければ「なし」と書く（書かないと送れない）。TPM 担当はこの 2 つで【dismiss】を送るかを決める。
 - 【end】の「残っている物」は、計画から外れた物・残した物で直した方がよい物。無ければ「なし」。
-- 【merged】【doc-fix】と【end】の `--pr` は、命令が送る前に PR が merge 済みか（`gh pr view` の state が `MERGED`）を見る。merge していなければ送らずに止まるので、merge を確かめてから打ち直す。`gh` で読めない PR だけ、自分で確かめた方法を `--unchecked "<訳>"` に書いて送る（訳はメッセージに載る）。
+- 【merged】【doc-fix】と【end】の `--pr` は、命令が送る前に PR が merge 済みか（`gh pr view` の state が `MERGED`）を見る。merge していなければ送らずに止まるので、merge を確かめてから打ち直す。`gh` で読めない PR だけ、自分で確かめた方法を `--unchecked "<訳>"` に書いて送る（訳はメッセージに載る）。【merged】【doc-fix】は、merge の後の main の workflow も命令が見る（下の「待つ・見張る」）。
 
 Dependabot の PR だけで使う見出し（【merge-request】【not-yet】【recreated】）は `/sustaining-engineer` と `/dependabot-triage` に書いてある。【returned】は前の版の見出しで、今は誰も送らない（古い記録に残っているだけ）。
 
@@ -276,6 +276,24 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 - process を止めるときは、`pgrep -fl '<型>'` で pid と command line を見て、当たった数を確かめてから、その数字を `kill <pid>` に書く。`pkill`・`killall` と pid を名指さない `kill`（`xargs kill`・`kill $(pgrep …)`）は打たない（guard が止める。macOS の `pkill` は後ろの旗も pattern に読み、2026-11-23 の朝（JST）に担当の session ごと 29 個を止めた。台帳 #89）。
 - 設定に書かれていない環境で、並べて動いている担当やほかの人が困りそうな物を変えるときも、先に【ask-tpm】を送る。
 - 手元で image を build する builder（環境 `builder`。container の名は `buildkit`）は、どの担当も使う。`container build` はそのまま打つ（builder が止まっていれば build が起こす）。build に `-c`・`-m`・`--ssh`・`--dns…` を付けない（動いている builder を作り直し、ほかの担当の build が落ちる。guard はこれを止められない）。要るなら【ask-devops】。
+
+## 待つ・見張る
+
+GitHub の側が終わるのを待つ仕事（PR の CI・merge の後の main の workflow・GitHub の戻り）は、自分（model）で待たず、見張りの命令 `roster watch` に任せる。待つ間、トークンを使わず、メッセージも届く。
+
+| 待つ物 | 命令 | 既定の長さ |
+|---|---|---|
+| PR の CI（今の head の commit の check が、みな終わるまで） | `roster watch pr <PR の URL>` | 30 分 |
+| merge の後の main の workflow | `roster watch main <PR の URL>` | 30 分 |
+| GitHub が応えるようになるまで | `roster watch github [--repo <owner/repo>]` | 120 分 |
+
+- **裏で起こして、手を止める。**Bash の `run_in_background` で打つ（表で打つと、終わるまで手が塞がり、メッセージが届かない）。命令が終わると起こされ、終了コードが渡る。**通ったかは、終了コードで決める**: 0 = 通った（戻った）・10 = 落ちた・20 = まだ（長さを過ぎた）・30 = check や回が付いていない・1 = 見張れない。0 のほかは、出力の file を読む（落ちた check の名と URL が出ている）。
+- **30 は「通った」ではない。**check が付いていないだけ。repo に、PR で動く workflow が在るなら、もう 1 度見張る。無い repo なら、そう確かめてから進む。
+- 20（まだ）で終わったら、もう 1 度見張る。2 度続けて過ぎたら、`roster ask tpm` で知らせる。
+- 今の様子を 1 回だけ見るなら `--timeout 0`（待たずに終わる）。
+- `gh pr checks --watch`・`gh run watch`・`sleep` で待たない。check の数でも待たない。
+- **GitHub が応えない時**: `gh`・`git push`・`git fetch` が、5xx や繋がらない誤りで落ちたら、打ち直しを続けない。`roster watch github --repo <落ちた手の owner/repo>` を裏で起こして手を止め、「戻った」（0）で起こされてから、落ちた命令を打ち直す。GitHub の障害は一部だけのことが多く、「戻った」の後も merge・push がまだ落ちることがある。打ち直しがまた落ちたら、もう 1 度見張る。20 で終わったら `roster ask tpm` で知らせる。PR の CI を見張っている間に GitHub が落ちた時は、`roster watch pr` が聞き直し続けるので、何もしなくてよい。
+- `roster report merged`・`roster report doc-fix` は、merge の後の main の workflow を命令が見て、結果を本文に足す。merge から 2 分の内と、まだ動いている回がある間は、止まる（落ちた回がもう在っても。みな終わってから送る）。止まったら、`roster watch main <PR の URL>` を裏で起こして待ち、終わってから打ち直す。`--unchecked` は、merge の確かめも main の workflow の確かめも外すので、`gh` で読めない PR の時だけ使う。
 
 ## アクターの台帳（castlist）
 

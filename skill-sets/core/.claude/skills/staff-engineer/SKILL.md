@@ -26,7 +26,7 @@ roster hello
 - **課題の担当の依頼書**（何が求められたか）と、`roster hello` が返した課題の写し・課題の中身（`roster issue view <Key>`）を読む。レビューは、これに照らしてする。
 - 見る物を読む:
   - 置き場のページ（計画・提案）: `roster page path <URL>` で読む。
-  - PR: `gh pr view <URL>`・`gh pr diff <URL>`・`gh pr checks <URL>` で読む。周りのコードは、`git fetch` の後に `git show <commit>:<path>`・`git diff` で読む。**checkout しない・worktree を作らない**（guard が止める）。試験は手元で流さず、CI の結果を見る。
+  - PR: `gh pr view <URL>`・`gh pr diff <URL>` で読む。CI の結果は `roster watch pr <URL> --timeout 0` で読む（今の様子を 1 回見て、待たずに終わる。0 = 通った・10 = 落ちた・20 = まだ・30 = check が付いていない）。CI がまだなら、待たずに、ほかを先に読む。周りのコードは、`git fetch` の後に `git show <commit>:<path>`・`git diff` で読む。**checkout しない・worktree を作らない**（guard が止める）。試験は手元で流さず、CI の結果を見る。
 - 見る物の repo の `CLAUDE.md`・`.claude/rules/`・教訓（`tasks/lessons.md` など）を読む。決まりに合っているかも見る。
 - 新しい頼みが【ask-review】で届いたら（TPM 担当が起こし直した時などは【brief】で届く）、同じように依頼書を読んで続ける。見直しなら、前のレビューのページも読む。「#<番号> を済ませてから、これをする」とあれば、前の頼みを先に返す（`roster report review` は、いちばん古い依頼書の頼みから返す）。
 
