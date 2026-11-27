@@ -166,6 +166,10 @@ cd <TPM 担当を起こした folder>
 - 止めている間の session の始まりと終わりは、castlist に残らない（hook は送らずに終わる）。起きた後の初めの Bash で、guard が登録する。
 - 監査では、Auditor が `roster castlist find`・`roster castlist show`・`roster castlist lineage`・`roster castlist events`・`roster castlist settings` でアクターを引く（読むだけ。[担当のあいだの決まり](/protocol/#監査の検索を読む)）。止まっている間は `castlist に聞けない` の 1 行で止まり、`roster incident timeline` はアクターの欄に「castlist に聞けない」と書いてページを置く。
 - 答えを手で確かめ直す時だけ、castlist を動かす機械の terminal で、同じ GET を `curl` で打つ（例 `curl -s 'http://127.0.0.1:8802/api/actors?label=tpm.key%3At-23zs'`。引数の名は castlist の API の名（`activeFrom`・`maxResults` など。`roster castlist` の旗の名とは違う）で、時刻は UTC（`Z`）で書く。引数は castlist の docs の [API](https://uraitakahito.github.io/castlist/api.html) の「監査の検索」）。ふだんは `roster castlist …` を使う（名を id にし、行ごとにプロフィールの画面の URL を添える）。書く要求（POST・PUT）は手で送らない。
+- **トークンの数と費え**（castlist 2.1.0 から）: roster が、席が閉じる時・席を閉じる命令・TPM 担当の 1 時間に 1 度の片付けで、Claude Code の session の記録から数だけを読んで castlist に送る（[担当のあいだの決まり](/protocol/#トークンの数と費え)）。人の手は要らない。見るのは callboard の費えの画面（`http://127.0.0.1:8803/usage/`）。
+  - 抜けていないかを見る: `roster castlist usage-check`（窓の既定は 31 日前〜1 時間前。読むだけ）。「合わない席」が出たら、`roster castlist usage`（まだ送っていない席をみな送る。上限なし）の後に、もう 1 度。それでも合わなければ `roster report incident` で台帳に挙げる。
+  - castlist が止まっていた間・古い版の間の分は、起きた後の片付けで送られる。ただし session の記録は Claude Code が 30 日で消すので、その前に送られていない分は戻らない。
+  - castlist が断った行は、状態の folder の `usage-refused.jsonl` に残る（`usage-check` が数を出す）。
 
 ## ページの置き場（pagetray）
 
@@ -270,7 +274,7 @@ castlist（アクターの台帳）と pagetray（ページの置き場）の画
 
 - **起こす版**: `.callboard-version` の版。`<版>` は `@` の前。取った image の digest が `@` の後ろと同じかを見る（見方は、上の「ページの置き場」の「起こす」と同じ）。
 - **起こす順**: castlist と pagetray より先に起こしてもよい（聞けない間は、入口に「届きません」と訳を出す）。
-- **確かめる**: callboard の docs の「確かめる」を、1 から 6 まで流す（`/healthz` の版・`127.0.0.1:8803` だけに開いているか・入口・記録の行）。入口の画面で、castlist と pagetray が「つながっています」と出ること（pagetray が「届きません」の時は、上の「聞く先」）。メッセージの記録（`http://127.0.0.1:8803/messages`）とページの一覧（`http://127.0.0.1:8803/pages/`）と費え（`http://127.0.0.1:8803/usage/`）が 200 で開くこと。castlist と pagetray の版が、callboard の `CHANGELOG.md` の「呼ぶ先の要る版」より古くないこと（0.4.0 は castlist 1.1.0 から・pagetray 1.3.0 から。pagetray が古いと、ページの一覧やメッセージの記録の画面が「pagetray に聞けません（404 が返りました）」になる。castlist が古いと、タイムラインが「castlist に聞けません（404 が返りました）」になり、一覧とプロフィールの「時刻ずれ」の印と、状態の横の出来事の名が、誤りを出さずに消える）。「届きません」の時は、`container logs callboard` の `呼ぶ先に聞けない` の行（どの呼ぶ先か・聞く先・訳）を読む。
+- **確かめる**: callboard の docs の「確かめる」を、1 から 6 まで流す（`/healthz` の版・`127.0.0.1:8803` だけに開いているか・入口・記録の行）。入口の画面で、castlist と pagetray が「つながっています」と出ること（pagetray が「届きません」の時は、上の「聞く先」）。メッセージの記録（`http://127.0.0.1:8803/messages`）とページの一覧（`http://127.0.0.1:8803/pages/`）と費え（`http://127.0.0.1:8803/usage/`）が 200 で開くこと。castlist と pagetray の版が、callboard の `CHANGELOG.md` の「呼ぶ先の要る版」より古くないこと（0.5.0 は castlist 1.1.0 から（費えの数は 2.1.0 から）・pagetray 1.3.0 から。pagetray が古いと、ページの一覧やメッセージの記録の画面が「pagetray に聞けません（404 が返りました）」になる。castlist が古いと、タイムラインが「castlist に聞けません（404 が返りました）」になり、一覧とプロフィールの「時刻ずれ」の印と、状態の横の出来事の名が、誤りを出さずに消える。castlist が 2.1.0 より古いと、費えの画面が「castlist に聞けません（404 が返りました）」になり、一覧の額の列とプロフィールの節「費え」が「—」と訳になる）。「届きません」の時は、`container logs callboard` の `呼ぶ先に聞けない` の行（どの呼ぶ先か・聞く先・訳）を読む。
 - **止まっている時**: 画面が開けないだけで、担当の仕事（ページを置く・メッセージを送る・アクターの登録）は止まらない。アクターの画面（一覧・プロフィール・タイムライン・相関図）は callboard だけにある（castlist は 2.0.0 から画面を持たない）ので、止まっている間は見られない。`roster castlist …` の命令（読むだけ）は、そのまま使える。pagetray の画面（8801）は、そのまま開ける。
 - **版を上げる**: callboard の新しい版が出て、この repo の `.callboard-version` が上がった時（上げ方は [開発](/development/#callboard画面のサーバーとのつなぎ)の「callboard を上げる時」）。callboard の `CHANGELOG.md` の「呼ぶ先の要る版」を見て、castlist・pagetray がその版より古ければ、先にそちらを上げる（castlist を上げるのは Product Manager）。その後、container を消して、新しい版で起こし直す（data が無いので、写しは要らない）。
 - **戻す**: この repo の `.callboard-version` を前の版に戻す PR を先に入れてから、前の版の image で起こし直す（版の file が新しいままだと、次に起こし直す時に、また新しい版で起こしてしまう）。castlist・pagetray も戻す時は、それぞれの版の file の PR を戻して前の版で起こし直してから、callboard を戻す（新しい操作を呼ぶ callboard を、古い castlist・pagetray に向けている間は、その画面が 503 になる。短い間で、data は失わない）。
