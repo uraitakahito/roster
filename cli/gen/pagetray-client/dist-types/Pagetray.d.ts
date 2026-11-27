@@ -5,6 +5,7 @@ import { type CreatePageCommandInput, type CreatePageCommandOutput } from "./com
 import { type DeleteFilesCommandInput, type DeleteFilesCommandOutput } from "./commands/DeleteFilesCommand";
 import { type DeletePagesCommandInput, type DeletePagesCommandOutput } from "./commands/DeletePagesCommand";
 import { type GetHealthCommandInput, type GetHealthCommandOutput } from "./commands/GetHealthCommand";
+import { type GetMessageFacetsCommandInput, type GetMessageFacetsCommandOutput } from "./commands/GetMessageFacetsCommand";
 import { type ListFilesCommandInput, type ListFilesCommandOutput } from "./commands/ListFilesCommand";
 import { type ListMessagesCommandInput, type ListMessagesCommandOutput } from "./commands/ListMessagesCommand";
 import { type ListPagesCommandInput, type ListPagesCommandOutput } from "./commands/ListPagesCommand";
@@ -55,6 +56,13 @@ export interface Pagetray {
     getHealth(args: GetHealthCommandInput, options?: PagetrayRequestOptions): Promise<GetHealthCommandOutput>;
     getHealth(args: GetHealthCommandInput, cb: (err: any, data?: GetHealthCommandOutput) => void): void;
     getHealth(args: GetHealthCommandInput, options: PagetrayRequestOptions, cb: (err: any, data?: GetHealthCommandOutput) => void): void;
+    /**
+     * @see {@link GetMessageFacetsCommand}
+     */
+    getMessageFacets(): Promise<GetMessageFacetsCommandOutput>;
+    getMessageFacets(args: GetMessageFacetsCommandInput, options?: PagetrayRequestOptions): Promise<GetMessageFacetsCommandOutput>;
+    getMessageFacets(args: GetMessageFacetsCommandInput, cb: (err: any, data?: GetMessageFacetsCommandOutput) => void): void;
+    getMessageFacets(args: GetMessageFacetsCommandInput, options: PagetrayRequestOptions, cb: (err: any, data?: GetMessageFacetsCommandOutput) => void): void;
     /**
      * @see {@link ListFilesCommand}
      */

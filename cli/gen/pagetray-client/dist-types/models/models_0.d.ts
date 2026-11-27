@@ -523,6 +523,14 @@ export interface DeletePagesOutput {
     removed: string[] | undefined;
 }
 /**
+ * 絞り込みの候補 1 つ: 値と、その値の記録の数。
+ * @public
+ */
+export interface FacetCount {
+    value: string | undefined;
+    count: number | undefined;
+}
+/**
  * 一覧の file の記録（中身と url は入らない）。
  * @public
  */
@@ -612,6 +620,56 @@ export interface GetHealthOutput {
      * @public
      */
     version: string | undefined;
+}
+/**
+ * @public
+ */
+export interface GetMessageFacetsInput {
+    /**
+     * 今絞っている受け手の名（絞らない。候補に必ず入れる値）。
+     * @public
+     */
+    to?: string | undefined;
+    /**
+     * 今絞っている送り手の名（絞らない。候補に必ず入れる値）。
+     * @public
+     */
+    from?: string | undefined;
+    /**
+     * 今絞っている Key（絞らない。候補に必ず入れる値）。
+     * @public
+     */
+    key?: string | undefined;
+}
+/**
+ * @public
+ */
+export interface GetMessageFacetsOutput {
+    /**
+     * 状態（`MessageState` の字）ごとの数。
+     * @public
+     */
+    states: FacetCount[] | undefined;
+    /**
+     * 受け手の名ごとの数。
+     * @public
+     */
+    to: FacetCount[] | undefined;
+    /**
+     * 送り手の名ごとの数。
+     * @public
+     */
+    from: FacetCount[] | undefined;
+    /**
+     * Key ごとの数。
+     * @public
+     */
+    keys: FacetCount[] | undefined;
+    /**
+     * project ごとの数。
+     * @public
+     */
+    projects: FacetCount[] | undefined;
 }
 /**
  * @public

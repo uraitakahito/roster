@@ -21,6 +21,7 @@ __exportStar(require("./CreatePageCommand"), exports);
 __exportStar(require("./DeleteFilesCommand"), exports);
 __exportStar(require("./DeletePagesCommand"), exports);
 __exportStar(require("./GetHealthCommand"), exports);
+__exportStar(require("./GetMessageFacetsCommand"), exports);
 __exportStar(require("./ListFilesCommand"), exports);
 __exportStar(require("./ListMessagesCommand"), exports);
 __exportStar(require("./ListPagesCommand"), exports);

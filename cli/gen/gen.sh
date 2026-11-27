@@ -34,7 +34,7 @@ sha_for() {
 DEFS="
 castlist v2.0.0 model/model/common.smithy 6425614b79d58d7149f17396cebc3eb30e0e6c511516957d82004eb329fb66d0
 castlist v2.0.0 model/model/castlist.smithy a913649956b5ee00a793f845454b817fa9d6dbebee8704e1a477e5f25cc6473a ai.castlist#Castlist
-pagetray v1.1.0 model/model/pagetray.smithy 9f9df166f7b045071a89366765934f353bae31e9b41711be313bc6c69bbf5155 ai.pagetray#Pagetray
+pagetray v1.2.0 model/model/pagetray.smithy 9778291651cf4d3a8fb2ecff8446bb1cf17d6769b7071b9e61c2bd0a2fc26eea ai.pagetray#Pagetray
 "
 MIN_AGE_SECONDS=$((2 * 24 * 60 * 60))
 # つなぎの一時の失敗（github.com や Maven Central への時間切れ）は、少し待って送り直す（pagetray の ci/gen.sh と同じ）。

@@ -13,7 +13,16 @@
     // 字の含みで見る前の guard では * の項目は当たらず、* の無い項目が当たる。どちらの guard でも守りに穴が空かないよう、両方を並べて置く。
     "pagetray": {
       "guard": "tpm",
+      // container の名は pagetray.box（pagetray 1.2.0 から。同じ network の callboard が、DNS の domain box で名で引く。AI-32）。
+      // 前の名 pagetray の項目も残す（前の名で動かしている間と、前の名で起こし直す試みを止めるため）。
+      // 前の名の項目だけでは、新しい名を旗を挟んで名指す命令（container rm -f pagetray.box）が、語でも字でも当たらない。
       "match": [
+        "--name pagetray.box",
+        "container start pagetray.box",
+        "container stop pagetray.box",
+        "container kill pagetray.box",
+        "container delete pagetray.box",
+        "container rm pagetray.box",
         "--name pagetray",
         "container start pagetray",
         "container stop pagetray",
