@@ -124,7 +124,7 @@ export function lookHead(exec: Exec, pr: PrRef): Look | undefined {
   const v = exec('gh', ['pr', 'view', pr.url, '--json', 'state,headRefOid,headRefName,headRepository,headRepositoryOwner']);
   if (v.status !== 0) return failure(v.status, v.stderr, v.stdout);
   const view = parsed<HeadView>(v.stdout);
-  if (typeof view?.headRefOid !== 'string' || typeof view.headRefName !== 'string') return { state: 'unreachable', message: 'gh pr view の答えを読めない' };
+  if (typeof view?.state !== 'string' || typeof view.headRefOid !== 'string' || typeof view.headRefName !== 'string') return { state: 'unreachable', message: 'gh pr view の答えを読めない' };
   if (view.state !== 'OPEN') return undefined;
   const owner = view.headRepositoryOwner?.login;
   const name = view.headRepository?.name;

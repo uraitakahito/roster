@@ -240,6 +240,9 @@ describe('roster watch pr', () => {
   test('pr view の答えを読めない時は、聞き直す', async () => {
     const s = seat({ 'pr view': [ok({}), head('new')], 'api': [tip('new')], 'pr checks': [checks(0, 'pass')] });
     expect((await watchPr(s.ctx, PR)).code).toBe(WATCH_EXIT.passed);
+    // state だけ無い答えも、「開いていない」と見て比べを飛ばさずに聞き直す。
+    const noState = seat({ 'pr view': [ok({ headRefOid: 'old', headRefName: 'b', headRepository: { name: 'r' }, headRepositoryOwner: { login: 'o' } })], 'pr checks': [checks(1, 'fail')] });
+    expect((await watchPr(noState.ctx, PR, { timeout: 0 })).code).toBe(WATCH_EXIT.timeout);
   });
 
   test('PR の URL でない字は断る', () => {
