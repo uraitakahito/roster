@@ -146,7 +146,7 @@ export interface ActorRow {
   effort?: string | undefined;
 
   /**
-   * プロフィールの頁の path（`/actors/\{id\}`）。
+   * プロフィールの画面の path（`/actors/\{id\}`）。画面は callboard が、この path で出す（castlist は 2.0.0 から画面を持たない）。
    * @public
    */
   url: string | undefined;
