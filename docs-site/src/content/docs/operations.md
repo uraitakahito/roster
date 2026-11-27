@@ -1,6 +1,6 @@
 ---
 title: 運用
-description: この repo を別の folder へ移す手順、Node の version の上げ方、依存が増えた PR を merge した後の手、アクターの台帳（castlist）が止まった時、ページの置き場（pagetray）の起こし方と保ち方、メッセージキュー（NATS）の起こし方と止まった時、手元の builder（buildkit）の守り、レビュー（Staff Engineer 担当の席）と監査（Auditor の席）の運び、課題の時間の分け（roster time）、担当が落ちた後の調べ方
+description: この repo を別の folder へ移す手順、Node の version の上げ方、依存が増えた PR を merge した後の手、アクターの台帳（castlist）が止まった時、ページの置き場（pagetray）の起こし方と保ち方、画面のサーバー（callboard）の起こし方、メッセージキュー（NATS）の起こし方と止まった時、手元の builder（buildkit）の守り、レビュー（Staff Engineer 担当の席）と監査（Auditor の席）の運び、課題の時間の分け（roster time）、担当が落ちた後の調べ方
 ---
 
 ## 課題の時間の分け（roster time）
@@ -225,6 +225,27 @@ pagetray の新しい版が出て、この repo の `.pagetray-version` が上�
 ### ほかの project で使う
 
 置き場は roster を動かす機械に 1 つで、どの project の担当も同じ置き場を使う（一覧の UI では project で絞れる）。ほかの project で TPM 担当を起こすときも、その project の `.claude/roles/config.jsonc` に、この repo と同じ `infra.pagetray` の宣言を写す（写さないと、その project の担当は止める命令を断りなく打てる。[設定](/configuration/#環境の手続き)）。
+
+## 画面のサーバー（callboard）
+
+castlist（アクターの台帳）と pagetray（ページの置き場）の画面をまとめるサーバー（別の repo の [callboard](https://github.com/uraitakahito/callboard)。AI-32）。castlist と pagetray を API で呼び、画面の HTML を組んで返す。data は持たない（DB も volume も無い）。Apple Container（`container` CLI）で動かし、`127.0.0.1` だけで待ち受ける。起こす・止める・版を上げるのは DevOps Engineer 担当で、命令は `roster infra run callboard -- <命令>` で打つ（callboard の repo の `.claude/roles/config.jsonc` が、環境 `callboard` を「TPM に相談」の手続きで宣言している。roster は、project の folder の直下の folder の宣言も合わせて読む）。
+
+| 物 | 値 |
+|---|---|
+| image | `ghcr.io/uraitakahito/callboard:<版>`。版と digest は、この repo の `.callboard-version`（`v<版>@<digest>`） |
+| container | `callboard`（`127.0.0.1:8803` → 中の 8080。メモリは Apple Container の下限の 200 MiB、CPU は 1） |
+| URL | `http://127.0.0.1:8803/`（入口。castlist と pagetray が生きているかと、画面への link）。今あるのは、プロフィール（`/actors/<id>`）と相関図（`/graph/network`）。ほかの画面（アクターの一覧・タイムライン・ページの一覧・メッセージ）は、移すまで castlist（8802）と pagetray（8801）の画面 |
+| 聞く先 | castlist は `http://castlist.box:8080`、pagetray は、同じ network の container から pagetray に届く名（`CALLBOARD_CASTLIST_URL`・`CALLBOARD_PAGETRAY_URL`。container の中の `127.0.0.1` は container 自身なので、host の port には届かない） |
+| data | 無い。止めても、消しても、起こし直せば元のまま |
+
+**手順は、callboard の docs の「[動かす](https://uraitakahito.github.io/callboard/run.html)」にある**（設定・起こす・止める・版を上げる・確かめる）。そこの命令のうち、container に触る物は、頭に `roster infra run callboard --` を付けて打つ。下は、この repo の側の決まりだけを書く。
+
+- **起こす版**: `.callboard-version` の版。`<版>` は `@` の前。取った image の digest が `@` の後ろと同じかを見る（見方は、上の「ページの置き場」の「起こす」と同じ）。
+- **起こす順**: castlist と pagetray より先に起こしてもよい（聞けない間は、入口に「届きません」と訳を出す）。
+- **確かめる**: callboard の docs の「確かめる」を、1 から 6 まで流す（`/healthz` の版・`127.0.0.1:8803` だけに開いているか・入口・記録の行）。入口の画面で、castlist と pagetray のどちらも「つながっています」と出ること。「届きません」の時は、`container logs callboard` の `呼ぶ先に聞けない` の行（どの呼ぶ先か・聞く先・訳）を読む。
+- **止まっている時**: 画面が開けないだけで、担当の仕事（ページを置く・メッセージを送る・アクターの登録）は止まらない。castlist と pagetray の画面（8802・8801）は、そのまま開ける。
+- **版を上げる**: callboard の新しい版が出て、この repo の `.callboard-version` が上がった時（上げ方は [開発](/development/#callboard画面のサーバーとのつなぎ)の「callboard を上げる時」）。callboard の `CHANGELOG.md` の「呼ぶ先の要る版」を見て、castlist・pagetray がその版より古ければ、先にそちらを上げる（castlist を上げるのは Product Manager）。その後、container を消して、新しい版で起こし直す（data が無いので、写しは要らない）。
+- **戻す**: この repo の `.callboard-version` を前の版に戻す PR を先に入れてから、前の版の image で起こし直す（版の file が新しいままだと、次に起こし直す時に、また新しい版で起こしてしまう）。castlist・pagetray も戻す時は、それぞれの版の file の PR を戻して前の版で起こし直してから、callboard を戻す（新しい操作を呼ぶ callboard を、古い castlist・pagetray に向けている間は、その画面が 503 になる。短い間で、data は失わない）。
 
 ## メッセージキュー（NATS）
 
