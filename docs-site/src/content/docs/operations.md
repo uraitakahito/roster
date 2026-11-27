@@ -174,7 +174,7 @@ cd <TPM 担当を起こした folder>
 | 物 | 値 |
 |---|---|
 | image | `ghcr.io/uraitakahito/pagetray:<版>`。版と digest は、この repo の `.pagetray-version`（`v<版>@<digest>`。この repo の cli と合わせてある版） |
-| container | `pagetray`（`127.0.0.1:8801` と `127.0.0.1:8800` → 中の 8080。メモリは Apple Container の下限の 200 MiB、CPU は 1） |
+| container | `pagetray.box`（pagetray 1.2.0 から。前の名は `pagetray`。同じ network の callboard が、この名で届く。`127.0.0.1:8801` と `127.0.0.1:8800` → 中の 8080。メモリは Apple Container の下限の 200 MiB、CPU は 1） |
 | URL | `http://127.0.0.1:8801/`（一覧の UI。ページは `/<状態の folder の名>/<Key>/<種類>-<番号>.html`、ページが参照する file は `/<状態の folder の名>/<Key>/files/<語>-<番号>.<拡張子>`）。`http://127.0.0.1:8800/` は、前の置き場（Nginx。今は無い）の port。前に置いたページの URL と、ページの中の link を同じ path で開けるように、同じ container が待ち受ける |
 | CLI | `pagetray`（置き場を端末から操作する命令。release に macOS arm64 用の binary が付く。入れ方と命令は pagetray の docs の「[CLI](https://uraitakahito.github.io/pagetray/cli.html)」）。担当は `roster page` を使い、`pagetray` は人の手元と、`roster` を通さない場面で使う。担当の `pagetray page delete` は guard が止める |
 | 控えの folder | `~/.local/share/roster/pages/`（`roster` が、置いた・読んだページと file を roster を動かす機械に写す所。container には mount しない） |
@@ -187,7 +187,7 @@ cd <TPM 担当を起こした folder>
 ```sh
 container image pull ghcr.io/uraitakahito/pagetray:<版>
 container volume create pagetray-data-v1     # 初めての時だけ
-roster infra run pagetray -- container run -d --name pagetray \
+roster infra run pagetray -- container run -d --name pagetray.box \
   -p 127.0.0.1:8801:8080 \
   -p 127.0.0.1:8800:8080 \
   -v pagetray-data-v1:/data \
@@ -197,8 +197,9 @@ roster infra run pagetray -- container run -d --name pagetray \
   ghcr.io/uraitakahito/pagetray:<版>
 ```
 
-- `<版>` は `.pagetray-version` の `@` の前（`v1.1.1` など）。pull した image の digest が `@` の後ろと同じかを見る（見方は pagetray の docs の「[起こす](https://uraitakahito.github.io/pagetray/run.html#起こす)」）。
+- `<版>` は `.pagetray-version` の `@` の前（`v1.2.0` など）。pull した image の digest が `@` の後ろと同じかを見る（見方は pagetray の docs の「[起こす](https://uraitakahito.github.io/pagetray/run.html#起こす)」）。
 - `-p` には必ず `127.0.0.1:` を書く。`-p 8801:8080` と書くと LAN に開く。
+- container の名は `pagetray.box`。Apple Container の DNS は、domain `box` の付いた名だけを答えるので、画面のサーバー（callboard）は、この名で置き場に届く（前の名 `pagetray` では引けない）。担当と Product Manager が使う URL（`http://127.0.0.1:8801`）は変わらない。前の名で動いている container は、版を上げる時に、前の名で止めて消してから（`container stop pagetray`・`container delete pagetray`）、この名で起こす（volume はそのまま付く）。この repo の `.claude/roles/config.jsonc` は、どちらの名の命令も「TPM に相談」の手続きに入れてある。
 - `PAGETRAY_CASTLIST_URL` は、置き場が送り手を castlist（[アクターの台帳](#アクターの台帳castlist)）に聞く先。`roster page put`・`roster file put` は、castlist の設定がある project では送り手（session の付随する id）を付けて置き、置き場が受けたその時に castlist に聞いて記録に残す（[担当のあいだの決まり](/protocol/#ページの置き場)）。container の中の `127.0.0.1` は container 自身なので、castlist の container `castlist.box` に名でつなぐ（Apple Container の DNS が domain `box` の名を答える）。一覧の UI の送り手の link の頭 `PAGETRAY_CASTLIST_LINK_URL`（置き場の一覧で、送り手の名から開くプロフィールの画面の URL の頭）は、callboard の `http://127.0.0.1:8803` にする（プロフィールの画面は callboard にある。castlist は 2.0.0 から画面を持たないので、既定の `http://127.0.0.1:8802` のままだと、link の先が 404 になる）。
 - `PAGETRAY_CASTLIST_URL` を書いた置き場は、castlist が止まっている・名で届かない間、送り手を付けた置く要求を `503` で断る（何も置かない。`roster page put` は「castlist に送り手を聞けませんでした」と出す）。castlist を起こすのは Product Manager（[アクターの台帳](#アクターの台帳castlist)）。castlist が起きているのに続く時は、置き場から `castlist.box` に届いていない（同じ network に居ない・名が違う）。
 - 8801 が使われていたら別の port にし、担当が使う URL を環境変数 `ROSTER_PAGES_URL`（[設定](/configuration/)）で合わせる。
@@ -216,8 +217,8 @@ roster infra run pagetray -- container run -d --name pagetray \
 
 ### 止める・roster を動かす機械を起こし直した後
 
-- 止めている間、担当はページを置けず、Product Manager は一覧の UI を開けない（番号をサーバーが決めるため。担当は、控えにあるページなら読める）。先に【ask-tpm】を送り、答えを待つ。止めるのは `roster infra run pagetray -- container stop pagetray`。DB は volume に残る。
-- roster を動かす機械を起こし直すと止まったままになる。`container system start` の後に `roster infra run pagetray -- container start pagetray` を打ち、「確かめる」をする。
+- 止めている間、担当はページを置けず、Product Manager は一覧の UI を開けない（番号をサーバーが決めるため。担当は、控えにあるページなら読める）。先に【ask-tpm】を送り、答えを待つ。止めるのは `roster infra run pagetray -- container stop pagetray.box`。DB は volume に残る。
+- roster を動かす機械を起こし直すと止まったままになる。`container system start` の後に `roster infra run pagetray -- container start pagetray.box` を打ち、「確かめる」をする。
 - volume（`pagetray-data-v1`）は消さない。消す命令（`container volume delete`・`rm`）と、付けて起こす命令（`-v pagetray-data…`。写しから戻す時の書き込みも）を「TPM に相談」の手続きに入れてある（この repo の `.claude/roles/config.jsonc`）。
 - **DB の写し**（`curl -fsS -o ~/pagetray-$(date +%Y%m%d-%H%M).db http://127.0.0.1:8801/api/backup`。CLI が入っていれば `pagetray backup -o ~/pagetray-$(date +%Y%m%d-%H%M).db` でも同じ）は、版を上げる前と volume に触る前に取る。本文は控えの folder にも残るが、置いた担当の役割と workspace の ID は DB にだけある。
 
@@ -262,14 +263,14 @@ castlist（アクターの台帳）と pagetray（ページの置き場）の画
 | image | `ghcr.io/uraitakahito/callboard:<版>`。版と digest は、この repo の `.callboard-version`（`v<版>@<digest>`） |
 | container | `callboard`（`127.0.0.1:8803` → 中の 8080。メモリは Apple Container の下限の 200 MiB、CPU は 1） |
 | URL | `http://127.0.0.1:8803/`（入口。castlist と pagetray が生きているかと、画面への link）。castlist の 4 つの画面は、みな callboard にある（0.2.0 から）: アクターの一覧（`/actors/`）・プロフィール（`/actors/<id>`）・タイムライン（`/graph/timeline`）・相関図（`/graph/network`）。pagetray の画面（ページの一覧・メッセージ）は、移すまで pagetray（8801）の画面 |
-| 聞く先 | castlist は `http://castlist.box:8080`（`CALLBOARD_CASTLIST_URL`）。pagetray（`CALLBOARD_PAGETRAY_URL`）は、今は container の名 `pagetray` を書いているが、この名は container の中から引けない（Apple Container の DNS は、domain `box` の付いた名だけを答える）ので、入口は pagetray を「届きません」と出す。castlist の画面には響かない。pagetray の画面を移す段の前に、届く名にする（AI-32）。container の中の `127.0.0.1` は container 自身なので、host の port には届かない |
+| 聞く先 | castlist は `http://castlist.box:8080`（`CALLBOARD_CASTLIST_URL`）、pagetray は `http://pagetray.box:8080`（`CALLBOARD_PAGETRAY_URL`）。どちらも container の名でつなぐ（Apple Container の DNS は、domain `box` の付いた名だけを答える。container の中の `127.0.0.1` は container 自身なので、host の port には届かない）。pagetray の container が前の名 `pagetray` のままだと、名では届かず、入口は pagetray を「届きません」と出す（castlist の画面には響かない）。その時は、上の「ページの置き場」の「起こす」のとおり、`pagetray.box` の名で作り直す |
 | data | 無い。止めても、消しても、起こし直せば元のまま |
 
 **手順は、callboard の docs の「[動かす](https://uraitakahito.github.io/callboard/run.html)」にある**（設定・起こす・止める・版を上げる・確かめる）。そこの命令のうち、container に触る物は、頭に `roster infra run callboard --` を付けて打つ。下は、この repo の側の決まりだけを書く。
 
 - **起こす版**: `.callboard-version` の版。`<版>` は `@` の前。取った image の digest が `@` の後ろと同じかを見る（見方は、上の「ページの置き場」の「起こす」と同じ）。
 - **起こす順**: castlist と pagetray より先に起こしてもよい（聞けない間は、入口に「届きません」と訳を出す）。
-- **確かめる**: callboard の docs の「確かめる」を、1 から 6 まで流す（`/healthz` の版・`127.0.0.1:8803` だけに開いているか・入口・記録の行）。入口の画面で、castlist が「つながっています」と出ること（pagetray は、上の「聞く先」の訳で、今は「届きません」）。castlist の版が、callboard の `CHANGELOG.md` の「呼ぶ先の要る版」より古くないこと（0.2.0 は castlist 1.1.0 から。古いと、タイムラインが「castlist に聞けません（404 が返りました）」になり、一覧とプロフィールの「時刻ずれ」の印と、状態の横の出来事の名が、誤りを出さずに消える）。「届きません」の時は、`container logs callboard` の `呼ぶ先に聞けない` の行（どの呼ぶ先か・聞く先・訳）を読む。
+- **確かめる**: callboard の docs の「確かめる」を、1 から 6 まで流す（`/healthz` の版・`127.0.0.1:8803` だけに開いているか・入口・記録の行）。入口の画面で、castlist と pagetray が「つながっています」と出ること（pagetray が「届きません」の時は、上の「聞く先」）。castlist の版が、callboard の `CHANGELOG.md` の「呼ぶ先の要る版」より古くないこと（0.2.0 は castlist 1.1.0 から。古いと、タイムラインが「castlist に聞けません（404 が返りました）」になり、一覧とプロフィールの「時刻ずれ」の印と、状態の横の出来事の名が、誤りを出さずに消える）。「届きません」の時は、`container logs callboard` の `呼ぶ先に聞けない` の行（どの呼ぶ先か・聞く先・訳）を読む。
 - **止まっている時**: 画面が開けないだけで、担当の仕事（ページを置く・メッセージを送る・アクターの登録）は止まらない。アクターの画面（一覧・プロフィール・タイムライン・相関図）は callboard だけにある（castlist は 2.0.0 から画面を持たない）ので、止まっている間は見られない。`roster castlist …` の命令（読むだけ）は、そのまま使える。pagetray の画面（8801）は、そのまま開ける。
 - **版を上げる**: callboard の新しい版が出て、この repo の `.callboard-version` が上がった時（上げ方は [開発](/development/#callboard画面のサーバーとのつなぎ)の「callboard を上げる時」）。callboard の `CHANGELOG.md` の「呼ぶ先の要る版」を見て、castlist・pagetray がその版より古ければ、先にそちらを上げる（castlist を上げるのは Product Manager）。その後、container を消して、新しい版で起こし直す（data が無いので、写しは要らない）。
 - **戻す**: この repo の `.callboard-version` を前の版に戻す PR を先に入れてから、前の版の image で起こし直す（版の file が新しいままだと、次に起こし直す時に、また新しい版で起こしてしまう）。castlist・pagetray も戻す時は、それぞれの版の file の PR を戻して前の版で起こし直してから、callboard を戻す（新しい操作を呼ぶ callboard を、古い castlist・pagetray に向けている間は、その画面が 503 になる。短い間で、data は失わない）。

@@ -9,6 +9,7 @@ const CreatePageCommand_1 = require("./commands/CreatePageCommand");
 const DeleteFilesCommand_1 = require("./commands/DeleteFilesCommand");
 const DeletePagesCommand_1 = require("./commands/DeletePagesCommand");
 const GetHealthCommand_1 = require("./commands/GetHealthCommand");
+const GetMessageFacetsCommand_1 = require("./commands/GetMessageFacetsCommand");
 const ListFilesCommand_1 = require("./commands/ListFilesCommand");
 const ListMessagesCommand_1 = require("./commands/ListMessagesCommand");
 const ListPagesCommand_1 = require("./commands/ListPagesCommand");
@@ -25,6 +26,7 @@ const commands = {
     DeleteFilesCommand: DeleteFilesCommand_1.DeleteFilesCommand,
     DeletePagesCommand: DeletePagesCommand_1.DeletePagesCommand,
     GetHealthCommand: GetHealthCommand_1.GetHealthCommand,
+    GetMessageFacetsCommand: GetMessageFacetsCommand_1.GetMessageFacetsCommand,
     ListFilesCommand: ListFilesCommand_1.ListFilesCommand,
     ListMessagesCommand: ListMessagesCommand_1.ListMessagesCommand,
     ListPagesCommand: ListPagesCommand_1.ListPagesCommand,

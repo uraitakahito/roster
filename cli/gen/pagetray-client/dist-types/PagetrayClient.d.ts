@@ -11,6 +11,7 @@ import type { CreatePageCommandInput, CreatePageCommandOutput } from "./commands
 import type { DeleteFilesCommandInput, DeleteFilesCommandOutput } from "./commands/DeleteFilesCommand";
 import type { DeletePagesCommandInput, DeletePagesCommandOutput } from "./commands/DeletePagesCommand";
 import type { GetHealthCommandInput, GetHealthCommandOutput } from "./commands/GetHealthCommand";
+import type { GetMessageFacetsCommandInput, GetMessageFacetsCommandOutput } from "./commands/GetMessageFacetsCommand";
 import type { ListFilesCommandInput, ListFilesCommandOutput } from "./commands/ListFilesCommand";
 import type { ListMessagesCommandInput, ListMessagesCommandOutput } from "./commands/ListMessagesCommand";
 import type { ListPagesCommandInput, ListPagesCommandOutput } from "./commands/ListPagesCommand";
@@ -22,11 +23,11 @@ export { __Client };
 /**
  * @public
  */
-export type ServiceInputTypes = AddReviewMarksCommandInput | CreateFileCommandInput | CreatePageCommandInput | DeleteFilesCommandInput | DeletePagesCommandInput | GetHealthCommandInput | ListFilesCommandInput | ListMessagesCommandInput | ListPagesCommandInput | PutMessageCommandInput | SetReplyStateCommandInput;
+export type ServiceInputTypes = AddReviewMarksCommandInput | CreateFileCommandInput | CreatePageCommandInput | DeleteFilesCommandInput | DeletePagesCommandInput | GetHealthCommandInput | GetMessageFacetsCommandInput | ListFilesCommandInput | ListMessagesCommandInput | ListPagesCommandInput | PutMessageCommandInput | SetReplyStateCommandInput;
 /**
  * @public
  */
-export type ServiceOutputTypes = AddReviewMarksCommandOutput | CreateFileCommandOutput | CreatePageCommandOutput | DeleteFilesCommandOutput | DeletePagesCommandOutput | GetHealthCommandOutput | ListFilesCommandOutput | ListMessagesCommandOutput | ListPagesCommandOutput | PutMessageCommandOutput | SetReplyStateCommandOutput;
+export type ServiceOutputTypes = AddReviewMarksCommandOutput | CreateFileCommandOutput | CreatePageCommandOutput | DeleteFilesCommandOutput | DeletePagesCommandOutput | GetHealthCommandOutput | GetMessageFacetsCommandOutput | ListFilesCommandOutput | ListMessagesCommandOutput | ListPagesCommandOutput | PutMessageCommandOutput | SetReplyStateCommandOutput;
 /**
  * @public
  */

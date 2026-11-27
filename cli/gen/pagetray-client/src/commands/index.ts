@@ -5,6 +5,7 @@ export * from "./CreatePageCommand";
 export * from "./DeleteFilesCommand";
 export * from "./DeletePagesCommand";
 export * from "./GetHealthCommand";
+export * from "./GetMessageFacetsCommand";
 export * from "./ListFilesCommand";
 export * from "./ListMessagesCommand";
 export * from "./ListPagesCommand";

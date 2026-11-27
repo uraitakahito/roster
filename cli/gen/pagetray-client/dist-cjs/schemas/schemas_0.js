@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SetReplyState$ = exports.PutMessage$ = exports.ListPages$ = exports.ListMessages$ = exports.ListFiles$ = exports.GetHealth$ = exports.DeletePages$ = exports.DeleteFiles$ = exports.CreatePage$ = exports.CreateFile$ = exports.AddReviewMarks$ = exports.ValidationExceptionField$ = exports.SetReplyStateOutput$ = exports.SetReplyStateInput$ = exports.Sender$ = exports.PutMessageOutput$ = exports.PutMessageInput$ = exports.Page$ = exports.Message$ = exports.ListPagesOutput$ = exports.ListPagesInput$ = exports.ListMessagesOutput$ = exports.ListMessagesInput$ = exports.ListFilesOutput$ = exports.ListFilesInput$ = exports.GetHealthOutput$ = exports.GetHealthInput$ = exports.File$ = exports.DeletePagesOutput$ = exports.DeletePagesInput$ = exports.DeleteFilesOutput$ = exports.DeleteFilesInput$ = exports.CreatePageOutput$ = exports.CreatePageInput$ = exports.CreateFileOutput$ = exports.CreateFileInput$ = exports.AddReviewMarksOutput$ = exports.AddReviewMarksInput$ = exports.ActorSummary$ = exports.errorTypeRegistries = exports.ValidationException$ = exports.UnsupportedMediaType$ = exports.Unavailable$ = exports.PayloadTooLarge$ = exports.NotFound$ = exports.InternalError$ = exports.Forbidden$ = exports.Conflict$ = exports.PagetrayServiceException$ = void 0;
+exports.ListMessages$ = exports.ListFiles$ = exports.GetMessageFacets$ = exports.GetHealth$ = exports.DeletePages$ = exports.DeleteFiles$ = exports.CreatePage$ = exports.CreateFile$ = exports.AddReviewMarks$ = exports.ValidationExceptionField$ = exports.SetReplyStateOutput$ = exports.SetReplyStateInput$ = exports.Sender$ = exports.PutMessageOutput$ = exports.PutMessageInput$ = exports.Page$ = exports.Message$ = exports.ListPagesOutput$ = exports.ListPagesInput$ = exports.ListMessagesOutput$ = exports.ListMessagesInput$ = exports.ListFilesOutput$ = exports.ListFilesInput$ = exports.GetMessageFacetsOutput$ = exports.GetMessageFacetsInput$ = exports.GetHealthOutput$ = exports.GetHealthInput$ = exports.File$ = exports.FacetCount$ = exports.DeletePagesOutput$ = exports.DeletePagesInput$ = exports.DeleteFilesOutput$ = exports.DeleteFilesInput$ = exports.CreatePageOutput$ = exports.CreatePageInput$ = exports.CreateFileOutput$ = exports.CreateFileInput$ = exports.AddReviewMarksOutput$ = exports.AddReviewMarksInput$ = exports.ActorSummary$ = exports.errorTypeRegistries = exports.ValidationException$ = exports.UnsupportedMediaType$ = exports.Unavailable$ = exports.PayloadTooLarge$ = exports.NotFound$ = exports.InternalError$ = exports.Forbidden$ = exports.Conflict$ = exports.PagetrayServiceException$ = void 0;
+exports.SetReplyState$ = exports.PutMessage$ = exports.ListPages$ = void 0;
 const _ARM = "AddReviewMarks";
 const _ARMI = "AddReviewMarksInput";
 const _ARMO = "AddReviewMarksOutput";
@@ -20,11 +21,16 @@ const _DP = "DeletePages";
 const _DPI = "DeletePagesInput";
 const _DPO = "DeletePagesOutput";
 const _F = "Forbidden";
+const _FC = "FacetCount";
+const _FCa = "FacetCounts";
 const _Fi = "File";
 const _Fil = "Files";
 const _GH = "GetHealth";
 const _GHI = "GetHealthInput";
 const _GHO = "GetHealthOutput";
+const _GMF = "GetMessageFacets";
+const _GMFI = "GetMessageFacetsInput";
+const _GMFO = "GetMessageFacetsOutput";
 const _H = "Html";
 const _IE = "InternalError";
 const _L = "Location";
@@ -64,13 +70,14 @@ const _b = "body";
 const _c = "client";
 const _cA = "createdAt";
 const _cT = "contentType";
+const _co = "count";
 const _d = "deliveries";
 const _dA = "deliveredAt";
 const _e = "error";
 const _ex = "ext";
-const _f = "files";
+const _f = "from";
 const _fL = "fieldList";
-const _fr = "from";
+const _fi = "files";
 const _h = "heading";
 const _hE = "httpError";
 const _hH = "httpHeader";
@@ -80,6 +87,7 @@ const _i = "id";
 const _is = "issuer";
 const _k = "kind";
 const _ke = "key";
+const _key = "keys";
 const _l = "location";
 const _m = "message";
 const _mR = "maxResults";
@@ -92,6 +100,7 @@ const _o = "on";
 const _p = "project";
 const _pa = "path";
 const _pag = "pages";
+const _pr = "projects";
 const _q = "q";
 const _r = "role";
 const _rA = "resolvedAt";
@@ -107,7 +116,8 @@ const _sh = "sha256";
 const _si = "size";
 const _so = "sort";
 const _st = "status";
-const _sta = "state";
+const _sta = "states";
+const _stat = "state";
 const _t = "text/html";
 const _ta = "targets";
 const _te = "text";
@@ -117,6 +127,7 @@ const _ty = "type";
 const _u = "url";
 const _uA = "updatedAt";
 const _v = "verdict";
+const _va = "value";
 const _ve = "version";
 const _vi = "via";
 const _w = "workspace";
@@ -250,6 +261,11 @@ exports.DeletePagesOutput$ = [3, n1, _DPO,
     [_re],
     [64 | 0], 1
 ];
+exports.FacetCount$ = [3, n1, _FC,
+    0,
+    [_va, _co],
+    [0, 1], 2
+];
 exports.File$ = [3, n1, _Fi,
     0,
     [_p, _ke, _n, _ex, _n_, _ty, _si, _sh, _r, _w, _cA, _pa, _sen],
@@ -265,6 +281,16 @@ exports.GetHealthOutput$ = [3, n1, _GHO,
     [_st, _ve],
     [0, 0], 2
 ];
+exports.GetMessageFacetsInput$ = [3, n1, _GMFI,
+    0,
+    [_to, _f, _ke],
+    [[0, { [_hQ]: _to }], [0, { [_hQ]: _f }], [0, { [_hQ]: _ke }]]
+];
+exports.GetMessageFacetsOutput$ = [3, n1, _GMFO,
+    0,
+    [_sta, _to, _f, _key, _pr],
+    [() => FacetCounts, () => FacetCounts, () => FacetCounts, () => FacetCounts, () => FacetCounts], 5
+];
 exports.ListFilesInput$ = [3, n1, _LFI,
     0,
     [_p, _ke, _r, _w, _q, _a, _so, _mR, _nT],
@@ -272,13 +298,13 @@ exports.ListFilesInput$ = [3, n1, _LFI,
 ];
 exports.ListFilesOutput$ = [3, n1, _LFO,
     0,
-    [_f, _nT],
+    [_fi, _nT],
     [() => Files, 0], 1
 ];
 exports.ListMessagesInput$ = [3, n1, _LMI,
     0,
-    [_p, _ke, _to, _fr, _sta, _h, _q, _so, _mR, _nT],
-    [[0, { [_hQ]: _p }], [0, { [_hQ]: _ke }], [0, { [_hQ]: _to }], [0, { [_hQ]: _fr }], [0, { [_hQ]: _sta }], [0, { [_hQ]: _h }], [0, { [_hQ]: _q }], [0, { [_hQ]: _so }], [1, { [_hQ]: _mR }], [0, { [_hQ]: _nT }]]
+    [_p, _ke, _to, _f, _stat, _h, _q, _so, _mR, _nT],
+    [[0, { [_hQ]: _p }], [0, { [_hQ]: _ke }], [0, { [_hQ]: _to }], [0, { [_hQ]: _f }], [0, { [_hQ]: _stat }], [0, { [_hQ]: _h }], [0, { [_hQ]: _q }], [0, { [_hQ]: _so }], [1, { [_hQ]: _mR }], [0, { [_hQ]: _nT }]]
 ];
 exports.ListMessagesOutput$ = [3, n1, _LMO,
     0,
@@ -297,7 +323,7 @@ exports.ListPagesOutput$ = [3, n1, _LPO,
 ];
 exports.Message$ = [3, n1, _M,
     0,
-    [_p, _i, _h, _fr, _to, _te, _sA, _sta, _cA, _uA, _ke, _dA, _vi, _d, _rT, _sen],
+    [_p, _i, _h, _f, _to, _te, _sA, _stat, _cA, _uA, _ke, _dA, _vi, _d, _rT, _sen],
     [0, 0, 0, 0, 0, 0, 5, 0, 5, 5, 0, 5, 0, 1, 0, () => exports.Sender$], 10
 ];
 exports.Page$ = [3, n1, _P,
@@ -307,12 +333,12 @@ exports.Page$ = [3, n1, _P,
 ];
 exports.PutMessageInput$ = [3, n1, _PMI,
     0,
-    [_p, _i, _h, _fr, _to, _te, _sA, _sta, _aI, _aR, _ke, _dA, _vi, _d, _rT],
+    [_p, _i, _h, _f, _to, _te, _sA, _stat, _aI, _aR, _ke, _dA, _vi, _d, _rT],
     [[0, 1], [0, 1], 0, 0, 0, 0, 5, 0, [0, { [_hQ]: _aI }], [0, { [_hQ]: _aR }], 0, 5, 0, 1, 0], 8
 ];
 exports.PutMessageOutput$ = [3, n1, _PMO,
     0,
-    [_p, _i, _h, _fr, _to, _te, _sA, _sta, _cA, _uA, _st, _ke, _dA, _vi, _d, _rT, _sen],
+    [_p, _i, _h, _f, _to, _te, _sA, _stat, _cA, _uA, _st, _ke, _dA, _vi, _d, _rT, _sen],
     [0, 0, 0, 0, 0, 0, 5, 0, 5, 5, [1, 32], 0, 5, 0, 1, 0, () => exports.Sender$], 11
 ];
 exports.Sender$ = [3, n1, _S,
@@ -322,7 +348,7 @@ exports.Sender$ = [3, n1, _S,
 ];
 exports.SetReplyStateInput$ = [3, n1, _SRSI,
     0,
-    [_p, _ke, _k, _n_, _sta, _o],
+    [_p, _ke, _k, _n_, _stat, _o],
     [[0, 1], [0, 1], [0, 1], [0, 1], 0, 0], 5
 ];
 exports.SetReplyStateOutput$ = [3, n1, _SRSO,
@@ -334,6 +360,9 @@ exports.ValidationExceptionField$ = [3, n2, _VEF,
     0,
     [_pa, _m],
     [0, 0], 2
+];
+var FacetCounts = [1, n1, _FCa,
+    0, () => exports.FacetCount$
 ];
 var Files = [1, n1, _Fil,
     0, () => exports.File$
@@ -366,6 +395,9 @@ exports.DeletePages$ = [9, n1, _DP,
 ];
 exports.GetHealth$ = [9, n1, _GH,
     { [_ht]: ["GET", "/healthz", 200] }, () => exports.GetHealthInput$, () => exports.GetHealthOutput$
+];
+exports.GetMessageFacets$ = [9, n1, _GMF,
+    { [_ht]: ["GET", "/api/messages/facets", 200] }, () => exports.GetMessageFacetsInput$, () => exports.GetMessageFacetsOutput$
 ];
 exports.ListFiles$ = [9, n1, _LF,
     { [_ht]: ["GET", "/api/files", 200] }, () => exports.ListFilesInput$, () => exports.ListFilesOutput$
