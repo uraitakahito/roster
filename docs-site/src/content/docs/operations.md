@@ -1,6 +1,6 @@
 ---
 title: 運用
-description: この repo を別の folder へ移す手順、Node の version の上げ方、依存が増えた PR を merge した後の手、アクターの台帳（castlist）が止まった時、ページの置き場（pagetray）の起こし方と保ち方、画面のサーバー（callboard）の起こし方、メッセージキュー（NATS）の起こし方と止まった時、手元の builder（buildkit）の守り、レビュー（Staff Engineer 担当の席）と監査（Auditor の席）の運び、課題の時間の分け（roster time）、担当が落ちた後の調べ方
+description: この repo を別の folder へ移す手順、Node の version の上げ方、依存が増えた PR を merge した後の手、アクターの台帳（castlist）が止まった時、ページの置き場（pagetray）の起こし方と保ち方、画面のサーバー（callboard）の起こし方、メッセージキュー（NATS）の起こし方と止まった時、手元の builder（buildkit）の守り、レビュー（Staff Engineer 担当の席）と監査（Auditor の席）の運び、課題の時間の分け（roster time）、CI と GitHub の見張り（roster watch）、担当が落ちた後の調べ方
 ---
 
 ## 課題の時間の分け（roster time）
@@ -18,6 +18,32 @@ roster time AI-36 --gap 30   # 長い空きとみなす長さ（分。既定は 
 - **長い空き**: どの席の記録（状態の移り・送ったメッセージ・送る前の検査や guard が止めた回）も、決めた長さより長く動かなかった間。空きごとに、その間の席の状態を出す（片付けを終えた席は出さない）。**空きは「roster の命令を打たなかった間」**なので、担当が roster を打たずに長く手を動かした間（大きい実装・長い試験）も空きに入る。状態が「作業中」のまま空いた間（機械の止まり・利用の上限など）は、状態だけでは見えないので、「うち、長い空きに重なる分」で見る。Product Manager の答えを待った間も、空きとして出る（状態が PM 待ち・TPM 待ち）。
 - 測れない物: 手伝い（subagent）の動き・CI の待ち・Claude Code の session の記録の時刻は読まない（roster の記録だけを読む）。席を閉じた時刻も、状態の記録に無い。状態は、担当が `roster wait` などで替えた字なので、答えが来た後に `roster wait work` を打ち忘れると、動いていた間も待ちに数えられる。session の記録も見た集計より、空きと待ちを多めに見積もる。
 - 状態の移りを書くのは、`roster hello`（担当の名乗り）・`roster wait`・送る命令（【done】の後の待ちなど）・メッセージキューの止まり。担当の名乗りとメッセージキューの止まりは、この命令を入れた版から書くので、それより前の課題は、最初の `roster wait` から数え始まる（担当を交代した後の担当も、同じく最初の `roster wait work` から）。
+
+## CI と GitHub の見張り（roster watch）
+
+PR の CI・merge の後の main の workflow・GitHub の戻りを待つ仕事は、model を使わない命令 `roster watch` が受け持つ。担当は、この命令を**裏で起こして**（Claude Code の Bash の「裏で動かす」）手を止める。命令が終わると Claude Code が担当を起こし、終了コードを渡す。待つ間、担当はトークンを使わず、ほかの担当からのメッセージも届く。読むだけの命令で、どの担当も打てる。
+
+```sh
+roster watch pr <PR の URL>              # PR の今の head の commit の check が、みな終わるまで（既定 30 分）
+roster watch main <PR の URL>            # merge した PR の、merge の commit で main に動いた workflow が、みな終わるまで（既定 30 分）
+roster watch github [--repo <owner/repo>]  # GitHub が応えるようになるまで（既定 120 分）
+roster watch pr <PR の URL> --timeout 0  # 今の様子を 1 回見て、待たずに終わる（--timeout は分）
+```
+
+| 終了コード | 意味 | 出す行 |
+|---|---|---|
+| 0 | 通った（`watch github` は、戻った） | `通った: check 5 つ（4 分 12 秒）` |
+| 10 | 落ちた物がある | 落ちた check・workflow の名と URL。ほかがまだ動いていても、1 つ分かった時に終わる |
+| 20 | まだ（長さを過ぎた。GitHub が応えないまま過ぎた時も） | まだの数と、もう 1 度見張る命令 |
+| 30 | check・workflow の回が付いていない | 「通ったのではない」と出す。**0 にしない**（GitHub が遅い時に、CI を見ずに merge へ進まないため） |
+| 1 | 見張れない（PR が無い・認証や権限が無い・merge していない PR の `watch main`・PR の URL でない字） | 訳 |
+
+- **数では待たない。** `watch pr` は、付いている check がみな終わったかで判じる（docs と skill だけの PR は check が 3 つ、など、数は PR で違う）。check が 1 つも付いていない間は 5 分まで待ち、付かなければ 30 で終わる。
+- **1 度見ただけでは「通った」にしない。** みな終わったのを、間を空けて 2 度続けて見てから 0 で終わる（遅れて付く check・遅れて作られる回を待つため。`--timeout 0` は 1 度だけ見る）。
+- `watch main` は、PR の check の回（`pull_request`）を数えず、workflow ごとに、いちばん新しい回で判じる（落ちた `docs` を `gh workflow run docs.yml --ref main` で流し直した時は、新しい回を見る）。merge から 2 分の間は、回が無くても・在る回がみな終わっていても「まだ」と見る（回が、まだ作られきっていないことがある）。取り消された回（`cancelled`）は「落ちた」に数えない: `docs` は同じ concurrency の group で、merge が続くと、後の回が待っている回を取り消して公開する（見張りは、後の回が済ませたかまでは見ない。行に「うち 1 つは取り消し」と出す）。
+- `watch github` は、続けて 2 度応えたら「戻った」とする（戻りかけの揺れで起こさない）。`--repo` があればその repo を読めるかで、無ければ API が応えるかで見る。GitHub の障害は一部だけのことが多いので、落ちた手に近い repo を `--repo` で名指す（API が応えても、merge・push・Actions がまだ落ちていることはある。「戻った」の後に打ち直した命令がまた落ちたら、もう 1 度見張る）。上限（rate limit）に当たった時も、見張りは止まらずに聞き直す。
+- 聞く間は 20 秒から始め、長く待つほど空ける（長くて 60 秒）。GitHub が応えない間も、`watch pr`・`watch main` は止まらずに聞き直す。途中の様子は出さない（担当が読む字を増やさないため）。
+- 終わった見張り 1 回につき 1 行が、状態の folder の `watch.jsonl` に残る（始めた時刻とかかった秒を持つ。[決まりの記録](/protocol/)）。課題ごとに、CI を何分待ったかを後から数えられる。途中で止められた見張り（席が閉じた・担当が止めた）は残らない。
 
 ## 移す手順
 

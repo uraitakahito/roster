@@ -52,6 +52,7 @@ flowchart TB
 | `guard.jsonl`・`gate.jsonl` | guard が止めた命令（頭の 300 字と訳）と、入口の検査が送る・置くのを止めた回（読んでいないメッセージ・merge していない PR・読めない PR・同じメッセージの 2 度送り・TPM 担当が送って済んでいない物・前の監査の文脈が残ったまま始めようとした監査） |
 | `audits.jsonl` | 監査線の記録（下の「Auditor の席」）。Auditor の席を起こした・新しい文脈になった（席を起こした時と `/clear` の時）・監査を始めた・報告した・決定を渡した・Auditor の置いたページを消した、を 1 行ずつ。Auditor の席を 1 度も起こしていない project には無い |
 | `waits.jsonl` | 状態 `wait` の移り変わり（`waits/<宛先>.jsonc` は最後の 1 つだけ）。`roster time <Key>` が、課題の時間の分けに読む（[運用](/operations/#課題の時間の分けroster-time)） |
+| `watch.jsonl` | 見張り（`roster watch`）の 1 回ごとの記録。始めた時刻・種類（`pr`・`main`・`github`）・見張った物（PR の URL・repo）・結果・終了コード・聞いた回数・かかった秒・打った担当の課題の Key と役割。命令の字やメッセージは入らない。`roster watch` を 1 度も打っていない project には無い（[運用](/operations/#ci-と-github-の見張りroster-watch)） |
 | `shown/<宛先>.jsonc` | 前の版の記録（もう書かない。読むだけ）。前の版で、`roster inbox` と送る前の検査が居場所に見せたメッセージの id と、初めて見せた時刻。見た時刻の口（`cli/src/seen.ts`）が、古い行（運んだ道の無い行）の「担当がメッセージを見た時」に使う。今の版が見せた物は、`delivered.jsonl` の `output` の行と `mail/passed/` に残る（下の「[メッセージを NATS で配る道](#メッセージを-nats-で配る道)」） |
 | `incidents/<番号>.jsonc` | 台帳。思わぬ出来事（信頼性・安全性・効率性が落ちた時）の 1 件 1 ファイル。書いた担当・種類・起きた事実・tag・扱い（未決・振った・調べない・済み）と、結んだ振り先・PR |
 | `waits/<宛先>.jsonc` | 居場所が最後に打った `roster wait` の種類と時刻。バナーの hook が「この回に `roster wait pm` を打ったか」を見る |
