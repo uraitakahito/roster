@@ -833,6 +833,11 @@ describe('この repo の設定の、名を書かない命令と container-syste
     'container rm -f pagetray.box',
     'container run -d --name pagetray.box -p 127.0.0.1:8801:8080 -v pagetray-data-v1:/data ghcr.io/uraitakahito/pagetray:v1.2.0',
     'sudo -u root container kill pagetray.box',
+    // 名を = で繋ぎ、volume を長い旗で付ける（か、付けない）形（review-18）。
+    'container run -d --name=pagetray.box --volume pagetray-data-v1:/data ghcr.io/uraitakahito/pagetray:v1.2.0',
+    'container run -d --name=pagetray.box ghcr.io/uraitakahito/pagetray:v1.2.0',
+    'container run -d --name=pagetray -p 127.0.0.1:8801:8080 ghcr.io/uraitakahito/pagetray:v1.2.0',
+    'container run --rm --volume pagetray-data-v1:/data docker.io/library/rust:1.100.0-alpine sh',
     // 前の名（付け直す時に、止めて消す）。
     'container stop pagetray',
     'container delete pagetray',
