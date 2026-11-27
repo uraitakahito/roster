@@ -169,7 +169,7 @@ const more = (next: unknown): string[] => typeof next === 'string' && next !== '
 /** 一覧の頭の 1 行。 */
 const head = (what: string, n: number, asOf: unknown): string => n === 0 ? `当たる${what}は無い（castlist の時刻 ${String(asOf)}）` : `${what} ${n}（castlist の時刻 ${String(asOf)}）`;
 
-/** アクター 1 行: 名・種類・状態（稼働中・停止。castlist の画面と同じ字）・登場と退場・最新の model と effort・ラベル・プロフィールの URL。 */
+/** アクター 1 行: 名・種類・状態（稼働中・停止。callboard の画面と同じ字）・登場と退場・最新の model と effort・ラベル・プロフィールの URL。 */
 function actorLine(board: string, a: ActorItem): string {
   const exited = a.last_exited_at === null ? '-' : `${a.last_exited_at}（${or(a.last_exit_type)}）`;
   const labels = Object.entries(a.labels ?? {}).map(([k, v]) => `${k}=${v}`).join('・') || '-';
