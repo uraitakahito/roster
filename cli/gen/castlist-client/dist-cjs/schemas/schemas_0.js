@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Setting$ = exports.ResolveActorsOutput$ = exports.ResolveActorsInput$ = exports.Resolution$ = exports.RequestedSettings$ = exports.RegisterActorOutput$ = exports.RegisterActorInput$ = exports.PutSettingOutput$ = exports.PutSettingInput$ = exports.PutLinkOutput$ = exports.PutLinkInput$ = exports.PutEventOutput$ = exports.PutEventInput$ = exports.ListSettingsOutput$ = exports.ListSettingsInput$ = exports.ListEventsOutput$ = exports.ListEventsInput$ = exports.ListActorsOutput$ = exports.ListActorsInput$ = exports.ListActorSettingsOutput$ = exports.ListActorSettingsInput$ = exports.Link$ = exports.GraphNode$ = exports.GetTimelineOutput$ = exports.GetTimelineInput$ = exports.GetLineageOutput$ = exports.GetLineageInput$ = exports.GetHealthOutput$ = exports.GetHealthInput$ = exports.GetGraphOutput$ = exports.GetGraphInput$ = exports.GetActorSettingAtOutput$ = exports.GetActorSettingAtInput$ = exports.GetActorOutput$ = exports.GetActorInput$ = exports.EventRow$ = exports.Event$ = exports.Binding$ = exports.ActorState$ = exports.ActorRow$ = exports.ActorBinding$ = exports.errorTypeRegistries = exports.ValidationException$ = exports.Unavailable$ = exports.PayloadTooLarge$ = exports.NotFound$ = exports.InternalError$ = exports.Forbidden$ = exports.Conflict$ = exports.CastlistServiceException$ = void 0;
-exports.ResolveActors$ = exports.RegisterActor$ = exports.PutSetting$ = exports.PutLink$ = exports.PutEvent$ = exports.ListSettings$ = exports.ListEvents$ = exports.ListActorSettings$ = exports.ListActors$ = exports.GetTimeline$ = exports.GetLineage$ = exports.GetHealth$ = exports.GetGraph$ = exports.GetActorSettingAt$ = exports.GetActor$ = exports.ValidationExceptionField$ = exports.ActorSummary$ = exports.TimelineEvent$ = exports.SettingRow$ = void 0;
+exports.RequestedSettings$ = exports.RegisterActorOutput$ = exports.RegisterActorInput$ = exports.PutUsageOutput$ = exports.PutUsageInput$ = exports.PutSettingOutput$ = exports.PutSettingInput$ = exports.PutLinkOutput$ = exports.PutLinkInput$ = exports.PutEventOutput$ = exports.PutEventInput$ = exports.ListUsageOutput$ = exports.ListUsageInput$ = exports.ListSettingsOutput$ = exports.ListSettingsInput$ = exports.ListEventsOutput$ = exports.ListEventsInput$ = exports.ListActorsOutput$ = exports.ListActorsInput$ = exports.ListActorSettingsOutput$ = exports.ListActorSettingsInput$ = exports.Link$ = exports.GraphNode$ = exports.GetTimelineOutput$ = exports.GetTimelineInput$ = exports.GetLineageOutput$ = exports.GetLineageInput$ = exports.GetHealthOutput$ = exports.GetHealthInput$ = exports.GetGraphOutput$ = exports.GetGraphInput$ = exports.GetActorSettingAtOutput$ = exports.GetActorSettingAtInput$ = exports.GetActorOutput$ = exports.GetActorInput$ = exports.EventRow$ = exports.Event$ = exports.Binding$ = exports.ActorState$ = exports.ActorRow$ = exports.ActorBinding$ = exports.errorTypeRegistries = exports.ValidationException$ = exports.Unavailable$ = exports.PayloadTooLarge$ = exports.NotFound$ = exports.InternalError$ = exports.Forbidden$ = exports.Conflict$ = exports.CastlistServiceException$ = void 0;
+exports.ResolveActors$ = exports.RegisterActor$ = exports.PutUsage$ = exports.PutSetting$ = exports.PutLink$ = exports.PutEvent$ = exports.ListUsage$ = exports.ListSettings$ = exports.ListEvents$ = exports.ListActorSettings$ = exports.ListActors$ = exports.GetTimeline$ = exports.GetLineage$ = exports.GetHealth$ = exports.GetGraph$ = exports.GetActorSettingAt$ = exports.GetActor$ = exports.ValidationExceptionField$ = exports.ActorSummary$ = exports.UsageBucket$ = exports.UsageActor$ = exports.Usage$ = exports.TimelineEvent$ = exports.SettingRow$ = exports.Setting$ = exports.ResolveActorsOutput$ = exports.ResolveActorsInput$ = exports.Resolution$ = void 0;
 const _AB = "ActorBinding";
 const _ABc = "ActorBindings";
 const _AR = "ActorRow";
@@ -50,6 +50,9 @@ const _LEO = "ListEventsOutput";
 const _LS = "ListSettings";
 const _LSI = "ListSettingsInput";
 const _LSO = "ListSettingsOutput";
+const _LU = "ListUsage";
+const _LUI = "ListUsageInput";
+const _LUO = "ListUsageOutput";
 const _Li = "Links";
 const _NF = "NotFound";
 const _PE = "PutEvent";
@@ -62,6 +65,9 @@ const _PS = "PutSetting";
 const _PSI = "PutSettingInput";
 const _PSO = "PutSettingOutput";
 const _PTL = "PayloadTooLarge";
+const _PU = "PutUsage";
+const _PUI = "PutUsageInput";
+const _PUO = "PutUsageOutput";
 const _R = "Resolution";
 const _RA = "RegisterActor";
 const _RAI = "RegisterActorInput";
@@ -78,6 +84,12 @@ const _Se = "Settings";
 const _TE = "TimelineEvent";
 const _TEi = "TimelineEvents";
 const _U = "Unavailable";
+const _UA = "UsageActor";
+const _UAs = "UsageActors";
+const _UB = "UsageBucket";
+const _UBs = "UsageBuckets";
+const _UR = "UsageRows";
+const _Us = "Usage";
 const _VE = "ValidationException";
 const _VEF = "ValidationExceptionField";
 const _VEFL = "ValidationExceptionFieldList";
@@ -90,13 +102,20 @@ const _aT = "activeTo";
 const _ac = "active";
 const _act = "actors";
 const _acto = "actor";
+const _ag = "agent";
 const _b = "bindings";
 const _bi = "binding";
+const _bu = "buckets";
+const _buc = "bucket";
 const _by = "by";
 const _c = "client";
 const _cB = "currentBindings";
+const _cMU = "costMicroUsd";
+const _cRT = "cacheReadTokens";
 const _cS = "clockSkew";
 const _cSu = "currentSettings";
+const _cWT = "cacheWrite5mTokens";
+const _cWTa = "cacheWrite1hTokens";
 const _cr = "created";
 const _d = "detail";
 const _de = "depth";
@@ -109,6 +128,7 @@ const _ed = "edges";
 const _ef = "effort";
 const _ev = "events";
 const _f = "from";
+const _fA = "fromAt";
 const _fEA = "firstEnteredAt";
 const _fL = "fieldList";
 const _h = "http";
@@ -116,6 +136,7 @@ const _hE = "httpError";
 const _hQ = "httpQuery";
 const _i = "issuer";
 const _iK = "isKey";
+const _iT = "inputTokens";
 const _id = "id";
 const _in = "inferred";
 const _k = "kind";
@@ -128,6 +149,7 @@ const _lIi = "linkId";
 const _lO = "linksOut";
 const _la = "label";
 const _m = "message";
+const _mC = "maxContext";
 const _mR = "maxResults";
 const _mi = "mismatch";
 const _mo = "model";
@@ -137,6 +159,7 @@ const _nT = "nextToken";
 const _no = "nodes";
 const _now = "now";
 const _o = "order";
+const _oT = "outputTokens";
 const _p = "present";
 const _pa = "path";
 const _pr = "presence";
@@ -148,20 +171,28 @@ const _res = "results";
 const _s = "smithy.ts.sdk.synthetic.ai.castlist";
 const _sA = "sentAt";
 const _sI = "settingId";
+const _sT = "serviceTier";
 const _se = "server";
 const _set = "settings";
 const _sett = "setting";
 const _sk = "skewed";
 const _so = "sort";
 const _sou = "source";
+const _sp = "speed";
 const _st = "state";
 const _sta = "status";
 const _t = "type";
+const _tA = "toAt";
 const _ti = "time";
 const _to = "to";
+const _tu = "turns";
 const _u = "url";
+const _uI = "usageId";
+const _us = "usage";
 const _v = "value";
 const _ve = "version";
+const _wFR = "webFetchRequests";
+const _wSR = "webSearchRequests";
 const n0 = "ai.common";
 const n1 = "smithy.framework";
 const n2 = "ai.castlist";
@@ -367,6 +398,16 @@ exports.ListSettingsOutput$ = [3, n2, _LSO,
     [_aO, _set, _nT],
     [5, () => SettingRows, 0], 2
 ];
+exports.ListUsageInput$ = [3, n2, _LUI,
+    0,
+    [_f, _to, _la, _aI, _mR, _nT],
+    [[5, { [_hQ]: _f }], [5, { [_hQ]: _to }], [64 | 0, { [_hQ]: _la }], [0, { [_hQ]: _aI }], [1, { [_hQ]: _mR }], [0, { [_hQ]: _nT }]], 2
+];
+exports.ListUsageOutput$ = [3, n2, _LUO,
+    0,
+    [_aO, _us, _act, _nT],
+    [5, () => UsageRows, () => UsageActors, 0], 3
+];
 exports.PutEventInput$ = [3, n2, _PEI,
     0,
     [_eI, _i, _by, _t, _sA, _d],
@@ -396,6 +437,16 @@ exports.PutSettingOutput$ = [3, n2, _PSO,
     0,
     [_aI, _mo, _ef, _sou, _sA, _rA, _cS, _sta, _id],
     [0, 0, 0, 0, 5, 5, 2, [1, 32], 0], 8
+];
+exports.PutUsageInput$ = [3, n2, _PUI,
+    0,
+    [_uI, _i, _by, _mo, _sp, _sT, _fA, _tA, _tu, _iT, _oT, _cRT, _cWT, _cWTa, _wSR, _wFR, _cMU, _mC, _bu, _sA, _ag],
+    [[0, 1], 0, 0, 0, 0, 0, 5, 5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, () => UsageBuckets, 5, 0], 20
+];
+exports.PutUsageOutput$ = [3, n2, _PUO,
+    0,
+    [_id, _aI, _mo, _sp, _sT, _fA, _tA, _tu, _iT, _oT, _cRT, _cWT, _cWTa, _wSR, _wFR, _cMU, _mC, _bu, _sA, _rA, _cS, _sta, _ag],
+    [0, 0, 0, 0, 0, 5, 5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, () => UsageBuckets, 5, 5, 2, [1, 32], 0], 22
 ];
 exports.RegisterActorInput$ = [3, n2, _RAI,
     0,
@@ -441,6 +492,21 @@ exports.TimelineEvent$ = [3, n2, _TE,
     0,
     [_aI, _t, _rA, _in, _r],
     [0, 0, 5, 2, 0], 4
+];
+exports.Usage$ = [3, n2, _Us,
+    0,
+    [_id, _aI, _mo, _sp, _sT, _fA, _tA, _tu, _iT, _oT, _cRT, _cWT, _cWTa, _wSR, _wFR, _cMU, _mC, _bu, _sA, _rA, _cS, _ag],
+    [0, 0, 0, 0, 0, 5, 5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, () => UsageBuckets, 5, 5, 2, 0], 21
+];
+exports.UsageActor$ = [3, n2, _UA,
+    0,
+    [_id, _n, _l],
+    [0, 0, 128 | 0], 3
+];
+exports.UsageBucket$ = [3, n2, _UB,
+    0,
+    [_buc, _tu, _cMU],
+    [1, 1, 1], 3
 ];
 exports.ActorSummary$ = [3, n0, _ASc,
     0,
@@ -488,6 +554,15 @@ var Settings = [1, n2, _Se,
 var TimelineEvents = [1, n2, _TEi,
     0, () => exports.TimelineEvent$
 ];
+var UsageActors = [1, n2, _UAs,
+    0, () => exports.UsageActor$
+];
+var UsageBuckets = [1, n2, _UBs,
+    0, () => exports.UsageBucket$
+];
+var UsageRows = [1, n2, _UR,
+    0, () => exports.Usage$
+];
 var ValidationExceptionFieldList = [1, n1, _VEFL,
     0, () => exports.ValidationExceptionField$
 ];
@@ -522,6 +597,9 @@ exports.ListEvents$ = [9, n2, _LE,
 exports.ListSettings$ = [9, n2, _LS,
     { [_h]: ["GET", "/api/settings", 200] }, () => exports.ListSettingsInput$, () => exports.ListSettingsOutput$
 ];
+exports.ListUsage$ = [9, n2, _LU,
+    { [_h]: ["GET", "/api/usage", 200] }, () => exports.ListUsageInput$, () => exports.ListUsageOutput$
+];
 exports.PutEvent$ = [9, n2, _PE,
     { [_h]: ["PUT", "/api/events/{eventId}", 200] }, () => exports.PutEventInput$, () => exports.PutEventOutput$
 ];
@@ -530,6 +608,9 @@ exports.PutLink$ = [9, n2, _PL,
 ];
 exports.PutSetting$ = [9, n2, _PS,
     { [_h]: ["PUT", "/api/settings/{settingId}", 200] }, () => exports.PutSettingInput$, () => exports.PutSettingOutput$
+];
+exports.PutUsage$ = [9, n2, _PU,
+    { [_h]: ["PUT", "/api/usage/{usageId}", 200] }, () => exports.PutUsageInput$, () => exports.PutUsageOutput$
 ];
 exports.RegisterActor$ = [9, n2, _RA,
     { [_h]: ["POST", "/api/actors", 200] }, () => exports.RegisterActorInput$, () => exports.RegisterActorOutput$

@@ -75,9 +75,11 @@ import type {
 } from "./commands/ListActorSettingsCommand";
 import type { ListEventsCommandInput, ListEventsCommandOutput } from "./commands/ListEventsCommand";
 import type { ListSettingsCommandInput, ListSettingsCommandOutput } from "./commands/ListSettingsCommand";
+import type { ListUsageCommandInput, ListUsageCommandOutput } from "./commands/ListUsageCommand";
 import type { PutEventCommandInput, PutEventCommandOutput } from "./commands/PutEventCommand";
 import type { PutLinkCommandInput, PutLinkCommandOutput } from "./commands/PutLinkCommand";
 import type { PutSettingCommandInput, PutSettingCommandOutput } from "./commands/PutSettingCommand";
+import type { PutUsageCommandInput, PutUsageCommandOutput } from "./commands/PutUsageCommand";
 import type { RegisterActorCommandInput, RegisterActorCommandOutput } from "./commands/RegisterActorCommand";
 import type { ResolveActorsCommandInput, ResolveActorsCommandOutput } from "./commands/ResolveActorsCommand";
 import {
@@ -105,9 +107,11 @@ export type ServiceInputTypes =
   | ListActorsCommandInput
   | ListEventsCommandInput
   | ListSettingsCommandInput
+  | ListUsageCommandInput
   | PutEventCommandInput
   | PutLinkCommandInput
   | PutSettingCommandInput
+  | PutUsageCommandInput
   | RegisterActorCommandInput
   | ResolveActorsCommandInput;
 
@@ -125,9 +129,11 @@ export type ServiceOutputTypes =
   | ListActorsCommandOutput
   | ListEventsCommandOutput
   | ListSettingsCommandOutput
+  | ListUsageCommandOutput
   | PutEventCommandOutput
   | PutLinkCommandOutput
   | PutSettingCommandOutput
+  | PutUsageCommandOutput
   | RegisterActorCommandOutput
   | ResolveActorsCommandOutput;
 

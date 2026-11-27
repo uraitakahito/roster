@@ -41,6 +41,8 @@ service Castlist {
         ListSettings
         GetGraph
         GetTimeline
+        PutUsage
+        ListUsage
     ]
 
     // 操作の前の守りの層（server の生成した骨の外）が返す誤り。どの操作の答えにもなり得る。
@@ -1941,7 +1943,520 @@ operation PutSetting {
     ]
 }
 
-/// 送り手が付ける id（出来事・線・model と effort）: 空白の無い ASCII の印字できる字で 128 字まで。
+/// アクターのトークンの数と費えを 1 行足す（2.1.0 から）。同じ id で同じ本文なら 200（足さない）、同じ id で本文が違えば 409（前の行はそのまま）。
+/// 同じ id かは、`by` を引くより先に見る。
+/// - 1 行は、アクター 1 人の、時計の 1 時間（UTC の時）の内の、同じ種類（`model`・`agent`・`speed`・`serviceTier`）の回のまとめ。
+///   同じアクター・同じ時・同じ種類の行は、2 つ以上在りうる（送り手が、増えた分を新しい id の行で送る）。
+///   PutSetting の「最新と同じなら足さない」は無い（同じかは、id と本文だけで決める）。
+/// - 読む側は、数（`turns`・トークンの数・web の検索と取得の回数・`costMicroUsd`・`buckets` の段ごとの数）を足し、`maxContext` は大きい方を取る。
+/// - `fromAt`・`toAt` は区間の始めの回と終わりの回の時刻。`fromAt` は `toAt` より後でなく、2 つは同じ UTC の時（年月日と時が同じ）の内（違えば 400）。
+///   ミリ秒まで残す（それより下は切る）。
+/// - `buckets` は、文脈の長さの段ごとの数。同じ `bucket` は 1 度だけで、`turns` の和は行の `turns` と、`costMicroUsd` の和は行の
+///   `costMicroUsd` と合う（違えば 400）。並びは問わない（答えは `bucket` の順）。
+/// - 知らない model の名は、初めて来た時に一覧に足す。
+@idempotent
+@http(method: "PUT", uri: "/api/usage/{usageId}")
+@httpRequestTests([
+    {
+        id: "PutUsageRequest"
+        documentation: "id は道に、本文は camelCase。by は鍵の付随する id。agent は手伝い（subagent）の回だけ"
+        protocol: restJson1
+        method: "PUT"
+        uri: "/api/usage/u-1"
+        headers: { "Content-Type": "application/json" }
+        body: """
+            {"issuer":"tpm","by":"claude.session:s-1","model":"claude-opus-5-5","agent":"Explore","speed":"standard","serviceTier":"standard","fromAt":"2026-11-24T10:05:00Z","toAt":"2026-11-24T10:55:00Z","turns":3,"inputTokens":30,"outputTokens":1200,"cacheReadTokens":90000,"cacheWrite5mTokens":0,"cacheWrite1hTokens":4000,"webSearchRequests":2,"webFetchRequests":5,"costMicroUsd":250000,"maxContext":61000,"buckets":[{"bucket":1,"turns":1,"costMicroUsd":50000},{"bucket":2,"turns":2,"costMicroUsd":200000}],"sentAt":"2026-11-24T11:00:00Z"}"""
+        bodyMediaType: "application/json"
+        params: {
+            usageId: "u-1"
+            issuer: "tpm"
+            by: "claude.session:s-1"
+            model: "claude-opus-5-5"
+            agent: "Explore"
+            speed: "standard"
+            serviceTier: "standard"
+            fromAt: 1795514700
+            toAt: 1795517700
+            turns: 3
+            inputTokens: 30
+            outputTokens: 1200
+            cacheReadTokens: 90000
+            cacheWrite5mTokens: 0
+            cacheWrite1hTokens: 4000
+            webSearchRequests: 2
+            webFetchRequests: 5
+            costMicroUsd: 250000
+            maxContext: 61000
+            buckets: [
+                { bucket: 1, turns: 1, costMicroUsd: 50000 }
+                { bucket: 2, turns: 2, costMicroUsd: 200000 }
+            ]
+            sentAt: 1795518000
+        }
+    }
+])
+@httpResponseTests([
+    {
+        id: "PutUsageCreated"
+        documentation: "新しく足せば 201 で、足した行を返す（本体の回なら agent が無い）"
+        protocol: restJson1
+        code: 201
+        headers: { "Content-Type": "application/json" }
+        body: """
+            {"id":"u-1","actorId":"019abcde-0000-7000-8000-000000000001","model":"claude-opus-5-5","speed":"standard","serviceTier":"standard","fromAt":"2026-11-24T10:05:00Z","toAt":"2026-11-24T10:55:00Z","turns":3,"inputTokens":30,"outputTokens":1200,"cacheReadTokens":90000,"cacheWrite5mTokens":0,"cacheWrite1hTokens":4000,"webSearchRequests":2,"webFetchRequests":5,"costMicroUsd":250000,"maxContext":61000,"buckets":[{"bucket":1,"turns":1,"costMicroUsd":50000},{"bucket":2,"turns":2,"costMicroUsd":200000}],"sentAt":"2026-11-24T11:00:00Z","receivedAt":"2026-11-24T11:00:01Z","clockSkew":false}"""
+        bodyMediaType: "application/json"
+        params: {
+            id: "u-1"
+            actorId: "019abcde-0000-7000-8000-000000000001"
+            model: "claude-opus-5-5"
+            speed: "standard"
+            serviceTier: "standard"
+            fromAt: 1795514700
+            toAt: 1795517700
+            turns: 3
+            inputTokens: 30
+            outputTokens: 1200
+            cacheReadTokens: 90000
+            cacheWrite5mTokens: 0
+            cacheWrite1hTokens: 4000
+            webSearchRequests: 2
+            webFetchRequests: 5
+            costMicroUsd: 250000
+            maxContext: 61000
+            buckets: [
+                { bucket: 1, turns: 1, costMicroUsd: 50000 }
+                { bucket: 2, turns: 2, costMicroUsd: 200000 }
+            ]
+            sentAt: 1795518000
+            receivedAt: 1795518001
+            clockSkew: false
+            status: 201
+        }
+    }
+    {
+        id: "PutUsageSame"
+        documentation: "同じ id で同じ本文なら 200 で、前の行を返す"
+        protocol: restJson1
+        code: 200
+        headers: { "Content-Type": "application/json" }
+        body: """
+            {"id":"u-2","actorId":"019abcde-0000-7000-8000-000000000001","model":"claude-opus-5-5","agent":"Explore","speed":"fast","serviceTier":"priority","fromAt":"2026-11-24T10:05:00Z","toAt":"2026-11-24T10:05:00Z","turns":1,"inputTokens":0,"outputTokens":0,"cacheReadTokens":9000000000,"cacheWrite5mTokens":0,"cacheWrite1hTokens":0,"webSearchRequests":0,"webFetchRequests":6000000000,"costMicroUsd":0,"maxContext":1000000,"buckets":[{"bucket":40,"turns":1,"costMicroUsd":0}],"sentAt":"2026-11-24T11:00:00Z","receivedAt":"2026-11-24T11:00:01Z","clockSkew":false}"""
+        bodyMediaType: "application/json"
+        params: {
+            id: "u-2"
+            actorId: "019abcde-0000-7000-8000-000000000001"
+            model: "claude-opus-5-5"
+            agent: "Explore"
+            speed: "fast"
+            serviceTier: "priority"
+            fromAt: 1795514700
+            toAt: 1795514700
+            turns: 1
+            inputTokens: 0
+            outputTokens: 0
+            cacheReadTokens: 9000000000
+            cacheWrite5mTokens: 0
+            cacheWrite1hTokens: 0
+            webSearchRequests: 0
+            webFetchRequests: 6000000000
+            costMicroUsd: 0
+            maxContext: 1000000
+            buckets: [
+                { bucket: 40, turns: 1, costMicroUsd: 0 }
+            ]
+            sentAt: 1795518000
+            receivedAt: 1795518001
+            clockSkew: false
+            status: 200
+        }
+    }
+])
+operation PutUsage {
+    input := {
+        /// 送り手の決める id。
+        @required
+        @httpLabel
+        usageId: SenderId
+
+        /// 出し手。`by` は出し手の中で引く。
+        @required
+        issuer: Name
+
+        /// トークンを使ったアクター（鍵の付随する id）。
+        @required
+        by: ActorRef
+
+        @required
+        model: Name
+
+        /// 手伝い（subagent）の種類の名。本体の回なら付けない。
+        agent: Text
+
+        /// 速さの種類の名（例 `standard`）。
+        @required
+        speed: Text
+
+        /// service tier の名（例 `standard`）。
+        @required
+        serviceTier: Text
+
+        /// 区間の始めの回の時刻。
+        @required
+        fromAt: DateTime
+
+        /// 区間の終わりの回の時刻。`fromAt` と同じ UTC の時の内。
+        @required
+        toAt: DateTime
+
+        /// 回の数。
+        @required
+        turns: TurnCount
+
+        @required
+        inputTokens: Amount
+
+        @required
+        outputTokens: Amount
+
+        @required
+        cacheReadTokens: Amount
+
+        /// 5 分の cache に書いたトークンの数。
+        @required
+        cacheWrite5mTokens: Amount
+
+        /// 1 時間の cache に書いたトークンの数。
+        @required
+        cacheWrite1hTokens: Amount
+
+        /// web の検索の回数。
+        @required
+        webSearchRequests: Amount
+
+        /// web の取得の回数。
+        @required
+        webFetchRequests: Amount
+
+        /// 額（100 万分の 1 ドル）。
+        @required
+        costMicroUsd: Amount
+
+        /// 区間の内でいちばん長い文脈（トークン）。
+        @required
+        maxContext: Amount
+
+        /// 文脈の長さの段ごとの数。
+        @required
+        buckets: UsageBuckets
+
+        /// 送り手の時刻。
+        @required
+        sentAt: DateTime
+    }
+
+    output := with [UsageFields] {
+        /// 新しく足せば 201、同じ id で同じ本文なら 200。
+        @required
+        @httpResponseCode
+        status: Integer
+    }
+
+    errors: [
+        ValidationException
+        Conflict
+        Unavailable
+        InternalError
+    ]
+}
+
+/// トークンの数と費えの行を、アクターをまたいで読む（2.1.0 から）。条件はどれも AND。並びは受けた順。集計はしない（まとめるのは呼ぶ側）。
+/// - `from`・`to` は、区間の終わりの時刻（`toAt`）の窓（`from <= toAt < to`。始めは含み、終わりは含まない）。どちらも要る。
+///   `to - from` は 31 日まで（越えれば 400）。受けた時刻（`receivedAt`）とは比べない。
+/// - `label` は `鍵:値`（ListActors の `label` と同じ）。重ねれば、どれも持つアクターの行。`actorId` は、そのアクターの行。
+/// - `actors` は、この頁の行に出てきたアクターを 1 度ずつ（行に初めて出た順）。
+/// - 同じアクター・同じ時・同じ種類の行は、2 つ以上在りうる。読む側は、数（`turns`・トークンの数・web の検索と取得の回数・`costMicroUsd`・`buckets` の段ごとの数）を足し、
+///   `maxContext` は大きい方を取る。
+/// - 頁は受けた順で後ろから続ける（辿る間に行が足されても、元の組に穴も重なりも出ない）。`nextToken` はこの検索の答えの物を渡す（違えば 400）。
+@readonly
+@paginated(inputToken: "nextToken", outputToken: "nextToken", pageSize: "maxResults", items: "usage")
+@http(method: "GET", uri: "/api/usage")
+@httpRequestTests([
+    {
+        id: "ListUsageRequest"
+        documentation: "引数の名は camelCase。label は重ねられる"
+        protocol: restJson1
+        method: "GET"
+        uri: "/api/usage"
+        queryParams: [
+            "from=2026-11-24T00%3A00%3A00Z"
+            "to=2026-11-25T00%3A00%3A00Z"
+            "label=project%3Acastlist"
+            "label=tpm.role%3Aauditor"
+            "actorId=019abcde-0000-7000-8000-000000000001"
+            "maxResults=10"
+            "nextToken=abc"
+        ]
+        params: {
+            from: 1795478400
+            to: 1795564800
+            label: ["project:castlist", "tpm.role:auditor"]
+            actorId: "019abcde-0000-7000-8000-000000000001"
+            maxResults: 10
+            nextToken: "abc"
+        }
+    }
+])
+@httpResponseTests([
+    {
+        id: "ListUsageResponse"
+        documentation: "行は PutUsage の答えと同じ形。actors は、頁に出てきたアクターを 1 度ずつ"
+        protocol: restJson1
+        code: 200
+        headers: { "Content-Type": "application/json" }
+        body: """
+            {"asOf":"2026-11-24T12:00:00Z","usage":[{"id":"u-1","actorId":"019abcde-0000-7000-8000-000000000001","model":"claude-opus-5-5","speed":"standard","serviceTier":"standard","fromAt":"2026-11-24T10:05:00Z","toAt":"2026-11-24T10:55:00Z","turns":3,"inputTokens":30,"outputTokens":1200,"cacheReadTokens":90000,"cacheWrite5mTokens":0,"cacheWrite1hTokens":4000,"webSearchRequests":2,"webFetchRequests":5,"costMicroUsd":250000,"maxContext":61000,"buckets":[{"bucket":1,"turns":1,"costMicroUsd":50000},{"bucket":2,"turns":2,"costMicroUsd":200000}],"sentAt":"2026-11-24T11:00:00Z","receivedAt":"2026-11-24T11:00:01Z","clockSkew":false}],"actors":[{"id":"019abcde-0000-7000-8000-000000000001","name":"se.1","labels":{"project":"castlist"}}],"nextToken":"abc"}"""
+        bodyMediaType: "application/json"
+        params: {
+            asOf: 1795521600
+            usage: [
+                {
+                    id: "u-1"
+                    actorId: "019abcde-0000-7000-8000-000000000001"
+                    model: "claude-opus-5-5"
+                    speed: "standard"
+                    serviceTier: "standard"
+                    fromAt: 1795514700
+                    toAt: 1795517700
+                    turns: 3
+                    inputTokens: 30
+                    outputTokens: 1200
+                    cacheReadTokens: 90000
+                    cacheWrite5mTokens: 0
+                    cacheWrite1hTokens: 4000
+                    webSearchRequests: 2
+                    webFetchRequests: 5
+                    costMicroUsd: 250000
+                    maxContext: 61000
+                    buckets: [
+                        { bucket: 1, turns: 1, costMicroUsd: 50000 }
+                        { bucket: 2, turns: 2, costMicroUsd: 200000 }
+                    ]
+                    sentAt: 1795518000
+                    receivedAt: 1795518001
+                    clockSkew: false
+                }
+            ]
+            actors: [
+                {
+                    id: "019abcde-0000-7000-8000-000000000001"
+                    name: "se.1"
+                    labels: { project: "castlist" }
+                }
+            ]
+            nextToken: "abc"
+        }
+    }
+    {
+        id: "ListUsageResponseEmpty"
+        documentation: "行が無ければ、どちらの並びも空で、nextToken が無い"
+        protocol: restJson1
+        code: 200
+        headers: { "Content-Type": "application/json" }
+        body: """
+            {"asOf":"2026-11-24T12:00:00Z","usage":[],"actors":[]}"""
+        bodyMediaType: "application/json"
+        params: { asOf: 1795521600, usage: [], actors: [] }
+    }
+])
+operation ListUsage {
+    input := {
+        /// 区間の終わりの時刻（`toAt`）の窓の始め（含む）。
+        @required
+        @httpQuery("from")
+        from: DateTime
+
+        /// 区間の終わりの時刻（`toAt`）の窓の終わり（含まない）。`from` から 31 日まで。
+        @required
+        @httpQuery("to")
+        to: DateTime
+
+        /// ラベル（`鍵:値`）。重ねれば、どれも持つアクターの行。
+        @httpQuery("label")
+        label: LabelFilters
+
+        /// そのアクターの行。
+        @httpQuery("actorId")
+        actorId: ActorId
+
+        /// 1 頁の数（既定 100）。
+        @httpQuery("maxResults")
+        maxResults: MaxResults
+
+        /// 前の答えの `nextToken`。
+        @httpQuery("nextToken")
+        nextToken: NextToken
+    }
+
+    output := {
+        /// 読み始める前の castlist の時刻。
+        @required
+        asOf: DateTime
+
+        /// 受けた順。
+        @required
+        usage: UsageRows
+
+        /// この頁の行に出てきたアクターを 1 度ずつ（行に初めて出た順）。
+        @required
+        actors: UsageActors
+
+        /// 次の頁の印。終わりなら無い。
+        nextToken: NextToken
+    }
+
+    errors: [
+        ValidationException
+        Unavailable
+        InternalError
+    ]
+}
+
+/// 0 以上の数（トークンの数・web の検索と取得の回数・額・文脈の長さ）。
+@range(min: 0)
+long Amount
+
+/// 回の数（1 以上）。
+@range(min: 1)
+long TurnCount
+
+/// 文脈の長さの段の番号: n 段は n×25,000 以上 (n+1)×25,000 未満のトークン。40 は 1,000,000 以上。
+@range(min: 0, max: 40)
+integer UsageBucketIndex
+
+/// 文脈の長さの段 1 つの、回の数と額。
+structure UsageBucket {
+    @required
+    bucket: UsageBucketIndex
+
+    /// その段の回の数。
+    @required
+    turns: Amount
+
+    /// その段の額（100 万分の 1 ドル）。
+    @required
+    costMicroUsd: Amount
+}
+
+/// 段の並び（同じ段は 1 度だけ。段は 41 個）。
+@length(min: 1, max: 41)
+list UsageBuckets {
+    member: UsageBucket
+}
+
+/// トークンの数と費えの 1 行（欄は UsageFields）。
+structure Usage with [UsageFields] {}
+
+/// トークンの数と費えの欄（PutUsage の答えと、ListUsage の行で同じ形）。
+@mixin
+structure UsageFields {
+    /// 送り手の id。
+    @required
+    id: SenderId
+
+    @required
+    actorId: ActorId
+
+    @required
+    model: Name
+
+    /// 手伝い（subagent）の種類の名。本体の回なら無い。
+    agent: Text
+
+    @required
+    speed: Text
+
+    @required
+    serviceTier: Text
+
+    /// 区間の始めの回の時刻（ミリ秒まで）。
+    @required
+    fromAt: DateTime
+
+    /// 区間の終わりの回の時刻（ミリ秒まで）。
+    @required
+    toAt: DateTime
+
+    @required
+    turns: TurnCount
+
+    @required
+    inputTokens: Amount
+
+    @required
+    outputTokens: Amount
+
+    @required
+    cacheReadTokens: Amount
+
+    @required
+    cacheWrite5mTokens: Amount
+
+    @required
+    cacheWrite1hTokens: Amount
+
+    /// web の検索の回数。
+    @required
+    webSearchRequests: Amount
+
+    /// web の取得の回数。
+    @required
+    webFetchRequests: Amount
+
+    /// 額（100 万分の 1 ドル）。
+    @required
+    costMicroUsd: Amount
+
+    /// 区間の内でいちばん長い文脈（トークン）。同じ時の行をまとめる時は、大きい方を取る。
+    @required
+    maxContext: Amount
+
+    /// 文脈の長さの段ごとの数（`bucket` の順）。
+    @required
+    buckets: UsageBuckets
+
+    @required
+    sentAt: DateTime
+
+    @required
+    receivedAt: DateTime
+
+    @required
+    clockSkew: Boolean
+}
+
+list UsageRows {
+    member: Usage
+}
+
+/// トークンの数と費えの行に出てきたアクター（id・名・ラベル）。
+structure UsageActor {
+    @required
+    id: ActorId
+
+    /// `<接頭辞>.<番号>`。
+    @required
+    name: String
+
+    /// ラベル（JSON の鍵の順は決まらない）。
+    @required
+    labels: Labels
+}
+
+list UsageActors {
+    member: UsageActor
+}
+
+/// 送り手が付ける id（出来事・線・model と effort・トークンの数と費え）: 空白の無い ASCII の印字できる字で 128 字まで。
 @pattern("^[\\x21-\\x7E]{1,128}$")
 string SenderId
 
