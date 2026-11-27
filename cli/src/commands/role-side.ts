@@ -12,6 +12,7 @@ import { recordingTo, tpmHello } from './tpm-side.ts';
 import { envOf } from '../env.ts';
 import { claimNamed, ownName } from '../mail.ts';
 import { peekInbox } from './mail.ts';
+import { leadReviews } from '../reviews.ts';
 
 /**
  * 名乗る。$ROSTER_KEY が無ければ TPM 担当の名乗り（tpmHello）。
@@ -50,6 +51,7 @@ export async function hello(ctx: Context, options: { model?: string, effort?: st
     `課題管理の課題: ${record.issue === undefined ? '無し（記録しない）' : `${record.issue}（道具: ${recordingTo(ctx, record.issue)}）`}`,
     ...[issueCopyLine(record)].filter(v => v !== undefined),
     ...(issueTracker(ctx, issueKey) === undefined ? [] : [`課題の中身: roster issue view ${issueKey}`]),
+    ...(record.role === 'tech-lead' ? leadReviewLines(ctx, record.key) : []),
     `TPM 担当の宛先: ${tpm.address}`,
     `自分の宛先: ${record.address}`,
     // 落ちた session の推しの幕引き（castlist と cmux があれば。Auditor は打たない）。
@@ -58,7 +60,20 @@ export async function hello(ctx: Context, options: { model?: string, effort?: st
 }
 
 /**
- * roster inbox: 自分宛てで、まだ届いていない（配りの口に残っている）メッセージを出す。届くのは手が空いた時なので、段の区切り（PR を出す前・merge を頼む前）に見る。
+ * Tech Lead 担当の名乗りに、返していない repo の席の頼みを並べる。【ask-review】は起こした回の受け箱へ届くので、
+ * 起こし直した席は前の席に届いた頼みを受け取らない。頼みの記録（reviews/）から引き直して見せる。
+ */
+function leadReviewLines(ctx: Context, lead: string): string[] {
+  const open = leadReviews(ctx, lead);
+  if (open.length === 0) return [];
+  return [
+    `返していないレビューの頼み: ${open.length} 件（前の回の席に届いた物も。/tech-lead の 6 のとおり見て、roster report review --review <番号> で返す）`,
+    ...open.map(r => `  #${r.n} ${r.key} 見る物: ${r.url} 依頼書: ${r.brief ?? ''}${r.focus === undefined ? '' : ` 見てほしい所: ${r.focus}`}`),
+  ];
+}
+
+/**
+ * roster inbox:自分宛てで、まだ届いていない（配りの口に残っている）メッセージを出す。届くのは手が空いた時なので、段の区切り（PR を出す前・merge を頼む前）に見る。
  * 自分の受け手の名が作れなければ（長い組）、無いと答える。
  * - 自分（この session）の名乗りが効いている時: 取り置かずに出すだけ（届いたとは記録しない。hook が後で渡す。commands/mail.ts の peekInbox）。
  * - 名乗りが効いていない時（渡す hook を持たない session）: 出した物に「検査では止めない」の印を付け、渡した記録に output と残す
