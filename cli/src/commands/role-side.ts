@@ -73,7 +73,7 @@ function leadReviewLines(ctx: Context, lead: string): string[] {
 }
 
 /**
- * roster inbox:自分宛てで、まだ届いていない（配りの口に残っている）メッセージを出す。届くのは手が空いた時なので、段の区切り（PR を出す前・merge を頼む前）に見る。
+ * roster inbox: 自分宛てで、まだ届いていない（配りの口に残っている）メッセージを出す。届くのは手が空いた時なので、段の区切り（PR を出す前・merge を頼む前）に見る。
  * 自分の受け手の名が作れなければ（長い組）、無いと答える。
  * - 自分（この session）の名乗りが効いている時: 取り置かずに出すだけ（届いたとは記録しない。hook が後で渡す。commands/mail.ts の peekInbox）。
  * - 名乗りが効いていない時（渡す hook を持たない session）: 出した物に「検査では止めない」の印を付け、渡した記録に output と残す
