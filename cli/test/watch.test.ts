@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'vitest';
-import { NONE_GRACE_MS, WATCH_EXIT, WATCH_LOG, watchGithub, watchMain, watchPr, type WatchRecord } from '../src/commands/watch.ts';
+import { NONE_GRACE_MS, WATCH_EXIT, WATCH_LOG, watchGithub, watchMain, watchPr, watchTag, type WatchRecord } from '../src/commands/watch.ts';
 import type { Context } from '../src/context.ts';
 import type { ExecResult } from '../src/exec.ts';
 import { TpmError } from '../src/skill-sets.ts';
-import { lookChecks, lookMain, parsePr, RUN_GRACE_MS, span } from '../src/watch.ts';
+import { lookChecks, lookMain, lookTag, parsePr, RUN_GRACE_MS, span } from '../src/watch.ts';
 import { world } from './helpers.ts';
 
 const PR = 'https://github.com/o/r/pull/7';
@@ -433,5 +433,130 @@ describe('見張りの字', () => {
   test('秒を、分と秒にする', () => {
     expect(span(42)).toBe('42 秒');
     expect(span(252)).toBe('4 分 12 秒');
+  });
+});
+
+/** tag の回。既定は、tag の commit（tagsha）の push の回で、作られたのは 1 時間前（作られきっていない、ではない）。 */
+const tagRun = (workflowName: string, status: string, conclusion: string, headSha = 'tagsha', createdAt = '2026-11-27T11:00:00Z') => ({ workflowName, status, conclusion, event: 'push', createdAt, url: `https://x/runs/${workflowName}-${headSha}`, headSha });
+const tagSha = (sha = 'tagsha'): ExecResult => ({ status: 0, stdout: `${sha}\n`, stderr: '' });
+const NO_TAG: ExecResult = { status: 1, stdout: '', stderr: 'gh: No commit found for SHA: refs/tags/v9.9.9 (HTTP 422)' };
+const REPO = 'o/r';
+
+describe('lookTag', () => {
+  const at = (iso: string): Date => new Date(iso);
+  const T = at('2026-11-27T12:00:00Z');
+  const gh = (...answers: ExecResult[]) => {
+    const asked: string[] = [];
+    const exec = (cmd: string, args: string[]): ExecResult => {
+      asked.push(`${cmd} ${args.join(' ')}`);
+      return answers.shift() as ExecResult;
+    };
+    return { asked, exec };
+  };
+
+  test('tag の commit を引き、その sha の push の回だけを、main と同じ判じ方で見る（gh に渡す字も）', () => {
+    const g = gh(tagSha(), ok([tagRun('release', 'completed', 'success'), tagRun('docs', 'completed', 'success'), tagRun('release', 'completed', 'failure', 'oldsha')]));
+    expect(lookTag(g.exec, REPO, 'v2.1.1', T, T)).toEqual({ state: 'passed', total: 2 });
+    expect(g.asked).toEqual([
+      'gh api repos/o/r/commits/refs/tags/v2.1.1 -q .sha',
+      'gh run list --repo o/r --branch v2.1.1 --event push --limit 100 --json workflowName,status,conclusion,event,createdAt,url,headSha',
+    ]);
+  });
+
+  test('落ちた回・まだの回・取り消し', () => {
+    expect(lookTag(gh(tagSha(), ok([tagRun('release', 'completed', 'failure'), tagRun('docs', 'completed', 'success')])).exec, REPO, 'v1', T, T))
+      .toEqual({ state: 'failed', failed: [{ name: 'release', url: 'https://x/runs/release-tagsha' }], passed: 1, pending: 0 });
+    expect(lookTag(gh(tagSha(), ok([tagRun('release', 'in_progress', ''), tagRun('docs', 'completed', 'success')])).exec, REPO, 'v1', T, T))
+      .toEqual({ state: 'pending', done: 1, total: 2 });
+    expect(lookTag(gh(tagSha(), ok([tagRun('release', 'completed', 'success'), tagRun('docs', 'completed', 'cancelled')])).exec, REPO, 'v1', T, T))
+      .toEqual({ state: 'passed', total: 1, cancelled: 1 });
+  });
+
+  test('回が無い: 始めて 2 分の内は「まだ」、過ぎたら none。回が在って、作られて 2 分の内は「まだ」', () => {
+    expect(lookTag(gh(tagSha(), ok([])).exec, REPO, 'v1', T, new Date(T.getTime() + RUN_GRACE_MS - 1))).toEqual({ state: 'pending', done: 0, total: 0 });
+    expect(lookTag(gh(tagSha(), ok([])).exec, REPO, 'v1', T, new Date(T.getTime() + RUN_GRACE_MS))).toEqual({ state: 'none' });
+    // 打ち直した tag の古い回しか無い時も、回が無いと見る。
+    expect(lookTag(gh(tagSha(), ok([tagRun('release', 'completed', 'success', 'oldsha')])).exec, REPO, 'v1', T, new Date(T.getTime() + RUN_GRACE_MS))).toEqual({ state: 'none' });
+    const fresh = [tagRun('release', 'completed', 'success', 'tagsha', '2026-11-27T11:59:30Z'), tagRun('docs', 'completed', 'success', 'tagsha', '2026-11-27T11:59:30Z')];
+    expect(lookTag(gh(tagSha(), ok(fresh)).exec, REPO, 'v1', T, T)).toEqual({ state: 'pending', done: 2, total: 2 });
+    // 始めた時刻が今でも、回が作られて 2 分を過ぎていれば判じる（古い tag を --timeout 0 で見る時）。
+    expect(lookTag(gh(tagSha(), ok(fresh)).exec, REPO, 'v1', T, at('2026-11-27T12:01:31Z'))).toEqual({ state: 'passed', total: 2 });
+  });
+
+  test('tag が無い（422・404）は invalid。5xx・繋がらない・上限は unreachable', () => {
+    const missing = lookTag(gh(NO_TAG).exec, REPO, 'v9.9.9', T, T);
+    expect(missing.state).toBe('invalid');
+    expect(missing.state === 'invalid' ? missing.message : '').toContain('tag v9.9.9 が o/r に無い');
+    expect(lookTag(gh({ status: 1, stdout: '', stderr: 'gh: Not Found (HTTP 404)' }).exec, REPO, 'v1', T, T).state).toBe('invalid');
+    expect(lookTag(gh(HTTP_502).exec, REPO, 'v1', T, T).state).toBe('unreachable');
+    expect(lookTag(gh(tagSha(), DOWN).exec, REPO, 'v1', T, T).state).toBe('unreachable');
+    expect(lookTag(gh({ status: 1, stdout: '', stderr: 'gh: API rate limit exceeded for user ID 1. (HTTP 403)' }).exec, REPO, 'v1', T, T).state).toBe('unreachable');
+    expect(lookTag(gh(tagSha(), { status: 0, stdout: 'x', stderr: '' }).exec, REPO, 'v1', T, T).state).toBe('unreachable');
+  });
+
+  test('tag の名の / と # は、片ごとに encode して path に入れる', () => {
+    const g = gh(tagSha(), ok([]));
+    lookTag(g.exec, REPO, 'cli/v1#2', T, T);
+    expect(g.asked[0]).toBe('gh api repos/o/r/commits/refs/tags/cli/v1%232 -q .sha');
+  });
+});
+
+describe('roster watch tag', () => {
+  test('落ちた回が分かっても、ほかが動いている間は待ち、みな終わってから 10 で終わる', async () => {
+    const s = seat({ 'api': [tagSha()], 'run list': [ok([tagRun('release', 'completed', 'failure'), tagRun('docs', 'in_progress', '')]), ok([tagRun('release', 'completed', 'failure'), tagRun('docs', 'completed', 'success')])] });
+    const r = await watchTag(s.ctx, 'v2.1.1', { repo: REPO });
+    expect(r.code).toBe(WATCH_EXIT.failed);
+    expect(r.lines).toEqual(['落ちた: release（https://x/runs/release-tagsha）', 'ほかの tag の workflow: 通った 1・まだ 0（20 秒）']);
+    expect(s.records()).toEqual([{ at: '2026-11-27T12:00:00.000Z', kind: 'tag', target: 'o/r@v2.1.1', result: 'failed', code: 10, polls: 2, seconds: 20, key: 'AI-41' }]);
+  });
+
+  test('みな通ったのを、間を空けて 2 度見てから 0 で終わる', async () => {
+    const s = seat({ 'api': [tagSha()], 'run list': [ok([tagRun('release', 'in_progress', ''), tagRun('docs', 'completed', 'success')]), ok([tagRun('release', 'completed', 'success'), tagRun('docs', 'completed', 'success')])] });
+    const r = await watchTag(s.ctx, 'v2.1.1', { repo: REPO });
+    expect(r).toEqual({ code: WATCH_EXIT.passed, lines: ['通った: tag の workflow 2 つ（50 秒）'] });
+  });
+
+  test('--timeout 0 で古い tag を見ると、1 回で 0（20 にならない）', async () => {
+    const s = seat({ 'api': [tagSha()], 'run list': [ok([tagRun('release', 'completed', 'success'), tagRun('docs', 'completed', 'success')])] });
+    expect((await watchTag(s.ctx, 'v2.1.1', { repo: REPO, timeout: 0 })).code).toBe(WATCH_EXIT.passed);
+  });
+
+  test('回の無い tag: --timeout 0 は 20（回がまだ作られていない）、既定は 5 分待って 30', async () => {
+    const now = seat({ 'api': [tagSha()], 'run list': [ok([])] });
+    const r = await watchTag(now.ctx, 'v1', { repo: REPO, timeout: 0 });
+    expect(r.code).toBe(WATCH_EXIT.timeout);
+    expect(r.lines[0]).toMatch(/^まだ: tag の workflow の回がまだ作られていない/);
+    const later = seat({ 'api': [tagSha()], 'run list': [ok([])] });
+    const n = await watchTag(later.ctx, 'v1', { repo: REPO });
+    expect(n.code).toBe(WATCH_EXIT.none);
+    expect(n.lines[0]).toContain('通ったのではない');
+    expect(later.slept.reduce((a, b) => a + b, 0)).toBeGreaterThanOrEqual(NONE_GRACE_MS);
+  });
+
+  test('回が作られて 2 分の内に長さを過ぎたら、20 の行は「回が作られてから 2 分の内」（merge の字でない）', async () => {
+    const s = seat({ 'api': [tagSha()], 'run list': [ok([tagRun('release', 'completed', 'success', 'tagsha', '2026-11-27T12:00:00Z')])] });
+    const r = await watchTag(s.ctx, 'v1', { repo: REPO, timeout: 0 });
+    expect(r.code).toBe(WATCH_EXIT.timeout);
+    expect(r.lines[0]).toContain('回が作られてから 2 分の内');
+    expect(r.lines[0]).not.toContain('merge');
+    expect(r.lines[0]).toContain('roster watch tag v1 --repo o/r');
+  });
+
+  test('tag が無い時は、聞き直さずに 1 で終わる', async () => {
+    const s = seat({ api: [NO_TAG] });
+    const r = await watchTag(s.ctx, 'v9.9.9', { repo: REPO });
+    expect(r.code).toBe(WATCH_EXIT.error);
+    expect(r.lines[0]).toMatch(/^見張れない: tag v9.9.9 が o\/r に無い/);
+    expect(s.slept).toEqual([]);
+  });
+
+  test('--repo の形の誤り・tag の名の誤りは断る', () => {
+    const s = seat({});
+    expect(() => watchTag(s.ctx, 'v1', { repo: 'r' })).toThrow(TpmError);
+    expect(() => watchTag(s.ctx, 'v1', { repo: 'https://github.com/o/r' })).toThrow(TpmError);
+    expect(() => watchTag(s.ctx, '', { repo: REPO })).toThrow(TpmError);
+    expect(() => watchTag(s.ctx, 'v 1', { repo: REPO })).toThrow(TpmError);
+    expect(() => watchTag(s.ctx, '--repo', { repo: REPO })).toThrow(TpmError);
+    expect(s.asked).toEqual([]);
   });
 });

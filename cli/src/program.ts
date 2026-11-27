@@ -24,7 +24,7 @@ import { hello, inboxNow } from './commands/role-side.ts';
 import { seatAdd, seatBrief, seatClose, seatDismiss, seatNotify } from './commands/seat.ts';
 import { GAP_MINUTES, time } from './commands/time.ts';
 import { assign, close, newKey, roles, type AssignOptions } from './commands/tpm-side.ts';
-import { WATCH_MINUTES, watchGithub, watchMain, watchPr, type WatchResult } from './commands/watch.ts';
+import { WATCH_MINUTES, watchGithub, watchMain, watchPr, watchTag, type WatchResult } from './commands/watch.ts';
 import { composeSkillSets, readConfigSources } from './config.ts';
 import { createContext, mailroomsClosed } from './context.ts';
 import { exec } from './exec.ts';
@@ -136,7 +136,7 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
   program.command('time <key>').description('課題にかかった時間を、状態の移りの記録から分けて出す（席ごとの作業中・待ちの時間と、どの席の記録も動かなかった長い空き）')
     .option('--gap <分>', `長い空きとみなす長さ（分。既定は ${GAP_MINUTES}）`)
     .action((key: string, options: { gap?: string }) => print(time(createContext(), key, options.gap === undefined ? {} : { gapMinutes: Number(options.gap) })));
-  const watching = program.command('watch').description('PR の CI・merge の後の main の workflow・GitHub の戻りを、model を使わずに見張る（裏で起こして手を止める。終わると起こされ、終了コードで結果が分かる: 0 通った・10 落ちた・20 まだ（長さを過ぎた）・30 付いていない・1 見張れない）');
+  const watching = program.command('watch').description('PR の CI・merge の後の main の workflow・tag の push で動いた workflow・GitHub の戻りを、model を使わずに見張る（裏で起こして手を止める。終わると起こされ、終了コードで結果が分かる: 0 通った・10 落ちた・20 まだ（長さを過ぎた）・30 付いていない・1 見張れない）');
   const watched = (r: WatchResult): void => {
     print(r.lines);
     process.exit(r.code);
@@ -148,6 +148,10 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
   watching.command('main <url>').description('merge した PR の、merge の commit で main に動いた workflow が、みな終わるまで見張る（workflow ごとに、いちばん新しい回で判じる。落ちた物が分かっても、みな終わるまで待つ）')
     .option(...timeout('main'))
     .action(async (url: string, options: { timeout?: string }) => watched(await watchMain(createContext(), url, options.timeout === undefined ? {} : { timeout: Number(options.timeout) })));
+  watching.command('tag <tag>').description('tag の push で動いた workflow（release・docs など）が、みな終わるまで見張る（tag の commit の回だけ。判じ方は main と同じ。落ちた物が分かっても、みな終わるまで待つ）')
+    .requiredOption('--repo <owner/repo>', 'tag を打った repo')
+    .option(...timeout('tag'))
+    .action(async (tag: string, options: { repo: string, timeout?: string }) => watched(await watchTag(createContext(), tag, { repo: options.repo, ...(options.timeout === undefined ? {} : { timeout: Number(options.timeout) }) })));
   watching.command('github').description('GitHub が応えるようになるまで見張る（gh・git push が 5xx や繋がらない誤りで落ちた時。続けて 2 度応えたら「戻った」）')
     .option('--repo <owner/repo>', 'この repo を読めるかで見る（無ければ、API が応えるかで見る）')
     .option(...timeout('github'))
