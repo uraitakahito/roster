@@ -124,7 +124,7 @@ describe('課題への記録（GitHub の Issue）', () => {
     expect(texts(w, 'file:1')[0]).toBe('【answer】(1) 案 A (2) project ごと\n細かい事は依頼書に');
   });
 
-  test('【ask-pm】は状態を回答待ち(PM) にする。確認のページは開かない（Product Manager は置き場の一覧の UI で見る）', async () => {
+  test('【ask-pm】は状態を回答待ち(PM) にする。確認のページは開かない（Product Manager は callboard のページの一覧で見る）', async () => {
     const w = await started();
     await askPm(w.se, { url: 'https://claude.ai/artifact/c1', items: ['案の選択'], waitingFor: '案の選択' });
     expect(w.tpm.state.lines('file-transport/shown.jsonl')).toEqual([]);

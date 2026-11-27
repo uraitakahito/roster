@@ -1,5 +1,5 @@
 // 置き場のページの、返事の状態（返事待ち・答えた）を書く・読む。
-// roster ask pm が確認のページを返事待ちにし、roster answer が答えたにする。Product Manager は、置き場の一覧の UI の印と件数で、返事が要るページを見分ける。
+// roster ask pm が確認のページを返事待ちにし、roster answer が答えたにする。Product Manager は、ページの一覧（callboard の http://127.0.0.1:8803/pages/）の印と件数で、返事が要るページを見分ける。
 // 待ちの相手: レビューの依頼書はレビューの席を、上げたレビューは TPM 担当を待つ（review-marks.ts）。Product Manager の数には入らない。
 // 状態を書けない時（置き場が止まっている）でも、メッセージを送る命令は止めない（印は付かないだけ）。
 import { basename } from 'node:path';
@@ -16,7 +16,7 @@ export type Party = 'pm' | 'review' | 'tpm';
 /** 待ちの相手の名を読む。違えば undefined。 */
 export const party = (value: string): Party | undefined => (['pm', 'review', 'tpm'] as const).find(p => p === value);
 
-/** 状態の、人が読む名（待ちの相手ごと。置き場の一覧の UI の印と同じ字）。 */
+/** 状態の、人が読む名（待ちの相手ごと。callboard のページの一覧の印と同じ字）。 */
 export const REPLY_LABELS: Record<Party, Record<ReplyState, string>> = {
   pm: { waiting: '返事待ち', answered: '答えた' },
   review: { waiting: 'レビュー待ち', answered: 'レビュー済み' },
