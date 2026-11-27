@@ -818,6 +818,32 @@ describe('この repo の設定の、名を書かない命令と container-syste
     expect(judgeOwn(command, 'devops-engineer')).toBe(/^container v (?:rm|delete) /.test(command));
   });
 
+  // pagetray の container の名は pagetray.box（pagetray 1.2.0 から。同じ network の callboard が名で引く。AI-32）。
+  // 新しい名の命令を、宣言に名指しで書く（前の名の項目も残す。前の名で動かしている間と、前の名で起こし直す試みを止めるため）。
+  test.each(['--name pagetray.box', 'container start pagetray.box', 'container stop pagetray.box', 'container kill pagetray.box', 'container delete pagetray.box', 'container rm pagetray.box'])(
+    'pagetray の宣言に %s がある（前の名の項目も残る）',
+    (entry) => {
+      expect(own.pagetray?.match).toContain(entry);
+      expect(own.pagetray?.match).toContain(entry.replace('pagetray.box', 'pagetray'));
+    },
+  );
+
+  test.each([
+    'container stop pagetray.box',
+    'container rm -f pagetray.box',
+    'container run -d --name pagetray.box -p 127.0.0.1:8801:8080 -v pagetray-data-v1:/data ghcr.io/uraitakahito/pagetray:v1.2.0',
+    'sudo -u root container kill pagetray.box',
+    // 前の名（付け直す時に、止めて消す）。
+    'container stop pagetray',
+    'container delete pagetray',
+    // t-9tac で足した、volume の略の v。
+    'container v rm pagetray-data-v1',
+    'container v delete pagetray-data-v1',
+  ])('%s は、ほかの担当を止め、DevOps Engineer 担当は通す（TPM に相談）', (command) => {
+    expect(judgeOwn(command, 'software-engineer')).toBe(false);
+    expect(judgeOwn(command, 'devops-engineer')).toBe(true);
+  });
+
   test.each([
     'container stop --all',
     'container rm -af',
