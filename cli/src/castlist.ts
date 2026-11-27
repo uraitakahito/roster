@@ -62,6 +62,19 @@ export function castlistUrl(ctx: Pick<Context, 'env' | 'config'>): string | unde
   return url.replace(/\/+$/, '');
 }
 
+/** 画面のサーバー（callboard）の URL の既定（callboard の docs の「動かす」の port）。 */
+export const CALLBOARD_URL = 'http://127.0.0.1:8803';
+
+/**
+ * 画面のサーバー（callboard）の URL（末尾の / は落とす）。アクターのプロフィールなどの画面は、castlist でなく callboard にある
+ * （castlist は 2.0.0 から画面を持たない）。$ROSTER_CALLBOARD_URL、無ければ既定。roster は callboard に何も送らない（人に見せる URL を組むだけ）。
+ */
+export function callboardUrl(ctx: Pick<Context, 'env'>): string {
+  const url = envOf(ctx.env, 'CALLBOARD_URL') ?? CALLBOARD_URL;
+  if (!URL_FORM.test(url)) throw new TpmError(`$ROSTER_CALLBOARD_URL は http://127.0.0.1:<port> か http://localhost:<port> の形にしてください: ${url}`);
+  return url.replace(/\/+$/, '');
+}
+
 /** 警告に書く、足す 1 行の URL（castlist の docs の「動かす」の既定の port）。 */
 const SUGGESTED_URL = 'http://127.0.0.1:8802';
 /** 警告の枠の線。 */

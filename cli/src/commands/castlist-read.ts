@@ -1,10 +1,10 @@
 // roster castlist find・show・lineage・events・settings: castlist の監査の検索（castlist の Smithy の定義 cli/gen/model/castlist/castlist.smithy の ListActors などの操作）を読むだけの命令。
 // 送るのは GET だけで、castlist にも状態の folder にも書かない（Auditor の席から打つ物）。旗は castlist の引数の名にそのまま写し、値は確かめない（断るのは castlist）。
 // castlist-query.ts が新しい API の操作と引数に直して聞き（断る値は、そこで前の API と同じ訳で断る）、答えを前の API の形に直す。
-// 答えは 1 件 1 行の字にし、アクターにはプロフィールの画面の URL（<castlist>/actors/<id>）を添える。--json は、前の API の形に直した castlist の答えを出す。
+// 答えは 1 件 1 行の字にし、アクターにはプロフィールの画面の URL（<callboard>/actors/<id>）を添える。--json は、前の API の形に直した castlist の答えを出す。
 // castlist が断った（400・404）ら訳をそのまま、止まっていれば「castlist に聞けない」の 1 行で止まる。
 // castlist には名で引く道が無いので、名（t-23zs-swe.1 など）は、この project の roster が登録して控えた物（状態の folder の sessions/）から id にする。
-import { castlistUrl } from '../castlist.ts';
+import { callboardUrl, castlistUrl } from '../castlist.ts';
 import { query, type Params, type Query } from '../castlist-query.ts';
 import type { Context } from '../context.ts';
 import { TpmError } from '../skill-sets.ts';
@@ -147,8 +147,8 @@ function must<T>(answer: Answer<T>): { body: T, text: string } {
   return answer;
 }
 
-/** プロフィールの画面の URL。 */
-export const profileUrl = (url: string, id: string): string => `${url}/actors/${encodeURIComponent(id)}`;
+/** プロフィールの画面の URL。画面は callboard にある（`board` は callboardUrl の値。castlist は 2.0.0 から画面を持たない）。 */
+export const profileUrl = (board: string, id: string): string => `${board}/actors/${encodeURIComponent(id)}`;
 
 const flag = (on: boolean | undefined): string | undefined => on === true ? 'true' : undefined;
 const many = (name: string, values: string[] | undefined): Params => (values ?? []).map(v => [name, v]);
@@ -169,11 +169,11 @@ const more = (next: unknown): string[] => typeof next === 'string' && next !== '
 /** 一覧の頭の 1 行。 */
 const head = (what: string, n: number, asOf: unknown): string => n === 0 ? `当たる${what}は無い（castlist の時刻 ${String(asOf)}）` : `${what} ${n}（castlist の時刻 ${String(asOf)}）`;
 
-/** アクター 1 行: 名・種類・状態（稼働中・停止。castlist の画面と同じ字）・登場と退場・最新の model と effort・ラベル・プロフィールの URL。 */
-function actorLine(url: string, a: ActorItem): string {
+/** アクター 1 行: 名・種類・状態（稼働中・停止。callboard の画面と同じ字）・登場と退場・最新の model と effort・ラベル・プロフィールの URL。 */
+function actorLine(board: string, a: ActorItem): string {
   const exited = a.last_exited_at === null ? '-' : `${a.last_exited_at}（${or(a.last_exit_type)}）`;
   const labels = Object.entries(a.labels ?? {}).map(([k, v]) => `${k}=${v}`).join('・') || '-';
-  return [a.name, a.kind, a.present ? '稼働中' : '停止', `登場 ${or(a.first_entered_at)}`, `退場 ${exited}`, `${or(a.model)}・${or(a.effort)}`, labels, profileUrl(url, a.id)].join('  ');
+  return [a.name, a.kind, a.present ? '稼働中' : '停止', `登場 ${or(a.first_entered_at)}`, `退場 ${exited}`, `${or(a.model)}・${or(a.effort)}`, labels, profileUrl(board, a.id)].join('  ');
 }
 
 /** 線 1 本の行（名は点から引く）。 */
@@ -181,7 +181,7 @@ function edgeLine(names: Map<string, string>, e: Edge): string {
   return `- ${names.get(e.from) ?? e.from} → ${names.get(e.to) ?? e.to}（${e.type}・受けた ${e.received_at}）`;
 }
 
-const settingLine = (url: string, s: SettingRow): string => [s.received_at, s.actor_name, `${s.model}・${s.effort}（${s.source}）`, profileUrl(url, s.actor_id)].join('  ');
+const settingLine = (board: string, s: SettingRow): string => [s.received_at, s.actor_name, `${s.model}・${s.effort}（${s.source}）`, profileUrl(board, s.actor_id)].join('  ');
 
 /** `roster castlist find`: アクターを探す（ListActors）。 */
 export async function castlistFind(ctx: Context, options: FindOptions): Promise<string[]> {
@@ -204,7 +204,7 @@ export async function castlistFind(ctx: Context, options: FindOptions): Promise<
     ['after', options.after],
   ] }));
   if (options.json === true) return [text];
-  return [head('アクター', body.actors.length, body.as_of), ...body.actors.map(a => actorLine(url, a)), ...more(body.next)];
+  return [head('アクター', body.actors.length, body.as_of), ...body.actors.map(a => actorLine(callboardUrl(ctx), a)), ...more(body.next)];
 }
 
 /** `roster castlist show`: 1 つのアクター（GetActor）と、線の要約（GetLineage。上は人まで・下は 1 段）。 */
@@ -225,7 +225,7 @@ export async function castlistShow(ctx: Context, target: string, options: JsonOp
     : `停止（${s.presence ?? 'まだ登場が無い'}・登場 ${or(s.entered_at)}・最後の退場 ${or(s.exited_at)}）`;
   const c = a.current_settings;
   return [
-    `${a.name}（${a.kind}・issuer ${a.issuer}）  ${profileUrl(url, a.id)}`,
+    `${a.name}（${a.kind}・issuer ${a.issuer}）  ${profileUrl(callboardUrl(ctx), a.id)}`,
     `id: ${a.id}`,
     `今: ${now}`,
     `model と effort: ${c === null ? 'まだ無い' : `${c.model}・${c.effort}（${c.source}・受けた ${c.received_at}）`}`,
@@ -250,7 +250,7 @@ export async function castlistLineage(ctx: Context, target: string, options: Lin
   return [
     `${names.get(id) ?? id} の線（castlist の時刻 ${body.as_of}）`,
     '点:',
-    ...body.nodes.map(n => `- ${n.name}（${n.kind}）  ${profileUrl(url, n.id)}`),
+    ...body.nodes.map(n => `- ${n.name}（${n.kind}）  ${profileUrl(callboardUrl(ctx), n.id)}`),
     body.edges.length === 0 ? '線: 無い' : '線:',
     ...body.edges.map(e => edgeLine(names, e)),
   ];
@@ -273,7 +273,7 @@ export async function castlistEvents(ctx: Context, options: EventsOptions): Prom
   if (options.json === true) return [text];
   return [
     head('出来事', body.events.length, body.as_of),
-    ...body.events.map(e => [e.received_at, e.actor_name, e.type, JSON.stringify(e.detail), profileUrl(url, e.actor_id)].join('  ')),
+    ...body.events.map(e => [e.received_at, e.actor_name, e.type, JSON.stringify(e.detail), profileUrl(callboardUrl(ctx), e.actor_id)].join('  ')),
     ...more(body.next),
   ];
 }
@@ -300,12 +300,12 @@ export async function castlistSettings(ctx: Context, options: SettingsOptions): 
     const id = actorId(ctx, options.actor);
     const { body, text } = must(await ask<{ as_of: string, setting?: SettingRow | null, settings?: SettingRow[] }>(ctx, url, { op: 'ListActorSettings', id, params }));
     if (options.json === true) return [text];
-    if (body.settings !== undefined) return [head('model と effort の行', body.settings.length, body.as_of), ...body.settings.map(s => settingLine(url, s))];
-    return body.setting === null || body.setting === undefined ? [`その時（${options.at ?? ''}）の model と effort は、まだ無い（castlist の時刻 ${body.as_of}）`] : [settingLine(url, body.setting)];
+    if (body.settings !== undefined) return [head('model と effort の行', body.settings.length, body.as_of), ...body.settings.map(s => settingLine(callboardUrl(ctx), s))];
+    return body.setting === null || body.setting === undefined ? [`その時（${options.at ?? ''}）の model と effort は、まだ無い（castlist の時刻 ${body.as_of}）`] : [settingLine(callboardUrl(ctx), body.setting)];
   }
   const { body, text } = must(await ask<{ as_of: string, settings: SettingRow[], next: unknown }>(ctx, url, { op: 'ListSettings', params }));
   if (options.json === true) return [text];
-  return [head('model と effort の行', body.settings.length, body.as_of), ...body.settings.map(s => settingLine(url, s)), ...more(body.next)];
+  return [head('model と effort の行', body.settings.length, body.as_of), ...body.settings.map(s => settingLine(callboardUrl(ctx), s)), ...more(body.next)];
 }
 
 /**
