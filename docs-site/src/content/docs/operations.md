@@ -337,7 +337,7 @@ castlist と pagetray は、1.0.0 で API も DB も替えた（AI-36 の切り�
 | `container builder start`・`stop`・`delete`・`rm`、container の名を名指す `container stop`・`kill`・`delete`・`rm buildkit`、`--name buildkit` | DevOps Engineer 担当だけ。`roster infra run builder -- <命令>` で打つ |
 
 - `container build` は、builder が止まっていれば自分で起こす（Apple Container 1.7.1）。だから担当は `container builder start` を打たない。roster を動かす機械を起こし直した後も、初めの build が起こす。
-- **担当は `container build` に `-c`（`--cpus`）・`-m`（`--memory`）・`--ssh`・`--dns`・`--dns-domain`・`--dns-search`・`--dns-option` を付けない。**build も `container builder start` も、動いている builder の CPU・メモリ・DNS・ssh の転送が頼んだ物と違うと、builder を止めて消し、作り直す（ほかの担当の build が落ちる）。guard は字 1 つの含みで見るので、この旗の付いた build は止められない。builder の大きさや DNS を変える要があれば、`roster ask devops` で頼む。今の builder は既定の CPU 2・メモリ 2048 MB。
+- **担当は `container build` に `-c`（`--cpus`）・`-m`（`--memory`）・`--ssh`・`--dns`・`--dns-domain`・`--dns-search`・`--dns-option` を付けない。**build も `container builder start` も、動いている builder の CPU・メモリ・DNS・ssh の転送が頼んだ物と違うと、builder を止めて消し、作り直す（ほかの担当の build が落ちる）。guard の `match` は環境の名の付いた命令に当てるので、名の無いこの旗の付いた build は止められない。builder の大きさや DNS を変える要があれば、`roster ask devops` で頼む。今の builder は既定の CPU 2・メモリ 2048 MB。
 - 起こし直す（中から名前が引けないなど）のは DevOps Engineer 担当で、先に【ask-tpm】で何が止まるか（その間の build）を送る。`roster infra run builder -- container builder stop` の後に `roster infra run builder -- container builder start`。旗を付けずに起こすと既定の大きさになる。
 
 ## 担当が落ちた後の調べ方

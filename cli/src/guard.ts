@@ -7,14 +7,15 @@
 //     git・gh の変える命令（どちらも見て勧めるだけで、直さない）。
 // (5) Audit の席を起こす命令（roster audit start。起こすのは Product Manager）。
 // (6) pattern で選んだ process に合図を送る命令（pkill・killall と、pid を名指さない kill。どの席からも。台帳 #89・#92）。
-// (1) は命令の字全体に match の字が含まれるかで見る（共有の環境は、疑わしければ止める）。
+// (1) は、命令を単純な命令に分けて match の語で当て、語で当たらなくても命令の字全体に match の字が含まれれば止める（共有の環境は、疑わしければ止める）。
+//     字の含みだけの当たりを通すのは、命令がみな引数の字を命令として動かさない物（roster・git commit・grep・rg）で、書き出しも無い時だけ（touched）。
 // (2)〜(6) の shell の命令は、単純な命令に分け、その頭（実際に打つ道具の命令）だけを見る。commit の文・grep の型・here-document に道具の名が入っても止めない。
 // どれも字で見るので、防げるのは「うっかり」まで。script に包んだ命令や、shell の redirect での書き込みはすり抜ける。確実な守りは、担当に渡す権限の方で行う。
 import { existsSync, realpathSync } from 'node:fs';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { envLabel, type InfraEnv, type RolesConfig } from './config.ts';
 import type { RoleName } from './protocol.ts';
-import { shellQuote, splitCommands } from './shell.ts';
+import { rawCommands, shellQuote, splitCommands } from './shell.ts';
 import type { State } from './state.ts';
 
 /** 環境を変えてよい担当。 */
@@ -179,9 +180,63 @@ export interface Asked {
   now: Date
 }
 
-/** 命令が触る環境（match のどれかを含む）。 */
+/** match の語 1 つと命令の語 1 つ。末尾が * の語は前方一致、ほかは丸ごと一致。 */
+const wordHits = (pattern: string, word: string | undefined): boolean =>
+  word !== undefined && (pattern.endsWith('*') ? word.startsWith(pattern.slice(0, -1)) : word === pattern);
+
+/**
+ * 単純な命令 1 つの語に、match の 1 項目が当たるか。
+ * - 頭が旗（`--name callboard`・`-v pagetray-data*`）: その語の並びが、どこかに続けて（間に何も挟まらずに）現れる。
+ * - 頭が旗でない（`container stop callboard`）: 語のどこかに頭の語があり、残りの語がその後に順に現れる（間に何が挟まってもよい）。
+ *   命令の名に揃えないのは、知らない前置きの命令と旗の値（`timeout 60 …`・`sudo -u root …`）を splitCommands が外さないため。
+ */
+export function hitsWords(words: string[], match: string): boolean {
+  const pattern = match.trim().split(/\s+/);
+  const [head, ...rest] = pattern;
+  if (head === undefined) return false;
+  if (head.startsWith('-')) return words.some((_, i) => pattern.every((p, k) => wordHits(p, words[i + k])));
+  return words.some((word, i) => {
+    if (!wordHits(head, word)) return false;
+    let k = 0;
+    for (const later of words.slice(i + 1)) if (k < rest.length && wordHits(rest[k] ?? '', later)) k += 1;
+    return k === rest.length;
+  });
+}
+
+/**
+ * 引数の字を命令として動かさないと分かっている単純な命令（語の頭が path・頭の代入・前置きの語の無い形だけ）。
+ * 字の含みだけで match に当たる命令を通してよいのは、どの単純な命令もこれに当たる時（#253 の roster file put … --name callboard-x.png など）。
+ * 字を命令として動かす道は道具の数だけあるので、止める側を並べず、通す側を要る物だけ並べる（t-7j37 の review-5）。
+ */
+function inert(words: string[]): boolean {
+  const [name, first, second] = words;
+  // roster infra run は、環境に命令を打つ。
+  if (name === 'roster') return !(first === 'infra' && second === 'run');
+  // git は丸ごと並べない（rebase -x・-c alias が字を動かす）。直後の語が commit の時だけ。
+  if (name === 'git') return first === 'commit';
+  return name === 'grep' || name === 'rg';
+}
+
+/**
+ * file への書き出し（fd への写し `2>&1`・`>&2`・`>&-` と `/dev/null` を除く。`>& file`・`&> file` は書き出し）・here-document・here-string・
+ * process substitution・命令の置き換え（`$(…)` と backtick。中の命令は rawCommands でも整えた形で入るので、頭の代入や path を見られない）。
+ * 引用の中の字でも当てる（止める方に倒す）。
+ */
+function feedsOrWrites(command: string): boolean {
+  const rest = command.replace(/\d*>&(\d+|-)/g, '').replace(/\d*>>?\s*\/dev\/null/g, '');
+  return rest.includes('>') || rest.includes('<<') || rest.includes('<(') || rest.includes('$(') || rest.includes('`');
+}
+
+/**
+ * 命令が触る環境。命令を単純な命令に分け、match の項目が命令の語に当たれば触る（hitsWords）。
+ * 語で当たらなくても、命令の字全体に match の字（* を除く）が含まれれば、今までどおり触るとみなす。
+ * ただし、どの単純な命令も inert で、書き出し・here-document などが無い時だけは、字の含みでは当てない。
+ */
 export function touched(command: string, infra: Record<string, InfraEnv>): string[] {
-  return Object.entries(infra).filter(([, env]) => env.match.some(m => command.includes(m))).map(([name]) => name);
+  const commands = splitCommands(command);
+  const textOnly = !feedsOrWrites(command) && rawCommands(command).every(inert);
+  const hits = (match: string): boolean => commands.some(words => hitsWords(words, match)) || (!textOnly && command.includes(match.replaceAll('*', '')));
+  return Object.entries(infra).filter(([, env]) => env.match.some(hits)).map(([name]) => name);
 }
 
 /** 環境 1 つについて、この担当が今、変えてよいか。 */
