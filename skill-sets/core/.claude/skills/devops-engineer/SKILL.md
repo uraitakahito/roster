@@ -57,7 +57,7 @@ roster infra list
 - castlist と pagetray の画面をまとめるサーバー（環境 `callboard`。`127.0.0.1:8803` で待つ、別の repo の callboard の container）。image を取る・起こす・止める・版を上げるのはこの担当。data は持たない（volume は無い。写しも要らない）。
 - image は callboard の release の物を使い、自分では作らない。版は roster の repo の `.callboard-version`。
 - 手順（設定・起こす・確かめる・版を上げる・戻す）は、docs-site の運用のページ（`docs-site/src/content/docs/operations.md` の「画面のサーバー」）と、そこが指す callboard の docs（https://uraitakahito.github.io/callboard/run.html の「動かす」）。命令は `roster infra run callboard -- <命令>` で打つ。止める・作り直すは「TPM に相談」の手続き。
-- 起こした後・版を上げた後は、callboard の docs の「確かめる」を 1 から 6 まで流す（`/healthz` の版が起こした版か・`lsof` で `127.0.0.1:8803` だけに開いているか、も）。入口（`curl -s http://127.0.0.1:8803/`）が、castlist と pagetray のどちらも「つながっています」と出すかを見る。「届きません」の時は、`container logs callboard` の `呼ぶ先に聞けない` の行を読み、聞く先の設定を直す。出力を結果のページに載せる。
+- 起こした後・版を上げた後は、callboard の docs の「確かめる」を 1 から 6 まで流す（`/healthz` の版が起こした版か・`lsof` で `127.0.0.1:8803` だけに開いているか、も）。入口（`curl -s http://127.0.0.1:8803/`）が、castlist を「つながっています」と出すかを見る。pagetray は、今は「届きません」と出るのが正しい（container の名 `pagetray` が、container の中から引けないため。運用のページの「聞く先」）。**これを直すために pagetray の container や名を変えない**（届く名にするのは、AI-32 の後の段で、依頼書で決める）。castlist が「届きません」の時だけ、`container logs callboard` の `呼ぶ先に聞けない` の行を読み、聞く先の設定を直す。castlist の版が、callboard の `CHANGELOG.md` の「呼ぶ先の要る版」より古くないことも見る。出力を結果のページに載せる。
 - castlist の container には触らない（castlist を起こす・止めるのは Product Manager だけ）。callboard の聞く先に castlist の名を書くだけ。
 
 ## 2. 終わり
