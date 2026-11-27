@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { guard, infraApprove, infraList, infraRevoke, infraRun } from '../src/commands/infra.ts';
 import { readRolesConfig, type ConfigSource, type InfraEnv } from '../src/config.ts';
-import { commandOf, guardSettings, judge, judgeWrite, touched, writeOf, type Approval } from '../src/guard.ts';
+import { commandOf, guardSettings, judge, hitsWords, judgeWrite, touched, writeOf, type Approval } from '../src/guard.ts';
 import type { RoleName } from '../src/protocol.ts';
 import { splitCommands } from '../src/shell.ts';
 import { world } from './helpers.ts';
@@ -52,6 +52,89 @@ describe('touched', () => {
     expect(touched('cd /w && aws ecs update-service --cluster x', infra)).toEqual(['aws-staging']);
     expect(touched('ssh staging-01 uptime; container ls', infra)).toEqual(['apple-container', 'aws-staging']);
     expect(touched('git status', infra)).toEqual([]);
+  });
+});
+
+describe('touched: 命令の語で当てる（t-7j37。台帳 #253）', () => {
+  // 4 つの repo の設定と同じ形（* の項目は、今の項目と並べて足した物）。
+  const real: Record<string, InfraEnv> = {
+    callboard: { guard: 'tpm', match: ['--name callboard', 'container stop callboard', 'container rm callboard', '--name=callboard'] },
+    castlist: { guard: 'pm-only', match: ['--name castlist.box', 'container stop castlist.box', 'container volume delete castlist-data', 'container volume rm castlist-data', '-v castlist-data', 'container volume delete castlist-data*', 'container volume rm castlist-data*', '-v castlist-data*'] },
+    pagetray: { guard: 'tpm', match: ['--name pagetray', 'container stop pagetray', 'container volume rm pagetray-data', '-v pagetray-data', 'container volume rm pagetray-data*', '-v pagetray-data*'] },
+  };
+  const hit = (command: string): string[] => touched(command, real);
+
+  test.each<[string, string[]]>([
+    // 当たり過ぎだった物（今は通す）。
+    ['roster file put x.png --reviewed --name callboard-x.png', []],
+    ['roster file put x.png --reviewed --name callboard-x.png 2>&1', []],
+    ['git commit -m "container stop callboard を足す"', []],
+    ['git commit -m "a" -m "bash で container stop callboard"', []],
+    ['grep -rn "container stop callboard" docs', []],
+    ['rg -- "-v castlist-data" .', []],
+    ['roster ask devops --what "container stop pagetray" --why "版を上げる"', []],
+    ['container run --name smoke-callboard img', []],
+    // 語で当たる物。
+    ['container stop callboard', ['callboard']],
+    ['container stop -t 10 callboard', ['callboard']],
+    ['sudo container rm -f callboard', ['callboard']],
+    ['container run -d --name callboard img', ['callboard']],
+    ['container run -d --name=callboard img', ['callboard']],
+    ['echo container stop callboard', ['callboard']],
+    ['timeout 60 container volume delete castlist-data-v1', ['castlist']],
+    ['sudo -u root container stop pagetray', ['pagetray']],
+    ['nice -n 5 container stop pagetray', ['pagetray']],
+    ['caffeinate -i container stop pagetray', ['pagetray']],
+    ['container volume rm pagetray-data-v1', ['pagetray']],
+    ['container run -v pagetray-data-v1:/data img', ['pagetray']],
+    ['sh -c \'container stop pagetray\'', ['pagetray']],
+    ['roster infra run pagetray -- container stop pagetray', ['pagetray']],
+    // 語では当たらないが、字の含みで止める物（字を命令として動かしうる命令がある）。
+    ['container stop callboard-old', ['callboard']],
+    ['bash <<\'X\'\ncontainer stop pagetray\nX', ['pagetray']],
+    ['cat <<X | sh\ncontainer stop pagetray\nX', ['pagetray']],
+    ['bash <<< \'container stop pagetray\'', ['pagetray']],
+    ['timeout 60 sh -c \'container volume delete castlist-data-v1\'', ['castlist']],
+    ['timeout 60 /bin/sh -c \'container volume delete castlist-data-v1\'', ['castlist']],
+    ['sudo -u root bash -c \'container stop pagetray\'', ['pagetray']],
+    ['echo \'container stop pagetray\' | sh', ['pagetray']],
+    ['sh <(echo \'container stop pagetray\')', ['pagetray']],
+    ['watch -n 5 \'container stop pagetray\'', ['pagetray']],
+    ['fish -c \'container stop pagetray\'', ['pagetray']],
+    ['env -S \'container stop pagetray\'', ['pagetray']],
+    ['su root -c \'container stop pagetray\'', ['pagetray']],
+    ['trap \'container stop pagetray\' EXIT', ['pagetray']],
+    ['echo \'container stop pagetray\' > /tmp/x.sh && chmod +x /tmp/x.sh && /tmp/x.sh', ['pagetray']],
+    ['echo \'container stop pagetray\' | at now', ['pagetray']],
+    ['git rebase -x \'container stop pagetray\' HEAD~1', ['pagetray']],
+    ['tmux new -d \'container stop pagetray\'', ['pagetray']],
+    ['awk \'BEGIN{system("container stop pagetray")}\'', ['pagetray']],
+    ['ssh host \'container stop pagetray\'', ['pagetray']],
+    // 通す命令でも、頭の代入・前置き・path の付いた名・git の間の旗・書き出しがあれば止める。
+    ['GIT_EDITOR=\'container stop pagetray\' git commit --amend', ['pagetray']],
+    ['git -c core.editor=\'container stop pagetray\' commit', ['pagetray']],
+    ['env FOO=1 roster ask devops --what "container stop pagetray"', ['pagetray']],
+    ['/tmp/roster ask devops --what "container stop pagetray"', ['pagetray']],
+    ['roster file put x --reviewed --name callboard-x.png > log', ['callboard']],
+    ['git commit -m "$(container stop pagetray)"', ['pagetray']],
+    // 命令の置き換えの中は、頭の代入・path を見られないので、通す命令だけでも字の含みで止める（review-15）。
+    ['git commit -m "$(GIT_EDITOR=\'container stop pagetray\' git commit --amend)"', ['pagetray']],
+    ['git commit -m "$(/tmp/grep \'container stop pagetray\')"', ['pagetray']],
+    ['git commit -m "`/tmp/grep \'container stop pagetray\'`"', ['pagetray']],
+    ['roster file put x --reviewed --name callboard-x.png >& log', ['callboard']],
+    ['roster file put x --reviewed --name callboard-x.png &> log', ['callboard']],
+    ['roster file put x --reviewed --name callboard-x.png >&2', []],
+    ['roster file put x --reviewed --name callboard-x.png 2>/dev/null', []],
+  ])('%s', (command, expected) => {
+    expect(hit(command)).toEqual(expected);
+  });
+
+  test('hitsWords: 頭が旗の項目は続けて、頭が旗でない項目は順に（間に何が挟まってもよい）', () => {
+    expect(hitsWords(['container', 'run', '--name', 'x', 'callboard'], '--name callboard')).toBe(false);
+    expect(hitsWords(['container', 'stop', 'x', 'callboard'], 'container stop callboard')).toBe(true);
+    expect(hitsWords(['container', 'callboard', 'stop'], 'container stop callboard')).toBe(false);
+    expect(hitsWords(['a', '-v', 'pagetray-data-v1:/data'], '-v pagetray-data*')).toBe(true);
+    expect(hitsWords(['a', '-v', 'pagetray-data-v1:/data'], '-v pagetray-data')).toBe(false);
   });
 });
 
@@ -152,9 +235,10 @@ describe('道具の直打ち', () => {
     expect(ask('cd /w && gh issue comment 12 --body x', 'software-engineer', undefined, 'github').allow).toBe(false);
   });
 
-  test('共有の環境は、今までどおり字全体で見る（文に書いただけでも止める）', () => {
-    expect(ask('git commit -m "aws s3 rm を足す"', 'software-engineer').allow).toBe(false);
+  test('共有の環境は、字の含みだけの当たりも止める。通すのは、引数の字を動かさない命令（roster・git commit・grep・rg）だけの時', () => {
     expect(ask('echo "$(wmill sync push)"', 'software-engineer').allow).toBe(false);
+    expect(ask('echo "aws s3 rm を足す"', 'software-engineer').allow).toBe(false);
+    expect(ask('git commit -m "aws s3 rm を足す"', 'software-engineer').allow).toBe(true);
   });
 
   test('ROSTER_RAW=1 を付けた直打ちは通すが、環境の手続きには効かない', () => {

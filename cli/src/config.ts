@@ -191,6 +191,9 @@ function infraField(value: unknown, configFile: string): Record<string, InfraEnv
     if (!Array.isArray(match) || match.length === 0 || !match.every(m => typeof m === 'string' && m.trim() !== '')) {
       throw new TpmError(`${configFile} の infra.${name}.match は、空でない文字列の配列にしてください`);
     }
+    // * は語の末尾だけ（前方一致の印。guard.ts の hitsWords）。語の中ほどや、* だけの語は書けない。
+    const star = (match as string[]).find(m => m.trim().split(/\s+/).some(w => w.slice(0, -1).includes('*') || w === '*'));
+    if (star !== undefined) throw new TpmError(`${configFile} の infra.${name}.match の * は、語の末尾にだけ書けます（前方一致の印。* だけの語も書けません）: ${star}`);
     if (e.guard === undefined) throw new TpmError(`${configFile} の infra.${name}.guard がありません（${GUARDS.join('・')}）`);
     infra[name] = { guard: oneOf(e.guard, GUARDS, 'free', `infra.${name}.guard`, configFile), match: match as string[] };
   }
