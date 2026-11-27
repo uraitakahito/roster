@@ -770,6 +770,8 @@ export function judgeWrite(call: WriteCall, role: RoleName | undefined, roots: P
  * 名乗る・外す（SessionStart・SessionEnd）、検査が止めた後に渡す（Bash を使い終えた後。PostToolUse と PostToolUseFailure の両方）、人の入力の時に渡す（UserPromptSubmit）、
  * 手を止めている間に待つ（Stop と SessionStart。背景で動き、exit 2 で session を起こす）。
  * 前の版が付けた、届け違いを見る hook（roster returned check）は付けない（命令は、前の版が起こした席のために残してある。何もしない）。
+ * TPM 担当の席（role を渡さない呼び出し。担当の席は run-role.ts が role を渡す）にだけ、手を止める時に返事の言葉を数える hook（roster reply-language check）を、待つ hook の後ろに付ける（t-jen6）。
+ * `|| true` を付けるのは、cli/bin/roster が node を起こせない時に exit 2 で終わり、待たせる Stop の hook では「止める」と読まれて手を止めるたびに続けさせるため（review-6 の指摘 4）。
  */
 export function guardSettings(tpmBin: string, role?: RoleName): string {
   const hook = (command: string) => ({ type: 'command', command: `${shellQuote(tpmBin)} ${command}` });
@@ -785,7 +787,7 @@ export function guardSettings(tpmBin: string, role?: RoleName): string {
       // Bash を使い終えた後（成功の後・失敗の後の両方）。結果を pipe で切る（… | tail -1）と、検査が止めても命令は「成功」になるため。
       PostToolUse: [{ matcher: 'Bash', hooks: [hook('mail gate')] }],
       PostToolUseFailure: [{ matcher: 'Bash', hooks: [hook('mail gate')] }],
-      Stop: [{ hooks: [waiting] }],
+      Stop: [{ hooks: role === undefined ? [waiting, hook('reply-language check || true')] : [waiting] }],
       UserPromptSubmit: [{ hooks: [hook('mail prompt')] }],
     },
   });

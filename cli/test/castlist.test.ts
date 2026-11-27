@@ -651,6 +651,15 @@ describe('hook の settings', () => {
     expect(h.PreToolUse?.[0]?.hooks.map(x => x.command)).toEqual(['/r/cli/bin/roster guard']);
   });
 
+  test.each<[string, RoleName | undefined, string[]]>([
+    ['TPM 担当', undefined, ['/r/cli/bin/roster mail wait', '/r/cli/bin/roster reply-language check || true']],
+    ['Software Engineer 担当', 'software-engineer', ['/r/cli/bin/roster mail wait']],
+    ['Staff Engineer 担当', 'staff-engineer', ['/r/cli/bin/roster mail wait']],
+    ['Auditor', 'auditor', ['/r/cli/bin/roster mail wait']],
+  ])('%s: 手を止める時の hook（返事の言葉を数えるのは TPM 担当の席だけ）', (_label, role, commands) => {
+    expect(hooks(role).Stop?.flatMap(g => g.hooks.map(x => x.command))).toEqual(commands);
+  });
+
   test('Auditor の席は、始まりに roster audit fresh も呼ぶ', () => {
     expect(hooks('auditor').SessionStart?.flatMap(g => g.hooks.map(x => x.command))).toEqual(['/r/cli/bin/roster audit fresh', '/r/cli/bin/roster castlist session-start', '/r/cli/bin/roster mail claim', '/r/cli/bin/roster mail wait']);
   });
