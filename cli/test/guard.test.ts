@@ -7,7 +7,7 @@ import { guard, infraApprove, infraList, infraRevoke, infraRun } from '../src/co
 import { readRolesConfig, type ConfigSource, type InfraEnv } from '../src/config.ts';
 import { commandOf, guardSettings, judge, hitsWords, judgeWrite, touched, writeOf, type Approval } from '../src/guard.ts';
 import type { RoleName } from '../src/protocol.ts';
-import { splitCommands } from '../src/shell.ts';
+import { splitCommands, SUBSTITUTED } from '../src/shell.ts';
 import { world } from './helpers.ts';
 import { withoutRosterEnv } from '../src/env.ts';
 
@@ -24,7 +24,7 @@ describe('splitCommands', () => {
     expect(splitCommands('a=$(b c) d "`e`"\nbash -c \'f; g\'\ncat <<\'E\'\nh i\nE\nj # k')).toEqual([
       ['b', 'c'],
       ['e'],
-      ['d', ''],
+      ['d', SUBSTITUTED],
       ['f'],
       ['g'],
       ['cat'],
@@ -856,6 +856,9 @@ describe('この repo の設定の、名を書かない命令と container-syste
     'container ls -q | xargs container rm -f',
     'container volume delete --all',
     'container v rm $(container v ls -q)',
+    // 語の途中の置き換え（t-ta2b の review-1 の指摘 1。前は跡を残さず、字の名 pagetray に見えて通った）。
+    'container stop pagetray$(echo .box)',
+    'container stop x`echo y`',
   ])('%s（名を書かない）は、その動詞を持つ環境に当たり、ほかの担当を止める', (command) => {
     expect(judgeOwn(command, 'software-engineer')).toBe(false);
   });
@@ -1021,6 +1024,9 @@ describe('旗の書き方をそろえて読む（t-ta2b。台帳 #300）', () =>
     'container run --rm -v=castlist-data-v1:/data docker.io/library/alpine:3.22 sh',
     'container run --rm -vcastlist-data-v1:/data docker.io/library/alpine:3.22 sh',
     'container run --rm -dv castlist-data-v1:/data docker.io/library/alpine:3.22 sh',
+    'container run --rm -dvcastlist-data-v1:/data docker.io/library/alpine:3.22 sh',
+    // = は最初の 1 つで割る（review-1 の指摘 6）。
+    'container run --rm -v=castlist-data-v1:/data:ro docker.io/library/alpine:3.22 sh',
     // (4) 名・volume を変数・置き換えで渡す（同じ行の代入は読まない）。
     'container run -d --name "$N" ghcr.io/uraitakahito/castlist:v2.0.0',
     'container run -d --name="$N" ghcr.io/uraitakahito/castlist:v2.0.0',
@@ -1033,6 +1039,22 @@ describe('旗の書き方をそろえて読む（t-ta2b。台帳 #300）', () =>
     'container run --rm --volume="castlist-$S:/data" docker.io/library/alpine:3.22 sh',
     'container run --rm --mount "type=volume,source=$V,target=/data" docker.io/library/alpine:3.22 sh',
     'container run --rm --mount "$M" docker.io/library/alpine:3.22 sh',
+    // 語の途中の置き換え（review-1 の指摘 1）。
+    'container run --rm -v "$(cat f)":/data docker.io/library/alpine:3.22 sh',
+    'container run -d --name "$(echo castlist).box" ghcr.io/uraitakahito/castlist:v2.0.0',
+    'container run --rm -v `cat f`:/data docker.io/library/alpine:3.22 sh',
+    // 字の頭が項目の頭より短い（review-1 の指摘 5）。
+    'container run --rm -v cast"$X":/data docker.io/library/alpine:3.22 sh',
+    // xargs・find の置き場と、値の無い旗（review-1 の指摘 2）。
+    'echo castlist.box | xargs -I{} container run -d --name {} ghcr.io/uraitakahito/castlist:v2.0.0',
+    'echo castlist.box | xargs -I % container run -d --name % ghcr.io/uraitakahito/castlist:v2.0.0',
+    'echo castlist.box | xargs container run -d --name',
+    'find . -name x -exec container run --rm -v {}:/data docker.io/library/alpine:3.22 sh \\;',
+    // brace の展開（review-1 の指摘 8）。
+    'container run -d --name=castlist.{box,box} ghcr.io/uraitakahito/castlist:v2.0.0',
+    // 同じ行で path の変数を替える（review-1 の指摘 4）。
+    'HOME=castlist-data-v1; container run --rm -v "$HOME":/data docker.io/library/alpine:3.22 sh',
+    'export PWD=castlist-data-v1 && container run --rm -v "${PWD}:/data" docker.io/library/alpine:3.22 sh',
     // 前置き・path の付いた名・sh -c の中。
     'timeout 60 /opt/homebrew/bin/container run --rm --volume=castlist-data-v1:/data docker.io/library/alpine:3.22 sh',
     'sh -c \'container run --rm -v=castlist-data-v1:/data docker.io/library/alpine:3.22 sh\'',
@@ -1040,6 +1062,8 @@ describe('旗の書き方をそろえて読む（t-ta2b。台帳 #300）', () =>
     'bash <<\'X\'\ncontainer run --rm --volume=castlist-data-v1:/data docker.io/library/alpine:3.22 sh\nX',
     'ssh host \'container run --rm --mount type=volume,source=castlist-data-v1,target=/data docker.io/library/alpine:3.22 sh\'',
     'ssh host \'container run -d --name "$N" ghcr.io/uraitakahito/castlist:v2.0.0\'',
+    // 字の含みは、そろえる前の項目の字のまま（container の語の無い包みも、今までどおり止まる。review-1 の指摘 7）。
+    './up.sh --name=castlist.box',
   ];
   // 関わりの無い命令・読むだけの命令・文と検索。
   const castlistPasses = [
@@ -1051,7 +1075,17 @@ describe('旗の書き方をそろえて読む（t-ta2b。台帳 #300）', () =>
     'container run --rm -v "${TMPDIR}x:/x" docker.io/library/alpine:3.22 sh',
     'container run --rm -v /tmp/x:/x docker.io/library/alpine:3.22 sh',
     'container run --rm --name "test-$N" docker.io/library/alpine:3.22 sh',
+    // 字の頭も終わりも読む（"$N"x は、字の分け方が引用の切れ目を持たないので $Nx の 1 つの変数に読み、止まる側に倒れる）。
+    'container run --rm --name "${N}-test" docker.io/library/alpine:3.22 sh',
     'container run --rm -e "X=$Y" --name mytest docker.io/library/alpine:3.22 sh',
+    // source の無い字の mount（tmpfs・名の無い volume。review-1 の指摘 3）。
+    'container run --rm --mount type=tmpfs,target=/x docker.io/library/alpine:3.22 sh',
+    // container の中で動かす命令の旗（review-1 の指摘 9）と、-- の後ろ。
+    'container exec mytest tar -xzv castlist-data-v1.tgz',
+    'container exec mytest tar -xzvf castlist-data-v1.tgz',
+    'container run --rm docker.io/library/alpine:3.22 -- tar -xzv castlist-data-v1.tgz',
+    // 置き換えで名を出しても、字で書いた所が合わなければ通す。
+    'container run --rm --name "test-$(date +%s)" docker.io/library/alpine:3.22 sh',
     'container volume inspect castlist-data-v1',
     'container logs castlist.box',
     'container inspect castlist.box',
@@ -1077,7 +1111,8 @@ describe('旗の書き方をそろえて読む（t-ta2b。台帳 #300）', () =>
 
   describe.skipIf(!hasSibling('pagetray'))('pagetray の repo の宣言（TPM に相談。隣の repo の本体の checkout が無い時は飛ぶ）', () => {
     const judgePagetray = allowIn(readRolesConfig(sibling('pagetray')).infra);
-    const toPagetray = (command: string): string => command.replaceAll('castlist-data-v1', 'pagetray-data-v1').replaceAll('castlist.box', 'pagetray.box').replaceAll('castlist-$S', 'pagetray-$S').replaceAll('ghcr.io/uraitakahito/castlist:v2.0.0', 'ghcr.io/uraitakahito/pagetray:v1.2.0');
+    const toPagetray = (command: string): string => command.replaceAll('castlist-data-v1', 'pagetray-data-v1').replaceAll('castlist.box', 'pagetray.box').replaceAll('castlist.{', 'pagetray.{')
+      .replaceAll('castlist-$S', 'pagetray-$S').replaceAll('cast"$X"', 'page"$X"').replaceAll('ghcr.io/uraitakahito/castlist:v2.0.0', 'ghcr.io/uraitakahito/pagetray:v1.2.0');
     test.each(castlistStops.map(toPagetray))('%s は、ほかの担当を止め、DevOps Engineer 担当は通す', (command) => {
       expect(judgePagetray(command, 'software-engineer')).toBe(false);
       expect(judgePagetray(command, 'devops-engineer')).toBe(true);

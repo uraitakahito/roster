@@ -13,6 +13,15 @@ const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh']);
 /** 変数への代入（FOO=1）。 */
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 
+/**
+ * 命令の置き換え（`$(…)`・backtick）の跡に、語の中に残す印（値の分からない所）。語の途中の置き換え（`"$(cat f)":/data`・`x$(echo y)`）も、
+ * 字で書いた語と見分けられるようにする（t-ta2b の review-1 の指摘 1。前は跡を残さず、`:/data`・`x` の字の語に見えた）。人に見せる時は shownWord で字に戻す。
+ */
+export const SUBSTITUTED = '\u0000';
+
+/** 語を、人に見せる字にする（置き換えの跡の印を `$(…)` に戻す）。 */
+export const shownWord = (word: string): string => word.replaceAll(SUBSTITUTED, '$(…)');
+
 /** 字の命令を読む途中の位置と、出てきた単純な命令（語の並び）。 */
 class Lexer {
   private i = 0;
@@ -110,7 +119,7 @@ class Lexer {
     this.add(text);
   }
 
-  /** $( の後ろ（start）から、対の ) までを命令として読む。返すのは語に足す字（中身は語にしない）。 */
+  /** $( の後ろ（start）から、対の ) までを命令として読む。返すのは語に足す字（中身は語にしない。跡の印 SUBSTITUTED）。 */
   private substitution(start: number): string {
     const s = this.src;
     let depth = 1;
@@ -130,16 +139,16 @@ class Lexer {
     const inner = s.slice(start, depth === 0 ? j - 1 : j);
     this.commands.push(...splitCommands(inner));
     this.i = j;
-    return '';
+    return SUBSTITUTED;
   }
 
-  /** `…` を命令として読む。 */
+  /** `…` を命令として読む。返すのは跡の印 SUBSTITUTED。 */
   private backtick(): string {
     const s = this.src;
     const end = s.indexOf('`', this.i + 1);
     this.commands.push(...splitCommands(s.slice(this.i + 1, end === -1 ? s.length : end)));
     this.i = end === -1 ? s.length : end + 1;
-    return '';
+    return SUBSTITUTED;
   }
 
   /** `<`・`>`・`>>`・`>&`・`<<`（here-document）・`<<<`（here-string）。次の語は redirect の先なので命令の語にしない。 */
@@ -219,7 +228,8 @@ function head(words: string[]): string[][] {
   }
   const rest = words.slice(k);
   const name = rest[0]?.split('/').at(-1);
-  if (name === undefined || name === '') return [];
+  // 命令の名が置き換えだけの語（`$(…) args`）は、名を読めないので命令に数えない（前からの形）。
+  if (name === undefined || name.replaceAll(SUBSTITUTED, '') === '') return [];
   if (name === 'eval') return splitCommands(rest.slice(1).join(' '));
   if (SHELLS.has(name)) {
     const c = rest.findIndex(w => /^-[a-z]*c[a-z]*$/.test(w));

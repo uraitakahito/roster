@@ -15,7 +15,7 @@ import { existsSync, realpathSync } from 'node:fs';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { envLabel, type InfraEnv, type RolesConfig } from './config.ts';
 import type { RoleName } from './protocol.ts';
-import { rawCommands, shellQuote, splitCommands } from './shell.ts';
+import { rawCommands, shellQuote, shownWord, splitCommands, SUBSTITUTED } from './shell.ts';
 import type { State } from './state.ts';
 
 /** 環境を変えてよい担当。 */
@@ -280,7 +280,7 @@ const TARGET_VALUE_FLAGS = new Set(['-s', '--signal', '-t', '--time']);
 /**
  * 動詞の後ろの引数が、名を書かずに的を選ぶ形か（t-9tac）。通す形を数える（killsByPattern と同じく、疑わしければ止める。review-1 の指摘 1）:
  * 的（旗と、値を取る旗の値を除いた語）が 1 つ以上あり、どれも字で書いた名（WRITTEN_NAME）で、`--all` が無い時だけ通す。
- * 的が無い（xargs で渡す・`-a` だけ）・置き換えの跡（空の語）・変数・glob・`{}`・`%` は当てる。help（`-h`・`--help`）は何も変えないので当てない。
+ * 的が無い（xargs で渡す・`-a` だけ）・置き換えの跡（SUBSTITUTED の印。語の途中の `x$(echo y)` も）・変数・glob・`{}`・`%` は当てる。help（`-h`・`--help`）は何も変えないので当てない。
  * `-a` は名を書いた的と並ぶ時は当てない（container start の `-a` は attach）。stop・rm などで名と `-a`・`--all` を一緒に渡すと、
  * container（1.7.1）が「explicitly supplied container ID(s) conflict with the --all flag」で断るので、害は無い（review-2 の指摘 3）。
  */
@@ -299,16 +299,26 @@ function unnamedTarget(args: string[]): boolean {
 /** container の命令の、名か volume を値に取る旗（normalizeFlags でそろえた後の形）。 */
 const VALUE_FLAGS = new Set(['--name', '-v']);
 
-/** --mount の値（`type=volume,source=<>,target=<>`）の source（src）の値。無ければ undefined。 */
+/**
+ * 値の分からない所: 変数（`$N`・`${N}`・`$1`・`$@`・裸の `$`）・命令の置き換えの跡（SUBSTITUTED）・glob の字（`*`・`?`）・
+ * xargs と find の置き場の字と brace の展開（`{}`・`{a,b}`・`{1..3}`）・xargs -I の置き場によく使う `%`。
+ */
+const UNKNOWN = new RegExp(`\\$\\{[^}]*\\}|\\$[A-Za-z_][A-Za-z0-9_]*|\\$[0-9@*#?$!-]?|[*?%${SUBSTITUTED}]|\\{[^}]*\\}`);
+
+/**
+ * --mount の値（`type=volume,source=<>,target=<>`。key の順に依らない）の source（src）の値。
+ * source が無く、値に値の分からない所があれば値そのもの（`--mount "$M"`）。字で書いて source が無ければ undefined（tmpfs・名の無い volume。review-1 の指摘 3）。
+ */
 const mountSource = (spec: string): string | undefined =>
-  spec.split(',').map(part => /^(?:source|src)=(.*)$/s.exec(part)?.[1]).find(source => source !== undefined);
+  spec.split(',').map(part => /^(?:source|src)=(.*)$/s.exec(part)?.[1]).find(source => source !== undefined) ?? (UNKNOWN.test(spec) ? spec : undefined);
 
 /**
  * container の命令の旗を、1 つの形にそろえる（t-ta2b。台帳 #300）。宣言の項目の語も同じ関数でそろえるので、項目は書き方ごとに並べなくてよい:
- * - 長い旗の = を割る（`--name=x` → `--name x`）。
+ * - 長い旗の = を、最初の 1 つで割る（`--name=x` → `--name x`。`--mount=type=volume,…` → `--mount type=volume,…`）。
  * - volume の長い旗を短い旗に（`--volume` → `-v`）。
- * - -v の値の付け方をそろえる（`-v=x`・`-vx` → `-v x`。束ねた短い旗 `-dv x` → `-d -v x`）。
- * - --mount の source（src）を、volume の旗の値と読む（`--mount type=volume,source=x,target=/d` → `-v x`。source が無ければ値をそのまま）。
+ * - 短い旗を束ねた語（`-v`・`-dv`・`-vx`・`-v=x`・`-dvx`）に v があれば、getopt のように読む: v より前の字は旗のまま、
+ *   v より後ろの字があれば -v の値（頭の = は除く）、無ければ次の語が値（`-dvx` → `-d -v x`）。
+ * - --mount の source（src）を、volume の旗の値と読む（`--mount type=volume,source=x,target=/d` → `-v x`。mountSource が無ければ、そのまま）。
  * container の旗の読み方で通らない書き方もそろえる（止めても、通らない命令が止まるだけ）。
  */
 export function normalizeFlags(words: string[]): string[] {
@@ -316,7 +326,6 @@ export function normalizeFlags(words: string[]): string[] {
   for (let i = 0; i < words.length; i += 1) {
     const word = words[i] ?? '';
     const long = /^(--[A-Za-z][\w-]*)=(.*)$/s.exec(word);
-    // -v で始まるか、v で終わる束ねた短い旗（v の前の字に v は無い）。v の後ろの字は、-v の値。
     const short = long === null ? /^-([A-Za-uw-z]*)v(.*)$/s.exec(word) : null;
     let flag = long?.[1] ?? word;
     let value = long?.[2];
@@ -328,8 +337,9 @@ export function normalizeFlags(words: string[]): string[] {
     if (flag === '--volume') flag = '-v';
     if (flag === '--mount') {
       const spec = value ?? words[i + 1];
-      if (value === undefined) i += 1;
-      out.push(...(spec === undefined ? [flag] : ['-v', mountSource(spec) ?? spec]));
+      const source = spec === undefined ? undefined : mountSource(spec);
+      if (value === undefined && spec !== undefined) i += 1;
+      out.push(...(source !== undefined ? ['-v', source] : [flag, ...(spec === undefined ? [] : [spec])]));
       continue;
     }
     out.push(flag, ...(value === undefined ? [] : [value]));
@@ -337,27 +347,46 @@ export function normalizeFlags(words: string[]): string[] {
   return out;
 }
 
-/** 単純な命令が container の命令（どこかの語の名が container。`timeout 60 /opt/homebrew/bin/container …` も）なら、その語より後ろの旗をそろえた語。違えば undefined。 */
+/**
+ * 単純な命令が container の命令（どこかの語の名が container。`timeout 60 /opt/homebrew/bin/container …` も）なら、その語より後ろの旗をそろえた語。違えば undefined。
+ * `--` より後ろと、`container exec`（名と volume の旗を持たない。後ろは container の中で動かす命令の語）の後ろはそろえない
+ * （`container exec x tar -xzv castlist-data-v1.tgz` の -xzv を -v と読まない。review-1 の指摘 9）。
+ */
 function containerWords(words: string[]): string[] | undefined {
   const at = words.findIndex(word => word.split('/').at(-1) === 'container');
-  return at === -1 ? undefined : [...words.slice(0, at + 1), ...normalizeFlags(words.slice(at + 1))];
+  if (at === -1) return undefined;
+  const rest = words.slice(at + 1);
+  if (rest.find(word => !word.startsWith('-')) === 'exec') return words;
+  const end = rest.includes('--') ? rest.indexOf('--') : rest.length;
+  return [...words.slice(0, at + 1), ...normalizeFlags(rest.slice(0, end)), ...rest.slice(end)];
 }
 
 /** 命令の字を、粗く語に割る（字の含みの当たりで、here-document・`ssh host '…'` の中の container の命令の旗を読むため）。 */
 const textWords = (command: string): string[] => command.split(/[\s'"`;&|()<>\\]+/).filter(word => word !== '');
 
 /** いつも絶対の path に広がる変数（`-v "$PWD:/w"` は bind で、volume の名ではない）。 */
-const PATH_VARIABLES = /\$(?:\{(?:HOME|PWD|OLDPWD|TMPDIR)\}|(?:HOME|PWD|OLDPWD|TMPDIR)\b)/g;
-/** 値の分からない所: 変数（`$N`・`${N}`・`$1`・`$@`・裸の `$`）と glob の字。 */
-const UNKNOWN = /\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*|\$[0-9@*#?$!-]?|[*?]/;
+const PATH_NAMES = ['HOME', 'PWD', 'OLDPWD', 'TMPDIR'];
 
 /**
- * 旗の値の語が値の分からない所（変数・置き換えの跡の空の語・glob）を持ち、その所を何でも当たるとみなすと、項目の値（`castlist.box`・`castlist-data*`）に当たるか。
- * 字で書いた所は読む（`test-$N` は castlist.box にならない）。値の分からない所が無い語は false（今までの当て方に任せる）。
+ * 命令の字の中で、絶対の path と読んでよい変数を `/` に替える関数。名が `$` の後ろ以外に出る変数（`HOME=x`・`export HOME`・`read HOME`・`for HOME in`）は、
+ * 同じ行で値を替えうるので、path と読まない（値の分からない所のまま。同じ行の代入を読まない決めと揃える。review-1 の指摘 4）。
+ */
+function pathReader(command: string): (word: string) => string {
+  const names = PATH_NAMES.filter(name => !new RegExp(`(?<![\\w\${])${name}(?!\\w)`).test(command));
+  if (names.length === 0) return word => word;
+  const variables = new RegExp(`\\$(?:\\{(?:${names.join('|')})\\}|(?:${names.join('|')})(?!\\w))`, 'g');
+  return word => word.replace(variables, '/');
+}
+
+/**
+ * 旗の値の語が値の分からない所（UNKNOWN）を持ち、その所を何でも当たるとみなすと、項目の値（`castlist.box`・`castlist-data*`）に当たるか。
+ * 字で書いた所は読む。値の分からない所が無い語は false（今までの当て方に任せる）。比べ方:
+ * - 末尾 * の項目（前方一致）: 語の初めの値の分からない所より前の字を p、項目の * の前の字を q として、p が q で始まるか、q が p で始まれば当たる
+ *   （`cast"$X":/data`・`"$V":/data` は castlist-data* に当たる）。
+ * - * の無い項目: 語の値の分からない所を `.*` にした型を、項目の字に丸ごと当てる（`"${N}.box"` は castlist.box に当たり、`test-$N`・`"$N"x` は当たらない）。
  */
 function unknownValueHits(pattern: string, word: string): boolean {
-  const text = word.replace(PATH_VARIABLES, '/');
-  const literals = text === '' ? ['', ''] : text.split(UNKNOWN);
+  const literals = word.split(UNKNOWN);
   if (literals.length === 1) return false;
   if (pattern.endsWith('*')) {
     const prefix = bareName(pattern);
@@ -409,9 +438,11 @@ function touchOf(command: string, env: InfraEnv): Touch | undefined {
     return args !== undefined && unnamedTarget(args);
   });
   if (verbs.some(unnamed)) return 'unnamed';
+  // 旗が語の終わりにあり値が無い（`… | xargs container run -d --name`。値は後ろから足される）時も、値の分からない語とみなす（review-1 の指摘 2）。
+  const readPaths = pathReader(command);
   const variable = ([flag, value, ...rest]: string[]): boolean =>
     flag !== undefined && value !== undefined && rest.length === 0 && VALUE_FLAGS.has(flag)
-    && containers.some(words => words.some((word, i) => word === flag && i + 1 < words.length && unknownValueHits(value, words[i + 1] ?? '')));
+    && containers.some(words => words.some((word, i) => word === flag && unknownValueHits(value, readPaths(words[i + 1] ?? SUBSTITUTED))));
   return items.some(variable) ? 'variable' : undefined;
 }
 
@@ -456,13 +487,13 @@ export function judge(asked: Asked): Verdict {
   }
   const killer = commands.find(killsByPattern);
   if (killer !== undefined) {
-    return { allow: false, reason: `pattern で選んで process に合図を送る命令は止めます（${killer.filter(w => w !== '').slice(0, 3).join(' ')}）。思わぬ process に届くため（macOS の pkill は後ろの旗も pattern に読み、2026-11-23 の朝（JST）に担当の session ごと 29 個を止めた）。pgrep -fl '<型>' で pid と command line を見て、当たった数を確かめてから、その数字を kill <pid> に書いてください（pgrep の出力を変数や $(…) で kill に渡すと、見る手が抜けます）。` };
+    return { allow: false, reason: `pattern で選んで process に合図を送る命令は止めます（${killer.filter(w => w !== SUBSTITUTED).slice(0, 3).map(shownWord).join(' ')}）。思わぬ process に届くため（macOS の pkill は後ろの旗も pattern に読み、2026-11-23 の朝（JST）に担当の session ごと 29 個を止めた）。pgrep -fl '<型>' で pid と command line を見て、当たった数を確かめてから、その数字を kill <pid> に書いてください（pgrep の出力を変数や $(…) で kill に渡すと、見る手が抜けます）。` };
   }
   const reader = readOnly(asked.role);
   if (reader !== undefined) {
     const change = commands.find(changesRepo);
     if (change !== undefined) {
-      return { allow: false, reason: `${reader.name}は repo を変えません（${change.slice(0, 3).join(' ')}）。${reader.instead}` };
+      return { allow: false, reason: `${reader.name}は repo を変えません（${change.slice(0, 3).map(shownWord).join(' ')}）。${reader.instead}` };
     }
   }
   if (!asked.command.includes(RAW)) {
