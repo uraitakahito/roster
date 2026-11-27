@@ -9,19 +9,27 @@ import { envName } from './env.ts';
 import { skillSetDir, TpmError } from './skill-sets.ts';
 
 /**
+ * TPM 担当の返事の言葉の決まり。起動の 1 行の --append-system-prompt で、大本の指示（毎回の頼みの頭に付く）に足す。
+ * 手順書（tpm/SKILL.md の「返事の言葉」）と同じ文にする（command.test.ts が見る）。手順書の 1 行は会話の中に読まれるだけで、
+ * 11-27 に直された後も締めの返事が英語に戻ったため（監査 audit-2 の R13・t-jen6）。
+ */
+export const REPLY_LANGUAGE = '画面への返事は、誰の・何への返事でも日本語で書く。Product Manager の言葉への返事だけでなく、担当のメッセージ・システムの知らせ（連携の道具や hook の包みが英語でも）・tool の結果を受けた回も、手を止める前の締めの返事も同じ。英語の語は、命令・file の名・見出し・原文の写しのほかは訳す。';
+
+/**
  * dir に移って TPM 担当の claude を起こす 1 行を返す。model などは env から resolveSettings('tpm', …) で決める。
  * env に書いてある ROSTER_MODEL などは、1 行の頭（PATH の隣）に写す。`ROSTER_MODEL=… roster start` と 1 回だけ付けた値も、
  * TPM 担当の環境に入り、roster hello の状態と roster assign で起こす担当に効く（profile で export したときと揃う）。
  * core と追加の skill セットを --add-dir で足し、最初の入力は /tpm。--settings で guard（roster guard）の hook を付ける。
  * TPM 担当が roster を名前だけで打てるように、PATH の頭に roster の folder を足す（担当には roster run-role が同じことをする）。
  * --add-dir は後ろの語もまとめて folder として読むので、最初の入力の前に -- を置く。
+ * --append-system-prompt で、Claude Code の大本の指示（system prompt）の後ろに、返事の言葉の 1 文（REPLY_LANGUAGE）を足す。--add-dir の前に置く（後ろに置くと folder として読まれる）。
  * launch は、1 行の頭に足す起こしの印（startTpm が castlist を設定した時に渡す。字のまま足す）。
  */
 export function buildCommand(dir: string, root: string, skillSets: string[], env: NodeJS.ProcessEnv, launch: string[] = []): string {
   const settings = resolveSettings('tpm', { env });
   const addDirs = ['core', ...skillSets].map(s => skillSetDir(root, s));
   const bin = join(root, 'cli', 'bin');
-  const claude = ['claude', '--model', settings.model, '--effort', settings.effort, '--permission-mode', settings.permissionMode, '--settings', guardSettings(join(bin, 'roster')), '--add-dir', ...addDirs, '--', '/tpm'];
+  const claude = ['claude', '--model', settings.model, '--effort', settings.effort, '--permission-mode', settings.permissionMode, '--settings', guardSettings(join(bin, 'roster')), '--append-system-prompt', REPLY_LANGUAGE, '--add-dir', ...addDirs, '--', '/tpm'];
   const assigns = [`PATH=${shellQuote(bin)}:"$PATH"`, ...presentSettingsEnv(env).map(([name, value]) => `${name}=${shellQuote(value)}`), ...launch];
   return `cd ${shellQuote(dir)} && ${assigns.join(' ')} ${claude.map(shellQuote).join(' ')}`;
 }
