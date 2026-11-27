@@ -54,6 +54,8 @@
       "guard": "tpm",
       "match": [
         "--name roster-nats",
+        // 名を = で繋ぐ形（--name=…）。語も字も、空白で繋ぐ形の項目とは別なので、並べて置く（pagetray と同じ形。t-vp6r・台帳 #291）。
+        "--name=roster-nats",
         "container start roster-nats",
         "container stop roster-nats",
         "container kill roster-nats",
@@ -66,6 +68,9 @@
         "container volume delete roster-nats-data*",
         "container volume rm roster-nats-data*",
         "-v roster-nats-data*",
+        // volume を付ける旗の、長い形（--volume …）。
+        "--volume roster-nats-data",
+        "--volume roster-nats-data*",
         "container v delete roster-nats-data*",
         "container v rm roster-nats-data*",
       ],
@@ -79,6 +84,8 @@
       "guard": "tpm",
       "match": [
         "--name buildkit",
+        // 名を = で繋ぐ形（pagetray と同じ。t-vp6r・台帳 #291）。builder は名を付けた volume を宣言しないので、--volume の項目は無い。
+        "--name=buildkit",
         "container builder start",
         "container builder stop",
         "container builder delete",
