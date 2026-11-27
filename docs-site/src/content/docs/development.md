@@ -74,6 +74,14 @@ build は無い。`cli/bin/roster` は `cli/src/cli.ts` を node で直に動か
 
 - **合わせる版**: 版は 3 か所にある。つなぎの試験が起こす image は `.castlist-version`（`.pagetray-version` と同じ `v<版>@<image の digest>` の形）、castlist が止まっていて container も無い時に Product Manager へ出す `container run` の 1 行は `cli/src/castlist.ts` の `CASTLIST_VERSION`（image の版）と `CASTLIST_VOLUME`（volume。今は `castlist-data-v1`）、client を作る定義は `cli/gen/gen.sh` の `DEFS` の castlist の行の tag（今はどれも `v1.0.0`）。`CASTLIST_VERSION` が古いままだと、古い image を起こす 1 行を出してしまう。
 - **castlist を上げる時**: castlist で release を出す（castlist の docs の「[release を出す](https://uraitakahito.github.io/castlist/release.html)」）→ この repo で `.castlist-version`・`CASTLIST_VERSION` と、それを名指す試験（`cli/test/castlist.test.ts` の `expect(CASTLIST_VERSION).toBe(…)`）を新しい版にする PR を出す。定義が替わった版なら、同じ PR で `DEFS` の castlist の行（tag と SHA-256）を替えて client を作り直し、偽の castlist（`/healthz` の `version` も）と `cli/src/castlist.ts`・`cli/src/castlist-query.ts` を合わせる。
+## callboard（画面のサーバー）とのつなぎ
+
+castlist と pagetray の画面をまとめるサーバー（Rust）は、別の repo [callboard](https://github.com/uraitakahito/callboard) にある（[callboard の docs](https://uraitakahito.github.io/callboard/)）。この repo の cli は callboard を呼ばない（callboard は、人が browser で見る画面だけを持つ）。この repo が持つのは、起こす版と、[運用](/operations/#画面のサーバーcallboard)の手引きだけ。
+
+- **合わせる版**: `.callboard-version` に、起こす callboard の版を `v<版>@<image の digest>` の形で書く（digest は callboard の release にある。今は `v0.1.0`）。DevOps Engineer 担当は、この版で起こす。この file を読む試験は無い（callboard を相手にしたつなぎの試験は、この repo に無い。callboard の側が、出した版の castlist と pagetray を相手に試験を流す）。
+- **callboard を上げる時**: callboard で release を出す（callboard の docs の「[release を出す](https://uraitakahito.github.io/callboard/release.html)」）→ この repo で `.callboard-version` を新しい版と digest にする PR を出す → [運用](/operations/#画面のサーバーcallboard)の「版を上げる」で container を作り直す。castlist・pagetray の版も上がる時は、`.castlist-version`・`.pagetray-version` の PR と起こし直しを先に済ませる。
+- **画面の URL**: 担当に渡す画面の URL（castlist のプロフィールの `http://127.0.0.1:8802/actors/<id>`・置き場の一覧の `http://127.0.0.1:8801/` など）は、まだ castlist と pagetray の画面を指す。callboard に画面を移し終え、castlist・pagetray の画面を外す時に、この repo の cli・docs・skill の URL を callboard の物に替える（AI-32 の後の段）。
+
 ## NATS JetStream（メッセージキュー）とのつなぎ
 
 担当どうしのメッセージを預かって配る段取り（取り置き・渡せたの確かめ・渡し直し・上限・期限）は、自前で作らず、[NATS](https://nats.io/) の JetStream に任せる。roster が持つのは、それを包む「配りの口」（`cli/src/mailroom/types.ts` の `Mailroom`）と、NATS の言葉（stream・consumer）に写す adapter（`cli/src/mailroom/nats.ts`。公式の client `@nats-io/transport-node`・`@nats-io/jetstream` を使う）。担当どうしのメッセージは、いつもこの口を通る（連携の道具の cmux は運ばない。設定の `messages` は `nats` だけを受け、`cmux` は誤り。`cli/src/config.ts` の `messagesField`）。

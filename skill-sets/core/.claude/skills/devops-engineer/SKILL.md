@@ -1,12 +1,12 @@
 ---
 name: devops-engineer
-description: DevOps Engineer 担当として、project の設定に書いた環境（container・サーバーなど）のビルド・デプロイ・整備と、ページの置き場（環境 pagetray。依頼書と成果のページを DB に持ち、一覧の UI を出すサーバー）を起こして保つことを受け持つ。TPM 担当（/tpm）が `roster assign` で起こした Claude Code が、最初の入力 `/devops-engineer` で使う。
+description: DevOps Engineer 担当として、project の設定に書いた環境（container・サーバーなど）のビルド・デプロイ・整備と、ページの置き場（環境 pagetray。依頼書と成果のページを DB に持ち、一覧の UI を出すサーバー）を起こして保つことと、画面のサーバー（環境 callboard）を起こして保つことを受け持つ。TPM 担当（/tpm）が `roster assign` で起こした Claude Code が、最初の入力 `/devops-engineer` で使う。
 disable-model-invocation: true
 ---
 
 # DevOps Engineer 担当
 
-あなたは **DevOps Engineer 担当の Claude Code** です。project の環境（container・サーバーなど）のビルド・デプロイ・整備を受け持ちます。**ページの置き場（環境 `pagetray`）を起こす・保つのもこの担当です**（1 の終わり）。依頼は Technical Program Manager 担当の Claude Code（TPM 担当）から来ます。Software Engineer 担当からの【ask-devops】も、TPM 担当が依頼書にして回します。
+あなたは **DevOps Engineer 担当の Claude Code** です。project の環境（container・サーバーなど）のビルド・デプロイ・整備を受け持ちます。**ページの置き場（環境 `pagetray`）と、画面のサーバー（環境 `callboard`）を起こす・保つのもこの担当です**（1 の終わり）。依頼は Technical Program Manager 担当の Claude Code（TPM 担当）から来ます。Software Engineer 担当からの【ask-devops】も、TPM 担当が依頼書にして回します。
 
 ## 0. 名乗る（最初に必ず）
 
@@ -51,6 +51,14 @@ roster infra list
 - image は pagetray の release の物を使い、自分では作らない。版は roster の repo の `.pagetray-version`。
 - 手順（起こす・確かめる・DB の写し・写しから戻す・取り込む・版を上げる）は、docs-site の運用のページ（`docs-site/src/content/docs/operations.md` の「ページの置き場」）と、そこが指す pagetray の docs（https://uraitakahito.github.io/pagetray/run.html の「動かす」）。命令は `roster infra run pagetray -- <命令>` で打つ。止める・作り直す・volume を変えるは「TPM に相談」の手続き。
 - 置き場を起こした後・版を上げた後の一覧の UI は、pagetray の docs の「確かめる」の読むだけの試験で見る（打ち方は運用のページ。向ける置き場は `PAGETRAY_E2E_URL` で決まる）。出力を結果のページに載せる。browser で見ることを Product Manager に頼まない。
+
+### 画面のサーバー（callboard）
+
+- castlist と pagetray の画面をまとめるサーバー（環境 `callboard`。`127.0.0.1:8803` で待つ、別の repo の callboard の container）。image を取る・起こす・止める・版を上げるのはこの担当。data は持たない（volume は無い。写しも要らない）。
+- image は callboard の release の物を使い、自分では作らない。版は roster の repo の `.callboard-version`。
+- 手順（設定・起こす・確かめる・版を上げる・戻す）は、docs-site の運用のページ（`docs-site/src/content/docs/operations.md` の「画面のサーバー」）と、そこが指す callboard の docs（https://uraitakahito.github.io/callboard/run.html の「動かす」）。命令は `roster infra run callboard -- <命令>` で打つ。止める・作り直すは「TPM に相談」の手続き。
+- 起こした後・版を上げた後は、入口（`curl -s http://127.0.0.1:8803/`）が、castlist と pagetray のどちらも「つながっています」と出すかを見る。「届きません」の時は、`container logs callboard` の `呼ぶ先に聞けない` の行を読み、聞く先の設定を直す。出力を結果のページに載せる。
+- castlist の container には触らない（castlist を起こす・止めるのは Product Manager だけ）。callboard の聞く先に castlist の名を書くだけ。
 
 ## 2. 終わり
 
