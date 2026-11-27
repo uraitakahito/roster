@@ -73,6 +73,13 @@ export function patchReview(ctx: Context, n: number, fields: Partial<Omit<Review
 /** その課題の、まだ判定が返っていない頼み。 */
 export const openReviews = (ctx: Context, key: string): Review[] => readReviews(ctx).filter(r => r.key === key && r.verdict === undefined);
 
+/**
+ * その Tech Lead 担当が返していない、repo の席の頼み（依頼書にした物）。頼みの lead の欄で引くので、頼んだ席を閉じた後も、
+ * Tech Lead 担当を起こし直した後も引ける（【ask-review】は起こした回の受け箱へ届くので、起こし直した席は受け取らない）。
+ */
+export const leadReviews = (ctx: Context, lead: string): Review[] =>
+  readReviews(ctx).filter(r => r.verdict === undefined && r.brief !== undefined && r.reviewer === 'tech-lead' && r.lead === lead);
+
 /** 置き場のページの種類（file の名の頭）を、題に書く名にする。無い種類は file の名だけ。 */
 const KIND_NAMES: Record<string, string> = { plan: '計画', proposal: '提案', result: '結果' };
 /** 説明に出す見てほしい所の字の数の上限（サイドバーで切れないように）。 */

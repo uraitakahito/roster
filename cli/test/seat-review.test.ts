@@ -101,6 +101,55 @@ describe('Tech Lead 担当の roster report review', () => {
     await expect(reportReview(w.lead, { url: await w.put(w.lead, 'review'), verdict: 'approve', summary: 'x' })).rejects.toThrow(/返していないレビューの頼みがありません/);
   });
 
+  test.each([
+    ['起こしの id が無い（受け箱は Key だけ）', false],
+    // castlist を設定した実の形。受け箱は起こした回ごとに分かれ、前の回に届いた【ask-review】は新しい席の受け箱に無い。
+    ['起こしの id がある（受け箱が起こした回ごと）', true],
+  ])('起こし直した Tech Lead 担当は、前の席に届いた頼みを hello で受け取り、新しい席から返せる（t-7j37。%s）', async (_, launched) => {
+    const w = await split();
+    const launch = (ctx: Context, id: string): Context => {
+      if (!launched) return ctx;
+      writeRole(w.tpm, { ...readRole(w.tpm, 'AI-36')!, launch: id });
+      return { ...ctx, env: { ...ctx.env, ROSTER_LAUNCH: id } };
+    };
+    const first = launch(w.lead, 'L1');
+    await askReview(w.pagetray, { url: PR1, focus: '境の取り決めどおりか' });
+    await askReview(w.castlist, { url: PR2 });
+    // 今の席の名乗りにも並ぶ。
+    expect((await hello(first)).some(l => l.startsWith('返していないレビューの頼み'))).toBe(true);
+    w.wire.close('file:1');
+    await assign(w.tpm, 'AI-36', { role: 'tech-lead', brief: BRIEF, wait: 0 });
+    const address = readRole(w.tpm, 'AI-36')?.address ?? '';
+    expect(address).not.toBe('file:1');
+    const relaunched = launch({ ...w.role('AI-36', address), root: w.lead.root }, 'L2');
+    const asks = w.office.log.filter(m => m.text.startsWith('【ask-review】')).map(m => m.to);
+    expect(asks).toEqual(launched ? ['AI-36__L1', 'AI-36__L1'] : ['AI-36', 'AI-36']);
+    // 起こしの id があれば、前の回の頼みは新しい席の受け箱に無い（直したい不具合の形）。
+    if (launched) expect(w.texts(address).filter(t => t.startsWith('【ask-review】'))).toEqual([]);
+    const out = await hello(relaunched);
+    const at = out.findIndex(l => l.startsWith('返していないレビューの頼み'));
+    expect(out[at]).toBe('返していないレビューの頼み: 2 件（前の回の席に届いた物も。/tech-lead の 6 のとおり見て、roster report review --review <番号> で返す）');
+    expect(out[at + 1]).toMatch(/^ {2}#1 AI-36\.pagetray 見る物: https:\/\/github\.com\/o\/pagetray\/pull\/7 依頼書: \S+\/AI-36\/brief-\d+\.html 見てほしい所: 境の取り決めどおりか$/);
+    expect(out[at + 2]).toMatch(/^ {2}#2 AI-36\.castlist 見る物: https:\/\/github\.com\/o\/castlist\/pull\/3 依頼書: \S+\/AI-36\/brief-\d+\.html$/);
+    const sent = await reportReview(relaunched, { url: await w.put(relaunched, 'review'), verdict: 'approve', summary: 'よい', review: 1 });
+    expect(sent).toContain('送った: 【review】→ file:2（相手の手が空いた時に届く。送り直さない）');
+    // 返した頼みは並ばなくなる。
+    const again = await hello(relaunched);
+    expect(again.find(l => l.startsWith('返していないレビューの頼み'))).toBe('返していないレビューの頼み: 1 件（前の回の席に届いた物も。/tech-lead の 6 のとおり見て、roster report review --review <番号> で返す）');
+    expect(again.some(l => l.startsWith('  #1 '))).toBe(false);
+  });
+
+  test('hello が頼みを並べるのは Tech Lead 担当だけ。頼みが無ければ並べない', async () => {
+    const w = await split();
+    expect((await hello(w.lead)).some(l => l.startsWith('返していないレビューの頼み'))).toBe(false);
+    // Tech Lead 担当自身の頼み（Staff Engineer 担当が見る）は並べない。
+    await askReview(w.lead, { url: await w.put(w.lead, 'plan'), wait: 0 });
+    expect((await hello(w.lead)).some(l => l.startsWith('返していないレビューの頼み'))).toBe(false);
+    // 頼んだ repo の席の名乗りにも出ない。
+    await askReview(w.pagetray, { url: PR1 });
+    expect((await hello(w.pagetray)).some(l => l.startsWith('返していないレビューの頼み'))).toBe(false);
+  });
+
   test('--review は、返していない頼みの番号だけ。Staff Engineer 担当には付けられない', async () => {
     const w = await split();
     await askReview(w.pagetray, { url: PR1 });

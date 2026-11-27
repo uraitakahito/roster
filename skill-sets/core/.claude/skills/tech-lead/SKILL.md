@@ -111,6 +111,8 @@ repo の席の成果・merge・問い・レビューの頼みは、TPM 担当を
 
 repo の席の `roster ask review` は、あなたに【ask-review】で届く（頭が依頼書の URL。`【ask-review】<依頼書の URL> 頼み: #<番号> <見る物> …`）。
 
+**起こし直された時**: 【ask-review】は起こした回の席へ届くので、前の席に届いた頼みは、あなたには届かない。`roster hello` が「返していないレビューの頼み: N 件」の下に、頼みの番号・頼んだ席・見る物・依頼書の URL を並べたら、それを【ask-review】と同じく下の 1〜3 で見て、`--review <番号>` で返す。
+
 1. 依頼書と見る物を読む（ページは `roster page path <URL>`、PR は `gh pr view`・`gh pr diff`・`gh pr checks`）。
 2. **自分の計画・境の取り決め・その席の依頼書に照らして見る。**見る所: 取り決めの名と形のとおりか・ほかの repo とぶつからないか・受け持ちの外を触っていないか・試験が受け入れの条件を見ているか。
 3. レビューのページを書いて置き（`roster page put <file> --kind review`）、返す。

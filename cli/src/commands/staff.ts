@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { requireUp, sessionRef } from '../castlist.ts';
 import type { Context } from '../context.ts';
 import { ROLES, WAIT, type RoleName } from '../protocol.ts';
-import { addReview, openReviews, patchReview, readReviews, removeReview, reviewLabel, VERDICTS, type Review, type Verdict } from '../reviews.ts';
+import { addReview, leadReviews, openReviews, patchReview, readReviews, removeReview, reviewLabel, VERDICTS, type Review, type Verdict } from '../reviews.ts';
 import { isRepoSeat, readRole, staffKey, subjectOf, writeRole, type RoleRecord } from '../roster.ts';
 import { resolveSettings, type SettingsLayer } from '../settings.ts';
 import { skillSetDir, TpmError } from '../skill-sets.ts';
@@ -307,7 +307,7 @@ export async function reportReview(ctx: Context, options: ReviewOptions): Promis
   // 返すのは、いちばん古い依頼書の頼みだけ（依頼書は積まれた順にこなす。後ろに積まれた依頼書の頼みは、次の【review】で返す）。
   if (options.review !== undefined && !lead) throw new TpmError('--review は、Tech Lead 担当が、返す頼みを名指す時だけに付ける。送っていません');
   // Tech Lead 担当は、自分の課題の repo の席の頼みを束ねて受ける（頼みの lead の欄。頼んだ席を閉じた後も引ける）。判定は、頼んだ席へ返す。
-  const briefed = readReviews(ctx).filter(r => r.verdict === undefined && r.brief !== undefined && (lead ? r.reviewer === 'tech-lead' && r.lead === self.key : r.reviewer === undefined && r.key === subject));
+  const briefed = lead ? leadReviews(ctx, self.key) : readReviews(ctx).filter(r => r.verdict === undefined && r.brief !== undefined && r.reviewer === undefined && r.key === subject);
   if (briefed.length === 0) throw new TpmError(`${subject} に、返していないレビューの頼みがありません（もう返したか、頼みがまだ来ていない）。送っていません`);
   // Tech Lead 担当は、席いくつかの頼みを、ほかの仕事の合間に見る。どの頼みへの判定かを取り違えないよう、いくつもあれば名指させる。
   const listed = briefed.map(r => `#${r.n} ${r.key} ${r.url}`);
