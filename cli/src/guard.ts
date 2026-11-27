@@ -443,8 +443,76 @@ function unknownValueHits(pattern: string, word: string): boolean {
   return new RegExp(`^${literals.map(l => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`, 's').test(pattern);
 }
 
-/** 命令が環境に触る当たり方: 名を書いた項目に当たる（named）か、名を書かずに的を選ぶ（unnamed）か、名や volume を変数で渡す（variable）か。 */
-type Touch = 'named' | 'unnamed' | 'variable';
+/** container の、読むだけの動詞（環境を変えない。担当が状態を見る手）。 */
+const READ_VERBS = new Set(['logs', 'inspect', 'stats', 'list', 'ls']);
+/** volume の群の、読むだけの動詞。 */
+const VOLUME_READ_VERBS = new Set(['inspect', 'list', 'ls']);
+/** volume の群の名（`container volume …`・略の `container v …`）。 */
+const VOLUME_GROUPS = new Set(['volume', 'v']);
+/**
+ * 名の container を的にしない動詞と群。run・create の名は `--name` の項目が当てる（image の名 `pagetray:1.2.0` を的と読まない）。
+ * image・network・system などは、環境の container・volume を名で的にしない（system stop・prune は container-system の宣言が当てる）。
+ */
+const NOT_TARGETING = new Set(['run', 'create', 'image', 'i', 'registry', 'r', 'machine', 'm', 'network', 'n', 'system', 's', 'cluster', 'build', 'builder', 'help']);
+/** 値を取る旗（動詞ごとの help から。値の語は的に数えない）。知らない旗は値を取らないと読む（後ろの語を的に数え、止める側に倒れる）。 */
+const VERB_VALUE_FLAGS = new Set(['-e', '--env', '--env-file', '--gid', '-u', '--user', '--uid', '-w', '--workdir', '--cwd', '--ulimit', '-o', '--output', '-n', '--format', ...TARGET_VALUE_FLAGS]);
+/** exec の、束ねた短い旗の終わりが値を取る字（`-ite K=V` の e）。 */
+const EXEC_VALUE_SHORT = /^-[A-Za-z]*[euw]$/;
+
+/** 宣言に無い動詞の命令の的。volume は的が volume の名か、unnamed は名を書かずに選ぶ（的の語が無い・`--all`）か。 */
+interface VerbTargets {
+  volume: boolean
+  targets: string[]
+  unnamed: boolean
+}
+
+/**
+ * container の命令（containerWords の後の語）の、環境を変えうる動詞の的（t-d37r）。動詞が無い・読むだけの動詞・名の container を的にしない動詞・help なら undefined。
+ * 的: exec・commit・export は旗を除いた初めの語（exec の後ろは container の中の命令）、cp・copy は `:` を含む語の `:` より前（`:` の無い語は手元の path。
+ * 値の分からない語は container:path かもしれないので、語ごと）、ほかは旗を除いたどの語も（`--` の後ろはみな的）。volume の群は、その次の語を動詞として読み、的は volume の名。
+ */
+function verbTargets(words: string[]): VerbTargets | undefined {
+  const at = words.findIndex(word => toolName(word) === 'container');
+  let i = at + 1;
+  const nextVerb = (): string | undefined => {
+    while (i < words.length && unmark(words[i] ?? '').startsWith('-')) i += 1;
+    i += 1;
+    return words[i - 1] === undefined ? undefined : unmark(words[i - 1] ?? '');
+  };
+  let verb = nextVerb();
+  if (verb === undefined || NOT_TARGETING.has(verb)) return undefined;
+  const volume = VOLUME_GROUPS.has(verb);
+  if (volume) {
+    verb = nextVerb();
+    if (verb === undefined || VOLUME_READ_VERBS.has(verb)) return undefined;
+  }
+  else if (READ_VERBS.has(verb)) return undefined;
+  const args = words.slice(i);
+  const plain = args.map(unmark);
+  if (plain.some(a => a === '-h' || a === '--help')) return undefined;
+  const operands: string[] = [];
+  for (let k = 0; k < args.length; k += 1) {
+    const arg = plain[k] ?? '';
+    if (arg === '--') {
+      operands.push(...args.slice(k + 1));
+      break;
+    }
+    if (arg.startsWith('-')) {
+      if (VERB_VALUE_FLAGS.has(arg) || (verb === 'exec' && EXEC_VALUE_SHORT.test(arg))) k += 1;
+      continue;
+    }
+    operands.push(args[k] ?? '');
+  }
+  const unnamed = operands.length === 0 || plain.includes('--all');
+  if (verb === 'exec' || verb === 'commit' || verb === 'export') return { volume, targets: operands.slice(0, 1), unnamed };
+  if (verb === 'cp' || verb === 'copy') {
+    return { volume, targets: operands.flatMap(o => o.includes(':') ? [o.slice(0, o.indexOf(':'))] : UNKNOWN.test(o) ? [o] : []), unnamed };
+  }
+  return { volume, targets: operands, unnamed };
+}
+
+/** 命令が環境に触る当たり方: 名を書いた項目に当たる（named）か、名を書かずに的を選ぶ（unnamed）か、名や volume を変数で渡す（variable）か、宣言に無い動詞で名を的にする（verb）か。 */
+type Touch = 'named' | 'unnamed' | 'variable' | 'verb';
 
 /**
  * 命令が触る環境。命令を単純な命令に分け、match の項目が命令の語に当たれば触る（hitsWords）。container の命令の語と項目の語は、旗をそろえてから比べる（normalizeFlags）。
@@ -456,6 +524,22 @@ type Touch = 'named' | 'unnamed' | 'variable';
  */
 export function touched(command: string, infra: Record<string, InfraEnv>): string[] {
   return Object.entries(infra).filter(([, env]) => touchOf(command, env) !== undefined).map(([name]) => name);
+}
+
+/**
+ * 名と volume の旗の、字の含みで見る書き方。前に設定へ並べていた項目（`--name=X`・`--volume X`）と同じ字だけにする（`-v=`・`--volume=` まで広げると、
+ * 前は通っていた PR の本文の `--volume=…` が止まる）。
+ */
+const FLAG_SPELLINGS: Record<string, string[]> = { '--name': ['--name ', '--name='], '-v': ['-v ', '--volume '] };
+
+/**
+ * 字の含みで見る、項目の字（* を除く）。名と volume の旗の項目（`--name X`・`-v X`）は、同じ当たりになる書き方の字も見る（t-d37r）。
+ * container の語の無い包み（`./up.sh --name=X`）は旗をそろえて読めないので、前は `--name=X`・`--volume X` の項目を並べて当てていた。
+ */
+function spellings(match: string, item: string[]): string[] {
+  const [flag, value, ...rest] = item;
+  const texts = flag === undefined || value === undefined || rest.length > 0 ? [] : (FLAG_SPELLINGS[flag] ?? []).map(prefix => `${prefix}${value}`);
+  return [match, ...texts].map(text => text.replaceAll('*', ''));
 }
 
 /** 命令が環境に触る当たり方。触らなければ undefined。 */
@@ -480,7 +564,7 @@ function touchOf(command: string, env: InfraEnv): Touch | undefined {
   const hits = (match: string, k: number): boolean => {
     const item = items[k] ?? [];
     return commands.some(words => wordHit(words, item))
-      || (!textOnly && command.includes(match.replaceAll('*', '')))
+      || (!textOnly && spellings(match, item).some(text => command.includes(text)))
       || (flagItem(item) && segments.some(words => hitsWords(words, item.join(' '))));
   };
   if (env.match.some(hits)) return 'named';
@@ -489,8 +573,21 @@ function touchOf(command: string, env: InfraEnv): Touch | undefined {
     return args !== undefined && unnamedTarget(args);
   });
   if (verbs.some(unnamed)) return 'unnamed';
-  // 旗が語の終わりにあり値が無い（`… | xargs container run -d --name`。値は後ろから足される）時も、値の分からない語とみなす（review-1 の指摘 2）。
   const readPaths = pathReader(command);
+  // 宣言に無い動詞（exec・cp・commit・export・知らない動詞）で、名を宣言した container か volume を的にする命令（t-d37r）。読むだけの動詞は verbTargets が外す。
+  const declared = (flag: string): string[] => items.flatMap(item => item.length === 2 && item[0] === flag ? [item[1] ?? ''] : []);
+  const names = { container: declared('--name'), volume: declared('-v') };
+  // 字を粗く割った区切り（`ssh host '…'` の中）は、字で書いた名だけを当てる（区切りは `$(…)` の中を割るので、`roster ask tpm "container stop $(…)"` の跡を的と読まない。
+  // 名を書かずに選ぶ形を単純な命令だけで見る t-9tac と同じ）。
+  const parsed = markedContainers.filter((words): words is string[] => words !== undefined).map(words => ({ words, coarse: false }));
+  for (const { words, coarse } of [...parsed, ...segments.map(words => ({ words, coarse: true }))]) {
+    const verb = verbTargets(words);
+    const own = verb === undefined ? [] : verb.volume ? names.volume : names.container;
+    if (verb === undefined || own.length === 0) continue;
+    if (own.some(name => verb.targets.some(target => wordHits(name, unmark(target))))) return 'verb';
+    if (!coarse && (verb.unnamed || own.some(name => verb.targets.some(target => unknownValueHits(name, readPaths(target)))))) return 'unnamed';
+  }
+  // 旗が語の終わりにあり値が無い（`… | xargs container run -d --name`。値は後ろから足される）時も、値の分からない語とみなす（review-1 の指摘 2）。
   const variable = ([flag, value, ...rest]: string[]): boolean =>
     flag !== undefined && value !== undefined && rest.length === 0 && VALUE_FLAGS.has(flag)
     && containers.some(words => words.some((word, i) => word === flag && unknownValueHits(value, readPaths(words[i + 1] ?? SUBSTITUTED))));
@@ -521,8 +618,11 @@ const UNNAMED_HINT = '（名を書かずに的を選ぶ命令（--all・-a・$(�
 /** 名や volume を変数で渡す命令を止めた時に、訳に添える字。 */
 const VARIABLE_HINT = '（container の命令の --name・-v・--volume・--mount の値を、変数・$(…)・glob で渡す命令は、値の分からない所を何でも当たるとみなします（同じ行の代入と環境変数は読まない）。名を字で書いて打ってください）';
 
+/** 宣言に無い動詞で名を的にする命令を止めた時に、訳に添える字。 */
+const VERB_HINT = '（環境の container・volume の名を的にする container の命令は、宣言に無い動詞（exec・cp・commit・export など）でも止めます。状態を見るだけなら、読むだけの logs・inspect・stats・ls（volume は inspect・ls）は通します）';
+
 /** 止めた訳に添える字（当たり方ごと）。 */
-const HINTS: Record<Touch, string> = { named: '', unnamed: UNNAMED_HINT, variable: VARIABLE_HINT };
+const HINTS: Record<Touch, string> = { named: '', unnamed: UNNAMED_HINT, variable: VARIABLE_HINT, verb: VERB_HINT };
 
 /** 命令を通すか。環境の手続きを先に見て、次に道具の直打ちを見る。 */
 export function judge(asked: Asked): Verdict {
