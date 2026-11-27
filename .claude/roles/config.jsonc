@@ -26,6 +26,9 @@
         "container volume delete pagetray-data*",
         "container volume rm pagetray-data*",
         "-v pagetray-data*",
+        // volume の略の v（container v rm …）。字も語も volume と違うので、略の形も並べる（t-9tac）。
+        "container v delete pagetray-data*",
+        "container v rm pagetray-data*",
       ],
     },
     // メッセージキュー（NATS JetStream の container と、預かった物を置く volume）。担当どうしのメッセージを預かって配る
@@ -48,6 +51,8 @@
         "container volume delete roster-nats-data*",
         "container volume rm roster-nats-data*",
         "-v roster-nats-data*",
+        "container v delete roster-nats-data*",
+        "container v rm roster-nats-data*",
       ],
     },
     // 手元で image を build する builder（Apple Container の container build が使う container。名は buildkit）。
@@ -67,6 +72,32 @@
         "container kill buildkit",
         "container delete buildkit",
         "container rm buildkit",
+      ],
+    },
+    // container の仕組みそのものと、名を取らずにまとめて消す命令（t-9tac）。どれも、castlist（pm-only）の container か volume に届き得る:
+    // system stop は仕組みごと止め、prune は止めてある container を、volume prune は container の無い volume（作り直しの間の castlist-data-v1 など）を消す。
+    // castlist より緩くできないので pm-only。s・v・n は system・volume・network の略。
+    // --all・-a・$(…)・xargs で名を書かずに選ぶ stop・kill・rm・volume rm は、guard が、名を書いた項目の動詞から引いて当てる（ここには書かない）。
+    // 名を宣言しないこの環境の項目は、語が続けて並ぶ時だけ当たる（間は旗とその値だけ）。container image prune・container exec x make clean は当たらない。
+    "container-system": {
+      "guard": "pm-only",
+      "match": [
+        "container system stop",
+        "container s stop",
+        "container prune",
+        "container clean",
+        "container volume prune",
+        "container v prune",
+        "container network prune",
+        "container n prune",
+        "container network delete --all",
+        "container network delete -a",
+        "container network rm --all",
+        "container network rm -a",
+        "container n delete --all",
+        "container n delete -a",
+        "container n rm --all",
+        "container n rm -a",
       ],
     },
   },
