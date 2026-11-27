@@ -23,7 +23,7 @@ export interface ListUsageCommandInput extends ListUsageInput {}
 export interface ListUsageCommandOutput extends ListUsageOutput, __MetadataBearer {}
 
 /**
- * トークンの数と費えの行を、アクターをまたいで読む（2.1.0 から）。条件はどれも AND。並びは受けた順。集計はしない（まとめるのは呼ぶ側）。
+ * トークンの使用量の行を、アクターをまたいで読む（2.1.0 から）。条件はどれも AND。並びは受けた順。集計はしない（まとめるのは呼ぶ側）。
  * - `from`・`to` は、区間の終わりの時刻（`toAt`）の窓（`from <= toAt < to`。始めは含み、終わりは含まない）。どちらも要る。
  *   `to - from` は 31 日まで（越えれば 400）。受けた時刻（`receivedAt`）とは比べない。
  * - `label` は `鍵:値`（ListActors の `label` と同じ）。重ねれば、どれも持つアクターの行。`actorId` は、そのアクターの行。

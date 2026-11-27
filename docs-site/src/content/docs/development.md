@@ -40,7 +40,7 @@ build は無い。`cli/bin/roster` は `cli/src/cli.ts` を node で直に動か
 | `cli/src/mail.ts`・`cli/src/commands/mail.ts` | メッセージを NATS で配る道の、手元の物（受け手の名・名乗り・印・渡した記録）と、hook の命令（`roster mail …`）・TPM 担当の側の片付け |
 | `cli/src/tracker/` | 課題管理の口（`types.ts`）と adapter（`jira.ts`・`github.ts`）、課題の Key の形で adapter を選ぶ `routed.ts` |
 | `cli/src/guard.ts` | guard |
-| `cli/src/usage.ts` | 席の「トークンの数と費え」を、Claude Code の session の記録から数える純な関数（回を読む・値段の表・時計の 1 時間と種類ごとの行にまとめる）。castlist の数の表へ送る行の形を作る。file も castlist も触らない。写しを読んで castlist へ送る取り込み・片付け・突き合わせは `cli/src/commands/usage.ts`（[決まりの実装](/protocol/#トークンの数と費え)） |
+| `cli/src/usage.ts` | 席の「トークンの使用量」を、Claude Code の session の記録から数える純な関数（回を読む・値段の表・時計の 1 時間と種類ごとの行にまとめる）。castlist の数の表へ送る行の形を作る。file も castlist も触らない。写しを読んで castlist へ送る取り込み・片付け・突き合わせは `cli/src/commands/usage.ts`（[決まりの実装](/protocol/#トークンの使用量)） |
 | `cli/src/run-role.ts` | 連携の道具が担当の居場所で動かす `roster run-role`（名簿を読んで claude を起こす） |
 
 - **担当の種類を足す**: `cli/src/protocol.ts` の `ROLES` に足し、名の略（`cli/src/castlist.ts`）を書く。skill は `skill-sets/<名前>/.claude/skills/<役割>/SKILL.md`。合わせる物は、次の 3 つに分かれる。
@@ -73,14 +73,14 @@ build は無い。`cli/bin/roster` は `cli/src/cli.ts` を node で直に動か
 
 アクターの台帳のサーバー（Rust）は、別の repo [castlist](https://github.com/uraitakahito/castlist) にある（[castlist の docs](https://uraitakahito.github.io/castlist/)）。この repo が持つのは、その API を定義から作った client で呼ぶ側（`cli/src/castlist.ts`・`cli/src/castlist-query.ts`）と、新しい API を話す偽の castlist（`cli/test/fake-castlist.ts`。試験の process の中の HTTP の server）。
 
-- **合わせる版**: 版は 3 か所にある。つなぎの試験が起こす image は `.castlist-version`（`.pagetray-version` と同じ `v<版>@<image の digest>` の形）、castlist が止まっていて container も無い時に Product Manager へ出す `container run` の 1 行は `cli/src/castlist.ts` の `CASTLIST_VERSION`（image の版）と `CASTLIST_VOLUME`（volume。今は `castlist-data-v1`）、client を作る定義は `cli/gen/gen.sh` の `DEFS` の castlist の行の tag（今はどれも `v2.1.0`）。`CASTLIST_VERSION` が古いままだと、古い image を起こす 1 行を出してしまう。
+- **合わせる版**: 版は 3 か所にある。つなぎの試験が起こす image は `.castlist-version`（`.pagetray-version` と同じ `v<版>@<image の digest>` の形）、castlist が止まっていて container も無い時に Product Manager へ出す `container run` の 1 行は `cli/src/castlist.ts` の `CASTLIST_VERSION`（image の版）と `CASTLIST_VOLUME`（volume。今は `castlist-data-v1`）、client を作る定義は `cli/gen/gen.sh` の `DEFS` の castlist の行の tag（今はどれも `v2.1.1`）。`CASTLIST_VERSION` が古いままだと、古い image を起こす 1 行を出してしまう。
 - **castlist を上げる時**: castlist で release を出す（castlist の docs の「[release を出す](https://uraitakahito.github.io/castlist/release.html)」）→ この repo で `.castlist-version`・`CASTLIST_VERSION` と、それを名指す試験（`cli/test/castlist.test.ts` の `expect(CASTLIST_VERSION).toBe(…)`）を新しい版にする PR を出す。定義が替わった版なら、同じ PR で `DEFS` の castlist の行（tag と SHA-256）を替えて client を作り直し、偽の castlist（`/healthz` の `version` も）と `cli/src/castlist.ts`・`cli/src/castlist-query.ts` を合わせる。
 
 ## callboard（画面のサーバー）とのつなぎ
 
 castlist と pagetray の画面をまとめるサーバー（Rust）は、別の repo [callboard](https://github.com/uraitakahito/callboard) にある（[callboard の docs](https://uraitakahito.github.io/callboard/)）。この repo の cli は callboard を呼ばない（callboard は、人が browser で見る画面だけを持つ）。この repo が持つのは、起こす版と、[運用](/operations/#画面のサーバーcallboard)の手引きだけ。
 
-- **合わせる版**: `.callboard-version` に、起こす callboard の版を `v<版>@<image の digest>` の形で書く（digest は callboard の release にある。今は `v1.0.0`）。DevOps Engineer 担当は、この版で起こす。この file を読む試験は無い（callboard を相手にしたつなぎの試験は、この repo に無い。callboard の側が、出した版の castlist と pagetray を相手に試験を流す）。
+- **合わせる版**: `.callboard-version` に、起こす callboard の版を `v<版>@<image の digest>` の形で書く（digest は callboard の release にある。今は `v1.0.1`）。DevOps Engineer 担当は、この版で起こす。この file を読む試験は無い（callboard を相手にしたつなぎの試験は、この repo に無い。callboard の側が、出した版の castlist と pagetray を相手に試験を流す）。
 - **callboard を上げる時**: callboard で release を出す（callboard の docs の「[release を出す](https://uraitakahito.github.io/callboard/release.html)」）→ この repo で `.callboard-version` を新しい版と digest にする PR を出す → [運用](/operations/#画面のサーバーcallboard)の「版を上げる」で container を作り直す。castlist・pagetray の版も上がる時は、`.castlist-version`・`.pagetray-version` の PR と起こし直しを先に済ませる。
 - **画面の URL**: アクターのプロフィールの画面の URL（`roster castlist …` と `roster incident timeline` が出す）は、callboard の物（`<callboard>/actors/<id>`。`cli/src/castlist.ts` の `callboardUrl`。既定は `http://127.0.0.1:8803`、`$ROSTER_CALLBOARD_URL` で替えられる）。castlist は 2.0.0 から画面を持たない。メッセージの記録の画面も、callboard の物（`http://127.0.0.1:8803/messages`。0.3.0 から）。ページの一覧も、callboard の物（`http://127.0.0.1:8803/pages/`。0.4.0 から。Key の画面は `/pages/?project=<状態の folder の名>&key=<Key>`）。pagetray は 2.0.0 から画面を持たず、前の画面の URL（`http://127.0.0.1:8801/`・`/<project>/`・`/<project>/<Key>/`・`/messages`）は 404 を返す（前の URL から callboard へは移さない）。この repo の docs と skill と命令の字は、callboard の画面を指す。置いたページの URL（`http://127.0.0.1:8801/<状態の folder の名>/<Key>/…`）は、pagetray が持つ物で、変わらない。
 

@@ -21,7 +21,7 @@ import { envOf } from './env.ts';
  * castlist が止まっている時に Product Manager へ出す `container run` の image の版（gen/gen.sh の DEFS の castlist の tag と揃える）。
  * castlist の release を出したら、ここと試験の版を上げる（決まりは docs の開発の「castlist を上げる時」と、castlist の docs の「release を出す」）。
  */
-export const CASTLIST_VERSION = 'v2.1.0';
+export const CASTLIST_VERSION = 'v2.1.1';
 /** castlist の volume（1.0.0 から）。 */
 export const CASTLIST_VOLUME = 'castlist-data-v1';
 /** castlist の docs（動かし方）。 */
@@ -220,7 +220,7 @@ export async function putRecord<K extends keyof RecordInput>(ctx: Sender, url: s
   }, rowOf);
 }
 
-/** トークンの数と費えの 1 行の本文（欄の名は castlist の PutUsage の名。issuer は putUsage が足す）。 */
+/** トークンの使用量の 1 行の本文（欄の名は castlist の PutUsage の名。issuer は putUsage が足す）。 */
 export interface UsageInput {
   by: string
   model: string
@@ -243,7 +243,7 @@ export interface UsageInput {
 }
 
 /**
- * トークンの数と費えを 1 行足す（PutUsage。PUT /api/usage/<id>。castlist 2.1.0 から）。
+ * トークンの使用量を 1 行足す（PutUsage。PUT /api/usage/<id>。castlist 2.1.0 から）。
  * 送り手の時刻は、呼ぶ側が渡す（castlist は本文の写しに送り手の時刻も入れるので、送り直す時は、控えた時刻で同じ本文にする）。
  * 同じ id で本文が違えば 409（refused）。数の口を持たない版の castlist は 404（refused）。wait は待つ秒（REQUEST_TIMEOUT まで）。
  */
@@ -253,7 +253,7 @@ export async function putUsage(ctx: Sender, url: string, id: string, body: Usage
 }
 
 /**
- * トークンの数と費えの行を読む（ListUsage。GET /api/usage）。窓は、from 以上・to 未満の toAt（31 日まで）。
+ * トークンの使用量の行を読む（ListUsage。GET /api/usage）。窓は、from 以上・to 未満の toAt（31 日まで）。
  * ok の本文は usage（行。時刻は ISO の字）と nextToken。
  */
 export async function listUsage(ctx: Sender, url: string, input: { from: Date, to: Date, actorId?: string, nextToken?: string }): Promise<Reply> {

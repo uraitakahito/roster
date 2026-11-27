@@ -273,7 +273,7 @@ export interface Setting {
  */
 export interface Event {
   /**
-   * 送り手が付ける id（出来事・線・model と effort・トークンの数と費え）: 空白の無い ASCII の印字できる字で 128 字まで。
+   * 送り手が付ける id（出来事・線・model と effort・トークンの使用量）: 空白の無い ASCII の印字できる字で 128 字まで。
    * @public
    */
   id: string | undefined;
@@ -318,7 +318,7 @@ export interface Event {
  */
 export interface Link {
   /**
-   * 送り手が付ける id（出来事・線・model と effort・トークンの数と費え）: 空白の無い ASCII の印字できる字で 128 字まで。
+   * 送り手が付ける id（出来事・線・model と effort・トークンの使用量）: 空白の無い ASCII の印字できる字で 128 字まで。
    * @public
    */
   id: string | undefined;
@@ -1035,7 +1035,7 @@ export interface ListEventsInput {
  */
 export interface EventRow {
   /**
-   * 送り手が付ける id（出来事・線・model と effort・トークンの数と費え）: 空白の無い ASCII の印字できる字で 128 字まで。
+   * 送り手が付ける id（出来事・線・model と effort・トークンの使用量）: 空白の無い ASCII の印字できる字で 128 字まで。
    * @public
    */
   id: string | undefined;
@@ -1281,7 +1281,7 @@ export interface ListUsageInput {
 }
 
 /**
- * トークンの数と費えの行に出てきたアクター（id・名・ラベル）。
+ * トークンの使用量の行に出てきたアクター（id・名・ラベル）。
  * @public
  */
 export interface UsageActor {
@@ -1329,7 +1329,7 @@ export interface UsageBucket {
 }
 
 /**
- * トークンの数と費えの 1 行（欄は UsageFields）。
+ * トークンの使用量の 1 行（欄は UsageFields）。
  * @public
  */
 export interface Usage {
@@ -1542,7 +1542,7 @@ export interface PutEventInput {
  */
 export interface PutEventOutput {
   /**
-   * 送り手が付ける id（出来事・線・model と effort・トークンの数と費え）: 空白の無い ASCII の印字できる字で 128 字まで。
+   * 送り手が付ける id（出来事・線・model と effort・トークンの使用量）: 空白の無い ASCII の印字できる字で 128 字まで。
    * @public
    */
   id: string | undefined;
@@ -1634,7 +1634,7 @@ export interface PutLinkInput {
  */
 export interface PutLinkOutput {
   /**
-   * 送り手が付ける id（出来事・線・model と effort・トークンの数と費え）: 空白の無い ASCII の印字できる字で 128 字まで。
+   * 送り手が付ける id（出来事・線・model と effort・トークンの使用量）: 空白の無い ASCII の印字できる字で 128 字まで。
    * @public
    */
   id: string | undefined;
@@ -1911,7 +1911,7 @@ export interface PutUsageInput {
 }
 
 /**
- * トークンの数と費えの欄（PutUsage の答えと、ListUsage の行で同じ形）。
+ * トークンの使用量の欄（PutUsage の答えと、ListUsage の行で同じ形）。
  * @public
  */
 export interface PutUsageOutput {

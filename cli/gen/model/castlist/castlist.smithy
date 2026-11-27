@@ -1943,7 +1943,7 @@ operation PutSetting {
     ]
 }
 
-/// アクターのトークンの数と費えを 1 行足す（2.1.0 から）。同じ id で同じ本文なら 200（足さない）、同じ id で本文が違えば 409（前の行はそのまま）。
+/// アクターのトークンの使用量を 1 行足す（2.1.0 から）。同じ id で同じ本文なら 200（足さない）、同じ id で本文が違えば 409（前の行はそのまま）。
 /// 同じ id かは、`by` を引くより先に見る。
 /// - 1 行は、アクター 1 人の、時計の 1 時間（UTC の時）の内の、同じ種類（`model`・`agent`・`speed`・`serviceTier`）の回のまとめ。
 ///   同じアクター・同じ時・同じ種類の行は、2 つ以上在りうる（送り手が、増えた分を新しい id の行で送る）。
@@ -2169,7 +2169,7 @@ operation PutUsage {
     ]
 }
 
-/// トークンの数と費えの行を、アクターをまたいで読む（2.1.0 から）。条件はどれも AND。並びは受けた順。集計はしない（まとめるのは呼ぶ側）。
+/// トークンの使用量の行を、アクターをまたいで読む（2.1.0 から）。条件はどれも AND。並びは受けた順。集計はしない（まとめるのは呼ぶ側）。
 /// - `from`・`to` は、区間の終わりの時刻（`toAt`）の窓（`from <= toAt < to`。始めは含み、終わりは含まない）。どちらも要る。
 ///   `to - from` は 31 日まで（越えれば 400）。受けた時刻（`receivedAt`）とは比べない。
 /// - `label` は `鍵:値`（ListActors の `label` と同じ）。重ねれば、どれも持つアクターの行。`actorId` は、そのアクターの行。
@@ -2353,10 +2353,10 @@ list UsageBuckets {
     member: UsageBucket
 }
 
-/// トークンの数と費えの 1 行（欄は UsageFields）。
+/// トークンの使用量の 1 行（欄は UsageFields）。
 structure Usage with [UsageFields] {}
 
-/// トークンの数と費えの欄（PutUsage の答えと、ListUsage の行で同じ形）。
+/// トークンの使用量の欄（PutUsage の答えと、ListUsage の行で同じ形）。
 @mixin
 structure UsageFields {
     /// 送り手の id。
@@ -2438,7 +2438,7 @@ list UsageRows {
     member: Usage
 }
 
-/// トークンの数と費えの行に出てきたアクター（id・名・ラベル）。
+/// トークンの使用量の行に出てきたアクター（id・名・ラベル）。
 structure UsageActor {
     @required
     id: ActorId
@@ -2456,7 +2456,7 @@ list UsageActors {
     member: UsageActor
 }
 
-/// 送り手が付ける id（出来事・線・model と effort・トークンの数と費え）: 空白の無い ASCII の印字できる字で 128 字まで。
+/// 送り手が付ける id（出来事・線・model と effort・トークンの使用量）: 空白の無い ASCII の印字できる字で 128 字まで。
 @pattern("^[\\x21-\\x7E]{1,128}$")
 string SenderId
 
