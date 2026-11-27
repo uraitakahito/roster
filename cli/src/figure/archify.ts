@@ -1,6 +1,6 @@
 // Archify（図を JSON から描く道具。https://github.com/tt-a1i/archify）を、版を固定して取って置き、呼ぶ。
 // 取るのは roster figure setup だけ。ほかの命令は取りに行かず、置いていなければ止まる（Haiku の skill の中からネットに出ないように）。
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Context } from '../context.ts';
@@ -42,8 +42,14 @@ export function setupArchify(ctx: Context): string[] {
   const version = archifyVersion(ctx.root);
   const home = archifyHome(ctx.env, version);
   if (existsSync(join(home, 'archify', 'bin', 'archify.mjs'))) return [`置いてある: Archify ${version.tag}（${home}）`];
+  if (existsSync(home)) throw new TpmError(`${home} はあるのに Archify の入口（archify/bin/archify.mjs）がありません。この folder を消してから、打ち直してください`);
   const parent = join(home, '..');
   mkdirSync(parent, { recursive: true });
+  // 前の setup が途中で殺されて残した一時の folder（1 時間より前の物）を消す。
+  for (const name of readdirSync(parent)) {
+    const old = join(parent, name);
+    if (name.startsWith('.tmp-') && ctx.now().getTime() - statSync(old).mtimeMs > 60 * 60 * 1000) rmSync(old, { recursive: true, force: true });
+  }
   const tmp = mkdtempSync(join(parent, '.tmp-'));
   try {
     const repo = join(tmp, 'repo');

@@ -358,7 +358,7 @@ castlist と pagetray は、1.0.0 で API も DB も替えた（AI-36 の切り�
 
 ## 図を描く道具（Archify）
 
-文書の図を Archify で描く担当の命令（`roster figure embed`・`roster figure shot`）は、roster を動かす機械に置いた Archify を使う。置くのは `roster figure setup`（どの担当が打ってもよい。置いてあれば何もしない）。初めてと、`.archify-version` を上げる PR を merge した後に 1 度打つ。GitHub から版を固定して取り、commit を確かめて `~/.local/share/roster/tools/archify/<commit>/` に置く（[開発](/development/#archify図を描く道具とのつなぎ)）。`roster figure shot` は Chrome（`/Applications/Google Chrome.app`。在り処が違えば `$ROSTER_CHROME`）を使う。
+文書の図を Archify で描く担当の命令（`roster figure embed`・`roster figure shot`）は、roster を動かす機械に置いた Archify を使う。置くのは `roster figure setup`（どの担当が打ってもよい。置いてあれば何もしない）。初めてと、`.archify-version` を上げる PR を merge した後に 1 度打つ。GitHub から版を固定して取り、commit を確かめて `$XDG_DATA_HOME`（無ければ `~/.local/share`）の `roster/tools/archify/<commit>/` に置く。前の setup が途中で殺されて残した一時の folder（`.tmp-*`）は、次の setup が消す（[開発](/development/#archify図を描く道具とのつなぎ)）。`roster figure shot` は Chrome（`/Applications/Google Chrome.app`。在り処が違えば `$ROSTER_CHROME`）を使う。
 
 ## 手元の builder（buildkit）
 
