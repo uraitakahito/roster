@@ -57,7 +57,7 @@ build は無い。`cli/bin/roster` は `cli/src/cli.ts` を node で直に動か
 
 担当が置くページを DB に持つサーバー（Rust）は、別の repo [pagetray](https://github.com/uraitakahito/pagetray) にある（もとは、この repo の folder だった物を履歴ごと分けた）。作り・API の一覧・Rust の開発の手引きは、[pagetray の docs](https://uraitakahito.github.io/pagetray/)（[開発](https://uraitakahito.github.io/pagetray/development.html) の章）。この repo が持つのは、その API を定義から生成した client（下の「[生成した client](#生成した-clientcastlistpagetray-の定義から)」）で呼ぶ側（`roster page put`・`path`・`list`・`import`・`delete` は `cli/src/commands/page.ts`、`roster file put`・`path`・`list`・`delete` は `cli/src/commands/file.ts`、置き場に頼む足場と控えの folder は `cli/src/commands/store.ts`、送った記録の写しは `cli/src/commands/message-record.ts`）と、つなぎの試験。ページの本文と file の中身は URL の手の道なので、`store.ts` が curl で取る。
 
-- **合わせる版**: `.pagetray-version` に、合わせる pagetray の版を `v<版>@<image の digest>` の形で書く（digest は pagetray の release にある。今は `v1.2.0`）。[運用](/operations/#ページの置き場pagetray)で起こす image も、この版。つなぎの試験（下の「[つなぎの試験](#つなぎの試験)」）が、この版の image に向けて流す。
+- **合わせる版**: `.pagetray-version` に、合わせる pagetray の版を `v<版>@<image の digest>` の形で書く（digest は pagetray の release にある。今は `v1.3.0`）。[運用](/operations/#ページの置き場pagetray)で起こす image も、この版。つなぎの試験（下の「[つなぎの試験](#つなぎの試験)」）が、この版の image に向けて流す。
 - **送った記録の写し**: メッセージを送るたびに（`cli/src/commands/messages.ts` の `deliver`）、送った記録（`log.jsonl` の 1 行）を、置き場に `PutMessage`（`PUT /api/projects/<状態の folder の名>/messages/<メッセージの id>`。pagetray 1.1.0 から）で 1 件置く。Product Manager は、メッセージの記録の画面（callboard の `http://127.0.0.1:8803/messages`。callboard 0.3.0 から）で、誰が誰に何を送ったかを見る。
   - 状態は、送った時は `waiting`（届くのを待っている）。受け手の hook が渡した時・届かないまま終わった時に、受け手の側と TPM 担当の側が書き足す（`delivered`・`undeliverable`・`expired`）。`carried`（ほかの道具で運んだ）は、前の版で cmux が運んだ行（`carrier` の無い行）の状態で、届いたかは置き場に書いていない。
   - 置き場の記録の `from`・`to` は、担当の Key（人が読む名。TPM 担当は `tpm`）。置き場は初めの値から替えないので、頼みのたびに替わる居場所の題では書かない。配りの受け手の名（Key と起こした回の組。`cli/src/mail.ts` の `recipientName`）とは別。送り手の組の無い前の版の行だけ居場所の題に、届く担当の分からない行は宛先の字に落とす。200 字を超える名は頭の 200 字に切り、空になる時は写さない。
@@ -80,9 +80,9 @@ build は無い。`cli/bin/roster` は `cli/src/cli.ts` を node で直に動か
 
 castlist と pagetray の画面をまとめるサーバー（Rust）は、別の repo [callboard](https://github.com/uraitakahito/callboard) にある（[callboard の docs](https://uraitakahito.github.io/callboard/)）。この repo の cli は callboard を呼ばない（callboard は、人が browser で見る画面だけを持つ）。この repo が持つのは、起こす版と、[運用](/operations/#画面のサーバーcallboard)の手引きだけ。
 
-- **合わせる版**: `.callboard-version` に、起こす callboard の版を `v<版>@<image の digest>` の形で書く（digest は callboard の release にある。今は `v0.3.0`）。DevOps Engineer 担当は、この版で起こす。この file を読む試験は無い（callboard を相手にしたつなぎの試験は、この repo に無い。callboard の側が、出した版の castlist と pagetray を相手に試験を流す）。
+- **合わせる版**: `.callboard-version` に、起こす callboard の版を `v<版>@<image の digest>` の形で書く（digest は callboard の release にある。今は `v0.4.0`）。DevOps Engineer 担当は、この版で起こす。この file を読む試験は無い（callboard を相手にしたつなぎの試験は、この repo に無い。callboard の側が、出した版の castlist と pagetray を相手に試験を流す）。
 - **callboard を上げる時**: callboard で release を出す（callboard の docs の「[release を出す](https://uraitakahito.github.io/callboard/release.html)」）→ この repo で `.callboard-version` を新しい版と digest にする PR を出す → [運用](/operations/#画面のサーバーcallboard)の「版を上げる」で container を作り直す。castlist・pagetray の版も上がる時は、`.castlist-version`・`.pagetray-version` の PR と起こし直しを先に済ませる。
-- **画面の URL**: アクターのプロフィールの画面の URL（`roster castlist …` と `roster incident timeline` が出す）は、callboard の物（`<callboard>/actors/<id>`。`cli/src/castlist.ts` の `callboardUrl`。既定は `http://127.0.0.1:8803`、`$ROSTER_CALLBOARD_URL` で替えられる）。castlist は 2.0.0 から画面を持たない。メッセージの記録の画面も、callboard の物（`http://127.0.0.1:8803/messages`。0.3.0 から）。置き場の一覧（`http://127.0.0.1:8801/`）は、まだ pagetray の画面を指す。callboard に移した時に替える（AI-32 の後の段）。
+- **画面の URL**: アクターのプロフィールの画面の URL（`roster castlist …` と `roster incident timeline` が出す）は、callboard の物（`<callboard>/actors/<id>`。`cli/src/castlist.ts` の `callboardUrl`。既定は `http://127.0.0.1:8803`、`$ROSTER_CALLBOARD_URL` で替えられる）。castlist は 2.0.0 から画面を持たない。メッセージの記録の画面も、callboard の物（`http://127.0.0.1:8803/messages`。0.3.0 から）。ページの一覧も callboard にある（`http://127.0.0.1:8803/pages/`。0.4.0 から）が、この repo の docs と skill と命令の字は、まだ pagetray の一覧（`http://127.0.0.1:8801/`）を指す。pagetray の画面を外す時に、callboard の物に替える（AI-32 の後の段）。置いたページの URL（`http://127.0.0.1:8801/<状態の folder の名>/<Key>/…`）は、pagetray が持つ物で、変わらない。
 
 ## NATS JetStream（メッセージキュー）とのつなぎ
 
@@ -111,7 +111,7 @@ castlist と pagetray の画面をまとめるサーバー（Rust）は、別の
 
 ## 生成した client（castlist・pagetray の定義から）
 
-castlist と pagetray の API は、それぞれの repo の Smithy の定義（`model/`）に書いてある。roster が呼ぶ TypeScript の client は、その定義から smithy-typescript で生成し、`cli/gen/<repo>-client/` に入れる（AI-36）。今は castlist の client（`cli/gen/castlist-client/`）と pagetray の client（`cli/gen/pagetray-client/`）で、castlist は `v2.1.0`、pagetray は `v1.2.0` の定義から作る。roster は、castlist と置き場に送る物をみな、これで送る（置き場の本文を取る curl だけが外）。
+castlist と pagetray の API は、それぞれの repo の Smithy の定義（`model/`）に書いてある。roster が呼ぶ TypeScript の client は、その定義から smithy-typescript で生成し、`cli/gen/<repo>-client/` に入れる（AI-36）。今は castlist の client（`cli/gen/castlist-client/`）と pagetray の client（`cli/gen/pagetray-client/`）で、castlist は `v2.1.0`、pagetray は `v1.3.0` の定義から作る。roster は、castlist と置き場に送る物をみな、これで送る（置き場の本文を取る curl だけが外）。
 
 ```sh
 cd cli

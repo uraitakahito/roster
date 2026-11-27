@@ -7,7 +7,7 @@ import { guard, infraApprove, infraList, infraRevoke, infraRun } from '../src/co
 import { readRolesConfig, type ConfigSource, type InfraEnv } from '../src/config.ts';
 import { commandOf, guardSettings, judge, hitsWords, judgeWrite, touched, writeOf, type Approval } from '../src/guard.ts';
 import type { RoleName } from '../src/protocol.ts';
-import { splitCommands } from '../src/shell.ts';
+import { splitCommands, splitCommandsMarked, SUBSTITUTED } from '../src/shell.ts';
 import { world } from './helpers.ts';
 import { withoutRosterEnv } from '../src/env.ts';
 
@@ -30,6 +30,11 @@ describe('splitCommands', () => {
       ['cat'],
       ['j'],
     ]);
+  });
+
+  test('置き換えの跡の印は splitCommandsMarked だけが残す（頭は印を除いた字で整える）', () => {
+    expect(splitCommands('sudo$(true) pkill$(true) -f x"$(y)":/d')).toEqual([['true'], ['true'], ['y'], ['pkill', '-f', 'x:/d']]);
+    expect(splitCommandsMarked('sudo$(true) pkill$(true) -f x"$(y)":/d')).toEqual([['true'], ['true'], ['y'], ['pkill', '-f', `x${SUBSTITUTED}:/d`]]);
   });
 });
 
@@ -152,17 +157,18 @@ describe('touched: 名を書かずに的を選ぶ命令（t-9tac）', () => {
     ['container stop -a', ['callboard', 'castlist', 'builder']],
     ['container stop -t 5 --all', ['callboard', 'castlist', 'builder']],
     ['container --debug stop --all', ['callboard', 'castlist', 'builder']],
-    ['container kill -a', ['callboard']],
-    ['container delete -af', ['castlist']],
-    ['container delete -fa', ['castlist']],
+    // 動詞を宣言しない環境にも当たる（名を宣言した container は、宣言に無い動詞でもみな当たる。t-d37r）。
+    ['container kill -a', ['callboard', 'castlist', 'builder']],
+    ['container delete -af', ['callboard', 'castlist', 'builder']],
+    ['container delete -fa', ['callboard', 'castlist', 'builder']],
     ['container stop $(container ls -q)', ['callboard', 'castlist', 'builder']],
     ['container stop `container ls -q`', ['callboard', 'castlist', 'builder']],
     ['container ls -q | xargs container stop', ['callboard', 'castlist', 'builder']],
-    ['container ls -q | xargs -n1 container rm -f', ['callboard']],
-    ['container ls -q | xargs -I{} container rm -f {}', ['callboard']],
+    ['container ls -q | xargs -n1 container rm -f', ['callboard', 'castlist', 'builder']],
+    ['container ls -q | xargs -I{} container rm -f {}', ['callboard', 'castlist', 'builder']],
     ['container ls -q | xargs -I % container stop %', ['callboard', 'castlist', 'builder']],
     ['container ls -q | xargs container stop -t 5', ['callboard', 'castlist', 'builder']],
-    ['container ls -q | xargs container kill -s KILL', ['callboard']],
+    ['container ls -q | xargs container kill -s KILL', ['callboard', 'castlist', 'builder']],
     ['container stop --all mytest', ['callboard', 'castlist', 'builder']],
     ['for c in a b; do container stop "$c"; done', ['callboard', 'castlist', 'builder']],
     ['container stop callboard-*', ['callboard', 'castlist', 'builder']],
@@ -474,6 +480,14 @@ describe('pattern で process に合図を送る命令（台帳 #89・#92）', (
     'sh -c "pkill -f x"',
     'x=$(killall -s x)',
     'ROSTER_RAW=1 pkill -f x',
+    // 命令の名・前置き・-c の途中の置き換え（t-ta2b の review-2 の指摘 2・review-3 の指摘 1）。
+    'pkill$(true) -f foo',
+    'sudo$(true) pkill -f x',
+    'nohup$(true) pkill -f x',
+    'pgrep x | xargs$(true) kill',
+    'sh -c$(true) \'pkill -f x\'',
+    // 的の語の途中の置き換え（review-4 の指摘 4）。
+    'kill 1$(pgrep -f x)',
     // kill でも、的を名指さない物は、pattern で選んだ物にまとめて送るのと同じ。
     'pgrep -f x | xargs kill',
     'pgrep -f x | xargs kill -9',
@@ -631,6 +645,10 @@ describe('Staff Engineer 担当は repo を変えない', () => {
     ['gh pr comment 141 --body x', false],
     ['gh pr merge 141 --squash', false],
     ['ROSTER_RAW=1 git push', false],
+    // 命令の名の途中の置き換え（t-ta2b の review-2 の指摘 2）。
+    ['git$(true) push', false],
+    ['git push$(true)', false],
+    ['gh pr$(true) merge 141 --squash', false],
   ])('%s', (command, allow) => {
     expect(ask(command, 'staff-engineer').allow).toBe(allow);
   });
@@ -856,6 +874,9 @@ describe('この repo の設定の、名を書かない命令と container-syste
     'container ls -q | xargs container rm -f',
     'container volume delete --all',
     'container v rm $(container v ls -q)',
+    // 語の途中の置き換え（t-ta2b の review-1 の指摘 1。前は跡を残さず、字の名 pagetray に見えて通った）。
+    'container stop pagetray$(echo .box)',
+    'container stop x`echo y`',
   ])('%s（名を書かない）は、その動詞を持つ環境に当たり、ほかの担当を止める', (command) => {
     expect(judgeOwn(command, 'software-engineer')).toBe(false);
   });
@@ -893,6 +914,14 @@ describe('この repo の設定の、名を書かない命令と container-syste
   });
 });
 
+// 隣の repo の本物の宣言。guard は、TPM 担当を起こした folder の直下の folder の宣言も読むので、本体の checkout の file が効く。
+// worktree からでも本体を指すよう、git の common dir（<本体>/.git。絶対の path で取る）の親の親を、repo を並べた folder とみなす。
+// 隣の repo の本体の checkout が無い時は飛ぶ（CI では飛ぶ。手元で流す試験）。git には GIT_DIR などを渡さない（hook の中で流れても読み違えない）。
+const gitEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
+const common = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: import.meta.dirname, encoding: 'utf8', env: gitEnv }).stdout?.trim() ?? '';
+const sibling = (repo: string): string => join(dirname(dirname(common)), repo, '.claude', 'roles', 'config.jsonc');
+const hasSibling = (repo: string): boolean => common !== '' && existsSync(sibling(repo));
+
 // 名を = で繋ぐ形（--name=…）と、volume を付ける長い旗（--volume …）で起こす命令（t-vp6r。台帳 #291）。
 // pagetray の宣言は PR #256（review-18）で塞いだ。同じ形を、nats・builder と、隣の repo（castlist・pagetray）の宣言にも足す。
 describe('名を = で繋ぐ形と、volume の長い旗（t-vp6r。台帳 #291）', () => {
@@ -917,13 +946,6 @@ describe('名を = で繋ぐ形と、volume の長い旗（t-vp6r。台帳 #291�
   ])('この repo の設定: %s（関わりの無い・読むだけの命令）は、どの担当も通す', (command) => {
     expect(judgeOwn(command, 'software-engineer')).toBe(true);
   });
-
-  // 隣の repo の本物の宣言。guard は、TPM 担当を起こした folder の直下の folder の宣言も読むので、本体の checkout の file が効く。
-  // worktree からでも本体を指すよう、git の common dir（<本体>/.git。絶対の path で取る）の親の親を、repo を並べた folder とみなす。
-  // 隣の repo の本体の checkout が無い時は飛ぶ（CI では飛ぶ。手元で流す試験）。git には GIT_DIR などを渡さない（hook の中で流れても読み違えない）。
-  const gitEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
-  const common = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: import.meta.dirname, encoding: 'utf8', env: gitEnv }).stdout?.trim() ?? '';
-  const sibling = (repo: string): string => join(dirname(dirname(common)), repo, '.claude', 'roles', 'config.jsonc');
 
   describe.skipIf(common === '' || !existsSync(sibling('castlist')))('castlist の repo の宣言（PM だけ。隣の repo の本体の checkout が無い時は飛ぶ）', () => {
     const castlist = readRolesConfig(sibling('castlist')).infra;
@@ -972,5 +994,521 @@ describe('名を = で繋ぐ形と、volume の長い旗（t-vp6r。台帳 #291�
     ])('%s は、どの担当も通す', (command) => {
       expect(judgePagetray(command, 'software-engineer')).toBe(true);
     });
+  });
+});
+
+// 旗の書き方をそろえて読む（t-ta2b。台帳 #300）。container の命令の語と宣言の項目を、比べる前に 1 つの形にそろえる:
+// 旗の = を割る・--volume を -v に・-v の値の付け方（-v=・続けて書く・束ねる）・--mount の source を -v と読む。
+// 名と volume を変数・置き換えで渡す形は、値の分からない所を何でも当たるとみなす。宣言の項目は足さない。
+describe('旗の書き方をそろえて読む（t-ta2b。台帳 #300）', () => {
+  const judgeIn = (infra: Record<string, InfraEnv>) => (command: string, role: RoleName | undefined) =>
+    judge({ command, role, config: { infra, trackers: { jira: [], github: [] } }, approvals: {}, now });
+  const allowIn = (infra: Record<string, InfraEnv>) => (command: string, role: RoleName | undefined) => judgeIn(infra)(command, role).allow;
+  const own = readRolesConfig(join(import.meta.dirname, '..', '..', '.claude', 'roles', 'config.jsonc')).infra;
+  const judgeOwn = allowIn(own);
+
+  test.each([
+    'container run --rm --volume=roster-nats-data:/data docker.io/library/alpine:3.22 sh',
+    'container run --rm --mount type=volume,source=roster-nats-data,target=/data docker.io/library/alpine:3.22 sh',
+    'container run --rm -v=roster-nats-data:/data docker.io/library/alpine:3.22 sh',
+    'container run --rm -vroster-nats-data:/data docker.io/library/alpine:3.22 sh',
+    'container run -d --name "$N" docker.io/library/nats:2.12 -js',
+    'container run --rm --volume=pagetray-data-v1:/data docker.io/library/alpine:3.22 sh',
+  ])('この repo の設定: %s は、ほかの担当を止め、DevOps Engineer 担当は通す（TPM に相談）', (command) => {
+    expect(judgeOwn(command, 'software-engineer')).toBe(false);
+    expect(judgeOwn(command, 'devops-engineer')).toBe(true);
+  });
+
+  test('変数で渡した名を止めた訳には、名を字で書く案内が付く', () => {
+    const verdict = judgeIn(own)('container run -d --name "$N" img', 'software-engineer');
+    expect(verdict.allow).toBe(false);
+    if (!verdict.allow) expect(verdict.reason).toContain('名を字で書いて');
+    const named = judgeIn(own)('container run -d --name roster-nats img', 'software-engineer');
+    expect(named.allow).toBe(false);
+    if (!named.allow) expect(named.reason).not.toContain('名を字で書いて');
+  });
+
+  // 本物の宣言で止める形。castlist は PM だけなので、どの担当も止まる。
+  const castlistStops = [
+    // (1) volume の長い旗を = で繋ぐ。
+    'container run --rm --volume=castlist-data-v1:/data docker.io/library/alpine:3.22 sh',
+    'container create --volume=castlist-data-v1:/data docker.io/library/alpine:3.22',
+    // (2) --mount の source（= で繋ぐ形・src・type の無い形も）。
+    'container run --rm --mount type=volume,source=castlist-data-v1,target=/data docker.io/library/alpine:3.22 sh',
+    'container run --rm --mount=type=volume,source=castlist-data-v1,target=/data docker.io/library/alpine:3.22 sh',
+    'container run --rm --mount source=castlist-data-v1,target=/data docker.io/library/alpine:3.22 sh',
+    'container run --rm --mount type=volume,src=castlist-data-v1,dst=/data,readonly docker.io/library/alpine:3.22 sh',
+    // (3) 短い旗 -v を = で繋ぐ・続けて書く・束ねる。
+    'container run --rm -v=castlist-data-v1:/data docker.io/library/alpine:3.22 sh',
+    'container run --rm -vcastlist-data-v1:/data docker.io/library/alpine:3.22 sh',
+    'container run --rm -dv castlist-data-v1:/data docker.io/library/alpine:3.22 sh',
+    'container run --rm -dvcastlist-data-v1:/data docker.io/library/alpine:3.22 sh',
+    // = は最初の 1 つで割る（review-1 の指摘 6）。
+    'container run --rm -v=castlist-data-v1:/data:ro docker.io/library/alpine:3.22 sh',
+    // (4) 名・volume を変数・置き換えで渡す（同じ行の代入は読まない）。
+    'container run -d --name "$N" ghcr.io/uraitakahito/castlist:v2.0.0',
+    'container run -d --name="$N" ghcr.io/uraitakahito/castlist:v2.0.0',
+    'container run -d --name "${N}.box" ghcr.io/uraitakahito/castlist:v2.0.0',
+    'container run -d --name "$(cat name)" ghcr.io/uraitakahito/castlist:v2.0.0',
+    'container run -d --name `cat name` ghcr.io/uraitakahito/castlist:v2.0.0',
+    'N=castlist.box; container run -d --name "$N" ghcr.io/uraitakahito/castlist:v2.0.0',
+    'container run --rm -v "$V":/data docker.io/library/alpine:3.22 sh',
+    'container run --rm -v "${V}:/data" docker.io/library/alpine:3.22 sh',
+    'container run --rm --volume="castlist-$S:/data" docker.io/library/alpine:3.22 sh',
+    'container run --rm --mount "type=volume,source=$V,target=/data" docker.io/library/alpine:3.22 sh',
+    'container run --rm --mount "$M" docker.io/library/alpine:3.22 sh',
+    // 語の途中の置き換え（review-1 の指摘 1）。
+    'container run --rm -v "$(cat f)":/data docker.io/library/alpine:3.22 sh',
+    'container run -d --name "$(echo castlist).box" ghcr.io/uraitakahito/castlist:v2.0.0',
+    'container run --rm -v `cat f`:/data docker.io/library/alpine:3.22 sh',
+    // 字の頭が項目の頭より短い（review-1 の指摘 5）。
+    'container run --rm -v cast"$X":/data docker.io/library/alpine:3.22 sh',
+    // xargs・find の置き場と、値の無い旗（review-1 の指摘 2）。
+    'echo castlist.box | xargs -I{} container run -d --name {} ghcr.io/uraitakahito/castlist:v2.0.0',
+    'echo castlist.box | xargs -I % container run -d --name % ghcr.io/uraitakahito/castlist:v2.0.0',
+    'echo castlist.box | xargs container run -d --name',
+    'find . -name x -exec container run --rm -v {}:/data docker.io/library/alpine:3.22 sh \\;',
+    // brace の展開（review-1 の指摘 8）。
+    'container run -d --name=castlist.{box,box} ghcr.io/uraitakahito/castlist:v2.0.0',
+    // 同じ行で path の変数を替える（review-1 の指摘 4）。
+    'HOME=castlist-data-v1; container run --rm -v "$HOME":/data docker.io/library/alpine:3.22 sh',
+    'export PWD=castlist-data-v1 && container run --rm -v "${PWD}:/data" docker.io/library/alpine:3.22 sh',
+    // 前置き・path の付いた名・sh -c の中。
+    'timeout 60 /opt/homebrew/bin/container run --rm --volume=castlist-data-v1:/data docker.io/library/alpine:3.22 sh',
+    'sh -c \'container run --rm -v=castlist-data-v1:/data docker.io/library/alpine:3.22 sh\'',
+    // 字の含みの当たり（here-document・ssh の引数）にも、同じそろえ方を使う。
+    'bash <<\'X\'\ncontainer run --rm --volume=castlist-data-v1:/data docker.io/library/alpine:3.22 sh\nX',
+    'ssh host \'container run --rm --mount type=volume,source=castlist-data-v1,target=/data docker.io/library/alpine:3.22 sh\'',
+    'ssh host \'container run -d --name "$N" ghcr.io/uraitakahito/castlist:v2.0.0\'',
+    // 字の含みは、そろえる前の項目の字のまま（container の語の無い包みも、今までどおり止まる。review-1 の指摘 7）。
+    './up.sh --name=castlist.box',
+    // 前の区切りに exec か -- のある container の命令があっても、後ろの ssh の中を読む（review-2 の指摘 1）。
+    'container exec web ls; ssh host \'container run --rm --mount type=volume,source=castlist-data-v1,target=/data docker.io/library/alpine:3.22 sh\'',
+    'container run --rm docker.io/library/alpine:3.22 -- true; ssh host \'container run --rm -v=castlist-data-v1:/data docker.io/library/alpine:3.22 sh\'',
+    // 命令の名の途中の置き換え（review-2 の指摘 2）。
+    'container$(true) stop castlist.box',
+    'timeout 60 container$(true) stop castlist.box',
+    // 動詞・旗の途中の置き換え（review-3 の指摘 1）。
+    'container stop$(true) castlist.box',
+    'container run -d --name$(true) castlist.box ghcr.io/uraitakahito/castlist:v2.0.0',
+    'container run -d --name$(true) "$N" ghcr.io/uraitakahito/castlist:v2.0.0',
+    // source の無い mount の値の途中の変数（review-3 の指摘 2）。
+    'container run --rm --mount "type=volume,target=/data,$S" docker.io/library/alpine:3.22 sh',
+    // \ と改行で続けた here-document・ssh の中（review-3 の指摘 3）。
+    'bash <<\'X\'\ncontainer run --rm \\\n  --volume=castlist-data-v1:/data docker.io/library/alpine:3.22 sh\nX',
+    'ssh host \'container run --rm \\\n  --mount type=volume,source=castlist-data-v1,target=/data docker.io/library/alpine:3.22 sh\'',
+    'ssh host \'container run --rm \\\n  -v "$V":/data docker.io/library/alpine:3.22 sh\'',
+    // 引用しない here-document の中の置き換え（shell が動かす。review-4 の指摘 1）。
+    'git commit -F - <<EOF\n$(container run --rm --volume=castlist-data-v1:/data docker.io/library/alpine:3.22 cat /data/x)\nEOF',
+    'cat <<EOF > out.txt\n`container run --rm -v "$V":/data docker.io/library/alpine:3.22 cat /data/x`\nEOF',
+    // sh -c と eval の中の語の途中の置き換え（review-4 の指摘 2）。
+    'sh -c "container run -d --name castlist$(echo .box) ghcr.io/uraitakahito/castlist:v2.0.0"',
+    'eval container run --rm -v castlist$(echo -data-v1):/data docker.io/library/alpine:3.22 sh',
+    // 本文を送るだけでない gh（review-4 の指摘 3）。
+    'gh cs ssh -c mycs -- \'container run --rm -v=castlist-data-v1:/data docker.io/library/alpine:3.22 sh\'',
+    'gh ext exec foo \'container run --rm -v=castlist-data-v1:/data docker.io/library/alpine:3.22 sh\'',
+    // 字を出す命令でも、字を動かす命令と並べば読む。
+    'cat <<\'X\' | sh\ncontainer run --rm --volume=castlist-data-v1:/data docker.io/library/alpine:3.22 sh\nX',
+    // 値の無い --mount（review-2 の指摘 3）。
+    'echo \'type=volume,source=castlist-data-v1,target=/data docker.io/library/alpine:3.22 sh\' | xargs container run --rm --mount',
+    // 空でありうる path の変数の後ろに字が続く（review-2 の指摘 4）。
+    'container run --rm -v "${OLDPWD}castlist-data-v1:/data" docker.io/library/alpine:3.22 sh',
+    'container run --rm -v "${TMPDIR}castlist-data-v1:/data" docker.io/library/alpine:3.22 sh',
+    // image より後ろの語（container の中の命令）もそろえて読む（image の位置は、値を取る旗を知らないと決まらない。-- を挟めばそろえない。review-2 の指摘 5）。
+    'container run --rm docker.io/library/alpine:3.22 tar -xzv castlist-data-v1.tgz',
+  ];
+  // 関わりの無い命令・読むだけの命令・文と検索。
+  const castlistPasses = [
+    'container run --rm --name=mytest --volume=mytest-data:/data docker.io/library/alpine:3.22 sh',
+    'container run --rm --mount type=volume,source=mytest-data,target=/data docker.io/library/alpine:3.22 sh',
+    'container run --rm --mount type=bind,source=/tmp/x,target=/x docker.io/library/alpine:3.22 sh',
+    'container run --rm -v "$PWD:/w" docker.io/library/alpine:3.22 sh',
+    'container run --rm -v "$HOME/x:/x" docker.io/library/alpine:3.22 sh',
+    'container run --rm -v "${TMPDIR}/x:/x" docker.io/library/alpine:3.22 sh',
+    'container run --rm -v "$OLDPWD:/x" docker.io/library/alpine:3.22 sh',
+    // 区切りの外の命令の旗は、container の旗と読まない（review-2 の指摘 1）。
+    'container logs mytest 2>&1 | grep -v "$X"',
+    'container ls | grep -v "$PAT"',
+    'for n in a b; do container logs "$n" | grep -v "$n"; done',
+    'container ls; echo "--name $N"',
+    'mkdir -pv "$OUT" && container ls',
+    // PR の本文と commit の文（字を動かさない命令の引数と here-document。review-3 の指摘 4）。
+    'gh pr create --title x --body "container run -d --name \\"$N\\" は止まる"',
+    'gh pr create --title x --body \'container run --volume=castlist-data-v1:/data は止まる\'',
+    'git commit -F - <<\'EOF\'\ncontainer run -v "$V":/data を止める\nEOF',
+    'gh pr create --title x --body "$(cat <<\'EOF\'\ncontainer run -d --name "$N" は止まる\nEOF\n)"',
+    'gh issue comment 12 --body \'container run --volume=castlist-data-v1:/data は止まる\'',
+    // source の無い mount の、ほかの key の値の変数（review-4 の指摘 6）。
+    'container run --rm --mount "type=tmpfs,target=/x,tmpfs-size=$SZ" docker.io/library/alpine:3.22 sh',
+    'container run --rm -v /tmp/x:/x docker.io/library/alpine:3.22 sh',
+    'container run --rm --name "test-$N" docker.io/library/alpine:3.22 sh',
+    // 字の頭も終わりも読む（"$N"x は、字の分け方が引用の切れ目を持たないので $Nx の 1 つの変数に読み、止まる側に倒れる）。
+    'container run --rm --name "${N}-test" docker.io/library/alpine:3.22 sh',
+    'container run --rm -e "X=$Y" --name mytest docker.io/library/alpine:3.22 sh',
+    // source の無い字の mount（tmpfs・名の無い volume。review-1 の指摘 3）。
+    'container run --rm --mount type=tmpfs,target=/x docker.io/library/alpine:3.22 sh',
+    // container の中で動かす命令の旗（review-1 の指摘 9）と、-- の後ろ。
+    'container exec mytest tar -xzv castlist-data-v1.tgz',
+    'container exec mytest tar -xzvf castlist-data-v1.tgz',
+    'container run --rm docker.io/library/alpine:3.22 -- tar -xzv castlist-data-v1.tgz',
+    // 置き換えで名を出しても、字で書いた所が合わなければ通す。
+    'container run --rm --name "test-$(date +%s)" docker.io/library/alpine:3.22 sh',
+    'container volume inspect castlist-data-v1',
+    'container logs castlist.box',
+    'container inspect castlist.box',
+    'container ls -a',
+    'grep -- "--name=castlist" docs',
+    'rg -- "--volume=castlist-data" .',
+    'git commit -m "--mount source=castlist-data-v1 を読む"',
+    'roster ask devops --what "container run --volume=castlist-data-v1:/data" --why "x"',
+    'grep -v "$X" file',
+  ];
+
+  describe.skipIf(!hasSibling('castlist'))('castlist の repo の宣言（PM だけ。隣の repo の本体の checkout が無い時は飛ぶ）', () => {
+    const judgeCastlist = allowIn(readRolesConfig(sibling('castlist')).infra);
+    test.each(castlistStops)('%s は、どの担当も止める（DevOps Engineer 担当・TPM 担当も）', (command) => {
+      expect(judgeCastlist(command, 'software-engineer')).toBe(false);
+      expect(judgeCastlist(command, 'devops-engineer')).toBe(false);
+      expect(judgeCastlist(command, undefined)).toBe(false);
+    });
+    test.each(castlistPasses)('%s は、どの担当も通す', (command) => {
+      expect(judgeCastlist(command, 'software-engineer')).toBe(true);
+    });
+  });
+
+  describe.skipIf(!hasSibling('pagetray'))('pagetray の repo の宣言（TPM に相談。隣の repo の本体の checkout が無い時は飛ぶ）', () => {
+    const judgePagetray = allowIn(readRolesConfig(sibling('pagetray')).infra);
+    const toPagetray = (command: string): string => command.replaceAll('castlist-data-v1', 'pagetray-data-v1').replaceAll('castlist.box', 'pagetray.box').replaceAll('castlist.{', 'pagetray.{').replaceAll('castlist$(', 'pagetray$(')
+      .replaceAll('castlist-$S', 'pagetray-$S').replaceAll('cast"$X"', 'page"$X"').replaceAll('ghcr.io/uraitakahito/castlist:v2.0.0', 'ghcr.io/uraitakahito/pagetray:v1.2.0');
+    test.each(castlistStops.map(toPagetray))('%s は、ほかの担当を止め、DevOps Engineer 担当は通す', (command) => {
+      expect(judgePagetray(command, 'software-engineer')).toBe(false);
+      expect(judgePagetray(command, 'devops-engineer')).toBe(true);
+    });
+    test.each(castlistPasses.map(c => c.replaceAll('castlist', 'pagetray')))('%s は、どの担当も通す', (command) => {
+      expect(judgePagetray(command, 'software-engineer')).toBe(true);
+    });
+  });
+
+  describe.skipIf(!hasSibling('callboard'))('callboard の repo の宣言（TPM に相談。隣の repo の本体の checkout が無い時は飛ぶ）', () => {
+    const judgeCallboard = allowIn(readRolesConfig(sibling('callboard')).infra);
+    test.each([
+      'container run -d --name "$N" ghcr.io/uraitakahito/callboard:v1.0.0',
+      'container run -d --name="$(cat name)" ghcr.io/uraitakahito/callboard:v1.0.0',
+    ])('%s は、ほかの担当を止め、DevOps Engineer 担当は通す', (command) => {
+      expect(judgeCallboard(command, 'software-engineer')).toBe(false);
+      expect(judgeCallboard(command, 'devops-engineer')).toBe(true);
+    });
+    test.each([
+      'container run -d --name "test-$N" ghcr.io/uraitakahito/callboard:v1.0.0',
+      'grep -- "--name=callboard" docs',
+      'container logs callboard',
+    ])('%s は、どの担当も通す', (command) => {
+      expect(judgeCallboard(command, 'software-engineer')).toBe(true);
+    });
+  });
+});
+
+// 宣言に無い動詞（exec・cp・commit・export など）で、環境の container・volume の名を的にする命令（t-d37r。台帳 #312）。
+// 名は、名を宣言する項目（--name X・-v X）から引く。読むだけの動詞（logs・inspect・stats・ls と volume の inspect・ls）は通す。
+describe('宣言に無い動詞で、環境の名を的にする命令（t-d37r。台帳 #312）', () => {
+  const judgeIn = (infra: Record<string, InfraEnv>) => (command: string, role: RoleName | undefined) =>
+    judge({ command, role, config: { infra, trackers: { jira: [], github: [] } }, approvals: {}, now });
+  const allowIn = (infra: Record<string, InfraEnv>) => (command: string, role: RoleName | undefined) => judgeIn(infra)(command, role).allow;
+  // 項目を整えた後の castlist の宣言の形（隣の repo の本体が無い CI でも流す）。
+  const castlistInfra: Record<string, InfraEnv> = {
+    castlist: {
+      guard: 'pm-only',
+      match: ['--name castlist.box', 'container start castlist.box', 'container stop castlist.box', 'container rm castlist.box', '--name castlist', 'container stop castlist', 'container volume delete castlist-data*', 'container volume rm castlist-data*', '-v castlist-data*', 'container v rm castlist-data*'],
+    },
+  };
+  const allowCastlist = allowIn(castlistInfra);
+
+  const verbStops = [
+    'container exec castlist.box sh',
+    'container exec -it castlist.box sqlite3 /data/castlist.db',
+    'container exec -e K=V castlist.box sh',
+    'container exec --env=K=V -w /data castlist.box sh',
+    'container exec -ite K=V castlist.box sh',
+    // 束ねた短い旗の値・-- の後ろ（review-1 の指摘 2）。
+    'container exec -iu root castlist.box sh',
+    'container exec -ie K=V castlist.box sh',
+    'container exec -- castlist.box sh',
+    // 区切りの中で、宣言の動詞と名の間に旗や値を挟む（review-1 の指摘 1。前は通っていた）。
+    'ssh host \'container stop -t 5 castlist.box\'',
+    'ssh host \'container delete --force castlist.box\'',
+    'ssh host \'container rm -f castlist.box\'',
+    // 知らない動詞は、volume の名とも比べる（review-1 の指摘 4）。
+    'container frobnicate castlist-data-v1',
+    'container cp "$(cat src)" ./y',
+    'container commit mytest "$IMG"',
+    // container の中の命令の -h・--help は、exec の help ではない（review-2 の指摘 2）。
+    'container exec castlist.box ls --help',
+    'container exec -it castlist.box sqlite3 /data/castlist.db --help',
+    'container exec castlist.box sh -c \'cat /data/castlist.db\' -h',
+    // 字を出す命令でも、字を動かす命令と並べば読む。
+    'cat <<\'X\' | sh\ncontainer exec castlist.box sh\nX',
+    'echo x; container exec castlist.box sh',
+    'container exec castlist sh',
+    'container --debug exec castlist.box sh',
+    'timeout 60 /opt/homebrew/bin/container exec castlist.box sh',
+    'sh -c \'container exec castlist.box sh\'',
+    'ssh host \'container exec castlist.box sh\'',
+    'bash <<\'X\'\ncontainer exec castlist.box sh\nX',
+    'container cp castlist.box:/data/castlist.db ./x.db',
+    'container copy ./x castlist.box:/data/x',
+    'container commit castlist.box mine:1',
+    'container export -o out.tar castlist.box',
+    'container export castlist.box > out.tar',
+    'container clean castlist.box',
+    'container stop -- castlist.box',
+    // 知らない動詞（版が上がって足された物）。
+    'container frobnicate castlist.box',
+    // volume の群の、読むだけでない動詞。
+    'container volume create castlist-data-v1',
+    'container v frobnicate castlist-data-v1',
+    // 的が値の分からない語・的が無い。
+    'container exec "$N" sh',
+    'container exec $(container ls -q | head -1) sh',
+    'container ls -q | xargs -I{} container exec {} sh',
+    'container ls -q | xargs container export',
+    'container cp "$C":/data/x ./x',
+    'container cp ./x "$DEST"',
+    'container commit "$C" mine:1',
+    'container volume create "$V"',
+  ];
+  const verbPasses = [
+    'container logs castlist.box',
+    'container logs -n 50 castlist.box',
+    'container inspect castlist.box',
+    'container stats --no-stream castlist.box',
+    'container ls -a',
+    'container list',
+    'container volume inspect castlist-data-v1',
+    'container v ls',
+    'container volume inspect "$V"',
+    'for n in a b; do container logs "$n"; done',
+    // 自分の container と、container の中の命令の語。
+    'container exec mytest sh',
+    'container exec mytest grep castlist.box /etc/hosts',
+    'container exec mytest tar -xzv castlist-data-v1.tgz',
+    'container cp ./a mytest:/a',
+    'container cp mytest:/a "$HOME/a"',
+    'container commit mytest mine:1',
+    'container export -o "$OUT" mytest',
+    // container の動詞の的は container の名とだけ比べる（castlist-data* の前方一致に当てない。review-1 の指摘 4）。
+    // （container stop castlist-data-restore は、前の名の項目 container stop castlist の字の含みで、前から止まる）
+    'container kill -s TERM castlist-data-restore',
+    'container exec castlist-data-restore sh',
+    // 名の container を的にしない群（run・create の名は --name の項目が当てる）。
+    'container run --rm ghcr.io/uraitakahito/castlist:v2.0.0 --version',
+    'container image push castlist:v2.0.0',
+    'container image inspect castlist.box',
+    'container help exec',
+    'container exec --help',
+    'container exec -h',
+    'container cp -h',
+    // container の語を引数に持つ、読むだけの検索（review-2 の指摘 1）。
+    'grep -n container cli/src/guard.ts',
+    'grep -rn container docs',
+    'rg container .',
+    'git grep -n container -- docs',
+    'git log --oneline --grep container -- docs',
+    'find . -name container -type d',
+    'echo container exec castlist.box',
+    // 文と検索。
+    'grep -rn "container exec castlist.box" docs',
+    'git commit -m "container exec castlist.box を止める"',
+    'gh pr create --title x --body \'container exec castlist.box sh は止まる\'',
+    'roster ask devops --what "container exec castlist.box sh" --why "x"',
+  ];
+
+  test.each(verbStops)('%s は、どの担当も止める（castlist は PM だけ）', (command) => {
+    expect(allowCastlist(command, 'software-engineer')).toBe(false);
+    expect(allowCastlist(command, 'devops-engineer')).toBe(false);
+    expect(allowCastlist(command, undefined)).toBe(false);
+  });
+  test.each(verbPasses)('%s は、どの担当も通す', (command) => {
+    expect(allowCastlist(command, 'software-engineer')).toBe(true);
+  });
+
+  test('止めた訳には、読むだけの動詞は通す案内が付く', () => {
+    const verdict = judgeIn(castlistInfra)('container exec castlist.box sh', 'software-engineer');
+    expect(verdict.allow).toBe(false);
+    if (!verdict.allow) expect(verdict.reason).toContain('logs・inspect・stats・ls');
+  });
+
+  test('TPM に相談の環境は、DevOps Engineer 担当だけが打てる', () => {
+    const judgeOwn = allowIn(readRolesConfig(join(import.meta.dirname, '..', '..', '.claude', 'roles', 'config.jsonc')).infra);
+    for (const command of ['container exec pagetray.box sh', 'container cp roster-nats:/data/x .', 'container exec buildkit sh', 'container volume create pagetray-data-v2']) {
+      expect(judgeOwn(command, 'software-engineer')).toBe(false);
+      expect(judgeOwn(command, 'devops-engineer')).toBe(true);
+    }
+    for (const command of ['container logs pagetray.box', 'container stats --no-stream pagetray.box', 'container exec mytest sh']) {
+      expect(judgeOwn(command, 'software-engineer')).toBe(true);
+    }
+  });
+
+  // 隣の repo の本物の宣言。
+  const toPagetray = (command: string): string => command.replaceAll('castlist-data-v1', 'pagetray-data-v1').replaceAll('castlist.box', 'pagetray.box').replaceAll('exec castlist sh', 'exec pagetray sh');
+  describe.skipIf(!hasSibling('castlist'))('castlist の repo の宣言', () => {
+    const allowReal = allowIn(readRolesConfig(sibling('castlist')).infra);
+    test.each(verbStops)('%s は止める', (command) => {
+      expect(allowReal(command, 'devops-engineer')).toBe(false);
+    });
+    test.each(verbPasses)('%s は通す', (command) => {
+      expect(allowReal(command, 'software-engineer')).toBe(true);
+    });
+  });
+  describe.skipIf(!hasSibling('pagetray'))('pagetray の repo の宣言', () => {
+    const allowReal = allowIn(readRolesConfig(sibling('pagetray')).infra);
+    test.each(verbStops.map(toPagetray))('%s は、ほかの担当を止め、DevOps Engineer 担当は通す', (command) => {
+      expect(allowReal(command, 'software-engineer')).toBe(false);
+      expect(allowReal(command, 'devops-engineer')).toBe(true);
+    });
+    test.each(verbPasses.map(toPagetray))('%s は通す', (command) => {
+      expect(allowReal(command, 'software-engineer')).toBe(true);
+    });
+  });
+  describe.skipIf(!hasSibling('callboard'))('callboard の repo の宣言', () => {
+    const allowReal = allowIn(readRolesConfig(sibling('callboard')).infra);
+    test.each([
+      'container exec callboard sh',
+      'container cp callboard:/app/x .',
+      'container export callboard',
+      'ssh host \'container rm -f callboard\'',
+      'ssh host \'container delete --force callboard\'',
+    ])('%s は、ほかの担当を止め、DevOps Engineer 担当は通す', (command) => {
+      expect(allowReal(command, 'software-engineer')).toBe(false);
+      expect(allowReal(command, 'devops-engineer')).toBe(true);
+    });
+    test.each(['container logs callboard', 'container exec smoke-callboard sh'])('%s は通す', (command) => {
+      expect(allowReal(command, 'software-engineer')).toBe(true);
+    });
+  });
+});
+
+// 項目の別の書き方を、字の含みでも見る（t-d37r）。container の語の無い包み（./up.sh）に渡す旗も、--name X・-v X の項目で当たる。
+// これで、前の guard のために並べた --name=X・--volume X の項目を外せる。
+describe('字の含みの、項目の別の書き方（t-d37r）', () => {
+  const infra: Record<string, InfraEnv> = { castlist: { guard: 'pm-only', match: ['--name castlist.box', '-v castlist-data*'] } };
+  const allow = (command: string) => judge({ command, role: 'software-engineer', config: { infra, trackers: { jira: [], github: [] } }, approvals: {}, now }).allow;
+  test.each([
+    './up.sh --name=castlist.box',
+    './up.sh --name castlist.box',
+    './up.sh --volume castlist-data-v1:/data',
+    './up.sh -v castlist-data-v1:/data',
+  ])('%s は止める', (command) => {
+    expect(allow(command)).toBe(false);
+  });
+  test.each([
+    'grep -- "--name=castlist" docs',
+    'rg -- "--volume=castlist-data" .',
+    'git commit -m "--volume castlist-data-v1 を止める"',
+  ])('%s は通す', (command) => {
+    expect(allow(command)).toBe(true);
+  });
+});
+
+// 設定の項目を外しても、止まる形が変わらない（t-d37r の (c)）。外す前の宣言（t-ta2b の後の main の物）を字で持ち、外した後の宣言と答えを比べる。
+describe('設定の項目を外しても、止まる形が変わらない（t-d37r）', () => {
+  const before: Record<string, InfraEnv> = {
+    castlist: {
+      guard: 'pm-only',
+      match: ['--name castlist.box', '--name=castlist.box', '--name=castlist', 'container start castlist.box', 'container stop castlist.box', 'container kill castlist.box', 'container delete castlist.box', 'container rm castlist.box', '--name castlist', 'container start castlist', 'container stop castlist', 'container kill castlist', 'container delete castlist', 'container rm castlist', 'container volume delete castlist-data', 'container volume rm castlist-data', '-v castlist-data', 'container volume delete castlist-data*', 'container volume rm castlist-data*', '-v castlist-data*', '--volume castlist-data', '--volume castlist-data*', 'container v delete castlist-data*', 'container v rm castlist-data*'],
+    },
+    callboard: {
+      guard: 'tpm',
+      match: ['--name callboard', 'container start callboard', 'container stop callboard', 'container kill callboard', 'container delete callboard', 'container rm callboard', '--name=callboard', 'container rm -f callboard', 'container rm --force callboard', 'container delete -f callboard', 'container delete --force callboard'],
+    },
+  };
+  const after: Record<string, InfraEnv> = {
+    castlist: {
+      guard: 'pm-only',
+      match: ['--name castlist.box', 'container start castlist.box', 'container stop castlist.box', 'container kill castlist.box', 'container delete castlist.box', 'container rm castlist.box', '--name castlist', 'container start castlist', 'container stop castlist', 'container kill castlist', 'container delete castlist', 'container rm castlist', 'container volume delete castlist-data*', 'container volume rm castlist-data*', '-v castlist-data*', 'container v delete castlist-data*', 'container v rm castlist-data*'],
+    },
+    callboard: {
+      guard: 'tpm',
+      match: ['--name callboard', 'container start callboard', 'container stop callboard', 'container kill callboard', 'container delete callboard', 'container rm callboard'],
+    },
+  };
+  const touchedNames = (infra: Record<string, InfraEnv>) => (command: string) => touched(command, infra);
+  test.each([
+    'container run -d --name=castlist.box -p 127.0.0.1:8802:8080 --volume castlist-data-v1:/data ghcr.io/uraitakahito/castlist:v2.0.0',
+    'container run -d --name=castlist ghcr.io/uraitakahito/castlist:v2.0.0',
+    'container run --rm --volume castlist-data-v1:/data docker.io/library/alpine:3.22 sh',
+    'container run --rm --volume=castlist-data-v1:/data docker.io/library/alpine:3.22 sh',
+    'container run --rm -v castlist-data-v1:/data docker.io/library/alpine:3.22 sh',
+    'container volume rm castlist-data-v1',
+    'container volume delete castlist-data',
+    'container v rm castlist-data-v1',
+    './up.sh --name=castlist.box',
+    './up.sh --name=castlist',
+    './up.sh --volume castlist-data-v1:/data',
+    './up.sh -v castlist-data-v1:/data',
+    'ssh host \'container run -d --name=castlist.box x\'',
+    'ssh host \'container run --rm --volume castlist-data-v1:/data x\'',
+    'ssh host \'container volume rm castlist-data-v1\'',
+    'bash <<\'X\'\ncontainer volume rm castlist-data-v1\nX',
+    'container rm -f callboard',
+    'container rm --force callboard',
+    'container delete -f callboard',
+    'container delete --force callboard',
+    'ssh host \'container rm -f callboard\'',
+    'ssh host \'container delete --force callboard\'',
+    'ssh host \'container stop -t 5 callboard\'',
+    'ssh host \'container stop -t 5 castlist.box\'',
+    'ssh host \'container delete --force castlist.box\'',
+    './down.sh container rm -f callboard',
+    'container run -d --name=callboard x',
+    './up.sh --name=callboard',
+    'container volume inspect castlist-data-v1',
+    'container logs castlist.box',
+    'container logs callboard',
+    'grep -- "--name=castlist" docs',
+    'rg -- "--volume castlist-data" .',
+    'container run --rm --name=mytest --volume mytest-data:/data x sh',
+  ])('%s', (command) => {
+    expect(touchedNames(after)(command)).toEqual(touchedNames(before)(command));
+  });
+
+  // この repo の設定（pagetray・nats・builder）。外した後は本物の file を読む。
+  const beforeOwn: Record<string, InfraEnv> = {
+    pagetray: {
+      guard: 'tpm',
+      match: ['--name pagetray.box', '--name=pagetray.box', '--name=pagetray', 'container start pagetray.box', 'container stop pagetray.box', 'container kill pagetray.box', 'container delete pagetray.box', 'container rm pagetray.box', '--name pagetray', 'container start pagetray', 'container stop pagetray', 'container kill pagetray', 'container delete pagetray', 'container rm pagetray', 'container volume delete pagetray-data', 'container volume rm pagetray-data', '-v pagetray-data', 'container volume delete pagetray-data*', 'container volume rm pagetray-data*', '-v pagetray-data*', '--volume pagetray-data', '--volume pagetray-data*', 'container v delete pagetray-data*', 'container v rm pagetray-data*'],
+    },
+    nats: {
+      guard: 'tpm',
+      match: ['--name roster-nats', '--name=roster-nats', 'container start roster-nats', 'container stop roster-nats', 'container kill roster-nats', 'container delete roster-nats', 'container rm roster-nats', 'container volume delete roster-nats-data', 'container volume rm roster-nats-data', '-v roster-nats-data', 'container volume delete roster-nats-data*', 'container volume rm roster-nats-data*', '-v roster-nats-data*', '--volume roster-nats-data', '--volume roster-nats-data*', 'container v delete roster-nats-data*', 'container v rm roster-nats-data*'],
+    },
+    builder: {
+      guard: 'tpm',
+      match: ['--name buildkit', '--name=buildkit', 'container builder start', 'container builder stop', 'container builder delete', 'container builder rm', 'container stop buildkit', 'container kill buildkit', 'container delete buildkit', 'container rm buildkit'],
+    },
+  };
+  const own = readRolesConfig(join(import.meta.dirname, '..', '..', '.claude', 'roles', 'config.jsonc')).infra;
+  const afterOwn = Object.fromEntries(Object.keys(beforeOwn).map(name => [name, own[name] as InfraEnv]));
+  test.each([
+    'container run -d --name=pagetray.box --volume pagetray-data-v1:/data x',
+    'container run -d --name=pagetray x',
+    'container run -d --name=roster-nats --volume roster-nats-data:/data x',
+    'container run -d --name=buildkit x',
+    'container volume rm pagetray-data',
+    'container volume delete roster-nats-data',
+    'container v rm pagetray-data-v1',
+    './up.sh --name=pagetray.box',
+    './up.sh --name=roster-nats',
+    './up.sh --name=buildkit',
+    './up.sh --volume pagetray-data-v1:/data',
+    './up.sh --volume roster-nats-data:/data',
+    './up.sh -v pagetray-data:/data',
+    'ssh host \'container volume rm pagetray-data\'',
+    'ssh host \'container run -d --name=roster-nats x\'',
+    'container volume inspect pagetray-data-v1',
+    'container logs roster-nats',
+    'container builder status',
+    'grep -- "--name=pagetray" docs',
+  ])('この repo の設定: %s', (command) => {
+    expect(touchedNames(afterOwn)(command)).toEqual(touchedNames(beforeOwn)(command));
   });
 });

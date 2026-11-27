@@ -1,6 +1,6 @@
 ---
 title: roster
-description: Product Manager（人）を、TPM・Software Engineer・Tech Lead・DevOps Engineer・Staff Engineer・Sustaining Engineer・Auditor の各担当（Claude Code）が助けるための skill の一式と、担当のあいだの決まりを受け持つ roster の CLI
+description: Product Manager（人）を Claude Code の各担当が助けるための skill の一式と、担当のあいだの決まりを受け持つ roster の CLI
 ---
 
 roster は、Product Manager（人）を、Claude Code の各担当が助けるための skill の一式です。担当どうしのやりとり（担当を起こす・メッセージを送る・課題に記録する・共有の環境を守る）は `roster` の CLI が受け持ち、課題管理（Jira・GitHub の Issue）と連携（cmux）の道具は project ごとに設定で選びます。担当どうしのメッセージは、メッセージキュー（NATS JetStream）で配ります（cmux は、担当の居場所と状態を見せる道具で、メッセージは運びません）。

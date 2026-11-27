@@ -6,21 +6,19 @@
     // ページの置き場（別の repo の pagetray の image で動かす container と、DB を置く volume）。
     // 止めると担当はページを置けず、volume を消すと置かれたページの記録（役割・workspace の ID）が消える。
     // 起こし方は docs-site の運用のページの「ページの置き場（pagetray）」と、pagetray の docs の「動かす」（https://uraitakahito.github.io/pagetray/run.html）。
-    // volume は pagetray-data-v1。guard は字の含みで見るので、「-v pagetray-data」は pagetray-data-v1 を付けて起こす
-    // container run（写しから戻す時の書き込みも）に当たり、消す命令の 2 つも pagetray-data-v1 に当たる。
-    // 裸の「pagetray-data」は書かない（container volume inspect のような、volume を読むだけの命令まで止めるため）。
-    // 末尾に * の項目は、命令の語で当てる guard（t-7j37）の物で、* の語は前方一致（pagetray-data* は pagetray-data-v1:/data に当たる）。
-    // 字の含みで見る前の guard では * の項目は当たらず、* の無い項目が当たる。どちらの guard でも守りに穴が空かないよう、両方を並べて置く。
+    // guard の当て方は docs-site の設定のページの「環境の手続き」。要るところだけ:
+    // - 項目は命令の語で当て、末尾に * の語は前方一致（pagetray-data* は volume の pagetray-data-v1 と -v の値 pagetray-data-v1:/data に当たる）。
+    //   container の命令の旗はそろえてから当てるので、--name=…・--volume …・--mount …,source=… も、--name …・-v … の項目で当たる。
+    //   語で当たらなくても、命令の字に項目の字（--name=… と --volume … の書き方も）が含まれれば止める。
+    // - 名を宣言した container（--name の項目）と volume（-v の項目）を的にする container の命令は、ここに書いていない動詞
+    //   （exec・cp・commit・export など）でも止まる。読むだけの logs・inspect・stats・ls（volume は inspect・ls）は通る（t-d37r）。
+    // 裸の「pagetray-data」は書かない（命令の字に含まれれば止まるので、volume の名を grep する読む命令まで止めるため）。
     "pagetray": {
       "guard": "tpm",
       // container の名は pagetray.box（pagetray 1.2.0 から。同じ network の callboard が、DNS の domain box で名で引く。AI-32）。
       // 前の名 pagetray の項目も残す（前の名で動かしている間と、前の名で起こし直す試みを止めるため）。
-      // 前の名の項目だけでは、新しい名を旗を挟んで名指す命令（container rm -f pagetray.box）が、語でも字でも当たらない。
       "match": [
         "--name pagetray.box",
-        // 名を = で繋ぐ形（--name=…）。語も字も、空白で繋ぐ形の項目とは別なので、並べて置く（callboard の宣言と同じ形。review-18）。
-        "--name=pagetray.box",
-        "--name=pagetray",
         "container start pagetray.box",
         "container stop pagetray.box",
         "container kill pagetray.box",
@@ -32,45 +30,30 @@
         "container kill pagetray",
         "container delete pagetray",
         "container rm pagetray",
-        "container volume delete pagetray-data",
-        "container volume rm pagetray-data",
-        "-v pagetray-data",
         "container volume delete pagetray-data*",
         "container volume rm pagetray-data*",
         "-v pagetray-data*",
-        // volume を付ける旗の、長い形（--volume …）。
-        "--volume pagetray-data",
-        "--volume pagetray-data*",
-        // volume の略の v（container v rm …）。字も語も volume と違うので、略の形も並べる（t-9tac）。
+        // volume の略の v（container v rm …）。語が volume と違うので、略の形も並べる（t-9tac）。
         "container v delete pagetray-data*",
         "container v rm pagetray-data*",
       ],
     },
-    // メッセージキュー（NATS JetStream の container と、預かった物を置く volume）。担当どうしのメッセージを預かって配る
-    // （今は、まだ命令からは使っていない。使い始めるのは、hook と検査を替える段から）。
+    // メッセージキュー（NATS JetStream の container と、預かった物を置く volume）。担当どうしのメッセージを預かって配る。
     // 止めると担当はメッセージを送れず、volume を消すと、届いていないメッセージと記録が消える。
-    // 起こし方は docs-site の運用のページの「メッセージキュー（NATS）」。volume は roster-nats-data。
+    // 起こし方は docs-site の運用のページの「メッセージキュー（NATS）」。volume は roster-nats-data。項目の書き方は pagetray と同じ。
     "nats": {
       "guard": "tpm",
       "match": [
         "--name roster-nats",
-        // 名を = で繋ぐ形（--name=…）。語も字も、空白で繋ぐ形の項目とは別なので、並べて置く（pagetray と同じ形。t-vp6r・台帳 #291）。
-        "--name=roster-nats",
         "container start roster-nats",
         "container stop roster-nats",
         "container kill roster-nats",
         "container delete roster-nats",
         "container rm roster-nats",
-        "container volume delete roster-nats-data",
-        "container volume rm roster-nats-data",
-        "-v roster-nats-data",
-        // * の項目は pagetray と同じ（-v の値は roster-nats-data:/data の 1 語なので、命令の語で当てる guard では * が要る）。
+        // -v の値は roster-nats-data:/data の 1 語なので、* が要る。
         "container volume delete roster-nats-data*",
         "container volume rm roster-nats-data*",
         "-v roster-nats-data*",
-        // volume を付ける旗の、長い形（--volume …）。
-        "--volume roster-nats-data",
-        "--volume roster-nats-data*",
         "container v delete roster-nats-data*",
         "container v rm roster-nats-data*",
       ],
@@ -84,8 +67,6 @@
       "guard": "tpm",
       "match": [
         "--name buildkit",
-        // 名を = で繋ぐ形（pagetray と同じ。t-vp6r・台帳 #291）。builder は名を付けた volume を宣言しないので、--volume の項目は無い。
-        "--name=buildkit",
         "container builder start",
         "container builder stop",
         "container builder delete",

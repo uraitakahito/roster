@@ -529,6 +529,11 @@ export interface DeletePagesOutput {
 export interface FacetCount {
     value: string | undefined;
     count: number | undefined;
+    /**
+     * 値に添える字（送り手の名・workspace の Key）。ある時だけ（1.3.0 から）。
+     * @public
+     */
+    note?: string | undefined;
 }
 /**
  * 一覧の file の記録（中身と url は入らない）。
@@ -602,6 +607,42 @@ export interface File {
     sender?: Sender | undefined;
 }
 /**
+ * 受ける file の種類 1 つ。
+ * @public
+ */
+export interface FileType {
+    /**
+     * 拡張子（`.` は付けない）。
+     * @public
+     */
+    ext: string | undefined;
+    /**
+     * その file を返す時の `Content-Type`。
+     * @public
+     */
+    type: string | undefined;
+}
+/**
+ * @public
+ */
+export interface GetFileRulesInput {
+}
+/**
+ * @public
+ */
+export interface GetFileRulesOutput {
+    /**
+     * 受ける拡張子と、その file を返す時の `Content-Type`。
+     * @public
+     */
+    types: FileType[] | undefined;
+    /**
+     * file 1 つの大きさの上限（byte）。
+     * @public
+     */
+    maxBytes: number | undefined;
+}
+/**
  * @public
  */
 export interface GetHealthInput {
@@ -670,6 +711,71 @@ export interface GetMessageFacetsOutput {
      * @public
      */
     projects: FacetCount[] | undefined;
+}
+/**
+ * @public
+ */
+export interface GetPageFacetsInput {
+}
+/**
+ * @public
+ */
+export interface GetPageFacetsOutput {
+    /**
+     * Product Manager の返事待ちのページの数。
+     * @public
+     */
+    waiting: number | undefined;
+    /**
+     * Product Manager が答えたページの数。
+     * @public
+     */
+    answered: number | undefined;
+    /**
+     * レビュー待ちのページ（レビューの依頼書）の数。
+     * @public
+     */
+    reviewWaiting: number | undefined;
+    /**
+     * TPM 担当に上げて、まだ決まっていないページ（レビューのページ）の数。
+     * @public
+     */
+    escalated: number | undefined;
+    /**
+     * 送り手（castlist のアクター）ごとの数。
+     * @public
+     */
+    senders: FacetCount[] | undefined;
+    /**
+     * 役割ごとの数。
+     * @public
+     */
+    roles: FacetCount[] | undefined;
+    /**
+     * workspace の ID ごとの数。
+     * @public
+     */
+    workspaces: FacetCount[] | undefined;
+    /**
+     * 種類ごとの数。
+     * @public
+     */
+    kinds: FacetCount[] | undefined;
+    /**
+     * Key ごとの数。
+     * @public
+     */
+    keys: FacetCount[] | undefined;
+    /**
+     * project ごとの数。
+     * @public
+     */
+    projects: FacetCount[] | undefined;
+    /**
+     * レビューの判定ごとの数。
+     * @public
+     */
+    verdicts: FacetCount[] | undefined;
 }
 /**
  * @public
@@ -1052,6 +1158,43 @@ export interface ListPagesOutput {
      * @public
      */
     nextToken?: string | undefined;
+}
+/**
+ * @public
+ */
+export interface ListReviewsInput {
+    /**
+     * 見られたページの path（`/<project>/<key>/<kind>-<n>.html`）。
+     * @public
+     */
+    target: string[] | undefined;
+}
+/**
+ * 見られたページと、それを見たレビューのページ。
+ * @public
+ */
+export interface ReviewOf {
+    /**
+     * 見られたページの path。
+     * @public
+     */
+    target: string | undefined;
+    /**
+     * レビューのページの path。
+     * @public
+     */
+    path: string | undefined;
+    /**
+     * レビューの判定。書いていなければ無い。
+     * @public
+     */
+    verdict?: string | undefined;
+}
+/**
+ * @public
+ */
+export interface ListReviewsOutput {
+    reviews: ReviewOf[] | undefined;
 }
 /**
  * @public

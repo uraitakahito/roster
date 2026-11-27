@@ -273,7 +273,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 
 - 自分が変えてよくない環境は、自分では変えず【ask-devops】で TPM 担当に送る。
 - 手続きを踏んでいない命令は、guard が実行の前に止める。止まったら、出た文のとおりに頼む（別の書き方で通そうとしない）。
-- 名を書かずに container を選ぶ命令（`--all`・`-a`・`$(…)`・xargs・変数・glob と、`system stop`・`prune`）は、共有の環境にみな当たるとみなして止まる（castlist にも当たるので、どの担当も打てない）。自分の使い捨ての container は、`container ls` で名を見て、名を書いて打つ。
+- 名を書かずに container を選ぶ命令（`--all`・`-a`・`$(…)`・xargs・変数・glob と、`system stop`・`prune`）は、共有の環境にみな当たるとみなして止まる（castlist にも当たるので、どの担当も打てない）。自分の使い捨ての container は、`container ls` で名を見て、名を書いて打つ。`container run` などの `--name`・`-v`・`--volume`・`--mount` の値も、変数・`$(…)` で渡すと共有の環境にみな当たるとみなして止まる（同じ行の代入も読まない）ので、名と volume は字で書く。共有の環境の container・volume の名を的にする命令は、宣言に無い動詞（`container exec`・`cp`・`commit`・`export` など）でも止まる。状態を見るだけなら、読むだけの `logs`・`inspect`・`stats`・`ls`（volume は `inspect`・`ls`）を使う（通る）。
 - process を止めるときは、`pgrep -fl '<型>'` で pid と command line を見て、当たった数を確かめてから、その数字を `kill <pid>` に書く。`pkill`・`killall` と pid を名指さない `kill`（`xargs kill`・`kill $(pgrep …)`）は打たない（guard が止める。macOS の `pkill` は後ろの旗も pattern に読み、2026-11-23 の朝（JST）に担当の session ごと 29 個を止めた。台帳 #89）。
 - 設定に書かれていない環境で、並べて動いている担当やほかの人が困りそうな物を変えるときも、先に【ask-tpm】を送る。
 - 手元で image を build する builder（環境 `builder`。container の名は `buildkit`）は、どの担当も使う。`container build` はそのまま打つ（builder が止まっていれば build が起こす）。build に `-c`・`-m`・`--ssh`・`--dns…` を付けない（動いている builder を作り直し、ほかの担当の build が落ちる。guard はこれを止められない）。要るなら【ask-devops】。

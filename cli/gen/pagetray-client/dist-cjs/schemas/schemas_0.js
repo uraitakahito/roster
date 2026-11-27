@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ListMessages$ = exports.ListFiles$ = exports.GetMessageFacets$ = exports.GetHealth$ = exports.DeletePages$ = exports.DeleteFiles$ = exports.CreatePage$ = exports.CreateFile$ = exports.AddReviewMarks$ = exports.ValidationExceptionField$ = exports.SetReplyStateOutput$ = exports.SetReplyStateInput$ = exports.Sender$ = exports.PutMessageOutput$ = exports.PutMessageInput$ = exports.Page$ = exports.Message$ = exports.ListPagesOutput$ = exports.ListPagesInput$ = exports.ListMessagesOutput$ = exports.ListMessagesInput$ = exports.ListFilesOutput$ = exports.ListFilesInput$ = exports.GetMessageFacetsOutput$ = exports.GetMessageFacetsInput$ = exports.GetHealthOutput$ = exports.GetHealthInput$ = exports.File$ = exports.FacetCount$ = exports.DeletePagesOutput$ = exports.DeletePagesInput$ = exports.DeleteFilesOutput$ = exports.DeleteFilesInput$ = exports.CreatePageOutput$ = exports.CreatePageInput$ = exports.CreateFileOutput$ = exports.CreateFileInput$ = exports.AddReviewMarksOutput$ = exports.AddReviewMarksInput$ = exports.ActorSummary$ = exports.errorTypeRegistries = exports.ValidationException$ = exports.UnsupportedMediaType$ = exports.Unavailable$ = exports.PayloadTooLarge$ = exports.NotFound$ = exports.InternalError$ = exports.Forbidden$ = exports.Conflict$ = exports.PagetrayServiceException$ = void 0;
-exports.SetReplyState$ = exports.PutMessage$ = exports.ListPages$ = void 0;
+exports.AddReviewMarks$ = exports.ValidationExceptionField$ = exports.SetReplyStateOutput$ = exports.SetReplyStateInput$ = exports.Sender$ = exports.ReviewOf$ = exports.PutMessageOutput$ = exports.PutMessageInput$ = exports.Page$ = exports.Message$ = exports.ListReviewsOutput$ = exports.ListReviewsInput$ = exports.ListPagesOutput$ = exports.ListPagesInput$ = exports.ListMessagesOutput$ = exports.ListMessagesInput$ = exports.ListFilesOutput$ = exports.ListFilesInput$ = exports.GetPageFacetsOutput$ = exports.GetPageFacetsInput$ = exports.GetMessageFacetsOutput$ = exports.GetMessageFacetsInput$ = exports.GetHealthOutput$ = exports.GetHealthInput$ = exports.GetFileRulesOutput$ = exports.GetFileRulesInput$ = exports.FileType$ = exports.File$ = exports.FacetCount$ = exports.DeletePagesOutput$ = exports.DeletePagesInput$ = exports.DeleteFilesOutput$ = exports.DeleteFilesInput$ = exports.CreatePageOutput$ = exports.CreatePageInput$ = exports.CreateFileOutput$ = exports.CreateFileInput$ = exports.AddReviewMarksOutput$ = exports.AddReviewMarksInput$ = exports.ActorSummary$ = exports.errorTypeRegistries = exports.ValidationException$ = exports.UnsupportedMediaType$ = exports.Unavailable$ = exports.PayloadTooLarge$ = exports.NotFound$ = exports.InternalError$ = exports.Forbidden$ = exports.Conflict$ = exports.PagetrayServiceException$ = void 0;
+exports.SetReplyState$ = exports.PutMessage$ = exports.ListReviews$ = exports.ListPages$ = exports.ListMessages$ = exports.ListFiles$ = exports.GetPageFacets$ = exports.GetMessageFacets$ = exports.GetHealth$ = exports.GetFileRules$ = exports.DeletePages$ = exports.DeleteFiles$ = exports.CreatePage$ = exports.CreateFile$ = void 0;
 const _ARM = "AddReviewMarks";
 const _ARMI = "AddReviewMarksInput";
 const _ARMO = "AddReviewMarksOutput";
@@ -23,14 +23,22 @@ const _DPO = "DeletePagesOutput";
 const _F = "Forbidden";
 const _FC = "FacetCount";
 const _FCa = "FacetCounts";
+const _FT = "FileType";
+const _FTi = "FileTypes";
 const _Fi = "File";
 const _Fil = "Files";
+const _GFR = "GetFileRules";
+const _GFRI = "GetFileRulesInput";
+const _GFRO = "GetFileRulesOutput";
 const _GH = "GetHealth";
 const _GHI = "GetHealthInput";
 const _GHO = "GetHealthOutput";
 const _GMF = "GetMessageFacets";
 const _GMFI = "GetMessageFacetsInput";
 const _GMFO = "GetMessageFacetsOutput";
+const _GPF = "GetPageFacets";
+const _GPFI = "GetPageFacetsInput";
+const _GPFO = "GetPageFacetsOutput";
 const _H = "Html";
 const _IE = "InternalError";
 const _L = "Location";
@@ -43,6 +51,9 @@ const _LMO = "ListMessagesOutput";
 const _LP = "ListPages";
 const _LPI = "ListPagesInput";
 const _LPO = "ListPagesOutput";
+const _LR = "ListReviews";
+const _LRI = "ListReviewsInput";
+const _LRO = "ListReviewsOutput";
 const _M = "Message";
 const _Me = "Messages";
 const _NF = "NotFound";
@@ -52,6 +63,8 @@ const _PMI = "PutMessageInput";
 const _PMO = "PutMessageOutput";
 const _PTL = "PayloadTooLarge";
 const _Pa = "Pages";
+const _RO = "ReviewOf";
+const _ROe = "ReviewsOf";
 const _S = "Sender";
 const _SRS = "SetReplyState";
 const _SRSI = "SetReplyStateInput";
@@ -61,11 +74,12 @@ const _UMT = "UnsupportedMediaType";
 const _VE = "ValidationException";
 const _VEF = "ValidationExceptionField";
 const _VEFL = "ValidationExceptionFieldList";
-const _a = "actor";
+const _a = "answered";
 const _aA = "askedAt";
 const _aAn = "answeredAt";
 const _aI = "actorIssuer";
 const _aR = "actorRef";
+const _ac = "actor";
 const _b = "body";
 const _c = "client";
 const _cA = "createdAt";
@@ -74,6 +88,7 @@ const _co = "count";
 const _d = "deliveries";
 const _dA = "deliveredAt";
 const _e = "error";
+const _es = "escalated";
 const _ex = "ext";
 const _f = "from";
 const _fL = "fieldList";
@@ -88,14 +103,17 @@ const _is = "issuer";
 const _k = "kind";
 const _ke = "key";
 const _key = "keys";
+const _ki = "kinds";
 const _l = "location";
 const _m = "message";
+const _mB = "maxBytes";
 const _mR = "maxResults";
 const _mT = "mediaType";
 const _me = "messages";
 const _n = "name";
 const _nT = "nextToken";
 const _n_ = "n";
+const _no = "note";
 const _o = "on";
 const _p = "project";
 const _pa = "path";
@@ -105,13 +123,17 @@ const _q = "q";
 const _r = "role";
 const _rA = "resolvedAt";
 const _rT = "replyTo";
+const _rW = "reviewWaiting";
 const _re = "removed";
 const _ref = "ref";
 const _rep = "reply";
+const _rev = "reviews";
+const _ro = "roles";
 const _s = "smithy.ts.sdk.synthetic.ai.pagetray";
 const _sA = "sentAt";
 const _se = "server";
 const _sen = "sender";
+const _send = "senders";
 const _sh = "sha256";
 const _si = "size";
 const _so = "sort";
@@ -120,18 +142,23 @@ const _sta = "states";
 const _stat = "state";
 const _t = "text/html";
 const _ta = "targets";
+const _tar = "target";
 const _te = "text";
 const _ti = "title";
 const _to = "to";
 const _ty = "type";
+const _typ = "types";
 const _u = "url";
 const _uA = "updatedAt";
 const _v = "verdict";
 const _va = "value";
 const _ve = "version";
+const _ver = "verdicts";
 const _vi = "via";
 const _w = "workspace";
 const _wO = "waitsOn";
+const _wa = "waiting";
+const _wo = "workspaces";
 const n0 = "ai.common";
 const n1 = "ai.pagetray";
 const n2 = "smithy.framework";
@@ -263,13 +290,28 @@ exports.DeletePagesOutput$ = [3, n1, _DPO,
 ];
 exports.FacetCount$ = [3, n1, _FC,
     0,
-    [_va, _co],
-    [0, 1], 2
+    [_va, _co, _no],
+    [0, 1, 0], 2
 ];
 exports.File$ = [3, n1, _Fi,
     0,
     [_p, _ke, _n, _ex, _n_, _ty, _si, _sh, _r, _w, _cA, _pa, _sen],
     [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 5, 0, () => exports.Sender$], 12
+];
+exports.FileType$ = [3, n1, _FT,
+    0,
+    [_ex, _ty],
+    [0, 0], 2
+];
+exports.GetFileRulesInput$ = [3, n1, _GFRI,
+    0,
+    [],
+    []
+];
+exports.GetFileRulesOutput$ = [3, n1, _GFRO,
+    0,
+    [_typ, _mB],
+    [() => FileTypes, 1], 2
 ];
 exports.GetHealthInput$ = [3, n1, _GHI,
     0,
@@ -291,10 +333,20 @@ exports.GetMessageFacetsOutput$ = [3, n1, _GMFO,
     [_sta, _to, _f, _key, _pr],
     [() => FacetCounts, () => FacetCounts, () => FacetCounts, () => FacetCounts, () => FacetCounts], 5
 ];
+exports.GetPageFacetsInput$ = [3, n1, _GPFI,
+    0,
+    [],
+    []
+];
+exports.GetPageFacetsOutput$ = [3, n1, _GPFO,
+    0,
+    [_wa, _a, _rW, _es, _send, _ro, _wo, _ki, _key, _pr, _ver],
+    [1, 1, 1, 1, () => FacetCounts, () => FacetCounts, () => FacetCounts, () => FacetCounts, () => FacetCounts, () => FacetCounts, () => FacetCounts], 11
+];
 exports.ListFilesInput$ = [3, n1, _LFI,
     0,
-    [_p, _ke, _r, _w, _q, _a, _so, _mR, _nT],
-    [[0, { [_hQ]: _p }], [0, { [_hQ]: _ke }], [0, { [_hQ]: _r }], [0, { [_hQ]: _w }], [0, { [_hQ]: _q }], [0, { [_hQ]: _a }], [0, { [_hQ]: _so }], [1, { [_hQ]: _mR }], [0, { [_hQ]: _nT }]]
+    [_p, _ke, _r, _w, _q, _ac, _so, _mR, _nT],
+    [[0, { [_hQ]: _p }], [0, { [_hQ]: _ke }], [0, { [_hQ]: _r }], [0, { [_hQ]: _w }], [0, { [_hQ]: _q }], [0, { [_hQ]: _ac }], [0, { [_hQ]: _so }], [1, { [_hQ]: _mR }], [0, { [_hQ]: _nT }]]
 ];
 exports.ListFilesOutput$ = [3, n1, _LFO,
     0,
@@ -313,13 +365,23 @@ exports.ListMessagesOutput$ = [3, n1, _LMO,
 ];
 exports.ListPagesInput$ = [3, n1, _LPI,
     0,
-    [_p, _ke, _k, _r, _w, _q, _rep, _o, _v, _a, _so, _mR, _nT],
-    [[0, { [_hQ]: _p }], [0, { [_hQ]: _ke }], [0, { [_hQ]: _k }], [0, { [_hQ]: _r }], [0, { [_hQ]: _w }], [0, { [_hQ]: _q }], [0, { [_hQ]: _rep }], [0, { [_hQ]: _o }], [0, { [_hQ]: _v }], [0, { [_hQ]: _a }], [0, { [_hQ]: _so }], [1, { [_hQ]: _mR }], [0, { [_hQ]: _nT }]]
+    [_p, _ke, _k, _r, _w, _q, _rep, _o, _v, _ac, _so, _mR, _nT],
+    [[0, { [_hQ]: _p }], [0, { [_hQ]: _ke }], [0, { [_hQ]: _k }], [0, { [_hQ]: _r }], [0, { [_hQ]: _w }], [0, { [_hQ]: _q }], [0, { [_hQ]: _rep }], [0, { [_hQ]: _o }], [0, { [_hQ]: _v }], [0, { [_hQ]: _ac }], [0, { [_hQ]: _so }], [1, { [_hQ]: _mR }], [0, { [_hQ]: _nT }]]
 ];
 exports.ListPagesOutput$ = [3, n1, _LPO,
     0,
     [_pag, _nT],
     [() => Pages, 0], 1
+];
+exports.ListReviewsInput$ = [3, n1, _LRI,
+    0,
+    [_tar],
+    [[64 | 0, { [_hQ]: _tar }]], 1
+];
+exports.ListReviewsOutput$ = [3, n1, _LRO,
+    0,
+    [_rev],
+    [() => ReviewsOf], 1
 ];
 exports.Message$ = [3, n1, _M,
     0,
@@ -341,9 +403,14 @@ exports.PutMessageOutput$ = [3, n1, _PMO,
     [_p, _i, _h, _f, _to, _te, _sA, _stat, _cA, _uA, _st, _ke, _dA, _vi, _d, _rT, _sen],
     [0, 0, 0, 0, 0, 0, 5, 0, 5, 5, [1, 32], 0, 5, 0, 1, 0, () => exports.Sender$], 11
 ];
+exports.ReviewOf$ = [3, n1, _RO,
+    0,
+    [_tar, _pa, _v],
+    [0, 0, 0], 2
+];
 exports.Sender$ = [3, n1, _S,
     0,
-    [_is, _ref, _a, _rA],
+    [_is, _ref, _ac, _rA],
     [0, 0, () => exports.ActorSummary$, 5], 2
 ];
 exports.SetReplyStateInput$ = [3, n1, _SRSI,
@@ -367,6 +434,9 @@ var FacetCounts = [1, n1, _FCa,
 var Files = [1, n1, _Fil,
     0, () => exports.File$
 ];
+var FileTypes = [1, n1, _FTi,
+    0, () => exports.FileType$
+];
 var Messages = [1, n1, _Me,
     0, () => exports.Message$
 ];
@@ -374,6 +444,10 @@ var Pages = [1, n1, _Pa,
     0, () => exports.Page$
 ];
 var Paths = 64 | 0;
+var ReviewsOf = [1, n1, _ROe,
+    0, () => exports.ReviewOf$
+];
+var ReviewTargets = 64 | 0;
 var Targets = 64 | 0;
 var ValidationExceptionFieldList = [1, n2, _VEFL,
     0, () => exports.ValidationExceptionField$
@@ -393,11 +467,17 @@ exports.DeleteFiles$ = [9, n1, _DF,
 exports.DeletePages$ = [9, n1, _DP,
     { [_ht]: ["DELETE", "/api/pages", 200] }, () => exports.DeletePagesInput$, () => exports.DeletePagesOutput$
 ];
+exports.GetFileRules$ = [9, n1, _GFR,
+    { [_ht]: ["GET", "/api/files/rules", 200] }, () => exports.GetFileRulesInput$, () => exports.GetFileRulesOutput$
+];
 exports.GetHealth$ = [9, n1, _GH,
     { [_ht]: ["GET", "/healthz", 200] }, () => exports.GetHealthInput$, () => exports.GetHealthOutput$
 ];
 exports.GetMessageFacets$ = [9, n1, _GMF,
     { [_ht]: ["GET", "/api/messages/facets", 200] }, () => exports.GetMessageFacetsInput$, () => exports.GetMessageFacetsOutput$
+];
+exports.GetPageFacets$ = [9, n1, _GPF,
+    { [_ht]: ["GET", "/api/pages/facets", 200] }, () => exports.GetPageFacetsInput$, () => exports.GetPageFacetsOutput$
 ];
 exports.ListFiles$ = [9, n1, _LF,
     { [_ht]: ["GET", "/api/files", 200] }, () => exports.ListFilesInput$, () => exports.ListFilesOutput$
@@ -407,6 +487,9 @@ exports.ListMessages$ = [9, n1, _LM,
 ];
 exports.ListPages$ = [9, n1, _LP,
     { [_ht]: ["GET", "/api/pages", 200] }, () => exports.ListPagesInput$, () => exports.ListPagesOutput$
+];
+exports.ListReviews$ = [9, n1, _LR,
+    { [_ht]: ["GET", "/api/reviews", 200] }, () => exports.ListReviewsInput$, () => exports.ListReviewsOutput$
 ];
 exports.PutMessage$ = [9, n1, _PM,
     { [_ht]: ["PUT", "/api/projects/{project}/messages/{id}", 200] }, () => exports.PutMessageInput$, () => exports.PutMessageOutput$
