@@ -217,18 +217,24 @@ function inert(words: string[]): boolean {
   return name === 'grep' || name === 'rg';
 }
 
-/** gh の、字を命令として動かしうる命令（alias の --shell・extension・codespace の ssh）。 */
-const GH_RUNS = new Set(['alias', 'extension', 'codespace']);
+/**
+ * gh の、本文を送るだけの命令（`gh <語> <語>` の 2 語）。通す側を要る物だけ並べる（alias・extension と、その別の名 cs・ext は、名が決まっていないので止める側には並べない。
+ * review-4 の指摘 3）。
+ */
+const GH_SENDS = /^gh (?:pr (?:create|comment|edit|review)|issue (?:create|comment|edit)|release (?:create|edit))$/;
+
+/** 引用しない here-document（`<<EOF`。中の `$(…)`・backtick を shell が命令として動かす）と、置き換えが、同じ命令の字にあるか（review-4 の指摘 1）。 */
+const runsInHeredoc = (command: string): boolean => /<<-?\s*[A-Za-z_]/.test(command) && (command.includes('$(') || command.includes('`'));
 
 /**
  * 字を粗く区切りに分けて読む当たり（textSegments）を外してよい単純な命令: inert のほか、字を出すだけの命令（cat・echo・printf）と、
- * 字を本文として送るだけの gh（GH_RUNS を除く）。PR の本文・commit の文の here-document・`gh pr create --body "$(cat <<'EOF' …)"` に、
+ * 本文を送るだけの gh（GH_SENDS）。PR の本文・commit の文の here-document・`gh pr create --body "$(cat <<'EOF' …)"` に、
  * container の命令の字を書いても止めないため（review-3 の指摘 4）。`cat <<X | sh` のように字を動かす命令が並べば、読む。
  */
 function quietForSegments(words: string[]): boolean {
-  const [name, first] = words;
+  const [name] = words;
   if (name === 'cat' || name === 'echo' || name === 'printf') return true;
-  if (name === 'gh') return !GH_RUNS.has(first ?? '');
+  if (name === 'gh') return GH_SENDS.test(words.slice(0, 3).join(' '));
   return inert(words);
 }
 
@@ -333,7 +339,9 @@ const UNKNOWN = new RegExp(`\\$\\{[^}]*\\}|\\$[A-Za-z_][A-Za-z0-9_]*|\\$[0-9@*#?
  * 値そのものを返すと、値の途中の変数の前の字を項目の頭と比べて外れる。review-3 の指摘 2）。字で書いて source が無ければ undefined（tmpfs・名の無い volume。review-1 の指摘 3）。
  */
 const mountSource = (spec: string): string | undefined =>
-  spec.split(',').map(part => /^(?:source|src)=(.*)$/s.exec(part)?.[1]).find(source => source !== undefined) ?? (UNKNOWN.test(spec) ? SUBSTITUTED : undefined);
+  spec.split(',').map(part => /^(?:source|src)=(.*)$/s.exec(part)?.[1]).find(source => source !== undefined)
+  // 値の分からない所が、key= を持たない所（`$S`・`$M`。source を持つかもしれない）にある時だけ。ほかの key の値（`tmpfs-size=$SZ`）なら当てない（review-4 の指摘 6）。
+  ?? (spec.split(',').some(part => !/^[\w-]+=/.test(part) && UNKNOWN.test(part)) ? SUBSTITUTED : undefined);
 
 /**
  * container の命令の旗を、1 つの形にそろえる（t-ta2b。台帳 #300）。宣言の項目の語も同じ関数でそろえるので、項目は書き方ごとに並べなくてよい:
@@ -454,12 +462,14 @@ export function touched(command: string, infra: Record<string, InfraEnv>): strin
 function touchOf(command: string, env: InfraEnv): Touch | undefined {
   const commands = splitCommands(command).map(words => containerWords(words) ?? words);
   // 置き換えの跡の印を残した語は、値の分からない語を見分ける所（名を書かない的と、名と volume の旗の値）だけで使う（review-3 の指摘 1）。
-  const marked = splitCommandsMarked(command).map(words => containerWords(words) ?? words);
+  const markedRaw = splitCommandsMarked(command);
+  const markedContainers = markedRaw.map(containerWords);
+  const marked = markedContainers.map((words, i) => words ?? markedRaw[i] ?? []);
   const raws = rawCommands(command);
   const textOnly = !feedsOrWrites(command) && raws.every(inert);
-  const segments = textOnly || raws.every(quietForSegments) ? [] : textSegments(command).map(containerWords).filter((words): words is string[] => words !== undefined);
+  const segments = textOnly || (raws.every(quietForSegments) && !runsInHeredoc(command)) ? [] : textSegments(command).map(containerWords).filter((words): words is string[] => words !== undefined);
   // 変数の値で当てるのは、container の命令（と字を粗く割った区切りの container の命令）の旗の値だけ（`grep -v "$X"` には当てない）。
-  const containers = [...splitCommandsMarked(command).map(containerWords).filter((words): words is string[] => words !== undefined), ...segments];
+  const containers = [...markedContainers.filter((words): words is string[] => words !== undefined), ...segments];
   const items = env.match.map(match => normalizeFlags(match.trim().split(/\s+/)));
   const flagItem = (item: string[]): boolean => (item[0] ?? '').startsWith('-');
   // 名を宣言しない環境（container-system）の、頭が旗でない項目は、語が命令の中に続けて並ぶ時だけ語で当てる（間は旗だけ）。
@@ -526,7 +536,8 @@ export function judge(asked: Asked): Verdict {
   if (commands.some(words => AUDIT_START.test(words.join(' ')))) {
     return { allow: false, reason: 'Audit の席を起こすのは Product Manager です。roster audit start は、Product Manager が自分の手で打ちます（Auditor は TPM 担当の回し方も見るので、TPM 担当と担当は起こさない）。' };
   }
-  const killer = commands.find(killsByPattern);
+  // kill の的は、印の残った語で読む（`kill 1$(pgrep -f x)` の的を pid 1 と読まない。review-4 の指摘 4）。訳に出す字は、印を除く。
+  const killer = splitCommandsMarked(asked.command).find(killsByPattern)?.map(word => word.replaceAll(SUBSTITUTED, ''));
   if (killer !== undefined) {
     return { allow: false, reason: `pattern で選んで process に合図を送る命令は止めます（${killer.filter(w => w !== '').slice(0, 3).join(' ')}）。思わぬ process に届くため（macOS の pkill は後ろの旗も pattern に読み、2026-11-23 の朝（JST）に担当の session ごと 29 個を止めた）。pgrep -fl '<型>' で pid と command line を見て、当たった数を確かめてから、その数字を kill <pid> に書いてください（pgrep の出力を変数や $(…) で kill に渡すと、見る手が抜けます）。` };
   }

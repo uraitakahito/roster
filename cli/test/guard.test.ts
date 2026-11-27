@@ -485,6 +485,8 @@ describe('pattern で process に合図を送る命令（台帳 #89・#92）', (
     'nohup$(true) pkill -f x',
     'pgrep x | xargs$(true) kill',
     'sh -c$(true) \'pkill -f x\'',
+    // 的の語の途中の置き換え（review-4 の指摘 4）。
+    'kill 1$(pgrep -f x)',
     // kill でも、的を名指さない物は、pattern で選んだ物にまとめて送るのと同じ。
     'pgrep -f x | xargs kill',
     'pgrep -f x | xargs kill -9',
@@ -1095,6 +1097,15 @@ describe('旗の書き方をそろえて読む（t-ta2b。台帳 #300）', () =>
     'bash <<\'X\'\ncontainer run --rm \\\n  --volume=castlist-data-v1:/data docker.io/library/alpine:3.22 sh\nX',
     'ssh host \'container run --rm \\\n  --mount type=volume,source=castlist-data-v1,target=/data docker.io/library/alpine:3.22 sh\'',
     'ssh host \'container run --rm \\\n  -v "$V":/data docker.io/library/alpine:3.22 sh\'',
+    // 引用しない here-document の中の置き換え（shell が動かす。review-4 の指摘 1）。
+    'git commit -F - <<EOF\n$(container run --rm --volume=castlist-data-v1:/data docker.io/library/alpine:3.22 cat /data/x)\nEOF',
+    'cat <<EOF > out.txt\n`container run --rm -v "$V":/data docker.io/library/alpine:3.22 cat /data/x`\nEOF',
+    // sh -c と eval の中の語の途中の置き換え（review-4 の指摘 2）。
+    'sh -c "container run -d --name castlist$(echo .box) ghcr.io/uraitakahito/castlist:v2.0.0"',
+    'eval container run --rm -v castlist$(echo -data-v1):/data docker.io/library/alpine:3.22 sh',
+    // 本文を送るだけでない gh（review-4 の指摘 3）。
+    'gh cs ssh -c mycs -- \'container run --rm -v=castlist-data-v1:/data docker.io/library/alpine:3.22 sh\'',
+    'gh ext exec foo \'container run --rm -v=castlist-data-v1:/data docker.io/library/alpine:3.22 sh\'',
     // 字を出す命令でも、字を動かす命令と並べば読む。
     'cat <<\'X\' | sh\ncontainer run --rm --volume=castlist-data-v1:/data docker.io/library/alpine:3.22 sh\nX',
     // 値の無い --mount（review-2 の指摘 3）。
@@ -1125,6 +1136,9 @@ describe('旗の書き方をそろえて読む（t-ta2b。台帳 #300）', () =>
     'gh pr create --title x --body \'container run --volume=castlist-data-v1:/data は止まる\'',
     'git commit -F - <<\'EOF\'\ncontainer run -v "$V":/data を止める\nEOF',
     'gh pr create --title x --body "$(cat <<\'EOF\'\ncontainer run -d --name "$N" は止まる\nEOF\n)"',
+    'gh issue comment 12 --body \'container run --volume=castlist-data-v1:/data は止まる\'',
+    // source の無い mount の、ほかの key の値の変数（review-4 の指摘 6）。
+    'container run --rm --mount "type=tmpfs,target=/x,tmpfs-size=$SZ" docker.io/library/alpine:3.22 sh',
     'container run --rm -v /tmp/x:/x docker.io/library/alpine:3.22 sh',
     'container run --rm --name "test-$N" docker.io/library/alpine:3.22 sh',
     // 字の頭も終わりも読む（"$N"x は、字の分け方が引用の切れ目を持たないので $Nx の 1 つの変数に読み、止まる側に倒れる）。
@@ -1163,7 +1177,7 @@ describe('旗の書き方をそろえて読む（t-ta2b。台帳 #300）', () =>
 
   describe.skipIf(!hasSibling('pagetray'))('pagetray の repo の宣言（TPM に相談。隣の repo の本体の checkout が無い時は飛ぶ）', () => {
     const judgePagetray = allowIn(readRolesConfig(sibling('pagetray')).infra);
-    const toPagetray = (command: string): string => command.replaceAll('castlist-data-v1', 'pagetray-data-v1').replaceAll('castlist.box', 'pagetray.box').replaceAll('castlist.{', 'pagetray.{')
+    const toPagetray = (command: string): string => command.replaceAll('castlist-data-v1', 'pagetray-data-v1').replaceAll('castlist.box', 'pagetray.box').replaceAll('castlist.{', 'pagetray.{').replaceAll('castlist$(', 'pagetray$(')
       .replaceAll('castlist-$S', 'pagetray-$S').replaceAll('cast"$X"', 'page"$X"').replaceAll('ghcr.io/uraitakahito/castlist:v2.0.0', 'ghcr.io/uraitakahito/pagetray:v1.2.0');
     test.each(castlistStops.map(toPagetray))('%s は、ほかの担当を止め、DevOps Engineer 担当は通す', (command) => {
       expect(judgePagetray(command, 'software-engineer')).toBe(false);

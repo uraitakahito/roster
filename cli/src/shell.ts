@@ -241,10 +241,11 @@ function head(words: string[]): string[][] {
   const name = rest[0]?.split('/').at(-1);
   // 命令の名が置き換えだけの語（`$(…) args`）は、名を読めないので命令に数えない（前からの形）。
   if (name === undefined || name === '') return [];
-  if (name === 'eval') return splitCommandsMarked(rest.slice(1).join(' '));
+  // sh -c と eval の中の字は、印の残った語から読む（中の語の途中の置き換えにも印を残す。決めるのは印を除いた字。review-4 の指摘 2）。
+  if (name === 'eval') return splitCommandsMarked(words.slice(k + 1).join(' '));
   if (SHELLS.has(name)) {
     const c = rest.findIndex(w => /^-[a-z]*c[a-z]*$/.test(w));
-    const script = c === -1 ? undefined : rest[c + 1];
+    const script = c === -1 ? undefined : words[k + c + 1];
     if (script !== undefined) return splitCommandsMarked(script);
   }
   return [[name, ...words.slice(k + 1)]];
