@@ -1,4 +1,4 @@
-// 席（Claude Code の session）の「トークンの数と費え」を、session の記録（写し。JSONL）から数える、純な関数。
+// 席（Claude Code の session）の「トークンの使用量」を、session の記録（写し。JSONL）から数える、純な関数。
 //
 // castlist の数の表（PutUsage）へ送る行を作る。1 行は、席 1 つの、時計の 1 時間（UTC の時）の内の、同じ種類の回のまとめ。
 // 「同じ種類」は、model・本体か手伝いか（手伝いならその種類）・速さの種類（speed）・service tier が同じ物。

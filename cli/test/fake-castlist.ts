@@ -92,7 +92,7 @@ class Ledger {
     const q = new Query(seen.query);
     const ok = (body: unknown, status = 200): NextAnswer => ({ status, body });
     if (method === 'GET') {
-      if (path === '/healthz') return ok({ status: 'ok', version: '2.1.0', now: this.now });
+      if (path === '/healthz') return ok({ status: 'ok', version: '2.1.1', now: this.now });
       if (path === '/api/actors') return ok(this.searchActors(q));
       if (path === '/api/settings') return ok(this.searchSettings(q));
       if (path === '/api/events') return ok(this.searchEvents(q));
@@ -193,7 +193,7 @@ class Ledger {
     return { status: 201, body: without(added, 'seq') };
   }
 
-  /** トークンの数と費えの 1 行（PutUsage。2.1.0 から）。本物と同じ決まり: 同じ id で同じ本文は 200・違えば 409・同じ UTC の時の内・段の和が行と合う。 */
+  /** トークンの使用量の 1 行（PutUsage。2.1.0 から）。本物と同じ決まり: 同じ id で同じ本文は 200・違えば 409・同じ UTC の時の内・段の和が行と合う。 */
   private putUsage(id: string, b: Record<string, unknown>, text: string | undefined): NextAnswer {
     const key = `usage ${id}`;
     if (this.puts.has(key)) {
@@ -215,7 +215,7 @@ class Ledger {
     return { status: 201, body: without(added, 'seq') };
   }
 
-  /** トークンの数と費えの行を読む（ListUsage）: 窓は from <= toAt < to。actorId で絞る。 */
+  /** トークンの使用量の行を読む（ListUsage）: 窓は from <= toAt < to。actorId で絞る。 */
   private searchUsage(q: Query): Record<string, unknown> {
     const from = q.time('from') ?? bad('from と to が要る');
     const to = q.time('to') ?? bad('from と to が要る');

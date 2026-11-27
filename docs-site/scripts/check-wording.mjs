@@ -4,6 +4,7 @@
 //
 // 1. 語の Mac（macOS・MacOS は当てない）。機械は「roster を動かす機械」、バナーは「通知のバナー」と書く
 // 2. /Users/<名> と、それを folder の名にした -Users-<名>（見本の名 me は当てない）
+// 3. 前の呼び方「費え」。データの名は「トークンの使用量」、callboard の画面の名は「使用量」（Product Manager の答え。t-5dhg）
 //
 // 見るのは git が追跡する物と add 前の新しい物（check-refs.mjs と同じ数え方）。lockfile と、この file は見ない。
 import { execFileSync } from "node:child_process";
@@ -21,6 +22,10 @@ const RULES = [
   {
     re: /[-/]Users[-/](?!me(?:[^A-Za-z]|$))[A-Za-z]/,
     hint: "ある人の home の path がある。見本の名は me にする（/Users/me）",
+  },
+  {
+    re: /費え/,
+    hint: "前の呼び方「費え」がある。データの名は「トークンの使用量」、callboard の画面の名は「使用量」と書く",
   },
 ];
 
@@ -42,6 +47,7 @@ const MUST_HIT = [
   "置き場は Mac に 1 つ",
   "/Users/takahito/projects",
   "-Users-takahito-projects-ai",
+  "トークンの数と費えを送る",
 ];
 const MUST_PASS = [
   "macOS の通知",
@@ -49,6 +55,7 @@ const MUST_PASS = [
   "/Users/me/roster",
   "-Users-me-my-work-app",
   "uraitakahito.github.io",
+  "トークンの使用量を送る",
 ];
 for (const s of MUST_HIT)
   if (checkWording("self", s).length === 0)

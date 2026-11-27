@@ -23,7 +23,7 @@ export interface PutUsageCommandInput extends PutUsageInput {}
 export interface PutUsageCommandOutput extends PutUsageOutput, __MetadataBearer {}
 
 /**
- * アクターのトークンの数と費えを 1 行足す（2.1.0 から）。同じ id で同じ本文なら 200（足さない）、同じ id で本文が違えば 409（前の行はそのまま）。
+ * アクターのトークンの使用量を 1 行足す（2.1.0 から）。同じ id で同じ本文なら 200（足さない）、同じ id で本文が違えば 409（前の行はそのまま）。
  * 同じ id かは、`by` を引くより先に見る。
  * - 1 行は、アクター 1 人の、時計の 1 時間（UTC の時）の内の、同じ種類（`model`・`agent`・`speed`・`serviceTier`）の回のまとめ。
  *   同じアクター・同じ時・同じ種類の行は、2 つ以上在りうる（送り手が、増えた分を新しい id の行で送る）。

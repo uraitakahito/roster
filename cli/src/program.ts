@@ -348,7 +348,7 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
         process.stderr.write(`roster castlist session-end: ${(e as Error).message}\n`);
       }
     });
-  castlist.command('usage').description('まだ送っていない席のトークンの数と費えを、session の記録から数えて castlist へ送る（ふだんは、席が閉じる時と、TPM 担当の 1 時間に 1 度の片付けが送る。手で流す時に使う）')
+  castlist.command('usage').description('まだ送っていない席のトークンの使用量を、session の記録から数えて castlist へ送る（ふだんは、席が閉じる時と、TPM 担当の 1 時間に 1 度の片付けが送る。手で流す時に使う）')
     .action(async () => {
       const ctx = createContext();
       const url = castlistUrl(ctx);
@@ -356,7 +356,7 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
       const swept = await sweepUsage(ctx, url, Number.POSITIVE_INFINITY);
       print([`castlist へ送った行: ${swept.sent}${swept.stopped === undefined ? '' : `（途中でやめた: ${swept.stopped === 'old' ? 'castlist が、数の口を持たない版' : 'castlist が応えない'}）`}`]);
     });
-  castlist.command('usage-check').description('トークンの数と費えの突き合わせ: session の記録から直に数えた値と、castlist の行の合計を、席ごとに並べる（読むだけ）')
+  castlist.command('usage-check').description('トークンの使用量の突き合わせ: session の記録から直に数えた値と、castlist の行の合計を、席ごとに並べる（読むだけ）')
     .option('--from <時刻>', '窓の始め（回の時刻。既定は --to の 31 日前）')
     .option('--to <時刻>', '窓の終わり（既定は 1 時間前）')
     .action(async (options: { from?: string, to?: string }) => print(await usageCheck(createContext(), options)));

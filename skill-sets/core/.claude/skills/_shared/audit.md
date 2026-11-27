@@ -46,7 +46,7 @@ Auditor（`/audit`）が、監査のたびに読む手順。何のために・�
 | state の記録（メッセージ・届いた時刻・課題管理への書き込み・guard と入口の検査が止めた回・状態の移り・監査線の記録） | 状態の folder の `*.jsonl`。file ごとの中身の表は `docs-site/src/content/docs/protocol.md` にある（名簿と状態の置き場の節） |
 | 台帳 | `roster incident review --all`・`roster incident follow`。1 件ずつは状態の folder の `incidents/` |
 | 依頼書・成果のページ | `roster page list`（`--key`・`--kind`・`--role` で絞る）と `roster page path <URL>` |
-| 席ごとの文脈の長さと費え（トークンの数と額。効率性の件の重さ・件の時刻の文脈の長さ・圧縮の前後） | 画面のサーバー callboard の費えの画面（`<callboard>/usage/`。期間・ラベル（`tpm.key:<Key>`・`tpm.role:<役割>`）で絞る。役割ごと・課題ごとの表と、日ごとの図）と、アクターのプロフィールの節「費え」（1 時間ごとの文脈の長さの線と、要約（圧縮）の印）。数が抜けていないかは `roster castlist usage-check [--from <時刻>] [--to <時刻>]`（写しから直に数えた値と、castlist の行の合計を、席ごとに並べる。読むだけ）。額は API の値段に直した目安で、払う額ではない。数は roster が溜めた物（castlist 2.1.0 から。2026-11-22 より前の席は無い） |
+| 席ごとの文脈の長さと使用量（トークンの数と額。効率性の件の重さ・件の時刻の文脈の長さ・圧縮の前後） | 画面のサーバー callboard の使用量の画面（`<callboard>/usage/`。期間・ラベル（`tpm.key:<Key>`・`tpm.role:<役割>`）で絞る。役割ごと・課題ごとの表と、日ごとの図）と、アクターのプロフィールの節「使用量」（1 時間ごとの文脈の長さの線と、要約（圧縮）の印）。数が抜けていないかは `roster castlist usage-check [--from <時刻>] [--to <時刻>]`（写しから直に数えた値と、castlist の行の合計を、席ごとに並べる。読むだけ）。額は API の値段に直した目安で、払う額ではない。数は roster が溜めた物（castlist 2.1.0 から。2026-11-22 より前の席は無い） |
 | コードと skill の文 | repo（読むだけ）。変わった所は git の記録（`git log`・`git diff`） |
 | 課題 | `roster issue view <Key>` |
 | アクター（誰が・誰に起こされ・どの model と effort で） | castlist（アクターの台帳）のアクターの、プロフィールの画面の URL（`<callboard>/actors/<id>`。画面は、画面のサーバー callboard にある。既定は `http://127.0.0.1:8803`）。`roster castlist find --label tpm.key:<Key>`・`roster castlist show <名か id>`・`roster castlist lineage <名か id>`・`roster castlist settings --actor <名か id> --at <時刻>`・`roster castlist events`（どれも読むだけ。castlist を設定した project だけ） |

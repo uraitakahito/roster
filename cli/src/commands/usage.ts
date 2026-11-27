@@ -1,4 +1,4 @@
-// 席（Claude Code の session）の「トークンの数と費え」の取り込み: session の記録（写し）から数だけを読み、castlist の数の表（PutUsage）へ送る。
+// 席（Claude Code の session）の「トークンの使用量」の取り込み: session の記録（写し）から数だけを読み、castlist の数の表（PutUsage）へ送る。
 // 数える中身は usage.ts（純な関数）。ここは、写しの file を読む・どこまで読んだかを控える・castlist へ送る、をする。
 //
 // 掛け所は 3 つ: 席が閉じる時の hook（roster castlist session-end）・席を閉じる命令（roster close）・TPM 担当の側の、1 時間に 1 度の片付け（名乗る時と、送る命令の時）。
