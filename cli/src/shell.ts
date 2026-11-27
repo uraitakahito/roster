@@ -196,6 +196,14 @@ export function splitCommands(src: string): string[][] {
   return new Lexer(src).run().flatMap(head);
 }
 
+/**
+ * 字の命令を、単純な命令に分けるが、頭を整えない（頭の代入・前置きの語・命令の名の path を、書いたまま残す）。
+ * 命令の名を書いたままの字で見たい時に使う（guard の、字の含みだけの当たりを通してよいか）。$(…)・`…` の中は splitCommands の形で入る。
+ */
+export function rawCommands(src: string): string[][] {
+  return new Lexer(src).run();
+}
+
 /** 単純な命令 1 つの頭を整える。sh -c と eval は、中の字を命令として読む。 */
 function head(words: string[]): string[][] {
   let k = 0;

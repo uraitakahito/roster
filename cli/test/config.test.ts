@@ -70,6 +70,8 @@ describe('readRolesConfig', () => {
     ['object でない担当の欄', '{ "software-engineer": "opus" }', /software-engineer は/],
     ['文字列でない model', '{ "devops-engineer": { "model": 5 } }', /devops-engineer\.model は/],
     ['空白だけの match', '{ "infra": { "x": { "guard": "pm", "match": [" "] } } }', /infra\.x\.match は/],
+    ['語の中ほどの *', '{ "infra": { "x": { "guard": "pm", "match": ["-v a*b"] } } }', /infra\.x\.match の \* は、語の末尾にだけ書けます.*: -v a\*b$/],
+    ['* だけの語', '{ "infra": { "x": { "guard": "pm", "match": ["x *"] } } }', /infra\.x\.match の \* は/],
   ])('%sなら TpmError', (_, text, message) => {
     const file = config(text);
     expect(() => readRolesConfig(file)).toThrow(TpmError);
