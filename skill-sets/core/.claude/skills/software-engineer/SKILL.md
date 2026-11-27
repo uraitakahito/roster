@@ -38,8 +38,14 @@ roster hello
   - 置き場所は repo の決まり（`CLAUDE.md`・`.claude/dependabot/rules.md` など）に従う。決まりが無ければ `<repo の親>/<repo の名前>-worktrees/<branch の / を - に>`（repo の中に置かない）。
   - branch は `<課題の Key を小文字に>/<段>`（例: `ai-6/rename-roles`・`t-x7k2/impl`）。課題の Key は `roster hello` が返す。
   - 本体の checkout は動かさない。動いている物がその checkout を読んでいる repo（この roster の repo など）は、merge の後に `git -C <本体> pull --ff-only` だけをする。
-- PR は main から切った branch で出す。題か本文に課題の Key（GitHub の Issue なら `Refs #12`。`Closes` は書かない）。CI が緑になってから、自分で merge する（依頼書が TPM 担当の merge を求めたら `roster ask tpm` で頼む）。merge したら、main の push で動く workflow（`gh run list --branch main --limit 4`）が通ったかを見てから `roster report merged` を打つ（PR が merge 済みでなければ、送らずに止まる。merge の命令と 1 行に続けて書かず、merge できたのを見てから打つ）。
-  - PR の check が緑でも、docs の公開（`docs`）は main でしか動かない。落ちていたら、落ちたことと、`gh workflow run <workflow の file> --ref main` で流した新しい回が通ったかを【merged】の一言に書く。落ちた回の `gh run rerun` は使わない（roster の `docs` では、前の試みの artifact が残って重なり、また落ちる）。
+- PR は main から切った branch で出す。題か本文に課題の Key（GitHub の Issue なら `Refs #12`。`Closes` は書かない）。CI が緑になってから、自分で merge する（依頼書が TPM 担当の merge を求めたら `roster ask tpm` で頼む）。merge したら、main の workflow が終わるのを待ってから `roster report merged` を打つ（下の 2 つ目。PR が merge 済みでなければ、送らずに止まる。merge の命令と 1 行に続けて書かず、merge できたのを見てから打つ）。
+  - **CI は、自分で待たない。**`roster watch pr <PR の URL>` を裏で起こして（Bash の `run_in_background`）、手を止める（protocol.md の「待つ・見張る」）。終わると起こされ、終了コードで結果が分かる（0 = 通った・10 = 落ちた・20 = まだ・30 = check が付いていない）。0 なら merge へ進む。`gh pr checks --watch`・`sleep`・`gh run watch` で待たない。check の数でも待たない（数は PR で違う）。待つ間に、CI に依らない仕事（次の段の準備・成果のページ）があれば進めてよい。
+  - **merge したら、先に `roster watch main <PR の URL>` を裏で起こして手を止め、終わってから `roster report merged` を打つ**（`gh run list` を自分で打たない）。`roster watch main` は、main の push で動く workflow が、みな終わるまで待つ（0 = 通った・10 = 落ちた物がある・30 = この merge で動いた workflow が無い）。`roster report merged` も同じ物を見て、結果を【merged】の本文に足す。先に待つのは、落ちた workflow を、【merged】を送る前に知るため（送った後では、流し直しを伝える道が無い）。待たずに打って「まだ終わっていません」と止まった時も、`roster watch main` で待ってから打ち直す。
+  - PR の check が緑でも、docs の公開（`docs`）は main でしか動かない。落ちていたら（`roster watch main` が 10 で終わる）、次の順で流し直す。
+    1. 今の時刻を `date -u +%Y-%m-%dT%H:%M:%SZ` で控えてから（2 の `createdAt` は UTC）、`gh workflow run <workflow の file> --ref main` を打つ。
+    2. 新しい回が作られたのを見る: `gh run list --workflow <workflow の file> --branch main --event workflow_dispatch --limit 1 --json databaseId,createdAt,url`。`createdAt` が 1 で控えた時刻より後なら、その回。前の時刻なら、まだ作られていないので、もう 1 度引く（打ってすぐは、新しい回が無い。ここで `roster watch main` を打つと、前の落ちた回を見てすぐ 10 で終わり、流し直しも落ちたと読み違える）。
+    3. `gh run watch <2 の id> --exit-status` を裏で起こして手を止める（protocol.md の「待つ・見張る」の、ただ 1 つの例外。0 = 通った）。
+    4. `roster report merged` を打ち、流し直したこと・その回の URL と結果を一言に書く。命令は workflow ごとに新しい回で判じるので、流し直した回が merge の commit に載っていれば「通った」と足す。**流し直す前に main へ別の merge が入っていたら**、流し直した回は別の commit に載り、命令からは見えない（「落ちた docs」のまま出る）。一言に書いた URL と結果が、その時の知らせになる。落ちた回の `gh run rerun` は使わない（roster の `docs` では、前の試みの artifact が残って重なり、また落ちる）。
 - `git add -A`・`git add .` は使わない。ファイルを名指して add する。
 - 止める process は、`pgrep -fl '<型>'` で pid と command line を見て、当たった数を確かめてから、その数字を `kill <pid>` に書く（`pkill`・`killall` と pid を名指さない `kill` は guard が止める。台帳 #89）。
 - 動くことを示してから「できた」と言う。試験を流し、要るなら実際に起こして見る。
