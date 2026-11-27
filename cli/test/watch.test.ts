@@ -203,7 +203,7 @@ describe('roster watch main', () => {
     const s = seat({ 'pr view': [merged()], 'run list': [ok([run('test', 'completed', 'success'), run('docs', 'completed', 'cancelled')])] });
     const r = await watchMain(s.ctx, PR);
     expect(r.code).toBe(WATCH_EXIT.passed);
-    expect(r.lines[0]).toMatch(/^通った: main の workflow 2 つ（うち 1 つは取り消し＝後の回に寄った。/);
+    expect(r.lines[0]).toMatch(/^通った: main の workflow 2 つ（うち 1 つは取り消し。後の回が済ませたかは見ていない。/);
   });
 
   test('merge から 2 分を過ぎても回が無ければ、30（付いていない）で終わる', async () => {
@@ -211,6 +211,13 @@ describe('roster watch main', () => {
     const r = await watchMain(s.ctx, PR, { timeout: 0 });
     expect(r.code).toBe(WATCH_EXIT.none);
     expect(r.lines[0]).toContain('main の workflow が付いていない');
+  });
+
+  test('merge から 2 分の内に 1 回だけ見ると（--timeout 0）、終わっていても「まだ」で、字は「0 つが終わっていない」にしない', async () => {
+    const s = seat({ 'pr view': [merged('2026-11-27T11:59:50Z')], 'run list': [ok([run('test', 'completed', 'success')])] });
+    const r = await watchMain(s.ctx, PR, { timeout: 0 });
+    expect(r.code).toBe(WATCH_EXIT.timeout);
+    expect(r.lines[0]).toMatch(/^まだ: main の workflow 1 つは終わっているが、merge から 2 分の内/);
   });
 
   test('落ちた workflow があれば 10 で終わる', async () => {

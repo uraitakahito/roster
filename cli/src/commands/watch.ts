@@ -90,11 +90,11 @@ function report(loop: Loop, look: Look, timedOut: boolean, seconds: number): Wat
     case 'passed':
       if (timedOut) return { code: WATCH_EXIT.timeout, lines: [`まだ: ${loop.kind === 'github' ? 'GitHub は 1 度応えた' : `${loop.noun} ${look.total} つは終わっていた`}が、続けてもう 1 度は見ていない（${waited}）。${retry}`] };
       if (loop.kind === 'github') return { code: WATCH_EXIT.passed, lines: [`戻った: GitHub が応えた（${waited}）`] };
-      return { code: WATCH_EXIT.passed, lines: [`通った: ${loop.noun} ${look.total} つ（${look.cancelled === undefined ? '' : `うち ${look.cancelled} つは取り消し＝後の回に寄った。`}${waited}）`] };
+      return { code: WATCH_EXIT.passed, lines: [`通った: ${loop.noun} ${look.total} つ（${look.cancelled === undefined ? '' : `うち ${look.cancelled} つは取り消し。後の回が済ませたかは見ていない。`}${waited}）`] };
     case 'failed':
       return { code: WATCH_EXIT.failed, lines: [`落ちた: ${namedList(look.failed)}`, `ほかの ${loop.noun}: 通った ${look.passed}・まだ ${look.pending}（${waited}）`] };
     case 'pending':
-      return { code: WATCH_EXIT.timeout, lines: [look.total === 0 ? `まだ: ${loop.noun} の回がまだ作られていない（${waited}）。${retry}` : `まだ: ${loop.noun} ${look.total} つのうち ${look.total - look.done} つが終わっていない（${waited}）。${retry}`] };
+      return { code: WATCH_EXIT.timeout, lines: [look.total === 0 ? `まだ: ${loop.noun} の回がまだ作られていない（${waited}）。${retry}` : look.done === look.total ? `まだ: ${loop.noun} ${look.total} つは終わっているが、merge から 2 分の内なので、回が作られきるのを待っている（${waited}）。${retry}` : `まだ: ${loop.noun} ${look.total} つのうち ${look.total - look.done} つが終わっていない（${waited}）。${retry}`] };
     case 'none':
       return { code: WATCH_EXIT.none, lines: [`${loop.noun} が付いていない（${waited}）。通ったのではない。repo に、ここで動く workflow が在るはずなら、${loop.again} でもう 1 度見張る`] };
     case 'unreachable':
