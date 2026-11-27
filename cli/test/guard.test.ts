@@ -117,6 +117,14 @@ describe('touched: 命令の語で当てる（t-7j37。台帳 #253）', () => {
     ['/tmp/roster ask devops --what "container stop pagetray"', ['pagetray']],
     ['roster file put x --reviewed --name callboard-x.png > log', ['callboard']],
     ['git commit -m "$(container stop pagetray)"', ['pagetray']],
+    // 命令の置き換えの中は、頭の代入・path を見られないので、通す命令だけでも字の含みで止める（review-15）。
+    ['git commit -m "$(GIT_EDITOR=\'container stop pagetray\' git commit --amend)"', ['pagetray']],
+    ['git commit -m "$(/tmp/grep \'container stop pagetray\')"', ['pagetray']],
+    ['git commit -m "`/tmp/grep \'container stop pagetray\'`"', ['pagetray']],
+    ['roster file put x --reviewed --name callboard-x.png >& log', ['callboard']],
+    ['roster file put x --reviewed --name callboard-x.png &> log', ['callboard']],
+    ['roster file put x --reviewed --name callboard-x.png >&2', []],
+    ['roster file put x --reviewed --name callboard-x.png 2>/dev/null', []],
   ])('%s', (command, expected) => {
     expect(hit(command)).toEqual(expected);
   });

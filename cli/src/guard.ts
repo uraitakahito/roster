@@ -217,10 +217,14 @@ function inert(words: string[]): boolean {
   return name === 'grep' || name === 'rg';
 }
 
-/** file への書き出し（fd への写し `2>&1`・`>&2` と `/dev/null` を除く）・here-document・here-string・process substitution。引用の中の字でも当てる（止める方に倒す）。 */
+/**
+ * file への書き出し（fd への写し `2>&1`・`>&2`・`>&-` と `/dev/null` を除く。`>& file`・`&> file` は書き出し）・here-document・here-string・
+ * process substitution・命令の置き換え（`$(…)` と backtick。中の命令は rawCommands でも整えた形で入るので、頭の代入や path を見られない）。
+ * 引用の中の字でも当てる（止める方に倒す）。
+ */
 function feedsOrWrites(command: string): boolean {
-  const rest = command.replace(/\d*>&\d*-?/g, '').replace(/\d*>>?\s*\/dev\/null/g, '');
-  return rest.includes('>') || rest.includes('<<') || rest.includes('<(');
+  const rest = command.replace(/\d*>&(\d+|-)/g, '').replace(/\d*>>?\s*\/dev\/null/g, '');
+  return rest.includes('>') || rest.includes('<<') || rest.includes('<(') || rest.includes('$(') || rest.includes('`');
 }
 
 /**
