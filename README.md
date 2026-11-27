@@ -1,7 +1,7 @@
 # roster
 
-Product Manager（人）を、TPM・Software Engineer・Tech Lead・DevOps Engineer・Staff Engineer・Sustaining Engineer・Auditor の
-各担当（Claude Code）が助けるための skill の一式と、担当のあいだの決まりを受け持つ `roster` の CLI。
+Product Manager（人）を Claude Code の各担当が助けるための skill の一式と、担当のあいだの決まりを受け持つ `roster` の CLI。
+担当の一覧は、ドキュメントの [skill](https://uraitakahito.github.io/roster/skill/) の頁にある。
 課題管理（Jira・GitHub の Issue）は、project ごとに設定で選ぶ。担当の居場所は cmux が並べ、担当どうしのメッセージは、メッセージキュー（NATS JetStream）で配る。
 
 ## ドキュメント

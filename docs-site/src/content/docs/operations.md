@@ -47,7 +47,7 @@ roster watch pr <PR の URL> --timeout 0  # 今の様子を 1 回見て、待た
 
 ## 移す手順
 
-1. TPM 担当のほかに動いている担当（Software Engineer・Tech Lead・DevOps Engineer・Staff Engineer・Sustaining Engineer・Auditor）が 0 のときに行う。
+1. TPM 担当のほかに動いている担当（Auditor も含む）が 0 のときに行う。
 2. `mv <今の folder> <新しい folder>`（git の履歴ごと移る）。
 3. 新しい folder で 1 度 Claude Code を対話で起こして信頼する（[信頼のダイアログ](/getting-started/#信頼のダイアログ)。信頼は path に付くので、移すたびに要る）。
 4. 新しい folder の `cli/` で `pnpm install --frozen-lockfile` を打つ（`cd <新しい folder>/cli && pnpm install --frozen-lockfile`）。`~/.local/bin/roster` の symlink を張っていれば張り直す（`ln -sf <新しい folder>/cli/bin/roster ~/.local/bin/roster`）。通知のバナーの hook（[設定](/configuration/#cmuxjson-に-hook-を足す)）を使っていれば、`roster banner setup` を打ち直して `~/.config/cmux/cmux.json` の命令を替え、`roster banner check` で確かめる（命令は repo の在り処を書いている。替えないと、古い在り処に入口が無いので hook は何もせず、バナーを選ばなくなる。`roster banner check` と TPM 担当の `roster hello` が在り処の違いを知らせる）。
