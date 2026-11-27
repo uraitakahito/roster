@@ -21,7 +21,7 @@ export function parsePr(url: string): PrRef | undefined {
 
 /**
  * 聞いた 1 回の答え。
- * - passed: みな終わって、落ちた物が無い。
+ * - passed: みな終わって、落ちた物が無い（cancelled は、そのうち取り消された main の workflow の数）。
  * - failed: 落ちた物がある（ほかがまだ動いていても、分かった時に返す）。
  * - pending: まだ終わっていない物がある。
  * - none: 見る物（check・workflow の回）が 1 つも付いていない。「通った」ではない。
@@ -29,7 +29,7 @@ export function parsePr(url: string): PrRef | undefined {
  * - invalid: 聞き直しても変わらない誤り（PR が無い・認証が無い・merge していない）。
  */
 export type Look =
-  | { state: 'passed', total: number }
+  | { state: 'passed', total: number, cancelled?: number }
   | { state: 'failed', failed: Named[], passed: number, pending: number }
   | { state: 'pending', done: number, total: number }
   | { state: 'none' }
@@ -42,14 +42,17 @@ export interface Named {
   url?: string
 }
 
-/** 聞き直しても変わらない誤りの字（gh の stderr）。 */
-const INVALID = /Could not resolve to a|HTTP 404|HTTP 401|HTTP 403|no pull requests found|not found|authentication|gh auth login/i;
+/** 聞き直しても変わらない誤りの字（gh の stderr）: PR・repo が無い、認証や権限が無い。 */
+const INVALID = /Could not resolve to a|no pull requests found|HTTP 404|HTTP 401|HTTP 403|gh auth login/i;
+/** 上限に当たった時の字。GitHub は上限でも 403 を返すが、待てば変わるので「応えない」に数える（INVALID より先に見る）。 */
+const LIMITED = /rate limit|secondary rate|abuse detection|HTTP 429/i;
 
 const lastLine = (text: string): string => text.trim().split('\n').at(-1)?.trim() ?? '';
 
 /** gh が落ちた時の答え: 聞き直しても変わらない誤りか、応えないか。 */
 function failure(status: number, stderr: string, stdout: string): Look {
   const message = lastLine(stderr) || lastLine(stdout) || `gh が終了コード ${status} で終わった`;
+  if (LIMITED.test(stderr)) return { state: 'unreachable', message };
   // gh の終了コード 4 は、認証が要る。
   return status === 4 || INVALID.test(stderr) ? { state: 'invalid', message } : { state: 'unreachable', message };
 }
@@ -79,7 +82,8 @@ export function lookChecks(exec: Exec, pr: PrRef): Look {
   const checks = r.stdout.trim() === '' ? undefined : parsed<Check[]>(r.stdout);
   if (!Array.isArray(checks)) {
     if (/no checks reported/i.test(r.stderr)) return { state: 'none' };
-    if (r.status === 0) return { state: 'none' };
+    // gh が 0 で終わったのに JSON を読めない時は、「check が無い」と言い切らない（聞き直す）。
+    if (r.status === 0) return { state: 'unreachable', message: 'gh pr checks の答えを読めない' };
     return failure(r.status, r.stderr, r.stdout);
   }
   if (checks.length === 0) return { state: 'none' };
@@ -115,19 +119,28 @@ export const RUN_GRACE_MS = 2 * 60_000;
 
 /** 落ちたとみなさない結び（conclusion）。 */
 const FINE = new Set(['success', 'skipped', 'neutral']);
+/**
+ * 取り消された回の結び。main の workflow では「落ちた」に数えない: 同じ concurrency の group（docs の pages など）で、
+ * 後から来た回が、待っている回を取り消す（merge が続いた時。公開は後の回がする）。
+ */
+const CANCELLED = 'cancelled';
 
 /**
  * merge した PR の、merge の commit で main に動いた workflow を 1 回見る。
  * - PR の check の回（pull_request の event）は数えない。
  * - workflow ごとに、いちばん新しい回で判じる（落ちた docs を `gh workflow run` で流し直した時は、新しい回を見る）。
- * - 回が 1 つも無い時: merge から RUN_GRACE_MS の間は「まだ」（回がまだ作られていないことがある）。過ぎていれば none。
+ * - merge から RUN_GRACE_MS の間は、回が無くても・在る回がみな終わっていても「まだ」（回が、まだ作られきっていないことがある）。落ちた回は、その間でも返す。
+ * - 回が 1 つも無いまま RUN_GRACE_MS を過ぎていれば none。
+ * - 取り消された回（cancelled）は、落ちたに数えず、通った数に入れて、その数を cancelled に返す。
  */
 export function lookMain(exec: Exec, pr: PrRef, now: Date): Look {
   const v = exec('gh', ['pr', 'view', pr.url, '--json', 'state,mergeCommit,mergedAt']);
   if (v.status !== 0) return failure(v.status, v.stderr, v.stdout);
   const view = parsed<MergedView>(v.stdout);
-  const sha = view?.mergeCommit?.oid;
-  if (view?.state !== 'MERGED' || sha === undefined) return { state: 'invalid', message: `PR はまだ merge されていません（state: ${view?.state ?? '不明'}）` };
+  // 読めない答えを「merge していない」と言い切らない（聞き直す）。
+  if (typeof view?.state !== 'string') return { state: 'unreachable', message: 'gh pr view の答えを読めない' };
+  const sha = view.mergeCommit?.oid;
+  if (view.state !== 'MERGED' || sha === undefined) return { state: 'invalid', message: `PR はまだ merge されていません（state: ${view.state}）` };
   const r = exec('gh', ['run', 'list', '--repo', pr.repo, '--commit', sha, '--limit', '100', '--json', 'workflowName,status,conclusion,event,createdAt,url']);
   if (r.status !== 0) return failure(r.status, r.stderr, r.stdout);
   const runs = parsed<Run[]>(r.stdout);
@@ -139,22 +152,22 @@ export function lookMain(exec: Exec, pr: PrRef, now: Date): Look {
     const seen = latest.get(name);
     if (seen === undefined || (run.createdAt ?? '') > (seen.createdAt ?? '')) latest.set(name, run);
   }
-  if (latest.size === 0) {
-    const merged = view.mergedAt ? Date.parse(view.mergedAt) : Number.NaN;
-    // merge の時刻が読めない時も「まだ」に倒す（通った・無い、とは言わない）。
-    return Number.isNaN(merged) || now.getTime() - merged < RUN_GRACE_MS ? { state: 'pending', done: 0, total: 0 } : { state: 'none' };
-  }
+  const merged = view.mergedAt ? Date.parse(view.mergedAt) : Number.NaN;
+  // merge の時刻が読めない時も「merge の直後」に倒す（通った・無い、とは言わない）。
+  const fresh = Number.isNaN(merged) || now.getTime() - merged < RUN_GRACE_MS;
+  if (latest.size === 0) return fresh ? { state: 'pending', done: 0, total: 0 } : { state: 'none' };
   const all = [...latest.entries()];
   const running = all.filter(([, run]) => run.status !== 'completed');
-  const failed = all.filter(([, run]) => run.status === 'completed' && !FINE.has(run.conclusion ?? ''));
+  const cancelled = all.filter(([, run]) => run.status === 'completed' && run.conclusion === CANCELLED).length;
+  const failed = all.filter(([, run]) => run.status === 'completed' && run.conclusion !== CANCELLED && !FINE.has(run.conclusion ?? ''));
   if (failed.length > 0) {
     return { state: 'failed', failed: failed.map(([name, run]) => ({ name, ...(run.url ? { url: run.url } : {}) })), passed: all.length - failed.length - running.length, pending: running.length };
   }
-  if (running.length > 0) return { state: 'pending', done: all.length - running.length, total: all.length };
-  return { state: 'passed', total: all.length };
+  if (running.length > 0 || fresh) return { state: 'pending', done: all.length - running.length, total: all.length };
+  return { state: 'passed', total: all.length, ...(cancelled === 0 ? {} : { cancelled }) };
 }
 
-/** GitHub が応えるかを 1 回見る（repo があればその repo を、無ければ API の上限を読む）。 */
+/** GitHub が応えるかを 1 回見る（repo があればその repo を読めるか。無ければ API が応えるかだけ: API が応えても、merge・push・Actions がまだ落ちていることはある）。 */
 export function lookGithub(exec: Exec, repo?: string): Look {
   const r = exec('gh', repo === undefined ? ['api', 'rate_limit', '-q', '.rate.limit'] : ['api', `repos/${repo}`, '-q', '.full_name']);
   if (r.status === 0) return { state: 'passed', total: 1 };
