@@ -76,6 +76,7 @@ export const COMMANDS = [
   'file list',
   'file delete',
   'figure setup',
+  'figure guide',
   'figure validate',
   'figure embed',
   'figure shot',
