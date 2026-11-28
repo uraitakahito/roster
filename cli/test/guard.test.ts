@@ -497,7 +497,7 @@ describe('hook の入力と settings', () => {
 
   test('Auditor の席の settings は、file を書き替える道具の前にも roster guard を呼ぶ', () => {
     const matcher = (role?: RoleName): string => (JSON.parse(guardSettings('/r/cli/bin/roster', role)) as { hooks: { PreToolUse: { matcher: string }[] } }).hooks.PreToolUse[0]?.matcher ?? '';
-    expect(matcher('auditor')).toBe('Bash|Edit|Write|NotebookEdit');
+    expect(matcher('auditor')).toBe('Bash|Monitor|Edit|Write|NotebookEdit');
     expect(matcher('software-engineer')).toBe('Bash');
   });
 
@@ -724,7 +724,7 @@ describe('Staff Engineer 担当は repo を変えない', () => {
 
   test('席の settings は、file を書き替える道具の前にも roster guard を呼ぶ。audit fresh は Auditor の席だけ', () => {
     const settings = (role: RoleName) => JSON.parse(guardSettings('/r/cli/bin/roster', role)) as { hooks: { PreToolUse: { matcher: string }[], SessionStart: { hooks: { command: string }[] }[] } };
-    expect(settings('staff-engineer').hooks.PreToolUse[0]?.matcher).toBe('Bash|Edit|Write|NotebookEdit');
+    expect(settings('staff-engineer').hooks.PreToolUse[0]?.matcher).toBe('Bash|Monitor|Edit|Write|NotebookEdit');
     expect(settings('staff-engineer').hooks.SessionStart[0]?.hooks.map(h => h.command)).toEqual(['/r/cli/bin/roster castlist session-start', '/r/cli/bin/roster mail claim', '/r/cli/bin/roster mail wait']);
     expect(settings('auditor').hooks.SessionStart[0]?.hooks.map(h => h.command)).toEqual(['/r/cli/bin/roster audit fresh', '/r/cli/bin/roster castlist session-start', '/r/cli/bin/roster mail claim', '/r/cli/bin/roster mail wait']);
   });

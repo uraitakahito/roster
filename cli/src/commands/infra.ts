@@ -1,7 +1,7 @@
 // roster infra …: インフラの環境の宣言と承認を見る・書く。roster guard: hook から呼ばれる guard。
 import { OWN_LABEL } from '../config.ts';
 import type { Context } from '../context.ts';
-import { recordGuardStop } from '../evidence.ts';
+import { recordGuardStop, recordReviewGuardHit } from '../evidence.ts';
 import { commandOf, judge, judgeEnv, judgeWrite, readApprovals, removeApproval, writeApproval, writeOf, type Verdict } from '../guard.ts';
 import { ROLE_NAMES, type RoleName } from '../protocol.ts';
 import { requireTpmSide } from '../roster.ts';
@@ -9,6 +9,7 @@ import { TpmError } from '../skill-sets.ts';
 import { castlistGuard } from './castlist.ts';
 import { mailGuard, settleWaiter } from './mail.ts';
 import { pagesDir } from './store.ts';
+import { checkReviewCommand } from '../review-guard.ts';
 import { envOf } from '../env.ts';
 
 const GUARD_LABEL = { 'free': '自由', 'tpm': 'TPM に相談（DevOps Engineer 担当だけ）', 'pm': 'PM の承認（DevOps Engineer 担当だけ）', 'pm-only': 'PM だけ（どの担当も打てない）' } as const;
@@ -106,5 +107,15 @@ export async function guard(ctx: Context, stdin: string): Promise<Verdict> {
   // 手伝いの中からの送る命令と、同じ返答の中で渡した物がある時の送る命令（mail.ts の mailGuard）。
   const mail = castlist.allow ? mailGuard(ctx, stdin, command) : castlist;
   if (!mail.allow) recordGuardStop(ctx, command, mail.reason);
+  else if (roleOf(ctx.env) === 'staff-engineer') recordReviewCommand(ctx, stdin, command);
   return mail;
+}
+
+/** レビューの席の命令を通す側の表に照らし、表に無い形があれば記録する（段 1a。止めない。t-n4j9）。 */
+function recordReviewCommand(ctx: Context, stdin: string, command: string): void {
+  const check = checkReviewCommand(command);
+  if (check.outside.length === 0 && check.writes.length === 0) return;
+  const input = JSON.parse(stdin) as { tool_name?: string, agent_id?: unknown, agent_type?: unknown };
+  const agent = typeof input.agent_type === 'string' ? input.agent_type : typeof input.agent_id === 'string' ? input.agent_id : 'main';
+  recordReviewGuardHit(ctx, { agent, tool: input.tool_name ?? '', command, outside: check.outside, writes: check.writes });
 }
