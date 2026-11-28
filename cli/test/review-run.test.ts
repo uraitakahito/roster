@@ -1,0 +1,179 @@
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, utimesSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, test } from 'vitest';
+import type { Context } from '../src/context.ts';
+import type { ExecResult } from '../src/exec.ts';
+import { ensurePlace, gitDir, placeDir, PRUNE_AFTER_MS, workTree } from '../src/review-place.ts';
+import { imageFor, imageName, pruneReview, REVIEW_NETWORK, reviewRun, reviewServe, reviewStop, runArgs } from '../src/review-run.ts';
+
+/** roster の repo の一番上（review/images の Containerfile を読む）。 */
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+/** container ls --format json の答え（名・label の Key・種類）。 */
+const json = (rows: [string, string, string][]): string => JSON.stringify(rows.map(([id, key, kind]) => ({
+  configuration: { id, labels: key === '' ? {} : { 'roster.review.key': key, 'roster.review.kind': kind } },
+  status: { networks: [{ ipv4Address: '192.168.67.9/24' }] },
+})));
+
+/** 偽の container の命令（打った引数を覚え、答えを返す）。 */
+function setup(answer: (args: string[]) => ExecResult = () => ({ status: 0, stdout: '', stderr: '' })): { ctx: Context, calls: string[][] } {
+  const base = realpathSync(mkdtempSync(join(tmpdir(), 'roster-review-run-')));
+  const project = join(base, 'project');
+  mkdirSync(project);
+  const calls: string[][] = [];
+  const ctx = {
+    env: { ROSTER_REVIEW_DIR: join(base, 'review') },
+    project,
+    root: ROOT,
+    exec: (cmd: string, args: string[]) => {
+      calls.push([cmd, ...args]);
+      return answer(args);
+    },
+    now: () => new Date('2026-11-28T06:00:00.000Z'),
+  } as unknown as Context;
+  // clone の形（作業の木と、外の git の folder）を作る。
+  mkdirSync(workTree(ctx, 'AI-8', 'castlist'), { recursive: true });
+  mkdirSync(gitDir(ctx, 'AI-8', 'castlist'), { recursive: true });
+  writeFileSync(join(workTree(ctx, 'AI-8', 'castlist'), 'Cargo.toml'), '[package]\n');
+  return { ctx, calls };
+}
+
+describe('レビューの container（t-n4j9 の段 3）', () => {
+  test('mount は作業の木と課題の cache だけで、git の folder を含まない。専用の network・メモリ・名の頭', () => {
+    const { ctx } = setup();
+    const args = runArgs(ctx, 'AI-8', workTree(ctx, 'AI-8', 'castlist'), 'roster-review-rust:x', { name: 'roster-review-ai-8-run-1', kind: 'run', memory: '4G', detach: false, command: ['cargo', 'test', '--locked'] });
+    const volumes = args.flatMap((a, i) => a === '--volume' ? [args[i + 1] ?? ''] : []);
+    const cache = join(placeDir(ctx, 'AI-8'), 'cache');
+    expect(volumes).toEqual([
+      `${workTree(ctx, 'AI-8', 'castlist')}:/work`,
+      `${cache}:/cache`,
+      `${join(cache, 'cargo', 'cache')}:/usr/local/cargo/registry/cache`,
+      `${join(cache, 'cargo', 'index')}:/usr/local/cargo/registry/index`,
+    ]);
+    expect(volumes.some(v => v.includes('.git-'))).toBe(false);
+    expect(args.slice(0, 2)).toEqual(['run', '--rm']);
+    expect(args[args.indexOf('--network') + 1]).toBe(REVIEW_NETWORK);
+    expect(args[args.indexOf('--memory') + 1]).toBe('4G');
+    expect(args[args.indexOf('--name') + 1]).toMatch(/^roster-review-/);
+    expect(args).not.toContain('--cpus');
+    expect(args).toEqual(expect.arrayContaining(['--label', 'roster.review.key=AI-8', '--label', 'roster.review.kind=run']));
+    expect(args.slice(-3)).toEqual(['sh', '-c', 'cargo test --locked']);
+  });
+
+  test('引数が 1 つなら shell の字のまま、いくつもなら引用してつなぐ', () => {
+    const { ctx } = setup();
+    const tree = workTree(ctx, 'AI-8', 'castlist');
+    expect(runArgs(ctx, 'AI-8', tree, 'i', { name: 'n', kind: 'run', memory: '4G', detach: false, command: ['pnpm install && pnpm test'] }).at(-1)).toBe('pnpm install && pnpm test');
+    expect(runArgs(ctx, 'AI-8', tree, 'i', { name: 'n', kind: 'run', memory: '4G', detach: false, command: ['echo', 'a b'] }).at(-1)).toBe('echo \'a b\'');
+  });
+
+  test('image の種類は作業の木の file で決め、名は Containerfile の中身の hash で版を持つ', () => {
+    const { ctx } = setup();
+    expect(imageFor(workTree(ctx, 'AI-8', 'castlist'))).toBe('rust');
+    // 一番上に無ければ 1 つ下を見る（roster の cli/）。
+    const roster = workTree(ctx, 'AI-8', 'roster');
+    mkdirSync(join(roster, 'cli'), { recursive: true });
+    writeFileSync(join(roster, 'cli', 'package.json'), '{}');
+    expect(imageFor(roster)).toBe('node');
+    expect(imageName(ctx, 'rust')).toMatch(/^roster-review-rust:[0-9a-f]{12}$/);
+    expect(imageName(ctx, 'node')).toMatch(/^roster-review-node:[0-9a-f]{12}$/);
+    expect(existsSync(join(ROOT, 'review', 'images', 'node.Containerfile'))).toBe(true);
+  });
+
+  test('run: network と image が無ければ作り、流して、出力を場所の logs/ に置き、終了コードを返す', () => {
+    const { ctx, calls } = setup((args) => {
+      if (args[0] === 'network' && args[1] === 'inspect') return { status: 1, stdout: '', stderr: 'not found' };
+      if (args[0] === 'image' && args[1] === 'inspect') return { status: 1, stdout: '', stderr: 'not found' };
+      if (args[0] === 'run') return { status: 101, stdout: '[1/6] Fetching image\ntest result: FAILED\n', stderr: '' };
+      return { status: 0, stdout: '', stderr: '' };
+    });
+    const r = reviewRun(ctx, 'AI-8', {}, ['cargo', 'test']);
+    expect(r.status).toBe(101);
+    expect(calls.map(c => c.slice(1, 3).join(' '))).toEqual(['ls --format', 'network inspect', 'network create', 'image inspect', 'build --tag', 'run --rm']);
+    expect(calls[2]).toEqual(['container', 'network', 'create', '--label', 'roster=review', REVIEW_NETWORK]);
+    // build に -c・-m などの builder を作り直す旗を付けない。
+    expect(calls[4]?.some(a => /^-(?:c|m)$|^--(?:cpus|memory|ssh|dns)/.test(a))).toBe(false);
+    expect(r.lines).toContain('test result: FAILED');
+    expect(r.lines).not.toContain('[1/6] Fetching image');
+    const log = /全部の出力: (.+)$/.exec(r.lines.at(-1) ?? '')?.[1] ?? '';
+    expect(readFileSync(log, 'utf8')).toContain('test result: FAILED');
+    // lock は終わったら外れる（続けて打てる）。
+    expect(reviewRun(ctx, 'AI-8', {}, ['true']).status).toBe(101);
+  });
+
+  test('同じ課題の中で 2 つを同時に流さない（cache の lock は VM をまたいで効かない）', () => {
+    const { ctx } = setup();
+    const lock = join(placeDir(ctx, 'AI-8'), 'run.lock');
+    mkdirSync(lock);
+    // 取った roster が居る（この試験の process）。
+    writeFileSync(join(lock, 'note.json'), JSON.stringify({ pid: process.pid, name: 'roster-review-x' }));
+    expect(() => reviewRun(ctx, 'AI-8', {}, ['true'])).toThrow(/もう流れています/);
+  });
+
+  test('note のまだ無い、できたばかりの lock は、取った物とみなす（review-11 の提案）', () => {
+    const { ctx } = setup();
+    const lock = join(placeDir(ctx, 'AI-8'), 'run.lock');
+    mkdirSync(lock);
+    const fresh = ctx.now().getTime() / 1000;
+    utimesSync(lock, fresh, fresh);
+    expect(() => reviewRun(ctx, 'AI-8', {}, ['true'])).toThrow(/取ったばかり/);
+    const old = (ctx.now().getTime() - 120_000) / 1000;
+    utimesSync(lock, old, old);
+    expect(reviewRun(ctx, 'AI-8', {}, ['true']).lines[0]).toBe(`古い lock を取り直した: ${lock}`);
+  });
+
+  test('切られた run の古い lock は、残った container を止めてから取り直す（review-10 の指摘 1）', () => {
+    const left = 'roster-review-ai-8-run-old';
+    const { ctx, calls } = setup(args => args[0] === 'ls' ? { status: 0, stdout: json([[left, 'AI-8', 'run']]), stderr: '' } : { status: 0, stdout: '', stderr: '' });
+    const lock = join(placeDir(ctx, 'AI-8'), 'run.lock');
+    mkdirSync(lock);
+    // 居ない pid（取った roster が切られた）。
+    writeFileSync(join(lock, 'note.json'), JSON.stringify({ pid: 2 ** 22 + 12345, name: left }));
+    const r = reviewRun(ctx, 'AI-8', {}, ['true']);
+    expect(r.lines.slice(0, 2)).toEqual([`前に切られた run の container を止めた: ${left}`, `古い lock を取り直した: ${lock}`]);
+    expect(calls).toContainEqual(['container', 'stop', left]);
+    expect(existsSync(lock)).toBe(false);
+  });
+
+  test('clone が無い・言語が分からない・命令が無い時は止まる', () => {
+    const { ctx } = setup();
+    expect(() => reviewRun(ctx, 'AI-9', {}, ['true'])).toThrow(/clone がありません/);
+    expect(() => reviewRun(ctx, 'AI-8', {}, [])).toThrow(/命令を書いて/);
+    writeFileSync(join(workTree(ctx, 'AI-8', 'castlist'), 'Cargo.toml'), '');
+    mkdirSync(workTree(ctx, 'AI-8', 'other'), { recursive: true });
+    mkdirSync(gitDir(ctx, 'AI-8', 'other'), { recursive: true });
+    expect(() => reviewRun(ctx, 'AI-8', {}, ['true'])).toThrow(/--repo/);
+    expect(() => reviewRun(ctx, 'AI-8', { repo: 'other' }, ['true'])).toThrow(/言語が分かりません/);
+  });
+
+  test('serve は起こしたままにして IP を出し、stop は label の Key が丸ごと同じ container だけを止める（review-10 の指摘 2）', () => {
+    let rows: [string, string, string][] = [];
+    const { ctx, calls } = setup((args) => {
+      if (args[0] === 'ls') return { status: 0, stdout: json(rows), stderr: '' };
+      if (args[0] === 'run' && args.includes('--detach')) rows = [[args[args.indexOf('--name') + 1] ?? '', 'AI-8', 'serve'], ['roster-review-ai-8-roster-serve-y', 'AI-8#roster', 'serve'], ['pagetray.box', '', '']];
+      return { status: 0, stdout: '', stderr: '' };
+    });
+    const out = reviewServe(ctx, 'AI-8', {}, ['cargo run']);
+    const mine = rows[0]?.[0] ?? '';
+    expect(out.at(-1)).toBe(`起こした: ${mine}（IP: 192.168.67.9）。止めるのは roster review stop ${mine}`);
+    // serve が動いている間は、run も 2 つ目の serve も断る（review-10 の指摘 3・5）。
+    expect(() => reviewRun(ctx, 'AI-8', {}, ['true'])).toThrow(/serve の container が動いています/);
+    expect(() => reviewServe(ctx, 'AI-8', {}, ['x'])).toThrow(/課題ごとに 1 つまで/);
+    // repo の席の Key（AI-8#roster）の container には触らない。
+    expect(reviewStop(ctx, 'AI-8', undefined)).toEqual([mine]);
+    expect(calls.filter(c => c[1] === 'stop')).toEqual([['container', 'stop', mine]]);
+    expect(() => reviewStop(ctx, 'AI-8', 'roster-review-ai-8-roster-serve-y')).toThrow(/この課題の container ではありません/);
+    expect(() => reviewStop(ctx, 'AI-8', 'pagetray.box')).toThrow(/この課題の container ではありません/);
+  });
+
+  test('名簿に居ない古い課題の場所を消す時、その課題の container も止める（review-10 の指摘 4）', () => {
+    const { ctx, calls } = setup(args => args[0] === 'ls' ? { status: 0, stdout: json([['roster-review-ai-3-serve-z', 'AI-3', 'serve']]), stderr: '' } : { status: 0, stdout: '', stderr: '' });
+    const stale = ensurePlace(ctx, 'AI-3');
+    const old = (ctx.now().getTime() - PRUNE_AFTER_MS - 60_000) / 1000;
+    utimesSync(stale, old, old);
+    expect(pruneReview(ctx, k => k === 'AI-8')).toEqual([`名簿に居ない課題のレビューの場所を消した: ${stale}`, 'その課題の container を止めた: roster-review-ai-3-serve-z']);
+    expect(calls).toContainEqual(['container', 'stop', 'roster-review-ai-3-serve-z']);
+  });
+});
