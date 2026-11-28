@@ -62,14 +62,15 @@ roster push --no-checks "<訳>"    # push する commit に宣言が無い時だ
 |---|---|
 | 0 | push した |
 | 10 | 確かめが落ちた（push していない）。落ちた確かめの名・終了コード（時間切れは 124）・出力の終わり 40 行と、全部の log の path を出す。落ちた確かめの dir とその直下の folder に、依存を書いた `package.json` があって `node_modules` が無ければ、依存を入れる注意も出す（根で流す確かめが `docs-site` の依存を使う形も拾う） |
-| 1 | 断った（git の worktree の外・detached・既定の branch の上・HEAD に commit が無い・追われている file に commit していない変更がある（submodule の指す commit が checkout とずれていれば、その submodule の名と `git submodule update --init --recursive` を出す）・`git status` が読めない・push する commit に宣言が無い・push する commit に宣言が無く origin の既定の branch に在る（宣言が足される前に切った branch。取り込めば済むので `--no-checks` も断る）・宣言の形が違う・`--no-checks` の訳が空・確かめの間に HEAD か追われた file が動いた） |
+| 1 | 断った（git の worktree の外・detached・既定の branch の上（origin にその branch が在る時）・HEAD に commit が無い・追われている file に commit していない変更がある（submodule の指す commit が checkout とずれていれば、その submodule の名と `git submodule update --init --recursive` を出す）・`git status` が読めない・push する commit に宣言が無い・push する commit に宣言が無く origin の既定の branch に在る（宣言が足される前に切った branch。取り込めば済むので `--no-checks` も断る）・宣言の形が違う・`--no-checks` の訳が空・確かめの間に HEAD か追われた file が動いた） |
 | 2 | `git fetch` が落ちた（確かめは流していない）か、`git push` が落ちた（確かめは通った）。どちらかは出る行で分かる。網の誤りなら `roster watch github` で待って打ち直す（remote が先に進んで断られたなら、取り込んでから打ち直す） |
 
 - 確かめは、落ちても残りをみな流す（1 度で全部の落ちを見せる）。1 つにつき時間の限りがあり（既定 600 秒。設定の `timeoutSeconds`）、過ぎたら止めて落ちた（時間切れ）とする（止まったまま返らない確かめで、裏の `roster push` が返らなくならないため）。出力は状態の folder の `push/` の下の log に書き、画面には 1 つにつき 1 行（名・終了コード・秒）を出す。
 - 初めに HEAD の sha を取り、確かめの後に HEAD と追われた file が同じかをもう 1 度見てから、その sha を push する（裏で流す間に commit を足しても、確かめていない commit は出ない）。git に入っていない file（`.gitignore` に無い物）は、確かめの木には在るが commit には無いので、名を注意に出す（断らない）。
 - push の先は、いつも手元の branch と同じ名（upstream では決めない。`origin/main` から `-b` で切った branch は `origin/main` を追うため）。push の後、upstream を push した branch に付け直す。Dependabot の PR を直す時は、PR の branch と同じ名の手元の branch を作る（`git worktree add -b <PR の branch の名> <置き場所> --track origin/<PR の branch の名>`）。
 - 確かめの一覧は push する commit の物を読み（[設定](/configuration/#push-の前の確かめpush)）、branch が一覧に加えた変更を、確かめの前に `確かめの一覧の差（main と分かれた所と比べて）: 消した: …／変えた: …（run・env）／足した: …` の 1 行で出す。消した・変えたがあれば、PR の本文に差と訳を書き、レビューを必ず頼む案内も出す。push の欄ごと消した branch は、宣言の無い repo と同じに断る（`--no-checks "<訳>"` なら push する）。main と分かれた後に main に足された・中身を変えられた確かめは、branch に無いか古いままなら、注意に名を出す（取り込めば流れる）。
-- 1 回につき 1 行が、状態の folder の `pushes.jsonl` に残る（時刻・Key・repo・先・sha・確かめごとの終了コードと秒・結果・`--no-checks` の訳・一覧の差 `configDiff`（`base`（`merge-base` か、分かれた所が取れない・読めない時の `default-branch`）・`removed`・`changed`・`added`・`sectionRemoved`・`mainAdded`・`mainChanged`・`baseUnreadable`。差が無ければ無い））。確かめが落ちて止めた回（10）は、前なら CI で落ちていた回として数えられる。
+- **空の repo の初めの push**: origin が空（ref が 1 つも無い）の時は、`git fetch` の落ちを網の誤りと読まず（名指し無しの `git ls-remote --exit-code origin` が「無い」（2）を返すかで見分ける。中身が在って `main` だけが無い repo は、今どおり終了 2）、初めの push として扱う。既定の branch を作る push なので `main` の上からだけ打てる（ほかの名の branch から打つと断る。先に出した branch を GitHub が既定の branch にするため）。push する commit の一覧で確かめる（差は空の一覧と比べて、みな「足した」）。一覧が無ければ、宣言の無い repo と同じく `--no-checks "<訳>"` で push する。tag は断る（2026-11-29 t-f73c。台帳 #531）。
+- 1 回につき 1 行が、状態の folder の `pushes.jsonl` に残る（時刻・Key・repo・先・sha・確かめごとの終了コードと秒・結果・`--no-checks` の訳・一覧の差 `configDiff`（`base`（`merge-base` か、分かれた所が取れない・読めない時の `default-branch` か、初めの push の `none`）・`removed`・`changed`・`added`・`sectionRemoved`・`mainAdded`・`mainChanged`・`baseUnreadable`。差が無ければ無い））。確かめが落ちて止めた回（10）は、前なら CI で落ちていた回として数えられる。
 
 ## 移す手順
 
