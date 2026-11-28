@@ -428,6 +428,7 @@ Staff Engineer 担当の席が、PR を試す使い捨ての container（`roster
 | 作業の木と cache | `${XDG_CACHE_HOME:-~/.cache}/roster/review/<project>/<Key>/` | 席を閉じる時に消える。課題ごとで共有しない（Apple の container の volume は同時に 2 つに付かず、host の folder の共有は cargo の lock が効かない） |
 
 - 消す時は、名を `container ls`・`container image ls`・`container network ls` で見て、名を書いて 1 つずつ消す（`container rm roster-review-…`・`container image delete roster-review-node:<hash>`・`container network delete roster-review`）。`prune`・`--all` は使わない（PM だけの環境に当たる）。
+- 同時に動く数: 1 つの課題で、`run` か `serve` の 1 つだけ（4 GB）。並ぶレビューの席の数だけ 4 GB ずつ要る。Bash の時間切れで切られた `run` の container は、中の命令が終わるまで動き続けるが、次の `run`（か `roster close`）が止める。
 - disk の目安（2026-11-28 の段 0）: rust の image 1.3 GB ほど、castlist の clone の `target/` 4.4 GB ほど（課題ごと）。
 
 ## 担当が落ちた後の調べ方

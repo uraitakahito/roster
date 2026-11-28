@@ -3,8 +3,8 @@ import type { Command } from 'commander';
 import { createContext, type Context } from '../context.ts';
 import { readReviews, VERDICTS, type Review, type Verdict } from '../reviews.ts';
 import { envOf } from '../env.ts';
-import { checkoutPull, prunePlaces, removePlace, reviewGit } from '../review-place.ts';
-import { ensureImage, REVIEW_IMAGES, reviewRun, reviewServe, reviewStop, type ReviewImage, type RunOptions } from '../review-run.ts';
+import { checkoutPull, removePlace, reviewGit } from '../review-place.ts';
+import { ensureImage, pruneReview, REVIEW_IMAGES, reviewRun, reviewServe, reviewStop, type ReviewImage, type RunOptions } from '../review-run.ts';
 import { isStaffKey, readRole, repoSeatKeys, staffKey, subjectOfStaffKey } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
 
@@ -124,8 +124,8 @@ export function registerReview(program: Command, print: (lines: string[]) => voi
         print([removed === undefined ? `${key} のレビューの場所は無い` : `消した: ${removed}`]);
         return;
       }
-      const removed = prunePlaces(ctx, k => readRole(ctx, staffKey(k)) !== undefined);
-      print(removed.length === 0 ? ['消す場所は無い'] : removed.map(p => `消した: ${p}`));
+      const out = pruneReview(ctx, k => readRole(ctx, staffKey(k)) !== undefined);
+      print(out.length === 0 ? ['消す場所は無い'] : out);
     });
 }
 

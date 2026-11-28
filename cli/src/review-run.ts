@@ -6,14 +6,19 @@
 // container の命令は、名を字で書いて打つ（roster-review- の頭。共有の環境の決まり）。prune・system は使わない。
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { basename } from 'node:path';
 import { join } from 'node:path';
 import type { Context } from './context.ts';
-import { clonedRepos, placeDir, workTree } from './review-place.ts';
+import { clonedRepos, placeDir, prunePlaces, workTree } from './review-place.ts';
 import { shellQuote } from './shell.ts';
 import { TpmError } from './skill-sets.ts';
 
 /** レビューの container が使う network の名。 */
 export const REVIEW_NETWORK = 'roster-review';
+/** container の label（課題の Key と、run か serve か）。 */
+export const LABEL_KEY = 'roster.review.key';
+/** container の label の種類の名。 */
+export const LABEL_KIND = 'roster.review.kind';
 /** container の名の頭（共有の環境の宣言 review の match と同じ）。 */
 export const REVIEW_PREFIX = 'roster-review-';
 /** 既定のメモリ（段 0 の 4: castlist の clippy と試験は 4 GB で足り、8 GB と差が小さい）。 */
@@ -98,7 +103,7 @@ const nameOf = (key: string, kind: string, ctx: Context): string => `${REVIEW_PR
  * container run の引数。mount は作業の木（/work）と、課題ごとの cache（/cache と cargo の取り込み物）だけ。
  * --network は専用の network、-m はその container だけに効く（共有の環境の決まりが止めるのは build の -c・-m）。
  */
-export function runArgs(ctx: Context, key: string, tree: string, image: string, options: { name: string, memory: string, detach: boolean, command: string[] }): string[] {
+export function runArgs(ctx: Context, key: string, tree: string, image: string, options: { name: string, kind: 'run' | 'serve', memory: string, detach: boolean, command: string[] }): string[] {
   const cache = join(placeDir(ctx, key), 'cache');
   return [
     'run',
@@ -106,6 +111,11 @@ export function runArgs(ctx: Context, key: string, tree: string, image: string, 
     ...(options.detach ? ['--detach'] : []),
     '--name',
     options.name,
+    // 課題と種類は label で持つ（名の頭で選ぶと、repo の席の Key（t-x7k2#roster）の container が親の課題の頭に当たる。review-10 の指摘 2）。
+    '--label',
+    `${LABEL_KEY}=${key}`,
+    '--label',
+    `${LABEL_KIND}=${options.kind}`,
     '--network',
     REVIEW_NETWORK,
     '--memory',
@@ -138,18 +148,58 @@ function prepare(ctx: Context, key: string, options: RunOptions): { tree: string
   return { tree, image: imageName(ctx, kind), lines };
 }
 
-/** 課題ごとの lock（同じ課題の中で 2 つの run を同時に流さない。cache の lock は VM をまたいで効かないため）。 */
-function withLock<T>(ctx: Context, key: string, run: () => T): T {
-  const lock = join(placeDir(ctx, key), 'run.lock');
+/** lock に書く物（取った roster の pid と、流している container の名）。 */
+interface LockNote {
+  pid: number
+  name: string
+}
+
+/** pid の process が居るか。 */
+function alive(pid: number): boolean {
   try {
-    mkdirSync(lock);
+    process.kill(pid, 0);
+    return true;
   }
   catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
-    throw new TpmError(`この課題の container がもう流れています（${lock}）。終わってから打ち直してください（落ちて残っていれば、その folder を消す）`);
+    return (e as NodeJS.ErrnoException).code === 'EPERM';
   }
+}
+
+/**
+ * 課題ごとの lock（同じ課題の中で 2 つの run を同時に流さない。cache の lock は VM をまたいで効かないため）。
+ * lock の folder に、取った roster の pid と container の名を書く。取った roster が居なければ（Bash の時間切れなどで切られた）、
+ * 古い lock とみなし、残った container を止めてから取り直す（切られても、container run の子は命令が終わるまで動き続ける。review-10 の指摘 1）。
+ */
+function withLock<T>(ctx: Context, key: string, name: string, run: () => T): { value: T, recovered: string[] } {
+  const lock = join(placeDir(ctx, key), 'run.lock');
+  const note = join(lock, 'note.json');
+  const recovered: string[] = [];
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      mkdirSync(lock);
+      break;
+    }
+    catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'EEXIST' || attempt > 0) throw e instanceof TpmError ? e : new TpmError(`lock を取れませんでした: ${lock}`);
+      let held: LockNote | undefined;
+      try {
+        held = JSON.parse(readFileSync(note, 'utf8')) as LockNote;
+      }
+      catch {
+        held = undefined;
+      }
+      if (held !== undefined && alive(held.pid)) throw new TpmError(`この課題の container がもう流れています（pid ${held.pid}・${held.name}）。終わってから打ち直してください`);
+      if (held !== undefined && reviewContainers(ctx, key).includes(held.name)) {
+        container(ctx, ['stop', held.name], `残った ${held.name} を止めるの`);
+        recovered.push(`前に切られた run の container を止めた: ${held.name}`);
+      }
+      rmSync(lock, { recursive: true, force: true });
+      recovered.push(`古い lock を取り直した: ${lock}`);
+    }
+  }
+  writeFileSync(note, JSON.stringify({ pid: process.pid, name } satisfies LockNote));
   try {
-    return run();
+    return { value: run(), recovered };
   }
   finally {
     rmSync(lock, { recursive: true, force: true });
@@ -163,38 +213,82 @@ export function reviewRun(ctx: Context, key: string, options: RunOptions, comman
   if (command.length === 0) throw new TpmError('-- の後に、container の中で流す命令を書いてください（roster review run -- pnpm test）');
   // clone を先に確かめる（場所が無い課題で、lock の folder を作れない誤りを「流れています」と読み違えない）。
   chooseTree(ctx, key, options.repo);
-  return withLock(ctx, key, () => {
+  // serve が動いている間は流さない（同じ作業の木の target/・node_modules と cache を、2 つの VM が書くため。review-10 の指摘 3）。
+  const serving = reviewContainers(ctx, key, 'serve');
+  if (serving.length > 0) throw new TpmError(`この課題の serve の container が動いています（${serving.join('・')}）。roster review stop で止めてから打ってください`);
+  const name = nameOf(key, 'run', ctx);
+  const { value, recovered } = withLock(ctx, key, name, () => {
     const { tree, image, lines } = prepare(ctx, key, options);
-    const name = nameOf(key, 'run', ctx);
-    const r = ctx.exec('container', runArgs(ctx, key, tree, image, { name, memory: options.memory ?? REVIEW_MEMORY, detach: false, command }));
+    const r = ctx.exec('container', runArgs(ctx, key, tree, image, { name, kind: 'run', memory: options.memory ?? REVIEW_MEMORY, detach: false, command }));
     const log = join(placeDir(ctx, key), 'logs', `${name}.log`);
     const all = `${r.stdout}${r.stderr}`;
     writeFileSync(log, all);
     const tail = all.split('\n').filter(l => !/^\[\d\/\d\] /.test(l)).slice(-TAIL);
     return { lines: [...lines, ...tail, `終了コード ${r.status}・全部の出力: ${log}`], status: r.status };
   });
+  return { lines: [...recovered, ...value.lines], status: value.status };
 }
 
 /** 動かして試す: container を起こしたままにし、名と IP を出す（手元から container の IP で届く。段 0 の 8）。 */
 export function reviewServe(ctx: Context, key: string, options: RunOptions, command: string[]): string[] {
   if (command.length === 0) throw new TpmError('-- の後に、container の中で起こす命令を書いてください（roster review serve -- pnpm start）');
+  // serve は課題ごとに 1 つまで。run が流れている間も起こさない（review-10 の指摘 3・5）。
+  const running = reviewContainers(ctx, key);
+  if (running.length > 0) throw new TpmError(`この課題の container が動いています（${running.join('・')}）。roster review stop で止めてから打ってください（serve は課題ごとに 1 つまで）`);
   const { tree, image, lines } = prepare(ctx, key, options);
   const name = nameOf(key, 'serve', ctx);
-  container(ctx, runArgs(ctx, key, tree, image, { name, memory: options.memory ?? REVIEW_MEMORY, detach: true, command }), `${name} を起こすの`);
+  container(ctx, runArgs(ctx, key, tree, image, { name, kind: 'serve', memory: options.memory ?? REVIEW_MEMORY, detach: true, command }), `${name} を起こすの`);
   return [...lines, `起こした: ${name}（IP: ${ipOf(ctx, name) ?? '読めない'}）。止めるのは roster review stop ${name}`];
 }
 
-/** container の IP（container ls の 6 つ目の欄）。読めなければ undefined。 */
-function ipOf(ctx: Context, name: string): string | undefined {
-  const r = ctx.exec('container', ['ls']);
-  const row = r.stdout.split('\n').map(l => l.trim().split(/\s+/)).find(cols => cols[0] === name);
-  return row?.[5]?.split('/')[0];
+/** container ls の JSON の 1 行（使う欄だけ）。 */
+interface Listed {
+  configuration?: { id?: string, labels?: Record<string, string> }
+  status?: { networks?: { ipv4Address?: string }[] }
 }
 
-/** 課題の container の名（動いている物）。 */
-export function reviewContainers(ctx: Context, key: string): string[] {
-  const head = `${REVIEW_PREFIX}${key.toLowerCase().replace(/[^a-z0-9-]/g, '-')}-`;
-  return ctx.exec('container', ['ls']).stdout.split('\n').map(l => l.trim().split(/\s+/)[0] ?? '').filter(n => n.startsWith(head));
+/** 動いている container（container ls --format json）。読めなければ空。 */
+function listed(ctx: Context): Listed[] {
+  const r = ctx.exec('container', ['ls', '--format', 'json']);
+  if (r.status !== 0) return [];
+  try {
+    const rows = JSON.parse(r.stdout) as unknown;
+    return Array.isArray(rows) ? rows as Listed[] : [];
+  }
+  catch {
+    return [];
+  }
+}
+
+/** container の IP。読めなければ undefined。 */
+function ipOf(ctx: Context, name: string): string | undefined {
+  return listed(ctx).find(c => c.configuration?.id === name)?.status?.networks?.[0]?.ipv4Address?.split('/')[0];
+}
+
+/** 課題の container の名（動いている物。label の Key が丸ごと同じ物だけ。kind で run・serve に絞る）。 */
+export function reviewContainers(ctx: Context, key: string, kind?: 'run' | 'serve'): string[] {
+  return listed(ctx)
+    .filter(c => c.configuration?.labels?.[LABEL_KEY] === key && (kind === undefined || c.configuration.labels[LABEL_KIND] === kind))
+    .map(c => c.configuration?.id ?? '')
+    .filter(id => id.startsWith(REVIEW_PREFIX));
+}
+
+/**
+ * 名簿に居ない古い課題の場所を消し、その課題の container も止める（review-10 の指摘 4）。消した場所の path と、止めた container の行。
+ */
+export function pruneReview(ctx: Context, isAlive: (key: string) => boolean): string[] {
+  const removed = prunePlaces(ctx, isAlive);
+  const out: string[] = [];
+  for (const path of removed) {
+    out.push(`名簿に居ない課題のレビューの場所を消した: ${path}`);
+    try {
+      out.push(...reviewStop(ctx, basename(path), undefined).map(n => `その課題の container を止めた: ${n}`));
+    }
+    catch (e) {
+      out.push(`その課題の container を止められなかった: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  return out;
 }
 
 /** 課題の container を止める（名を名指すか、その課題の物をみな）。止めた名。 */
