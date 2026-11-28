@@ -100,6 +100,11 @@ const GIT_READ_ARGS: Record<string, RegExp> = {
  * 手元の checkout か git の設定を変える物（`pr checkout` と gh が初めから持つ別名の `co`・`issue develop`・`repo set-default`）と、GitHub の側を変える物（t-xdmv）。
  */
 const GH_CHANGES = /^gh (?:co|pr (?:create|merge|close|edit|ready|reopen|review|comment|checkout|update-branch|revert|lock|unlock)|issue (?:create|edit|delete|reopen|close|comment|develop|transfer|pin|unpin|lock|unlock)|release (?:create|delete|edit|upload)|repo (?:create|delete|edit|rename|archive|sync|fork|set-default)|workflow (?:run|enable|disable)|run (?:rerun|cancel|delete)|cache delete|(?:secret|variable|label) (?:set|delete|create|edit))\b/;
+/** GH_CHANGES の命令のうち、この旗があれば出すだけの形（`gh repo set-default --view`・`gh issue develop --list`。review-2 の提案 1）。 */
+const GH_READ_FLAGS: Record<string, RegExp> = {
+  'repo set-default': /^(?:-v|--view)$/,
+  'issue develop': /^(?:-l|--list)$/,
+};
 /** gh の、repo を名指す旗（値を次の語に取る形と、`-Ro/r`・`--repo=o/r` の形）。小命令の前にも置けるので、当てる前に除く（t-xdmv）。 */
 const GH_REPO_FLAG = /^(?:-R|--repo)$/;
 const GH_REPO_JOINED = /^(?:-R.|--repo=)/;
@@ -136,7 +141,10 @@ function changesRepo(words: string[]): boolean {
   }
   if (words[0] !== 'gh') return false;
   const gh = ghWords(words);
-  if (GH_CHANGES.test(gh.join(' '))) return true;
+  if (GH_CHANGES.test(gh.join(' '))) {
+    const read = GH_READ_FLAGS[gh.slice(1, 3).join(' ')];
+    return read === undefined || !gh.slice(3).some(a => read.test(a));
+  }
   if (gh[1] !== 'api') return false;
   const args = gh.slice(2);
   const method = args.findIndex(a => a === '-X' || a === '--method');
