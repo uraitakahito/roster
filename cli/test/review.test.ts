@@ -838,7 +838,7 @@ describe('見た commit・まとめた頼み・軽い見方・review allow（t-p
 
   test('見直しの依頼書に、前に見た commit から頼んだ時の head までの commit と file の数を載せる（t-vqhy）', async () => {
     const { html } = await againBrief({ status: 'ahead', commits: ['5d6e7f8 review-1 の指摘を直す', '6e7f8a9 <b>試験</b>'], files: [{ filename: 'cli/src/a.ts', additions: 10, deletions: 2 }, { filename: 'cli/test/a.test.ts', additions: 5, deletions: 0 }] });
-    expect(html).toContain('<li>前に見た 1a2b3c4 から頼んだ時の head 5d6e7f8 まで: 2 commit・2 file（+15 −2。GitHub の compare）</li>');
+    expect(html).toContain('<li>前に見た 1a2b3c4 から頼んだ時の head 5d6e7f8 まで: 2 commit・2 file（+15 −2。GitHub の compare・ahead）</li><li>commit:');
     expect(html).toContain('<li>commit: 5d6e7f8 review-1 の指摘を直す</li><li>commit: 6e7f8a9 &lt;b&gt;試験&lt;/b&gt;</li>');
     expect(html).toContain('<li>file: cli/src/a.ts（+10 −2）</li><li>file: cli/test/a.test.ts（+5 −0）</li>');
     expect(html).not.toContain('range-diff');
@@ -846,10 +846,19 @@ describe('見た commit・まとめた頼み・軽い見方・review allow（t-p
 
   test('前に見た commit が head の祖先でない（rebase）なら、range-diff の 1 行を足す。並べる数を超えた分は「ほか N」（t-vqhy）', async () => {
     const commits = Array.from({ length: 32 }, (_, i) => `${String(i).padStart(7, '0')} c${i}`);
-    const { html } = await againBrief({ status: 'diverged', commits, files: [{ filename: 'a.ts', additions: 1, deletions: 1 }] });
+    const { html } = await againBrief({ status: 'diverged', total_commits: 32, commits, files: [{ filename: 'a.ts', additions: 1, deletions: 1 }] });
+    expect(html).toContain('32 commit・1 file（+1 −1。GitHub の compare・diverged）');
     expect(html).toContain(`<code>roster review git --repo r -- range-diff refs/remotes/origin/main ${H1} refs/remotes/pull/7</code>`);
     expect(html).toContain('<li>commit: 0000029 c29</li><li>ほか 2</li><li>file: a.ts');
     expect(html).not.toContain('c30');
+  });
+
+  test('compare の上限に当たった時と、behind・identical の時は、そう書く（review-1 の指摘 8・9）', async () => {
+    const files = Array.from({ length: 300 }, (_, i) => ({ filename: `f${i}.ts`, additions: 1, deletions: 0 }));
+    const big = (await againBrief({ status: 'ahead', total_commits: 260, commits: Array.from({ length: 250 }, (_, i) => `c${i}`), files })).html;
+    expect(big).toContain('260 commit（並ぶのは 250 まで）・300 file 以上（数は返った分だけ）');
+    expect((await againBrief({ status: 'behind', total_commits: 0, commits: [], files: [] })).html).toContain('<li>頼んだ時の head は、前に見た commit より前（commit を消したか戻した）。');
+    expect((await againBrief({ status: 'identical', total_commits: 0, commits: [], files: [] })).html).toContain('<li>頼んだ時の head は、前に見た commit と同じ（変わっていない）</li>');
   });
 
   test('compare が落ちた・形の違う答えなら、差の数を載せずに頼む（t-vqhy）', async () => {

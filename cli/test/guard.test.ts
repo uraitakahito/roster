@@ -712,6 +712,9 @@ describe('担当の席の素の git push（t-fcp8。監査 audit-2 の R15）', 
     'git push --follow-tags',
     'git -C /w/roster push',
     'cd /w && git push origin',
+    'git push origin "$(git branch --show-current)"',
+    'git push origin $BRANCH',
+    'git push origin HEAD:"${B}"',
   ])('役割の無い session の、送る branch を字で書かない push は止める（今の branch が main かを読めない。t-vqhy）: %s', (command) => {
     expect(ask(command, undefined)).toEqual({ allow: false, reason: expect.stringContaining('送る branch を字で書かない push') as string });
   });
@@ -819,6 +822,8 @@ describe('merge の直打ち（t-pq5v の段 3）', () => {
     'gh api -X PUT repos/o/r/contents/a.md -f branch=t-x/impl --input body.json',
     'gh api -X PUT repos/o/r/contents/a.md -f branch=t-x/impl --input=body.json',
     'gh api -X PUT repos/o/r/contents/a.md -f branch= -f message=x -f content=eA==',
+    'gh api -X PUT repos/o/r/contents/a.md -F branch=@b.txt -f message=x',
+    'gh api -X PUT repos/o/r/contents/a.md --field branch=@- -f message=x',
     // URL の形（review-9 の指摘 2）。
     'gh api -X PUT https://api.github.com/repos/o/r/pulls/1/merge',
     'gh api https://api.github.com/repos/o/r/merges -f base=main -f head=b',
@@ -951,6 +956,21 @@ describe('役割の有る席の、判定の守りを外す命令（t-pq5v の段
     'xargs env ROSTER_KEY=t-1.staff roster review checkout < x',
     'sudo ROSTER_ROLE= roster pr merge x',
     'timeout 60 sh -c \'ROSTER_ROLE= roster pr merge x\'',
+    // review-1 の指摘 1・2・3・5（t-vqhy）。
+    'env -u ROSTER_ROLE -u PATH roster pr merge x',
+    'ROSTER_ROLE= env -u PATH roster pr merge x',
+    'env -i -u PATH roster pr merge x',
+    'env --unset ROSTER_KEY --unset HOME roster review checkout 1',
+    'ROSTER_ROLE= bash -e /w/roster/cli/bin/roster pr merge x',
+    'ROSTER_ROLE= bash -o pipefail /w/roster/cli/bin/roster pr merge x',
+    'ROSTER_ROLE= sh -eu /w/roster/cli/bin/roster pr merge x',
+    'ROSTER_ROLE= npx tsx /w/roster/cli/src/cli.ts pr merge x',
+    'ROSTER_ROLE= pnpm tsx /w/roster/cli/src/cli.ts pr merge x',
+    'ROSTER_ROLE= pnpm exec node /w/roster/cli/src/cli.ts pr merge x',
+    'ROSTER_ROLE= node --env-file .env /w/roster/cli/src/cli.ts pr merge x',
+    'ROSTER_ROLE= node --some-new-flag /w/roster/cli/src/cli.ts pr merge x',
+    'ROSTER_ROLE= sudo -u bun env roster pr merge x',
+    'ROSTER_ROLE= nice -n 5 node /w/roster/cli/src/cli.ts pr merge x',
   ])('役割と Key の替えを止める: %s', (command) => {
     for (const role of SEATS) expect(ask(command, role), role).toEqual({ allow: false, reason: SPOOF_HINT });
   });
@@ -972,6 +992,10 @@ describe('役割の有る席の、判定の守りを外す命令（t-pq5v の段
     'ROSTER_KEY=t-1 node -e "console.log(1)" roster',
     'ROSTER_KEY=t-1 node -p 1 roster',
     'ROSTER_KEY=t-1 npx -c "echo 1" roster',
+    'ROSTER_KEY=t-1 node --eval=1 roster',
+    'ROSTER_KEY=t-1 node --test test/a.test.ts',
+    'ROSTER_KEY=t-1 pnpm -C cli test',
+    'ROSTER_KEY=t-1 bash -e scripts/check.sh',
     'ROSTER_KEY=t-1 npx vitest run test/roster.test.ts',
     'ROSTER_KEY=t-1 pnpm vitest run',
     'ROSTER_ROLE= sh scripts/check.sh',

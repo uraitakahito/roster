@@ -62,13 +62,19 @@ function staffBriefPage(subject: RoleRecord, asks: Review[], previous: Map<numbe
     const plus = diff.files.reduce((n, f) => n + f.additions, 0);
     const minus = diff.files.reduce((n, f) => n + f.deletions, 0);
     const more = (shown: number, all: number): string[] => all > shown ? [`<li>ほか ${all - shown}</li>`] : [];
-    const rebased = diff.status === 'diverged'
-      ? [`<li>前に見た commit は、頼んだ時の head の祖先でない（rebase か force push）。数は分かれた所からの物で、main の分も含みうる。commit ごとの差: <code>roster review git --repo ${e(pull.repo)} -- range-diff refs/remotes/origin/main ${e(from)} refs/remotes/pull/${pull.number}</code></li>`]
-      : [];
+    // compare は commit を 250・file を 300 までしか返さない（review-1 の指摘 8）。commit は total_commits と比べ、file は上限に当たれば「以上」。
+    const commits = diff.totalCommits > diff.commits.length ? `${diff.totalCommits} commit（並ぶのは ${diff.commits.length} まで）` : `${diff.commits.length} commit`;
+    const files = diff.files.length >= COMPARE_FILES_MAX ? `${diff.files.length} file 以上（数は返った分だけ）` : `${diff.files.length} file`;
+    // ahead のほかは、数だけでは読み違えうるので 1 行添える（review-1 の指摘 9・10）。
+    const status: Record<string, string> = {
+      diverged: `前に見た commit は、頼んだ時の head の祖先でない（rebase か force push）。数は分かれた所からの物で、main の分も含みうる。commit ごとの差（base が main の PR で、前の head が clone に在る時）: <code>roster review git --repo ${e(pull.repo)} -- range-diff refs/remotes/origin/main ${e(from)} refs/remotes/pull/${pull.number}</code>`,
+      behind: '頼んだ時の head は、前に見た commit より前（commit を消したか戻した）。消えた commit は数に出ないので、diff の 1 行で見る',
+      identical: '頼んだ時の head は、前に見た commit と同じ（変わっていない）',
+    };
     return [
       '<ul>',
-      `<li>前に見た ${e(from.slice(0, 7))} から頼んだ時の head ${e(to.slice(0, 7))} まで: ${diff.commits.length} commit・${diff.files.length} file（+${plus} −${minus}。GitHub の compare）</li>`,
-      ...rebased,
+      `<li>前に見た ${e(from.slice(0, 7))} から頼んだ時の head ${e(to.slice(0, 7))} まで: ${commits}・${files}（+${plus} −${minus}。GitHub の compare・${e(diff.status)}）</li>`,
+      ...(status[diff.status] === undefined ? [] : [`<li>${status[diff.status] ?? ''}</li>`]),
       ...diff.commits.slice(0, CHANGES_SHOWN).map(c => `<li>commit: ${e(c)}</li>`),
       ...more(CHANGES_SHOWN, diff.commits.length),
       ...diff.files.slice(0, CHANGES_SHOWN).map(f => `<li>file: ${e(f.filename)}（+${f.additions} −${f.deletions}）</li>`),
@@ -116,29 +122,34 @@ export async function putStaffBrief(ctx: Context, subject: RoleRecord, asks: Rev
 
 /** 見直しの依頼書に並べる commit と file の数（超えた分は「ほか N」）。 */
 const CHANGES_SHOWN = 30;
+/** GitHub の compare が返す file の数の上限。 */
+const COMPARE_FILES_MAX = 300;
 
 /** 前に見た commit から頼んだ時の head までの差（GitHub の compare が返す物。commit は 250・file は 300 まで）。 */
 export interface ChangesSince {
   /** ahead（前に見た commit の後に足した）・diverged（前に見た commit が head の祖先でない）・identical など。 */
   status: string
-  /** 短い sha と、文の 1 行目。 */
+  /** 短い sha と、文の 1 行目（compare は 250 まで返す）。 */
   commits: string[]
+  /** 間の commit の数（commits が上限で切られても、みなの数）。 */
+  totalCommits: number
   files: { filename: string, additions: number, deletions: number }[]
 }
 
 /** compare の答えから、ChangesSince の欄だけを出す jq（patch の字は持ち帰らない）。 */
-export const COMPARE_JQ = '{status, commits: [.commits[] | .sha[0:7] + " " + (.commit.message | split("\\n")[0])], files: [.files[]? | {filename, additions, deletions}]}';
+export const COMPARE_JQ = '{status, total_commits, commits: [.commits[] | .sha[0:7] + " " + (.commit.message | split("\\n")[0])], files: [.files[]? | {filename, additions, deletions}]}';
 
 /** 前に見た commit から頼んだ時の head までの差を、GitHub の compare で読む。読めなければ（網の誤り・消えた commit）undefined（依頼書は差の数を載せずに置く）。 */
 function changesSince(ctx: Context, pull: { owner: string, repo: string }, from: string, to: string): ChangesSince | undefined {
   const r = ctx.exec('gh', ['api', `repos/${pull.owner}/${pull.repo}/compare/${from}...${to}`, '--jq', COMPARE_JQ]);
   if (r.status !== 0) return undefined;
   try {
-    const got = JSON.parse(r.stdout) as Partial<ChangesSince>;
+    const got = JSON.parse(r.stdout) as Partial<ChangesSince> & { total_commits?: unknown };
     if (typeof got.status !== 'string' || !Array.isArray(got.commits) || !Array.isArray(got.files)) return undefined;
     return {
       status: got.status,
       commits: got.commits.filter((c): c is string => typeof c === 'string'),
+      totalCommits: typeof got.total_commits === 'number' ? got.total_commits : got.commits.length,
       files: got.files.filter(f => typeof f.filename === 'string').map(f => ({ filename: f.filename, additions: Number(f.additions) || 0, deletions: Number(f.deletions) || 0 })),
     };
   }

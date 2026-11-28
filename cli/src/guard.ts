@@ -179,13 +179,13 @@ const CONTENTS = /^repos\/[^/]+\/[^/]+\/contents\/./;
 const branchField = (arg: string): string | undefined => /^branch=(.*)$/.exec(arg.replace(/^(?:-[fF]|--(?:raw-)?field=)/, ''))?.[1];
 /**
  * Contents API への書き込みが、既定の branch（main・master）でない branch だけを名指すか: branch の欄が 1 つ以上あり、みな既定の branch でなく、
- * 本文を file から読む `--input` が無い（`--input` の時、欄は本文でなく URL に載り、本文の branch は字で読めない）。
+ * 本文を file から読む `--input` が無い（`--input` の時、欄は本文でなく URL に載り、本文の branch は字で読めない）。値を file から読む `-F branch=@<file>` も、字で読めないので通さない（review-1 の指摘 4）。
  * 欄を重ねた形（`-f branch=t-x -f branch=main`）は gh が断る（unexpected override existing field）が、gh の版で変わりうるので、みなを見る（review-10 の提案 2）。
  */
 const writesOtherBranch = (args: string[]): boolean => {
   const branches = args.flatMap(a => branchField(a) ?? []);
   return branches.length > 0
-    && branches.every(b => b !== '' && !/^(?:refs\/heads\/)?(?:main|master)$/.test(b))
+    && branches.every(b => b !== '' && !b.startsWith('@') && !/^(?:refs\/heads\/)?(?:main|master)$/.test(b))
     && !args.some(a => a === '--input' || a.startsWith('--input='));
 };
 
@@ -237,18 +237,40 @@ const ENV_CLEARS = new Set(['-i', '--ignore-environment', '-']);
 const WRAPPERS = new Set(['env', 'sudo', 'nice', 'nohup', 'timeout', 'gtimeout', 'xargs', 'command', 'exec', 'builtin', 'time', 'caffeinate']);
 /** env の、値を次の語に取る旗（-u・--unset は SEAT_ENV を見るので別に読む）。 */
 const ENV_VALUE_FLAGS = new Set(['-C', '--chdir', '-P', '-S', '--split-string']);
+/**
+ * env のほかの前置きの、値を次の語に取る旗。値は、命令の名になる語（`sudo -u bun …` の bun）でも値として飛ばす（review-1 の指摘 5 の (c)）。
+ * 表に無い旗の後ろの、命令の名にならない語も、値とみなして飛ばす（walkPrefix）。
+ */
+const WRAPPER_VALUE_FLAGS: Record<string, Set<string>> = {
+  sudo: new Set(['-u', '-g', '-C', '-D', '-h', '-p', '-r', '-t', '-U', '-T', '--user', '--group', '--chdir', '--host', '--prompt', '--role', '--type', '--other-user', '--command-timeout']),
+  nice: new Set(['-n', '--adjustment']),
+  timeout: new Set(['-s', '-k', '--signal', '--kill-after']),
+  gtimeout: new Set(['-s', '-k', '--signal', '--kill-after']),
+  xargs: new Set(['-n', '-L', '-P', '-s', '-I', '-E', '-d', '-a', '--max-args', '--max-lines', '--max-procs', '--max-chars', '--delimiter', '--arg-file', '--replace', '--eof']),
+  exec: new Set(['-a']),
+  time: new Set(['-o', '-f', '--output', '--format']),
+  caffeinate: new Set(['-t', '-w']),
+};
 /** script の file を引数に取って動かす道具（`node …/src/cli.ts`・`npx roster`・`pnpm exec roster`。review-10 の提案 1 の (a)）。shell の `sh <file>` も同じに読む。 */
 const RUNNERS = new Set(['node', 'deno', 'bun', 'tsx', 'npx', 'pnpx', 'bunx', 'pnpm', 'npm', 'yarn']);
 /** RUNNERS の、script の前に置く小命令の語（`pnpm exec`・`npm exec`・`pnpm dlx`・`yarn dlx`・`deno run`・`bun x`）。 */
 const RUNNER_WORDS = new Set(['exec', 'dlx', 'x', 'run']);
 /** RUNNERS のうち、package の bin を動かす道具（旗の読み方が node と違う: `-p` は package の名、`-c` は字を動かす）。 */
 const PACKAGE_RUNNERS = new Set(['npx', 'pnpx', 'bunx', 'pnpm', 'npm', 'yarn']);
-/** 値を次の語に取る旗（値を script と読まない）。node の仲間と、package の bin を動かす道具。 */
-const SCRIPT_VALUE_FLAGS = new Set(['-r', '--require', '--import', '--loader', '--experimental-loader', '--conditions']);
-const PACKAGE_VALUE_FLAGS = new Set(['-C', '--dir', '--filter', '-F', '--prefix', '-w', '--workspace', '-p', '--package']);
-/** script の file でなく字を動かす旗（`node -e`・`npx -c`）。後ろは script と読まない。 */
-const SCRIPT_EVAL_FLAGS = new Set(['-e', '--eval', '-p', '--print']);
-const PACKAGE_EVAL_FLAGS = new Set(['-c', '--call']);
+/**
+ * script を動かす道具の旗の読み方: 値を次の語に取る旗（値を script と読まない）と、script の file でなく字を動かす旗（後ろは script と読まない。`--eval=1` の形も）。
+ * shell は `-c` だけが字を動かし、それは shellScript が先に読むので、ここでは値の旗だけ（`-o pipefail`。review-1 の指摘 2）。
+ */
+interface RunnerFlags { values: Set<string>, evals: Set<string> }
+const SCRIPT_FLAGS: RunnerFlags = {
+  values: new Set(['-r', '--require', '--import', '--loader', '--experimental-loader', '--conditions', '-C', '--env-file', '--env-file-if-exists', '--inspect-port', '--title', '--input-type']),
+  evals: new Set(['-e', '--eval', '-p', '--print']),
+};
+const PACKAGE_FLAGS: RunnerFlags = {
+  values: new Set(['-C', '--dir', '--filter', '-F', '--prefix', '-w', '--workspace', '-p', '--package']),
+  evals: new Set(['-c', '--call']),
+};
+const SHELL_FLAGS: RunnerFlags = { values: new Set(['-o', '-O', '+o', '+O']), evals: new Set() };
 /** roster を動かす script（path を外した名が roster か、roster の入口の src/cli.ts）。 */
 const rosterScript = (word: string | undefined): boolean => word !== undefined && ((word.split('/').at(-1) ?? '') === 'roster' || /(?:^|\/)src\/cli\.ts$/.test(word));
 
@@ -256,37 +278,50 @@ const rosterScript = (word: string | undefined): boolean => word !== undefined &
 const baseName = (word: string | undefined): string => (word ?? '').split('/').at(-1) ?? '';
 /** 語が SEAT_ENV の代入か、SEAT_ENV の名そのものか。 */
 const namesSeatEnv = (word: string): boolean => SEAT_ENV.test(word.split('=')[0] ?? '');
+/** 語が、命令の名になる語（roster・eval・前置き・shell・RUNNERS）か。 */
+const headWord = (word: string | undefined): boolean => {
+  const name = baseName(word);
+  return name === 'roster' || name === 'eval' || WRAPPERS.has(name) || SHELLS.has(name) || RUNNERS.has(name);
+};
 
 /**
  * 単純な命令（書いたままの語）の、頭の代入と前置きの命令（WRAPPERS。いくつ重なっても）を辿り、後ろの命令の名の位置と、辿る間に SEAT_ENV を替えたかを返す。
  * 替える形: 頭の代入（`ROSTER_ROLE= …`）・前置きの後ろの代入（`env ROSTER_ROLE= …`・`sudo ROSTER_KEY=x …`）・env の `-u`・`--unset`・環境を空にする旗
  * （前置きの後ろの env も。`xargs -n 1 env -u ROSTER_ROLE roster …`。review-10 の提案 1 の (b)）。
- * 前置きの後ろの旗・旗の値・数（`timeout 60`）は飛ばす。命令の名になる語（roster・前置き・shell・eval・RUNNERS）は旗の値と読まない（`env -i roster`）。
+ * 前置きの旗の値（表の旗の後ろの語。命令の名になる語でも）・数（`timeout 60`）は飛ばす。表に無い旗の後ろは、命令の名になる語でなければ値と読む（`env -i roster`）。
+ * 値の旗は、替えたかが分かった後も読み飛ばす（`env -u ROSTER_ROLE -u PATH roster` の PATH を命令の名と読まない。review-1 の指摘 1）。
  */
 function walkPrefix(words: string[]): { at: number, sets: boolean } {
   let sets = false;
   let k = 0;
-  for (; k < words.length && ASSIGNMENT.test(words[k] ?? ''); k += 1) sets ||= namesSeatEnv(words[k] ?? '');
-  const heads = (word: string | undefined): boolean => {
-    const name = baseName(word);
-    return name === 'roster' || name === 'eval' || WRAPPERS.has(name) || SHELLS.has(name) || RUNNERS.has(name);
-  };
+  for (; k < words.length && ASSIGNMENT.test(words[k] ?? ''); k += 1) if (namesSeatEnv(words[k] ?? '')) sets = true;
   while (WRAPPERS.has(baseName(words[k]))) {
-    const env = baseName(words[k]) === 'env';
-    for (k += 1; k < words.length && !heads(words[k]); k += 1) {
+    const wrapper = baseName(words[k]);
+    const values = WRAPPER_VALUE_FLAGS[wrapper] ?? new Set<string>();
+    for (k += 1; k < words.length; k += 1) {
       const word = words[k] ?? '';
       if (ASSIGNMENT.test(word)) {
-        sets ||= namesSeatEnv(word);
+        if (namesSeatEnv(word)) sets = true;
         continue;
       }
-      if (env) {
-        if (ENV_CLEARS.has(word)) sets = true;
-        else if (word === '-u' || word === '--unset') sets ||= SEAT_ENV.test(words[k += 1] ?? '');
-        else if (/^(?:-u|--unset=)./.test(word)) sets ||= SEAT_ENV.test(word.replace(/^(?:-u|--unset=)/, ''));
+      if (wrapper === 'env') {
+        if (word === '-u' || word === '--unset') {
+          k += 1;
+          if (SEAT_ENV.test(words[k] ?? '')) sets = true;
+        }
+        else if (/^(?:-u|--unset=)./.test(word)) {
+          if (SEAT_ENV.test(word.replace(/^(?:-u|--unset=)/, ''))) sets = true;
+        }
         else if (ENV_VALUE_FLAGS.has(word)) k += 1;
+        else if (ENV_CLEARS.has(word)) sets = true;
         else if (!word.startsWith('-')) break;
         continue;
       }
+      if (values.has(word)) {
+        k += 1;
+        continue;
+      }
+      if (headWord(word)) break;
       if (!word.startsWith('-') && !/^\d+(?:\.\d+)?[smhd]?$/.test(word) && !(words[k - 1] ?? '').startsWith('-')) break;
     }
   }
@@ -299,17 +334,29 @@ function shellScript(words: string[], at: number): string | undefined {
   return c === -1 ? undefined : words[c + 1];
 }
 
-/** RUNNERS と shell の命令の、動かす script の語（旗・旗の値・小命令の語を飛ばした初めの語）。字を動かす旗（`node -e`）が先にあれば undefined。 */
-function scriptOperand(words: string[], at: number): string | undefined {
-  const pkg = PACKAGE_RUNNERS.has(baseName(words[at]));
-  const [evals, values] = pkg ? [PACKAGE_EVAL_FLAGS, PACKAGE_VALUE_FLAGS] : [SCRIPT_EVAL_FLAGS, SCRIPT_VALUE_FLAGS];
+/**
+ * RUNNERS と shell の命令（at の位置）が、roster の script を動かすか。旗・旗の値・小命令の語を飛ばした初めの語を script と読む。
+ * 字を動かす旗（`node -e`）が先にあれば動かさない。script の語が、また script を動かす道具なら、そこから読み直す（`npx tsx …/src/cli.ts`・`pnpm exec node …`。review-1 の指摘 3）。
+ * 表に無い旗の後ろの語は、旗の値か script か字で分からないので、roster の script なら動かすと読み、そうでなければ値として飛ばす（疑わしければ止める。review-1 の指摘 5 の (a)）。
+ */
+function runsRosterScript(words: string[], at: number): boolean {
+  const name = baseName(words[at]);
+  const flags = SHELLS.has(name) ? SHELL_FLAGS : PACKAGE_RUNNERS.has(name) ? PACKAGE_FLAGS : SCRIPT_FLAGS;
   for (let k = at + 1; k < words.length; k += 1) {
     const word = words[k] ?? '';
-    if (evals.has(word)) return undefined;
-    if (values.has(word)) k += 1;
-    else if (!word.startsWith('-') && !RUNNER_WORDS.has(word)) return word;
+    if (flags.evals.has(word.split('=')[0] ?? '')) return false;
+    if (flags.values.has(word)) {
+      k += 1;
+      continue;
+    }
+    if (/^[-+]/.test(word) || (RUNNER_WORDS.has(word) && !SHELLS.has(name))) continue;
+    if (rosterScript(word)) return true;
+    if (RUNNERS.has(baseName(word)) || SHELLS.has(baseName(word))) return runsRosterScript(words, k);
+    const prev = words[k - 1] ?? '';
+    if (k - 1 > at && /^-[^=]*$/.test(prev) && !flags.values.has(prev)) continue;
+    return false;
   }
-  return undefined;
+  return false;
 }
 
 /**
@@ -341,7 +388,7 @@ function runsRoster(raw: string[]): boolean {
   if (name === 'eval') return rawCommands(words.slice(at + 1).join(' ')).some(runsRoster);
   const script = SHELLS.has(name) ? shellScript(words, at) : undefined;
   if (script !== undefined) return rawCommands(script).some(runsRoster);
-  return (SHELLS.has(name) || RUNNERS.has(name)) && rosterScript(scriptOperand(words, at));
+  return (SHELLS.has(name) || RUNNERS.has(name)) && runsRosterScript(words, at);
 }
 
 /** 命令が roster を動かし（runsRoster）、同じ命令で SEAT_ENV を替えるか（t-pq5v の段 3。review-5 の提案 1）。 */
@@ -420,7 +467,7 @@ const CURRENT_BRANCH = /^(?:HEAD|@)$/;
  * 素の git push が、既定の branch（main・master）を的にするか（役割の無い session の守り。review-9 の提案 4）。
  * refspec の先（`:` の後ろ、無ければ refspec そのもの）が main・master の物（`main`・`+main`・`HEAD:main`・`x:refs/heads/main`）と、
  * branch をみな送る `--all`・`--mirror`。branch を消すだけの形（deletesOnly）は、ほかの守りと同じく通す（消す名が main なら deletesOnly が外す）。
- * 今の branch を送る形（refspec を書かない `git push`・`git push origin` と、先が `HEAD`・`@` の refspec）は、どの branch か字で読めないので止める
+ * 今の branch を送る形（refspec を書かない `git push`・`git push origin` と、先が `HEAD`・`@` の refspec）と、先が置き換えか変数の refspec は、どの branch か字で読めないので止める
  * （TPM 担当は repo を変えないので、送る先を字で書けば足りる。tag だけを送る `git push --tags` は通す。t-vqhy）。
  */
 function pushesDefault(command: string): string[] | undefined {
@@ -438,7 +485,8 @@ function pushesDefault(command: string): string[] | undefined {
       const target = (spec: string): string => (spec.includes(':') ? spec.slice(spec.indexOf(':') + 1) : spec.replace(/^\+/, '')).replace(/^refs\/heads\//, '');
       const specs = operands.slice(1);
       if (specs.length === 0 && !args.includes('--tags')) return git;
-      if (specs.some(spec => DEFAULT_BRANCH.test(target(spec)) || CURRENT_BRANCH.test(target(spec)))) return git;
+      // 置き換え（`"$(git branch --show-current)"` は空の語になる）と変数（`$BRANCH`）の先も、字で読めない（review-1 の指摘 6）。
+      if (specs.some(spec => DEFAULT_BRANCH.test(target(spec)) || CURRENT_BRANCH.test(target(spec)) || target(spec) === '' || spec.includes('$') || spec.includes('`'))) return git;
     }
   }
   return undefined;
