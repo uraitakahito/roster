@@ -219,16 +219,20 @@ async function deliverSent(ctx: Context, id: HeadingId, key: string, from: strin
  * 配りの口には置かない（中身は、起こす時の依頼書で渡してある）。行は印（launch）を持ち、置き場には「ほかの道具で運んだ」（carried）の記録として写る。
  * 返事（最初の【done】・【review】）が、この行を返事の先にする。依頼書の数え・まだ見ていない物には数えない（openBriefs・unsettled）。
  * seat は起こした席の名簿の行（宛先が書いてある物）。key は記録の行の Key（【brief】は受け手の Key、【ask-review】は頼んだ課題の担当の Key。送る時と同じ）。
+ * asker は、頼んだ担当（無ければ、命令を打った担当）。TPM 担当が Staff Engineer 担当の席を起こし直す時も、頼みの送り手は課題の担当にする
+ * （送り手の名 from と、送り手の担当 sender を食い違わせない）。
+ * replyTo は、この行が閉じる前の頼み（返っていない頼みのまま席を起こし直した時の、元の【ask-review】）。
  */
-export function recordLaunchAsk(ctx: Context, id: 'brief' | 'ask-review', key: string, from: string, seat: RoleRecord, body: string): string {
+export function recordLaunchAsk(ctx: Context, id: 'brief' | 'ask-review', key: string, from: string, seat: RoleRecord, body: string, asker?: RoleRecord, replyTo?: string): string {
   const sent: Sent = {
     at: ctx.now().toISOString(),
     key,
     heading: id,
     from,
     to: seat.address ?? '',
+    ...(replyTo === undefined ? {} : { replyTo }),
     ...(id === 'ask-review' ? { peer: true as const } : {}),
-    sender: selfParty(ctx.env),
+    sender: asker === undefined ? selfParty(ctx.env) : partyOf(asker),
     recipient: partyOf(seat),
     carrier: 'launch',
     launch: true,

@@ -12,7 +12,7 @@ import { hello } from '../src/commands/role-side.ts';
 import { askReview, reportReview } from '../src/commands/staff.ts';
 import { time } from '../src/commands/time.ts';
 import { collect } from '../src/commands/timeline.ts';
-import { assign } from '../src/commands/tpm-side.ts';
+import { assign, close } from '../src/commands/tpm-side.ts';
 import type { Context } from '../src/context.ts';
 import { HEADINGS, TPM_TITLE, type HeadingId } from '../src/protocol.ts';
 import { readReviews } from '../src/reviews.ts';
@@ -273,6 +273,43 @@ describe('【review】の返事の先は、頼みを渡した【ask-review】', 
     staff.now = () => new Date('2026-11-20T12:30:00.000Z');
     await reportReview(staff, { url: await w.put(staff, 'review'), verdict: 'concerns', summary: '気になる' });
     expect(last(w, 'review')?.replyTo).toBe(idOf(asked));
+  });
+});
+
+describe('返っていない頼みのまま、Staff Engineer 担当の席を起こし直す', () => {
+  test('新しい行が、元の頼みを返事の先に持ち（元の頼みは残らない）、判定は新しい行に返る。TPM 担当が起こし直しても、送り手は課題の担当', async () => {
+    const w = await started();
+    const plan = await w.put(w.se, 'plan');
+    await askReview(w.se, { url: plan, wait: 0 });
+    const staff = w.staffAt('file:2');
+    await hello(staff);
+    const [first] = launches(w, 'ask-review');
+    // 判定が返る前に、TPM 担当が席を閉じて起こし直す。
+    await close(w.tpm, `${KEY}.staff`);
+    await assign(w.tpm, KEY, { role: 'staff-engineer', wait: 0 });
+    const [, second] = launches(w, 'ask-review');
+    expect(second).toMatchObject({ key: KEY, replyTo: idOf(first), from: 'SWE AI-8: 計画と実装', sender: { key: KEY }, recipient: { key: `${KEY}.staff` } });
+    expect(readReviews(w.tpm)[0]?.ask).toBe(idOf(second));
+    const again = w.staffAt(second?.to ?? '');
+    await hello(again);
+    again.now = () => new Date('2026-11-20T12:20:00.000Z');
+    await reportReview(again, { url: await w.put(again, 'review'), verdict: 'approve', summary: 'よい' });
+    expect(last(w, 'review')?.replyTo).toBe(idOf(second));
+  });
+
+  test('行を書けなくても席は起こし、書けなかった事を結果に 1 行出す', async () => {
+    const w = world();
+    await hello(w.tpm, TPM);
+    const append = w.tpm.state.append.bind(w.tpm.state);
+    const state = Object.assign(Object.create(w.tpm.state) as Context['state'], {
+      append: (file: string, line: unknown): void => {
+        if (file === 'log.jsonl') throw new Error('書けない');
+        append(file, line);
+      },
+    });
+    const out = await assign({ ...w.tpm, state }, KEY, { role: 'software-engineer', title: '計画と実装', brief: BRIEF, wait: 0 });
+    expect(out[0]).toMatch(/^起こした: /);
+    expect(out).toContain('起こす時に渡した頼みを、送った記録に残せなかった（席は起こした。その返事は、返事の先を持たない）: 書けない');
   });
 });
 

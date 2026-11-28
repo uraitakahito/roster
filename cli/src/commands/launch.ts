@@ -39,7 +39,7 @@ export class NotStartedError extends TpmError {}
  * 状態の folder は symlink を解いて渡す（古い在り処の symlink を通って起きた担当が起こす席にも、新しい path を渡す。t-6ydg）。
  * description は題の下に出す説明。色は役割の表（ROLES の color）から、宛先を名簿に書いた後に付ける（paint）。
  * spawned は、居場所を作って宛先を名簿に書いた直後（名乗りを待つ前）に呼ぶ（起こす時に渡した頼みを、送った記録に残す所。messages.ts の recordLaunchAsk）。
- * 名乗らなかった回にも、頼みは残る（依頼書は名簿の行で渡してある）。spawned が誤りで止まっても、席は起こす（記録は、起こすことより軽い）。
+ * 名乗らなかった回にも、頼みは残る（依頼書は名簿の行で渡してある）。spawned が誤りで止まっても、席は起こし、書けなかった事を結果に 1 行出す。
  */
 export async function launch(ctx: Context, record: RoleRecord, again: boolean, wait: number, more: string[] = [], launchedBy?: string, description?: string, spawned?: (record: RoleRecord) => void): Promise<string[]> {
   if (castlistUrl(ctx) !== undefined) {
@@ -50,13 +50,15 @@ export async function launch(ctx: Context, record: RoleRecord, again: boolean, w
   const command = [join(ctx.root, 'cli', 'bin', 'roster'), 'run-role', record.key, '--project', ctx.project, '--state', realpathSync(ctx.state.dir)].map(shellQuote).join(' ');
   record.address = ctx.seats.spawn({ title: record.title, cwd: record.cwd, command, ...(description === undefined ? {} : { description }) });
   writeRole(ctx, record);
+  // 記録を書けなくても、席は起こしてある（止めない）。書けなかった事は、結果に 1 行出す（黙って捨てない）。
+  const unrecorded: string[] = [];
   try {
     spawned?.(record);
   }
-  catch {
-    // 記録を書けなくても、席は起こしてある。
+  catch (e) {
+    unrecorded.push(`起こす時に渡した頼みを、送った記録に残せなかった（席は起こした。その返事は、返事の先を持たない）: ${e instanceof Error ? e.message : String(e)}`);
   }
-  const head = [`${again ? '起こし直した' : '起こした'}: ${record.title}（${record.address}・${modelStatus(record.model, record.effort)}）`, `folder: ${record.cwd}`, ...more, ...paint(ctx, record.address, ROLES[record.role].color)];
+  const head = [`${again ? '起こし直した' : '起こした'}: ${record.title}（${record.address}・${modelStatus(record.model, record.effort)}）`, `folder: ${record.cwd}`, ...more, ...paint(ctx, record.address, ROLES[record.role].color), ...unrecorded];
   if (wait === 0) return [...head, '名乗り（roster hello）は待っていない'];
   for (let waited = 0; waited < wait * 1000; waited += HELLO_INTERVAL_MS) {
     if (readRole(ctx, record.key)?.helloAt !== undefined) return [...head, '名乗った（roster hello が来た）'];
