@@ -1,6 +1,6 @@
 // 偽の HTTP の handler: 生成した client（cli/gen/<server>-client/）に差し込み、受けた要求を記録して、決まりの形（restJson1）で答える。
 // どの server の client にも使える（本文は字のまま text に、JSON なら body にも入れる）。答えは試験が要求ごとに決める。socket は使わない。
-import { createServer } from 'node:net';
+import { connect } from 'node:net';
 import { Readable } from 'node:stream';
 import type { HttpRequest } from '@smithy/types';
 
@@ -60,12 +60,36 @@ export function nextHandler(answer: (seen: NextSeen) => NextAnswer | undefined, 
   return { handler, seen };
 }
 
-/** 何も待っていない 127.0.0.1 の URL（server が止まっている）。空いた port を 1 度取って閉じる。 */
+/**
+ * 何も待っていない所（`127.0.0.1:1`）。
+ *
+ * 空いた口を取って閉じた所にすると、並んで流れる別の試験の偽の server が同じ口を取ることがあり、頼みがそこに届いて
+ * 試験が揺れうる（AI-56。Linux では手放した口がまた渡る）。番号 1 は、OS が `listen(0)` で渡す帯（Linux は 32768〜、
+ * macOS は 49152〜）の外で、root でなければ待ち受けもできない。万一つながれば、揺れでなく、deadUrl で落ちる。
+ */
+export const NOWHERE = { host: '127.0.0.1', port: 1 } as const;
+
+/** 何も待っていない 127.0.0.1 の URL（server が止まっている。つなぐと、すぐ断られる）。 */
 export async function deadUrl(): Promise<string> {
-  const server = createServer();
-  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-  const address = server.address();
-  const port = typeof address === 'object' && address !== null ? address.port : 0;
-  await new Promise<void>(resolve => server.close(() => resolve()));
-  return `http://127.0.0.1:${port}`;
+  await assertRefused(NOWHERE.host, NOWHERE.port);
+  return `http://${NOWHERE.host}:${NOWHERE.port}`;
+}
+
+/** host:port へつなぎ、すぐ断られる（ECONNREFUSED）ことを確かめる。つながった・待たされた時は、訳を書いて投げる。 */
+export async function assertRefused(host: string, port: number): Promise<void> {
+  const got = await new Promise<string>((resolve) => {
+    const socket = connect(port, host);
+    socket.setTimeout(2000, () => {
+      socket.destroy();
+      resolve('2 秒で答えが無い');
+    });
+    socket.on('connect', () => {
+      socket.destroy();
+      resolve('つながった');
+    });
+    socket.on('error', (e: NodeJS.ErrnoException) => resolve(e.code ?? e.message));
+  });
+  if (got === 'ECONNREFUSED') return;
+  if (got === 'つながった') throw new Error(`${host}:${port} で何かが待ち受けている。何も待っていない所の試験は、この機械では流せない`);
+  throw new Error(`${host}:${port} へつなぐと、断られずに ${got} になった。何も待っていない所の試験は、この機械では流せない`);
 }
