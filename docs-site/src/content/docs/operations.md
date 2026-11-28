@@ -225,7 +225,7 @@ roster infra run pagetray -- container run -d --name pagetray.box \
   ghcr.io/uraitakahito/pagetray:<版>
 ```
 
-- `<版>` は `.pagetray-version` の `@` の前（`v2.0.0` など）。pull した image の digest が `@` の後ろと同じかを見る（見方は pagetray の docs の「[起こす](https://uraitakahito.github.io/pagetray/run.html#起こす)」）。
+- `<版>` は `.pagetray-version` の `@` の前（`v2.1.0` など）。pull した image の digest が `@` の後ろと同じかを見る（見方は pagetray の docs の「[起こす](https://uraitakahito.github.io/pagetray/run.html#起こす)」）。
 - `-p` には必ず `127.0.0.1:` を書く。`-p 8801:8080` と書くと LAN に開く。
 - container の名は `pagetray.box`。Apple Container の DNS は、domain `box` の付いた名だけを答えるので、画面のサーバー（callboard）は、この名で置き場に届く（前の名 `pagetray` では引けない）。担当が使う URL と、置いたページの URL（`http://127.0.0.1:8801`）は変わらない。前の名で動いている container は、版を上げる時に、前の名で止めて消してから（`container stop pagetray`・`container delete pagetray`）、この名で起こす（volume はそのまま付く）。この repo の `.claude/roles/config.jsonc` は、どちらの名の命令も「TPM に相談」の手続きに入れてある。
 - `PAGETRAY_CASTLIST_URL` は、置き場が送り手を castlist（[アクターの台帳](#アクターの台帳castlist)）に聞く先。`roster page put`・`roster file put` は、castlist の設定がある project では送り手（session の付随する id）を付けて置き、置き場が受けたその時に castlist に聞いて記録に残す（[担当のあいだの決まり](/protocol/#ページの置き場)）。container の中の `127.0.0.1` は container 自身なので、castlist の container `castlist.box` に名でつなぐ（Apple Container の DNS が domain `box` の名を答える）。
