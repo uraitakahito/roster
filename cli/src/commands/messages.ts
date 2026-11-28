@@ -78,6 +78,8 @@ export interface Sent {
   box?: Recipient
   /** 置いた直後に送る命令が落ちて書けなかった行を、TPM 担当の側の片付けが、置いた物から足した行（commands/mail.ts の tidyMail）。 */
   recovered?: true
+  /** 【notify】の行だけ: 問いへの返事でない知らせ（--no-reply）。この行は、相手のまだ応えていない問いを閉じない（openAsks）。 */
+  noReply?: true
   /** 【done】の行だけ: 担当が --briefs で名指して済ませた依頼書の URL（渡された時の字のまま）。無ければ、見ていた依頼書のいちばん古い 1 つを済ませる。 */
   briefs?: string[]
 }
@@ -176,7 +178,7 @@ async function assertReachable(ctx: Context, party: Party): Promise<void> {
  * 置く物には、送った側の記録の欄（Key・見出し・送り手と受け手の Key・送った時刻）を持たせる（commands/mail.ts の sentFrom が読む）。
  * to は、記録の行に残す居場所の宛先（運ぶのには使わない）。
  */
-async function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: string, body: string, recipient: Party, replyTo?: string, extra: Pick<Sent, 'settle' | 'peer' | 'briefs'> = {}): Promise<string> {
+async function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: string, body: string, recipient: Party, replyTo?: string, extra: Pick<Sent, 'settle' | 'peer' | 'briefs' | 'noReply'> = {}): Promise<string> {
   return sentNote(await deliverSent(ctx, id, key, from, to, body, recipient, replyTo, extra));
 }
 
@@ -184,7 +186,7 @@ async function deliver(ctx: Context, id: HeadingId, key: string, from: string, t
 const sentNote = (sent: Sent): string => `送った: 【${sent.heading}】→ ${sent.to}（${SENT_NOTE}）`;
 
 /** {@link deliver} と同じに送り、送った記録の行を返す（送った id を、頼みの記録に書く所が使う）。 */
-async function deliverSent(ctx: Context, id: HeadingId, key: string, from: string, to: string, body: string, recipient: Party, replyTo?: string, extra: Pick<Sent, 'settle' | 'peer' | 'briefs'> = {}): Promise<Sent> {
+async function deliverSent(ctx: Context, id: HeadingId, key: string, from: string, to: string, body: string, recipient: Party, replyTo?: string, extra: Pick<Sent, 'settle' | 'peer' | 'briefs' | 'noReply'> = {}): Promise<Sent> {
   await assertNotRepeat(ctx, id, from, to, body, replyTo);
   const text = message(id, body);
   const box = recipientName(recipient);
@@ -299,7 +301,7 @@ function seatOf(ctx: Context, role: RoleRecord): string {
  * 仕事を振る者（TPM 担当。repo の席には、その Tech Lead 担当）から担当へ。居場所が無ければ止まる。
  * from は送り手の名（TPM 担当の題か、Tech Lead 担当の名簿の題）。記録の行の Key は、どちらも受け手の Key（依頼書の数えが、受け手の Key の行を読む）。
  */
-async function toRole(ctx: Context, role: RoleRecord, id: HeadingId, body: string, replyTo?: string, extra: Pick<Sent, 'settle'> = {}, from: string = TPM_TITLE): Promise<string> {
+async function toRole(ctx: Context, role: RoleRecord, id: HeadingId, body: string, replyTo?: string, extra: Pick<Sent, 'settle' | 'noReply'> = {}, from: string = TPM_TITLE): Promise<string> {
   // 渡せない物・期限切れを記録し、命令の結果に 1 通につき 1 度だけ出す（TPM 担当の session だけ。担当の session では何もしない）。
   const ended = await tidyMail(ctx, { sweep: false });
   if (ended.length > 0) ctx.print(ended);
@@ -1294,12 +1296,13 @@ export async function brief(ctx: Context, role: RoleRecord, url: string, note?: 
   // 前の依頼書を取り消す時は、取り消した依頼書（送った id の分かるいちばん古い物）を返事の先にする（頼みが、前の頼みを閉じる）。
   const superseded = settled?.choice === 'supersede' ? unsettled(ctx, role, seatOf(ctx, role)).briefs.find(b => b.id !== undefined)?.id : undefined;
   // 取り消す依頼書が無ければ、その席のまだ応えていない問いが 1 つの時、それを返事の先にする（仕事を振る者は、問いに次の依頼書で応えることがある）。
-  const asked = superseded === undefined ? askReply(ctx, role, from === TPM_TITLE ? ASKS_TO_TPM : ASKS_TO_LEAD, false).replyTo : undefined;
-  const sent = await toRole(ctx, role, 'brief', body, superseded ?? asked, { settle: settled?.choice ?? 'none' }, from);
+  const asked: AskReply = superseded === undefined ? askReply(ctx, role, from === TPM_TITLE ? 'tpm' : 'lead', false) : { lines: [] };
+  const sent = await toRole(ctx, role, 'brief', body, superseded ?? asked.replyTo, { settle: settled?.choice ?? 'none' }, from);
   role.brief = url;
   delete role.dismissed;
   writeRole(ctx, role);
-  return [sent];
+  // 問いを返事の先にした時は、【notify】と同じに、付けたことを出す（黙って付けない）。
+  return [sent, ...asked.lines];
 }
 
 /** 課題の写しの一言（【brief】と担当の roster hello）。写しも、作らなかった訳も無ければ undefined。 */
@@ -1368,23 +1371,25 @@ export async function answer(ctx: Context, key: string, options: AnswerOptions):
   return [...recorded, sent, ...marks];
 }
 
-/** TPM 担当に送る問いの見出し（TPM 担当の【notify】が返事になる）と、Tech Lead 担当に送る問いの見出し。 */
-const ASKS_TO_TPM: HeadingId[] = ['ask-tpm', 'ask-devops'];
-const ASKS_TO_LEAD: HeadingId[] = ['ask-lead'];
+/** 問いに応える者（仕事を振る者）: TPM 担当か、repo の席の Tech Lead 担当。 */
+type Answerer = 'tpm' | 'lead';
+
+/** 応える者ごとの、問いの見出し（TPM 担当の【notify】は【ask-tpm】【ask-devops】の、Tech Lead 担当の【notify】は【ask-lead】の返事になる）。 */
+const ASKS: Record<Answerer, HeadingId[]> = { tpm: ['ask-tpm', 'ask-devops'], lead: ['ask-lead'] };
 
 /**
- * その席（今の居場所）が送り、まだ応えていない問い（古い順）: 返事の先に指されておらず、仕事を振る者（TPM 担当。repo の席の【ask-lead】には
- * Tech Lead 担当）がその席へ最後に何かを送った時より後の物。
- * 仕事を振る者は、問いに【notify】のほか【brief】【dismiss】【answer】でも応える。後で何かを送った問いは、応えた物として数えない
- * （返事の先を付ける前の問いや、別の見出しで応え済みの問いを、溜めない）。
+ * その席（今の居場所）が送り、まだ応えていない問い（古い順）: 返事の先に指されておらず、応える者が「広く応えうる送り」をその席へ最後に送った時より後の物。
+ * 広く応えうる送りは、返事の先を持たない【notify】【brief】【dismiss】【answer】（前の版の、旗を打たなかった返事も、ここに入る）。
+ * 返事の先を名指した送りは、指した問いだけを閉じる（ほかの問いは残る）。--no-reply の知らせ（行の印 noReply）は、問いへの返事でないので、どの問いも閉じない。
+ * 返事の先を付ける前の問いや、先無しで応え済みの問いを、溜めない。
  */
-function openAsks(ctx: Context, role: RoleRecord, headings: HeadingId[]): Sent[] {
+function openAsks(ctx: Context, role: RoleRecord, by: Answerer): Sent[] {
   const log = byTime(ctx.state.lines<Sent>('log.jsonl'));
-  // Tech Lead 担当への問いは、Tech Lead 担当が送った物（送り手の担当で見る）と比べる。TPM 担当への問いは、TPM 担当が送った物と。
-  const answerer: (l: Sent) => boolean = headings === ASKS_TO_LEAD ? fromAssigner(role) : l => l.from === TPM_TITLE;
-  const last = log.findLast(l => l.launch !== true && l.key === role.key && answerer(l) && (role.address === undefined || l.to === role.address))?.at ?? '';
+  // Tech Lead 担当の送りは、送り手の担当で見る（fromAssigner）。TPM 担当の送りは、送り手の題で見る（repo の席の【ask-tpm】にも、TPM 担当が答える）。
+  const answerer: (l: Sent) => boolean = by === 'lead' ? fromAssigner(role) : l => l.from === TPM_TITLE;
+  const last = log.findLast(l => l.launch !== true && l.replyTo === undefined && l.noReply !== true && l.key === role.key && answerer(l) && (role.address === undefined || l.to === role.address))?.at ?? '';
   const replied = new Set(log.flatMap(l => l.replyTo ?? []));
-  return log.filter(l => l.key === role.key && headings.includes(l.heading as HeadingId) && l.sender?.key === role.key
+  return log.filter(l => l.key === role.key && ASKS[by].includes(l.heading as HeadingId) && l.sender?.key === role.key
     && l.at > last && (role.helloAt === undefined || l.at >= role.helloAt) && !replied.has(l.id));
 }
 
@@ -1397,11 +1402,11 @@ interface AskReply {
 
 /**
  * 仕事を振る者が席へ送る物（【notify】【brief】【dismiss】）の返事の先を、その席のまだ応えていない問いから決める。
- * 問いが 1 つなら、それを返事の先にする。無ければ付けない。2 つ以上の時、【notify】（strict）は、どの問いへの返事かを取り違えないよう、
- * 送らずに止まって問いを並べる（--reply-to か --no-reply で打ち直す）。【brief】【dismiss】は、付けずに送る（止めない）。
+ * 問いが 1 つなら、それを返事の先にし、付けたことを結果に出す行を返す。無ければ付けない。2 つ以上の時、【notify】（strict）は、どの問いへの返事かを
+ * 取り違えないよう、送らずに止まって問いを並べる（--reply-to か --no-reply で打ち直す）。【brief】【dismiss】は、付けずに送る（止めない）。
  */
-function askReply(ctx: Context, role: RoleRecord, headings: HeadingId[], strict: boolean): AskReply {
-  const open = openAsks(ctx, role, headings);
+function askReply(ctx: Context, role: RoleRecord, by: Answerer, strict: boolean): AskReply {
+  const open = openAsks(ctx, role, by);
   const [only] = open;
   if (only === undefined) return { lines: [] };
   if (open.length === 1) return { replyTo: only.id, lines: [`返事の先: 【${only.heading}】${oneLine(only.text.slice(only.heading.length + 2))}（id ${only.id}）を付けた`] };
@@ -1411,7 +1416,7 @@ function askReply(ctx: Context, role: RoleRecord, headings: HeadingId[], strict:
     `${role.key} の担当の、まだ応えていない問いが ${open.length} つあります。送っていません。`,
     ...open.map(l => `--- ${l.at} 【${l.heading}】${oneLine(l.text.slice(l.heading.length + 2))}（id ${l.id}）`),
     '--- ここまで',
-    'どの問いへの返事かを --reply-to <id> で名指すか、問いへの返事でなければ --no-reply を付けて、打ち直してください',
+    'どの問いへの返事かを --reply-to <id> で名指すか、問いへの返事でなければ --no-reply を付けて、打ち直してください（名指して答えた後も、残りの問いは数えたまま）',
   ].join('\n'));
 }
 
@@ -1424,12 +1429,17 @@ export interface NotifyOptions {
   noReply?: boolean
 }
 
-/** 【notify】の返事の先: 旗で名指した物。--no-reply なら付けない。どちらも無ければ、その席のまだ応えていない問い（{@link askReply}）。 */
-function notifyReply(ctx: Context, role: RoleRecord, options: NotifyOptions, headings: HeadingId[]): AskReply {
+/**
+ * 【notify】を送る: 返事の先は、旗で名指した物。--no-reply なら付けず、行に印を残す（問いを閉じない）。どちらも無ければ、その席のまだ応えていない問い
+ * （{@link askReply}）。旗で名指していない時は、返事の先を引く前に、同じ本文の 2 度送りを見る（命令が引いた返事の先は、1 度目と 2 度目で違いうる）。
+ */
+async function sendNotify(ctx: Context, role: RoleRecord, options: NotifyOptions, by: Answerer, from: string): Promise<string[]> {
   if (options.replyTo !== undefined && options.noReply === true) throw new TpmError('--reply-to と --no-reply は、どちらか 1 つにしてください。送っていません');
-  if (options.replyTo !== undefined) return { replyTo: options.replyTo, lines: [] };
-  if (options.noReply === true) return { lines: [] };
-  return askReply(ctx, role, headings, true);
+  if (options.replyTo === undefined && role.address !== undefined) await assertNotRepeat(ctx, 'notify', from, role.address, options.text);
+  const reply: AskReply = options.replyTo !== undefined
+    ? { replyTo: options.replyTo, lines: [] }
+    : options.noReply === true ? { lines: [] } : askReply(ctx, role, by, true);
+  return [await toRole(ctx, role, 'notify', options.text, reply.replyTo, options.noReply === true ? { noReply: true } : {}, from), ...reply.lines];
 }
 
 /**
@@ -1438,9 +1448,7 @@ function notifyReply(ctx: Context, role: RoleRecord, options: NotifyOptions, hea
  */
 export async function notify(ctx: Context, key: string, options: NotifyOptions): Promise<string[]> {
   requireTpmSide(ctx, 'roster notify');
-  const role = await receiver(ctx, key);
-  const reply = notifyReply(ctx, role, options, ASKS_TO_TPM);
-  return [await toRole(ctx, role, 'notify', options.text, reply.replyTo), ...reply.lines];
+  return sendNotify(ctx, await receiver(ctx, key), options, 'tpm', TPM_TITLE);
 }
 
 /**
@@ -1448,9 +1456,7 @@ export async function notify(ctx: Context, key: string, options: NotifyOptions):
  * その席にまだ応えていない【ask-lead】が 1 つあれば、それを返事の先にする。
  */
 export async function notifySeat(ctx: Context, lead: RoleRecord, seat: RoleRecord, options: NotifyOptions): Promise<string[]> {
-  const role = await receiver(ctx, seat.key);
-  const reply = notifyReply(ctx, role, options, ASKS_TO_LEAD);
-  return [await toRole(ctx, role, 'notify', options.text, reply.replyTo, {}, lead.title), ...reply.lines];
+  return sendNotify(ctx, await receiver(ctx, seat.key), options, 'lead', lead.title);
 }
 
 /** この課題に続きは無い、と知らせる。handover は担当の交代（課題は続くので、担当は課題を閉じない）。 */
@@ -1467,7 +1473,8 @@ export async function dismiss(ctx: Context, key: string, options: { handover: bo
     ? '担当の交代のため（課題は続くので、課題は閉じない）。worktree を片付けて【end】を返す。'
     : 'この課題に続きは無い。worktree と課題を片付けて【end】を返す。', settled].filter(v => v !== undefined).join('');
   // その席のまだ応えていない問いが 1 つなら、それを返事の先にする（問いに、片付けの指示で応えた）。
-  const sent = await toRole(ctx, role, 'dismiss', body, askReply(ctx, role, ASKS_TO_TPM, false).replyTo);
+  const asked = askReply(ctx, role, 'tpm', false);
+  const sent = await toRole(ctx, role, 'dismiss', body, asked.replyTo);
   role.dismissed = options.handover ? 'handover' : 'done';
   writeRole(ctx, role);
   // 答えが要らなくなった確認が、置き場で返事待ちのまま残らないように知らせる（止めない）。
@@ -1478,7 +1485,7 @@ export async function dismiss(ctx: Context, key: string, options: { handover: bo
       ? []
       : [`置き場に、${key} の${WAITING_PAGES[on]}が ${waiting.length} 枚残っています:`, ...waiting, `もう答えが要らなければ、roster page reply <URL>… --answered${on === 'pm' ? '' : ` --on ${on}`} で印を外す`];
   });
-  return [sent, ...left];
+  return [sent, ...asked.lines, ...left];
 }
 
 /**
@@ -1491,10 +1498,11 @@ export async function dismissSeat(ctx: Context, lead: RoleRecord, seat: RoleReco
   const role = await receiver(ctx, seat.key);
   const settled = assertSettled(ctx, role, 'dismiss', options.supersede === true ? 'supersede' : undefined, 'lead');
   const body = ['この席の仕事に続きは無い。worktree を片付けて【end】を返す（課題は済みにならない。済みにするのは Tech Lead 担当の片付けの時）。', settled].filter(v => v !== undefined).join('');
-  const sent = await toRole(ctx, role, 'dismiss', body, askReply(ctx, role, ASKS_TO_LEAD, false).replyTo, {}, lead.title);
+  const asked = askReply(ctx, role, 'lead', false);
+  const sent = await toRole(ctx, role, 'dismiss', body, asked.replyTo, {}, lead.title);
   role.dismissed = 'done';
   writeRole(ctx, role);
-  return [sent];
+  return [sent, ...asked.lines];
 }
 
 /** URL を自分の居場所で開いて、人に見せる。 */

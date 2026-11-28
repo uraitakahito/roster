@@ -354,10 +354,26 @@ describe('TPM 担当の返事の先は、相手のまだ応えていない問い
     expect(await tell(w, { text: '別の話', noReply: true })).toEqual([SENT]);
     expect(last(w, 'notify')?.replyTo).toBeUndefined();
     await expect(tell(w, { text: 'x', replyTo: asked, noReply: true })).rejects.toThrow('--reply-to と --no-reply は、どちらか 1 つにしてください。送っていません');
-    // 別の話を送った後は、TPM 担当がその席へ何かを送った後なので、前の問いは数えない（旗で名指せば付く）。
-    expect(await tell(w, { text: 'やはり A で' })).toEqual([SENT]);
-    expect(await tell(w, { text: 'A で', replyTo: asked })).toEqual([SENT]);
+    // --no-reply の知らせは、行に印を残し、問いを閉じない: 次の【notify】が、前の問いを返事の先にする。
+    expect(last(w, 'notify')?.noReply).toBe(true);
+    expect(await tell(w, { text: 'A で' })).toEqual([SENT, `返事の先: 【ask-tpm】迷う（id ${asked}）を付けた`]);
     expect(last(w, 'notify')?.replyTo).toBe(asked);
+    // 旗で名指せば、応えた問いにも付く。
+    expect(await tell(w, { text: '補い', replyTo: asked })).toEqual([SENT]);
+    expect(last(w, 'notify')?.replyTo).toBe(asked);
+  });
+
+  test('先無しで送った物（前の版の返事・知らせ）は、それまでの問いをみな応えた物にする（溜めない）', async () => {
+    const w = await started();
+    await ask(w, '古い問い');
+    // 前の版の TPM 担当の返事の形: 返事の先も、--no-reply の印も無い行。
+    tick(w);
+    w.tpm.state.append('log.jsonl', { at: w.tpm.now().toISOString(), key: KEY, heading: 'notify', from: TPM_TITLE, to: 'file:1', text: '【notify】前の版の返事', id: 'old-reply', carrier: 'nats' } satisfies Sent);
+    expect(await tell(w, { text: '知らせ' })).toEqual([SENT]);
+    expect(last(w, 'notify')?.replyTo).toBeUndefined();
+    // その知らせ（先無し）の後の問いは、また数える。
+    const asked = await ask(w, '新しい問い');
+    expect((await tell(w, { text: '答え' }))[1]).toBe(`返事の先: 【ask-tpm】新しい問い（id ${asked}）を付けた`);
   });
 
   test('問いが 2 つ以上なら、【notify】は送らずに止まり、問いを並べる。名指せば送る', async () => {
@@ -377,36 +393,44 @@ describe('TPM 担当の返事の先は、相手のまだ応えていない問い
     expect(rows(w, 'notify')).toHaveLength(sent);
     expect(w.tpm.state.lines<{ gate: string, detail: string }>('gate.jsonl').at(-1)).toMatchObject({ gate: 'asks', detail: `${KEY}: ${first} ${second}` });
     expect(await tell(w, { text: 'DevOps に振った', replyTo: second })).toEqual([SENT]);
-    // 残りは 1 つ…ではない: TPM 担当が後で何かを送ったので、前の問いは数えない（溜めない）。
-    expect(await tell(w, { text: '知らせ' })).toEqual([SENT]);
-    expect(last(w, 'notify')?.replyTo).toBeUndefined();
+    // 名指した返事は、指した問いだけを閉じる。残りの 1 つは、次の【notify】が返事の先にする。
+    expect(await tell(w, { text: '1 つ目の答え' })).toEqual([SENT, `返事の先: 【ask-tpm】1 つ目（id ${first}）を付けた`]);
+    expect(last(w, 'notify')?.replyTo).toBe(first);
   });
 
-  test('問いに【brief】【dismiss】で応えた時も、それを返事の先にする（取り消す依頼書の先が勝つ）。問いが 2 つ以上でも止めない', async () => {
+  test('先を名指さない【notify】は、同じ本文を 30 秒の内に 2 度送ると止まる（1 度目の後に問いが届いて、2 度目の先が替わっても）', async () => {
+    const w = await started();
+    await notify(w.tpm, KEY, { text: '同じ知らせ' });
+    await askTpm(w.se, { text: '問い', waitingFor: '答え' });
+    await expect(notify(w.tpm, KEY, { text: '同じ知らせ' })).rejects.toThrow(/^同じ【notify】を/);
+    expect(rows(w, 'notify')).toHaveLength(1);
+  });
+
+  test('問いに【brief】【dismiss】で応えた時も、それを返事の先にし、付けた事を結果に出す（取り消す依頼書の先が勝つ）。問いが 2 つ以上なら、付けずに送る（止めない）', async () => {
     const w = await started();
     await reportDone(w.se, { ...DONE, summary: '1 つ目' });
     const asked = await ask(w, '次は何をするか');
     tick(w);
-    await assign(w.tpm, KEY, { role: 'software-engineer', brief: B(2), wait: 0 });
+    expect(await assign(w.tpm, KEY, { role: 'software-engineer', brief: B(2), wait: 0 })).toEqual(['送った: 【brief】→ file:1（相手の手が空いた時に届く。送り直さない）', `返事の先: 【ask-tpm】次は何をするか（id ${asked}）を付けた`]);
     expect(last(w, 'brief')?.replyTo).toBe(asked);
-    // 取り消す依頼書がある時は、取り消した依頼書が先。
-    await ask(w, 'これでよいか');
+    // 取り消す依頼書がある時は、取り消した依頼書が先（問いは、まだ応えていない物として残る）。
+    const kept = await ask(w, 'これでよいか');
     tick(w);
-    await assign(w.tpm, KEY, { role: 'software-engineer', brief: B(3), wait: 0, supersede: true });
+    expect(await assign(w.tpm, KEY, { role: 'software-engineer', brief: B(3), wait: 0, supersede: true })).toEqual(['送った: 【brief】→ file:1（相手の手が空いた時に届く。送り直さない）']);
     expect(last(w, 'brief')?.replyTo).toBe(idOf(rows(w, 'brief')[0]));
-    // dismiss も同じ。問いが 2 つなら、付けずに送る（止めない）。
+    // 残った問いは、片付けの指示が返事の先にする。
     tick(w);
     await reportDone(w.se, { ...DONE, summary: '3 つ目' });
-    const closing = await ask(w, '片付けてよいか');
     tick(w);
-    await dismiss(w.tpm, KEY, { handover: false });
-    expect(last(w, 'dismiss')?.replyTo).toBe(closing);
+    expect((await dismiss(w.tpm, KEY, { handover: false })).slice(0, 2)).toEqual(['送った: 【dismiss】→ file:1（相手の手が空いた時に届く。送り直さない）', `返事の先: 【ask-tpm】これでよいか（id ${kept}）を付けた`]);
+    expect(last(w, 'dismiss')?.replyTo).toBe(kept);
+    // 問いが 2 つなら、付けずに送る（止めない）。
     const v = await started();
     await reportDone(v.se, { ...DONE, summary: '済み' });
     await ask(v, 'a');
     await ask(v, 'b');
     tick(v);
-    expect((await dismiss(v.tpm, KEY, { handover: false }))[0]).toMatch(/^送った: 【dismiss】/);
+    expect(await dismiss(v.tpm, KEY, { handover: false })).toEqual(['送った: 【dismiss】→ file:1（相手の手が空いた時に届く。送り直さない）']);
     expect(last(v, 'dismiss')?.replyTo).toBeUndefined();
   });
 });

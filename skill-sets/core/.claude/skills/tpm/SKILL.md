@@ -114,7 +114,7 @@ disable-model-invocation: true
 
 | 見出し | すること |
 |---|---|
-| 【ask-tpm】 | 課題の概要をもとに答える（`roster notify <Key> "<答え>"`。その席のまだ応えていない問いが 1 つなら、命令がそれを返事の先にして「返事の先: … を付けた」と出す。問いが 2 つ以上あると止まるので、出た id を `--reply-to <id>` で名指す。問いへの答えでない知らせを送る時は `--no-reply`）。Product Manager の判断が要るなら、Product Manager に聞いてから答える |
+| 【ask-tpm】 | 課題の概要をもとに答える（`roster notify <Key> "<答え>"`。その席のまだ応えていない問いが 1 つなら、命令がそれを返事の先にして「返事の先: … を付けた」と出す。問いが 2 つ以上あると止まるので、出た id を `--reply-to <id>` で名指す（残りの問いは数えたまま）。問いへの答えでない知らせを送る時は `--no-reply`。問いに続きの依頼書（`roster assign`）や `roster dismiss` で応えた時も、問いが 1 つなら、命令がそれを返事の先にして同じ 1 行を出す）。Product Manager の判断が要るなら、Product Manager に聞いてから答える |
 | 【ask-pm】 | Product Manager に、確認のページの URL と項目を伝える（ページは callboard のページの一覧の新着に出ている。その場で開いて見せる時だけ `roster show <URL>`）。答えを `roster answer <Key> "<答え>"` で返す（課題があれば「決定」の記録も書かれ、置き場の返事待ちの確認のページが「答えた」になる。その Key の返事待ちが 2 枚以上あって止まったら、出た URL から答えたページを `--url <URL>` で書くか、みなへの答えなら `--all` を付けて打ち直す） |
 | 【ask-devops】 | DevOps Engineer 担当に依頼書を書いて回す（`roster assign devops …`） |
 | 【incident】 | 「受け取った」だけの返事は送らない（台帳にはもう入っている）。「[重い]」と付いていたら、すぐ Product Manager に伝える（下の「6. 監査」） |
