@@ -85,9 +85,14 @@ function substitutionEnd(command: string, i: number): number {
  */
 function headSubstitutions(command: string): string[] {
   const out: string[] = [];
-  for (const m of command.matchAll(/(?:^|[;&|(\n])\s*\$\(/g)) {
-    const at = (m.index ?? 0) + m[0].length - 2;
-    out.push(command.slice(at + 2, substitutionEnd(command, at) - 1));
+  // 引用した頭（`"$(…)"`）と backtick の頭も見る（review-6 の指摘 1）。
+  for (const m of command.matchAll(/(?:^|[;&|(\n])\s*"?(\$\(|`)/g)) {
+    const at = (m.index ?? 0) + m[0].length - (m[1] ?? '').length;
+    if (m[1] === '`') {
+      const end = command.indexOf('`', at + 1);
+      if (end !== -1) out.push(command.slice(at + 1, end));
+    }
+    else out.push(command.slice(at + 2, substitutionEnd(command, at) - 1));
   }
   return out;
 }
@@ -172,7 +177,7 @@ export function chromeLaunch(command: string): ChromeLaunch | undefined {
         const value = assigned.get(variable);
         const named = variable === 'ROSTER_CHROME' || (value !== undefined && CHROME_NAMES.has(toolName(value))) || (substituted(text) && CHROME_TEXT.test(text));
         if (named && !versionOnly(args)) {
-          const tool = value !== undefined && CHROME_NAMES.has(toolName(value)) ? toolName(value) : (/chrome for testing/i.test(text) ? 'Google Chrome for Testing' : `$${variable}`);
+          const tool = value !== undefined && CHROME_NAMES.has(toolName(value)) ? toolName(value) : (/chrome for testing/i.test(text.replaceAll('\\ ', ' ')) ? 'Google Chrome for Testing' : `$${variable}`);
           return { kind: 'direct', tool, path: substituted(text) ? undefined : value, args };
         }
         continue;

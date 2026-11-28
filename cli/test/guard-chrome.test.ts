@@ -38,6 +38,10 @@ describe('Chrome の直起こしを止める（旗があっても）', () => {
     `env FOO=1 ${CHROME} --headless`,
     `arch -arm64 ${CHROME} --headless`,
     'CH=$(ls -d ~/.cache/puppeteer/chrome/*/chrome-mac-arm64/\'Google Chrome for Testing.app\'/Contents/MacOS/*); "$CH" --headless --remote-debugging-port=9222',
+    // review-6: 引用した置き換えの頭・backtick の頭。
+    '"$(mdfind -name chromium | head -1)" --headless',
+    '`which chromium` --headless',
+    '"`which chromium`" --headless',
   ])('止める: %s', (command) => {
     const verdict = ask(command);
     expect(verdict.allow).toBe(false);
@@ -131,6 +135,9 @@ describe('案内の 1 行（chromeSuggestion）', () => {
     expect(suggest(`sh -c '${CHROME} --dump-dom x'`)).toBe('roster chrome run --bin \'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\' -- --dump-dom x');
     expect(suggest('CH="$(ls -d ~/.cache/puppeteer/chrome/* | tail -1)/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"; "$CH" --dump-dom x'))
       .toBe('roster chrome run --bin for-testing -- --dump-dom x');
+    // 逆斜線で逃がした空白の Chrome for Testing も for-testing（review-6 の提案 3）。
+    expect(suggest('CH=$(ls -d ~/.cache/puppeteer/chrome/*/chrome-mac-arm64/Google\\ Chrome\\ for\\ Testing.app/Contents/MacOS/*); "$CH" --headless --remote-debugging-port=9222'))
+      .toBe('roster chrome start --bin for-testing --port 9222 -- --headless');
     // roster chrome が断る旗は外し、訳に添える（review-5 の提案 6）。
     expect(suggest('/opt/c/chromium --profile-directory=Default --headless x')).toBe('roster chrome run --bin /opt/c/chromium -- --headless x（roster chrome が断る --profile-directory=Default は外した）');
     // 1 本の - の旗も揃えて外す・替える。
