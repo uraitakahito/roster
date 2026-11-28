@@ -1,6 +1,7 @@
 // レビューの 1 周: 課題の担当が頼む（roster ask review。Staff の席が無ければ起こし、居ればじかに届ける）→ Staff が返す（roster report review。課題の担当へじかに届く）→ 数える（roster review list）。
 // どちらも TPM 担当を通らない。受けない時だけ、課題の担当が roster ask tpm --review で上げる。
 import { mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { placeDir } from '../src/review-place.ts';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
@@ -61,7 +62,7 @@ describe('roster ask review（席が無い時: 命令が席を起こす）', () 
     const w = await started({ tracker: 'jira' }, 'AI-8');
     expect(await askReview(w.se, { url: w.plan, focus: '名簿の Key の決め方', wait: 0 })).toEqual([
       '起こした: レビュー AI-8: 計画 plan-1（file:2・Opus 5.5 · high）',
-      `folder: ${w.project}`,
+      `folder: ${placeDir(w.se, 'AI-8')}`,
       '名乗り（roster hello）は待っていない',
       expect.stringMatching(/^置き場の印: レビュー待ちにした http:\/\/127\.0\.0\.1:8801\/.+\/AI-8\/brief-1\.html$/) as string,
       '状態: 回答待ち(レビュー): 計画 plan-1',
@@ -146,7 +147,7 @@ describe('roster ask review（席が居る時: じかに届ける）', () => {
     w.staff.now = () => new Date('2026-11-20T12:05:00.000Z');
     await reportReview(w.staff, { url: await w.put(w.staff, 'review'), verdict: 'approve', summary: 'このままでよい' });
     w.se.now = () => new Date('2026-11-20T12:10:00.000Z');
-    expect(await askReview(w.se, { url: PR })).toEqual(['送った: 【ask-review】→ file:2（相手の手が空いた時に届く。送り直さない）', expect.stringMatching(/^置き場の印: レビュー待ちにした http:\/\/127\.0\.0\.1:8801\/.+\/AI-8\/brief-2\.html$/) as string, '状態: 回答待ち(レビュー): PR #7']);
+    expect(await askReview(w.se, { url: PR })).toEqual(['送った: 【ask-review】→ file:2（相手の手が空いた時に届く。送り直さない）', expect.stringMatching(/^置き場の印: レビュー待ちにした http:\/\/127\.0\.0\.1:8801\/.+\/AI-8\/brief-2\.html$/) as string, expect.stringMatching(/^レビューの場所に PR の head を出した: .+\/review\/.+\/AI-8\/r（/) as string, '状態: 回答待ち(レビュー): PR #7']);
     const got = w.posted('file:2').at(-1);
     expect(got?.from).toBe(SE_TITLE);
     expect(got?.text).toMatch(new RegExp(`^【ask-review】http://127\\.0\\.0\\.1:8801/.+/AI-8/brief-2\\.html 頼み: #2 ${PR}$`));
@@ -226,7 +227,7 @@ describe('roster ask review（席が居る時: じかに届ける）', () => {
       throw new Error('Workspace ref not found');
     };
     const se = { ...w.se, seats: Object.assign(Object.create(w.se.seats) as Context['seats'], { relabel }) };
-    expect(await askReview(se, { url: PR })).toEqual(['送った: 【ask-review】→ file:2（相手の手が空いた時に届く。送り直さない）', '居場所の題を替えられなかった（名簿の題は レビュー AI-8: 計画 plan-1 のまま）: Workspace ref not found', expect.stringMatching(/^置き場の印: レビュー待ちにした http:\/\/127\.0\.0\.1:8801\/.+\/AI-8\/brief-2\.html$/) as string, '状態: 回答待ち(レビュー): PR #7']);
+    expect(await askReview(se, { url: PR })).toEqual(['送った: 【ask-review】→ file:2（相手の手が空いた時に届く。送り直さない）', '居場所の題を替えられなかった（名簿の題は レビュー AI-8: 計画 plan-1 のまま）: Workspace ref not found', expect.stringMatching(/^置き場の印: レビュー待ちにした http:\/\/127\.0\.0\.1:8801\/.+\/AI-8\/brief-2\.html$/) as string, expect.stringMatching(/^レビューの場所に PR の head を出した: .+\/review\/.+\/AI-8\/r（/) as string, '状態: 回答待ち(レビュー): PR #7']);
     expect(requireRole(w.tpm, 'AI-8.staff').title).toBe('レビュー AI-8: 計画 plan-1');
     expect(readReviews(w.tpm)[1]?.brief).toMatch(/brief-2\.html$/);
   });
