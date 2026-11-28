@@ -1,5 +1,5 @@
 // guard: 担当が使う道具を、実行の前に見て、通すか止めるかを決める（Claude Code の PreToolUse hook から呼ばれる）。
-// 止めるのは 8 つ。(1) project の設定（infra。直下の folder の設定の宣言も合わせる）に書いた環境に触る命令で、手続きを踏んでいない物。
+// 止めるのは 10 種。(1) project の設定（infra。直下の folder の設定の宣言も合わせる）に書いた環境に触る命令で、手続きを踏んでいない物。
 // (2) 連携と課題管理の道具の直打ち（roster を通さないと、記録と状態が抜ける）。
 // (3) 担当が置き場のページと file を消す命令: 消す要求を直に送る curl と、置き場の CLI（pagetray）の消す命令
 //     （消してよいのは TPM 担当だけ。roster page delete・roster file delete も担当からは止まる）。
@@ -9,17 +9,24 @@
 // (6) pattern で選んだ process に合図を送る命令（pkill・killall と、pid を名指さない kill。どの席からも。台帳 #89・#92）。
 // (7) 担当の席の素の git push（push は roster push で打つ。確かめをみな流し、通った時だけ push する。branch を消すだけの push は通す。t-fcp8・監査 audit-2 の R15）。
 // (8) Chrome・Chromium のバイナリを直に起こす命令と、open で Chrome を開く命令（旗があっても。起こすのは roster chrome。どの席からも。台帳 #402・#403。guard-chrome.ts）。
+// (9) merge の直打ち: gh pr merge・gh api の merge の endpoint（pulls/<n>/merge・merges・merge-upstream）と既定の branch（main・master）の ref への書き込み・
+//     既定の branch への Contents API の書き込み・GraphQL の merge の mutation・merge を含む gh alias set と gh alias import
+//     （merge は roster pr merge で打つ。判定と見た commit を確かめる。役割の有る席も、役割の無い session（TPM 担当の席）も。作業の branch の ref を消す DELETE は通す。t-pq5v の段 3）。
+//     役割の無い session の、既定の branch を的にする素の git push（HEAD:main・--all など）も止める（役割の有る席の push は (7) が止める。review-9 の提案 4）。
+// (10) 役割の有る席の、判定の守りを外す命令: roster review allow（役割の無い session だけが打つ）と、roster を動かす命令での ROSTER_ROLE・ROSTER_KEY の替え（命令の前の代入・env -u・env -i・export・unset）。
+//     役割は hook の process の物で見るので、命令の前の ROSTER_ROLE= では外れない（t-pq5v の段 3。review-2 の指摘 2・review-5 の提案 1）。
 // (1) は、命令を単純な命令に分けて match の語で当て、語で当たらなくても命令の字全体に match の字が含まれれば止める（共有の環境は、疑わしければ止める）。
 //     字の含みだけの当たりを通すのは、どの単純な命令も、引数も入力も命令として動かさない道具の表（cat・grep・tail・roster・git の読む命令など。字を動かす旗は外す）か、
 //     命令を起こす呼び出しの字の無い python・node の時だけ（textStays。t-y67q の案 B）。
-// (2)〜(6)・(8) の shell の命令は、単純な命令に分け、その頭（実際に打つ道具の命令）だけを見る（(7) は語の並びの中の git も見る。pushesBare）。commit の文・grep の型・here-document に道具の名が入っても止めない。
+// (2)〜(6)・(8) の shell の命令は、単純な命令に分け、その頭（実際に打つ道具の命令）だけを見る（(7) は語の並びの中の git も、(9)・(10) は gh・roster も見る。pushesBare・mergesDirect）。
+// (6)〜(10) は ROSTER_RAW=1 でも外れない。commit の文・grep の型・here-document に道具の名が入っても止めない。
 // どれも字で見るので、防げるのは「うっかり」まで。script に包んだ命令や、shell の redirect での書き込みはすり抜ける。確実な守りは、担当に渡す権限の方で行う。
 import { existsSync, realpathSync } from 'node:fs';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { envLabel, type InfraEnv, type RolesConfig } from './config.ts';
 import { chromeLaunch, chromeReason } from './guard-chrome.ts';
 import type { RoleName } from './protocol.ts';
-import { rawCommands, scanCommand, shellQuote, splitCommands, splitCommandsMarked, SUBSTITUTED } from './shell.ts';
+import { rawCommands, scanCommand, SHELLS, shellQuote, splitCommands, splitCommandsMarked, SUBSTITUTED } from './shell.ts';
 import type { State } from './state.ts';
 
 /** 環境を変えてよい担当。 */
@@ -145,12 +152,141 @@ function changesRepo(words: string[]): boolean {
     const read = GH_READ_FLAGS[gh.slice(1, 3).join(' ')];
     return read === undefined || !gh.slice(3).some(a => read.test(a));
   }
-  if (gh[1] !== 'api') return false;
-  const args = gh.slice(2);
+  return gh[1] === 'api' && ghApiMethod(gh.slice(2)) !== 'GET';
+}
+
+/** gh api の引数から、送る method（大文字）。旗が無ければ、欄を送る旗（GH_API_WRITES）があれば POST、無ければ GET（gh の既定）。 */
+function ghApiMethod(args: string[]): string {
   const method = args.findIndex(a => a === '-X' || a === '--method');
   const named = args.find(a => /^(?:-X|--method=)./.test(a))?.replace(/^(?:-X|--method=)/, '') ?? (method === -1 ? undefined : args[method + 1]);
-  return (named !== undefined && named.toUpperCase() !== 'GET') || (named === undefined && args.some(a => GH_API_WRITES.test(a)));
+  return named?.toUpperCase() ?? (args.some(a => GH_API_WRITES.test(a)) ? 'POST' : 'GET');
 }
+
+/** gh api の、書けば PR を通らずに既定の branch へ入る endpoint（`{owner}` の置き字も当てる。比べる前に apiPath で揃える）。 */
+const MERGE_ENDPOINTS = [
+  /^repos\/[^/]+\/[^/]+\/pulls\/[^/]+\/merge$/,
+  /^repos\/[^/]+\/[^/]+\/merges$/,
+  /^repos\/[^/]+\/[^/]+\/merge-upstream$/,
+  /^repos\/[^/]+\/[^/]+\/git\/refs\/heads\/(?:main|master)$/,
+];
+/** 既定の branch の ref を作る形（`repos/o/r/git/refs` に `-f ref=refs/heads/main`）。 */
+const CREATES_DEFAULT_REF = { endpoint: /^repos\/[^/]+\/[^/]+\/git\/refs$/, field: /^ref=refs\/heads\/(?:main|master)$/ };
+/** file を commit にして書く endpoint（Contents API）。branch の欄が無ければ、GitHub は既定の branch に commit を作る（review-9 の指摘 1）。 */
+const CONTENTS = /^repos\/[^/]+\/[^/]+\/contents\/./;
+/** branch の欄が、既定の branch（main・master）でない branch を名指すか（旗に繋げた `-fbranch=x`・`--field=branch=x` も）。 */
+const namesOtherBranch = (arg: string): boolean =>
+  /^branch=(?!(?:refs\/heads\/)?(?:main|master)$)./.test(arg.replace(/^(?:-[fF]|--(?:raw-)?field=)/, ''));
+
+/**
+ * gh api の endpoint の語を、比べる形に揃える: ? の後ろ・URL の頭（`https://<host>/`。gh は :// の入った endpoint をそのまま URL に使う）と、
+ * その後ろの GHES の `api/v3/`・頭の / を除く（review-9 の指摘 2）。
+ */
+const apiPath = (arg: string): string =>
+  arg.replace(/\?.*$/, '').replace(/^https?:\/\/[^/]+\/(?:api\/v3\/)?/, '').replace(/^\//, '');
+/** GraphQL の、merge するか ref を動かす mutation の名（大小を分ける）。 */
+const MERGE_MUTATIONS = /\b(?:mergePullRequest|enablePullRequestAutoMerge|mergeBranch|updateRefs?)\b/;
+
+/**
+ * 単純な命令（語の並び）の中の gh（path を外した名。`timeout 60 gh …`・`xargs gh …` も）が、merge を直に打つ形か（t-pq5v の段 3）。当たった gh からの語を返す。
+ * `gh pr merge`（`-R`・`--repo` は ghWords が除く）・merge の endpoint への gh api の書き込み・merge の mutation を持つ gh api graphql
+ * （本文は here-document や `-f query=…` に書くので、命令の字 command 全体で見る）・merge を含む別名を作る `gh alias set` と、別名を読み込む `gh alias import`。
+ * 字を出す・読むだけの道具（echo・grep など）の引数は見ない。
+ */
+function mergesDirect(words: string[], command: string): string[] | undefined {
+  if (TEXT_TOOLS.has(words[0] ?? '')) return undefined;
+  const at = words.findIndex(w => w.split('/').at(-1) === 'gh');
+  if (at === -1) return undefined;
+  const gh = ghWords(words.slice(at));
+  const [, group, sub] = gh;
+  if (group === 'pr' && sub === 'merge') return gh;
+  if (group === 'alias') return sub === 'import' || (sub === 'set' && gh.slice(3).some(a => /merge|updateRef|git\/refs/i.test(a))) ? gh : undefined;
+  if (group !== 'api') return undefined;
+  const args = gh.slice(2);
+  const paths = args.map(apiPath);
+  if (paths.includes('graphql') || paths.includes('api/graphql')) return MERGE_MUTATIONS.test(command) ? gh : undefined;
+  if (ghApiMethod(args) === 'GET') return undefined;
+  if (paths.some(p => MERGE_ENDPOINTS.some(e => e.test(p)))) return gh;
+  if (paths.some(p => CONTENTS.test(p))) return args.some(namesOtherBranch) ? undefined : gh;
+  return paths.some(p => CREATES_DEFAULT_REF.endpoint.test(p)) && args.some(a => CREATES_DEFAULT_REF.field.test(a)) ? gh : undefined;
+}
+
+/** 単純な命令（語の並び）の中の roster（path を外した名）が `roster review allow` か。字を出す・読むだけの道具の引数は見ない。 */
+const allowsReview = (words: string[]): boolean =>
+  !TEXT_TOOLS.has(words[0] ?? '') && words.some((w, i) => w.split('/').at(-1) === 'roster' && words[i + 1] === 'review' && words[i + 2] === 'allow');
+
+/** roster の命令が役割と課題を見分ける環境変数（命令の前で替えると、席の物でない役割と Key で動く）。 */
+const SEAT_ENV = /^ROSTER_(?:ROLE|KEY)$/;
+/** 変数を書く・消す shell の命令（`export ROSTER_ROLE=`・`unset ROSTER_KEY`）。 */
+const ENV_SETTERS = new Set(['export', 'unset', 'declare', 'typeset', 'readonly', 'local']);
+/** env の、環境をみな空にする旗。 */
+const ENV_CLEARS = new Set(['-i', '--ignore-environment', '-']);
+
+/**
+ * 単純な命令（書いたままの語）が、SEAT_ENV を替えるか: 頭の代入（`ROSTER_ROLE= …`）・env の代入と `-u`・`--unset`・環境を空にする旗
+ * （`env -u ROSTER_ROLE …`・`env -i …`）・変数を書く命令（`export ROSTER_KEY=x`・`unset ROSTER_ROLE`）。sh -c・eval の字の中も見る。
+ */
+function setsSeatEnv(raw: string[]): boolean {
+  const words = withoutShellWords(raw);
+  const named = (word: string): boolean => SEAT_ENV.test(word.split('=')[0] ?? '');
+  if (ENV_SETTERS.has(words[0] ?? '')) return words.slice(1).some(named);
+  let i = 0;
+  for (; i < words.length && ASSIGNMENT.test(words[i] ?? ''); i += 1) if (named(words[i] ?? '')) return true;
+  const name = (words[i] ?? '').split('/').at(-1) ?? '';
+  if (name === 'env') {
+    for (let j = i + 1; j < words.length; j += 1) {
+      const word = words[j] ?? '';
+      if (ENV_CLEARS.has(word) || (ASSIGNMENT.test(word) && named(word))) return true;
+      if (word === '-u' || word === '--unset') {
+        if (SEAT_ENV.test(words[j + 1] ?? '')) return true;
+        j += 1;
+      }
+      else if (/^(?:-u|--unset=)/.test(word) && SEAT_ENV.test(word.replace(/^(?:-u|--unset=)/, ''))) return true;
+      else if (!word.startsWith('-') && !ASSIGNMENT.test(word)) break;
+    }
+  }
+  // sh -c・eval の字は、中の命令を書いたままの語で見る。
+  if (name === 'eval') return rawCommands(words.slice(i + 1).join(' ')).some(setsSeatEnv);
+  if (!SHELLS.has(name)) return false;
+  const c = words.findIndex((w, k) => k > i && /^-[a-z]*c[a-z]*$/.test(w));
+  const script = c === -1 ? undefined : words[c + 1];
+  return script !== undefined && rawCommands(script).some(setsSeatEnv);
+}
+
+/** 後ろの命令を動かす前置きの命令（runsRoster が、その後ろの命令の名を読む）。 */
+const WRAPPERS = new Set(['env', 'sudo', 'nice', 'nohup', 'timeout', 'gtimeout', 'xargs', 'command', 'exec', 'builtin', 'time', 'caffeinate']);
+
+/**
+ * 単純な命令（書いたままの語）が roster を動かすか: 命令の名（頭の代入を除いた初めの語）か、前置きの命令（WRAPPERS）の後ろの命令の名が roster
+ * （path を外した名）。前置きの後ろの旗・旗の値・代入・数（`timeout 60`）は飛ばす（roster の語は旗の値と読まない。`env -i roster`）。
+ * sh -c・eval の字の中も見る。引数に roster の path がある命令（`cd …/roster && …`）は動かさない（review-9 の提案 3）。
+ */
+function runsRoster(raw: string[]): boolean {
+  const words = withoutShellWords(raw);
+  let i = 0;
+  while (i < words.length && ASSIGNMENT.test(words[i] ?? '')) i += 1;
+  const base = (k: number): string => (words[k] ?? '').split('/').at(-1) ?? '';
+  const name = base(i);
+  if (name === 'eval') return rawCommands(words.slice(i + 1).join(' ')).some(runsRoster);
+  if (SHELLS.has(name)) {
+    const c = words.findIndex((w, k) => k > i && /^-[a-z]*c[a-z]*$/.test(w));
+    const script = c === -1 ? undefined : words[c + 1];
+    return script !== undefined && rawCommands(script).some(runsRoster);
+  }
+  if (!WRAPPERS.has(name)) return name === 'roster';
+  for (let k = i + 1; k < words.length; k += 1) {
+    const word = words[k] ?? '';
+    if (base(k) === 'roster') return true;
+    const skip = word.startsWith('-') || ASSIGNMENT.test(word) || /^\d+(?:\.\d+)?[smhd]?$/.test(word) || WRAPPERS.has(base(k)) || (words[k - 1] ?? '').startsWith('-');
+    if (!skip) return SHELLS.has(base(k)) || base(k) === 'eval' ? runsRoster(words.slice(k)) : false;
+  }
+  return false;
+}
+
+/** 命令が roster を動かし（runsRoster）、同じ命令で SEAT_ENV を替えるか（t-pq5v の段 3。review-5 の提案 1）。 */
+const spoofsSeat = (command: string): boolean => {
+  const raws = rawCommands(command);
+  return raws.some(runsRoster) && raws.some(setsSeatEnv);
+};
 
 /** 消すだけの push に並べてよい、出力の量だけを替える旗（字のまま。略しは数えない）。 */
 const QUIET_FLAGS = new Set(['-q', '--quiet', '-v', '--verbose']);
@@ -211,6 +347,36 @@ function pushesBare(command: string): string[] | undefined {
   return undefined;
 }
 
+/** git push の、値を次の語に取る旗（値を remote・refspec と読まない）。 */
+const PUSH_VALUE_FLAGS = new Set(['-o', '--push-option', '--repo', '--receive-pack', '--exec']);
+/** 既定の branch の名（refspec の先。`refs/heads/` と強いる印の `+` は除いて比べる）。 */
+const DEFAULT_BRANCH = /^(?:main|master)$/;
+
+/**
+ * 素の git push が、既定の branch（main・master）を的にするか（役割の無い session の守り。review-9 の提案 4）。
+ * refspec の先（`:` の後ろ、無ければ refspec そのもの）が main・master の物（`main`・`+main`・`HEAD:main`・`x:refs/heads/main`）と、
+ * branch をみな送る `--all`・`--mirror`。branch を消すだけの形（deletesOnly）は、ほかの守りと同じく通す（消す名が main なら deletesOnly が外す）。
+ * refspec を書かない `git push`（今の branch を送る）は、どの branch か字で読めないので見ない。
+ */
+function pushesDefault(command: string): string[] | undefined {
+  for (const words of splitCommands(command)) {
+    if (TEXT_TOOLS.has(words[0] ?? '')) continue;
+    for (let j = 0; j < words.length; j++) {
+      if ((words[j] ?? '').split('/').at(-1) !== 'git') continue;
+      const git = words.slice(j);
+      const sub = gitCommand(git);
+      if (sub?.name !== 'push') continue;
+      const args = sub.args;
+      if (args.some(a => a === '--all' || a === '--mirror')) return git;
+      if (deletesOnly(args)) continue;
+      const operands = args.filter((a, i) => !a.startsWith('-') && !PUSH_VALUE_FLAGS.has(args[i - 1] ?? ''));
+      const target = (spec: string): string => (spec.includes(':') ? spec.slice(spec.indexOf(':') + 1) : spec.replace(/^\+/, '')).replace(/^refs\/heads\//, '');
+      if (operands.slice(1).some(spec => DEFAULT_BRANCH.test(target(spec)))) return git;
+    }
+  }
+  return undefined;
+}
+
 /** Audit の席を起こす命令。Product Manager が自分の手で打つ物なので、TPM 担当と担当が道具として打つのは止める。 */
 const AUDIT_START = /^roster audit start\b/;
 
@@ -255,7 +421,7 @@ const SENDS = /^roster (?:(?:ask|report|notify|answer|dismiss|assign|seat)\b|pag
 /** 命令の中に、roster の送る命令（ask・report・notify・answer・dismiss・assign・seat・page put）があるか。単純な命令の頭だけを見る。 */
 export const sendsMessage = (command: string): boolean => splitCommands(command).some(words => SENDS.test(words.join(' ')));
 
-/** 命令の頭にこれを書くと、道具の直打ちを通す（roster 自身の開発と試しのため。環境の手続きと、読むだけの担当の守りと、Audit の席を起こす命令と、pattern で process に合図を送る命令と、担当の席の素の git push と、Chrome の直起こしには効かない）。 */
+/** 命令の頭にこれを書くと、道具の直打ちを通す（roster 自身の開発と試しのため。環境の手続きと、読むだけの担当の守りと、Audit の席を起こす命令と、pattern で process に合図を送る命令と、担当の席の素の git push と、Chrome の直起こしと、merge の直打ちと、判定の守りを外す命令には効かない）。 */
 export const RAW = 'ROSTER_RAW=1';
 
 /** guard に聞く 1 件。打った命令と、決めるのに要る設定・承認・時刻。 */
@@ -934,6 +1100,23 @@ export function judge(asked: Asked): Verdict {
     if (change !== undefined) {
       return { allow: false, reason: `${reader.name}は repo を変えません（${change.slice(0, 3).join(' ')}）。${reader.instead}` };
     }
+  }
+  // (9) merge の直打ち（t-pq5v の段 3）。役割の有る席も無い session（hook が付くのは TPM 担当の席だけ）も止め、ROSTER_RAW=1 でも外さない。
+  const merge = commands.map(words => mergesDirect(words, asked.command)).find(words => words !== undefined);
+  if (merge !== undefined) {
+    return { allow: false, reason: `merge は roster pr merge で打ってください（レビューのいちばん新しい判定と、席が見た commit を確かめてから merge します）。止めたのは ${merge.slice(0, 3).join(' ')} です（gh pr merge・gh api の merge と既定の branch の ref への書き込み・GraphQL の merge・merge の別名を作る gh alias）。担当の席も TPM 担当の席も同じで、${RAW} でも外れません。Product Manager の terminal（hook が無い）は止めません。` };
+  }
+  // 役割の無い session（TPM 担当の席）の、既定の branch を的にする素の git push も (9) に並べて止める（役割の有る席は (7) が止める。review-9 の提案 4）。
+  const toDefault = asked.role === undefined ? pushesDefault(asked.command) : undefined;
+  if (toDefault !== undefined) {
+    return { allow: false, reason: `main へは PR と roster pr merge で入れてください（${toDefault.slice(0, 3).join(' ')}）。既定の branch（main・master）を的にする push（HEAD:main・+main・refs/heads/main・--all・--mirror も）は、TPM 担当の席でも止めます（${RAW} でも外れません）。ほかの branch への push と、branch を消す push は通します。Product Manager の terminal（hook が無い）は止めません。` };
+  }
+  // (10) 判定の守りを外す命令（役割の有る席だけ。役割は hook の process の物で見るので、命令の前の ROSTER_ROLE= では外れない）。
+  if (asked.role !== undefined && commands.some(allowsReview)) {
+    return { allow: false, reason: 'roster review allow は、役割の無い session（TPM 担当の席・Product Manager の terminal）だけが打ちます。上げた「直すべき」は、roster ask tpm --review <番号> で TPM 担当に上げてください。' };
+  }
+  if (asked.role !== undefined && spoofsSeat(asked.command)) {
+    return { allow: false, reason: '役割と Key は席の物を使ってください。roster の命令は役割と Key を環境変数（ROSTER_ROLE・ROSTER_KEY）で見分けるので、命令の前の ROSTER_ROLE=・ROSTER_KEY=・env -u・env -i と、export・unset で替えると、席の物でない役割と Key で動きます。' };
   }
   // 担当の席の push は roster push で（t-fcp8）。ROSTER_RAW=1 でも外さない（確かめを外す道にしない）。役割の無い session（Product Manager の terminal・TPM 担当の席。TPM 担当は repo を触らない）には効かない。
   const bare = asked.role === undefined ? undefined : pushesBare(asked.command);

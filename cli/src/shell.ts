@@ -9,7 +9,7 @@ export function shellQuote(word: string): string {
 /** 命令の頭に付いても、打つ命令そのものではない語（予約語・前に付けて命令を動かす命令）。 */
 const PREFIX_WORDS = new Set(['!', '{', 'if', 'then', 'else', 'elif', 'do', 'while', 'until', 'time', 'exec', 'command', 'builtin', 'nohup', 'sudo', 'env', 'xargs', 'nice']);
 /** -c で字の命令を動かす shell。 */
-const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh']);
+export const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh']);
 /** 変数への代入（FOO=1）。 */
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 
