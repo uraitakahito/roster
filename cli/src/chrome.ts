@@ -105,7 +105,15 @@ function realish(path: string): string {
     tail.unshift(basename(head));
     head = dirname(head);
   }
-  return join(realpathSync(head), ...tail);
+  return join(realpathSync.native(head), ...tail);
+}
+
+/**
+ * 1 本の - で始まる旗（`-password-store=keychain`）を、-- の形に揃える。Chromium の command line は、macOS・Linux では
+ * - 1 本の旗も同じ旗として受けるので、揃えずに見ると、使わせない旗の検査を抜ける（review-3 の指摘 1）。揃えた形を Chrome にも渡す。
+ */
+export function normalizeChromeArgs(args: readonly string[]): string[] {
+  return args.map(a => /^-[A-Za-z][A-Za-z0-9-]/.test(a) ? `-${a}` : a);
 }
 
 /** CDP の口を開いてよい在り処（機械の外に開かない）。 */
@@ -132,7 +140,7 @@ export interface ChromeLaunch {
  * - `--remote-debugging-port` を、--port と別の値で書いた。
  */
 export function checkChromeArgs(launch: ChromeLaunch, home = homedir()): void {
-  const { args } = launch;
+  const args = normalizeChromeArgs(launch.args);
   const store = flagValue(args, '--password-store');
   if (store !== undefined && store !== 'basic') throw new TpmError(`--password-store=${store} は使えません（keychain を読むため。roster chrome が --password-store=basic を付ける）`);
   if (args.some(a => a === '--user-data-dir' || a.startsWith('--user-data-dir='))) throw new TpmError('--user-data-dir は Chrome の引数に書かず、roster chrome の --profile <dir> で渡してください');
@@ -142,8 +150,9 @@ export function checkChromeArgs(launch: ChromeLaunch, home = homedir()): void {
   if (launch.headed === true && args.some(a => a === '--headless' || a.startsWith('--headless='))) throw new TpmError('--headed と、Chrome の引数の --headless が両方あります。どちらか 1 つにしてください');
   const port = flagValue(args, '--remote-debugging-port');
   if (port !== undefined && launch.port !== undefined && Number(port) !== launch.port) throw new TpmError(`--port ${launch.port} と、Chrome の引数の --remote-debugging-port=${port} が違います。どちらか 1 つにしてください`);
-  const appSupport = realish(join(home, 'Library', 'Application Support'));
-  const profile = realish(launch.profile);
+  // macOS の既定の file system は大小を分けないので、小文字に揃えて比べる（review-3 の指摘 2）。
+  const appSupport = realish(join(home, 'Library', 'Application Support')).toLowerCase();
+  const profile = realish(launch.profile).toLowerCase();
   if (profile === appSupport || profile.startsWith(`${appSupport}${sep}`)) throw new TpmError(`--profile が ${join(home, 'Library', 'Application Support')} の下です（Product Manager のふだんのブラウザの profile。keychain の鍵を読み、記録を変えるため）。別の folder を渡してください`);
 }
 
@@ -154,7 +163,7 @@ export function checkChromeArgs(launch: ChromeLaunch, home = homedir()): void {
  */
 export function chromeArgs(launch: ChromeLaunch, home = homedir()): string[] {
   checkChromeArgs(launch, home);
-  const { args } = launch;
+  const args = normalizeChromeArgs(launch.args);
   const headless = launch.headed === true || args.some(a => a === '--headless' || a.startsWith('--headless=')) ? [] : ['--headless=new'];
   const port = launch.port === undefined || flagValue(args, '--remote-debugging-port') !== undefined ? [] : [`--remote-debugging-port=${launch.port}`];
   return [...ALWAYS_FLAGS, ...headless, `--user-data-dir=${launch.profile}`, ...port, ...args];
@@ -173,5 +182,16 @@ export function readDevToolsPort(profile: string, since: number): number | undef
   // mtime は秒より細かく持たない file system もあるので、1 秒の幅を見る。
   if (statSync(file).mtimeMs < since - 1000) return undefined;
   const port = Number(readFileSync(file, 'utf8').split('\n')[0]);
+  return Number.isInteger(port) && port > 0 ? port : undefined;
+}
+
+/**
+ * Chrome の log（標準エラー）の、offset（起こす前の大きさ）より後ろから、`DevTools listening on ws://…:<口>/`の口を読む。
+ * 口を決めて起こした Chrome は DevToolsActivePort を書かない（書くのは口 0 の時だけ）ので、こちらで読む。無ければ undefined。
+ */
+export function readListeningPort(log: string, offset: number): number | undefined {
+  if (!existsSync(log)) return undefined;
+  const text = readFileSync(log).subarray(offset).toString('utf8');
+  const port = Number(/DevTools listening on ws:\/\/[^/\s]*:(\d+)\//.exec(text)?.[1]);
   return Number.isInteger(port) && port > 0 ? port : undefined;
 }

@@ -254,12 +254,18 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
   const bin = ['--bin <path>', '起こす Chrome（実行の file か .app の path。for-testing（for-testing@156）なら puppeteer の置いた Chrome for Testing。既定は $ROSTER_CHROME、無ければ Google Chrome）'] as const;
   const headed = ['--headed', '窓を出す（headless にしない。窓は Product Manager の画面に出る）'] as const;
   const profile = ['--profile <dir>', '使う profile の folder（無ければ一時の folder を作り、終わりに消す）'] as const;
+  /** 整数の旗を読む（範囲の外・数でなければ断る。review-3 の指摘 7）。 */
+  const integer = (name: string, value: string, min: number, max: number): number => {
+    const n = Number(value);
+    if (!/^\d+$/.test(value) || n < min || n > max) throw new TpmError(`${name} は ${String(min)}〜${String(max)} の整数で書いてください: ${value}`);
+    return n;
+  };
   const chromeOptions = (o: { bin?: string, headed?: boolean, profile?: string, port?: string, timeout?: string }): ChromeOptions => ({
     ...(o.bin === undefined ? {} : { bin: o.bin }),
     ...(o.headed === true ? { headed: true } : {}),
     ...(o.profile === undefined ? {} : { profile: o.profile }),
-    ...(o.port === undefined ? {} : { port: Number(o.port) }),
-    ...(o.timeout === undefined ? {} : { timeout: Number(o.timeout) }),
+    ...(o.port === undefined ? {} : { port: integer('--port', o.port, 0, 65535) }),
+    ...(o.timeout === undefined ? {} : { timeout: integer('--timeout', o.timeout, 1, 86400) }),
   });
   chrome.command('run <args...>').description('前で動かし、終わるまで待つ（撮り・--dump-dom。roster chrome run -- --screenshot=<png> <URL>）。Chrome の出力と終了コードを返す')
     .option(...bin).option(...headed).option(...profile)
@@ -268,7 +274,8 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
       const r = await chromeRun(createContext(), args, chromeOptions(o));
       process.stdout.write(r.stdout);
       process.stderr.write(r.stderr);
-      process.exit(r.status);
+      // process.exit で終えると、pipe への書き出しが書き切る前に切れうる（review-3 の指摘 8）。
+      process.exitCode = r.status;
     });
   chrome.command('start [args...]').description('裏で起こし、pid・CDP の URL・profile・log を出す（roster chrome start -- <Chrome の引数>）。止めるのは roster chrome stop <pid>')
     .option(...bin).option(...headed).option(...profile)

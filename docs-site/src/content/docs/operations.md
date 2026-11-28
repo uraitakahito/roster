@@ -369,15 +369,15 @@ castlist と pagetray は、1.0.0 で API も DB も替えた（AI-36 の切り�
 | 命令 | すること |
 |---|---|
 | `roster chrome run [--bin …] [--profile <dir>] [--timeout <秒>] -- <Chrome の引数>` | 前で動かし、終わるまで待つ（`--screenshot=<png>`・`--dump-dom` の撮り）。Chrome の出力と終了コードを返す。`--timeout`（既定 60 秒）を過ぎたら止めて 1 で終わる |
-| `roster chrome start [--bin …] [--profile <dir>] [--port <n>] -- <Chrome の引数>` | 裏で起こし、pid・CDP の URL（`http://127.0.0.1:<口>`）・profile・log を出す。口は既定で Chrome が選ぶ（`--port 0`）。TPM 担当が口の帯を分けた時は `--port` で帯の中を書く |
+| `roster chrome start [--bin …] [--profile <dir>] [--port <n>] -- <Chrome の引数>` | 裏で起こし、pid・CDP の URL（`http://127.0.0.1:<口>`）・profile・log を出す。口は既定で Chrome が選ぶ（`--port 0`）。`--port` が無く、Chrome の引数に `--remote-debugging-port=<n>` を書いていれば、その口を使う。TPM 担当が口の帯を分けた時は `--port` で帯の中を書く |
 | `roster chrome list` | 自分の Key が `start` で起こし、まだ動いている物 |
-| `roster chrome stop <pid>…` | `start` で起こした物だけを止める。SIGTERM の後 5 秒で居なくならなければ SIGKILL。親が居なくなってから、profile を command line に持つ残り（Renderer・GPU の helper・`chrome_crashpad_handler`）を pid で止め、roster が作った profile と log を消す |
+| `roster chrome stop <pid>…` | `start` で起こした物だけを止める。SIGTERM の後 5 秒で居なくならなければ SIGKILL。親が居なくなってから、command line に profile の path を持つ残り（path の後ろが `/`・空白・終わりの物だけ。Renderer・GPU の helper など）を pid で止め、roster が作った profile と log を消す |
 
 - **起こす Chrome**（`--bin`）: 既定は `$ROSTER_CHROME`、無ければ `/Applications/Google Chrome.app`。`.app` の path は中の実行の file に読み替える。`for-testing` は、puppeteer が `~/.cache/puppeteer/chrome/` に置いた Chrome for Testing のいちばん新しい版（`for-testing@156` で版の頭を絞る）。Chrome の仲間（Google Chrome・Chrome for Testing・Chromium・chrome-headless-shell・Microsoft Edge・Brave Browser など）でなければ断る。
-- **profile**: `--profile` が無ければ、一時の folder（`$TMPDIR/roster-chrome-<Key>-XXXX`）を作り、`run` は終わりに、`start` は `stop` で消す。`--profile` で渡した folder は消さない。
-- **使わせない旗**（断って、訳を出す）: `--password-store=` の basic 以外の値、Chrome の引数の `--user-data-dir`（`--profile` で渡す）と `--profile-directory`、loopback の外の `--remote-debugging-address`、`--headed` と担当の `--headless` の両方、`--port` と違う値の `--remote-debugging-port`。`--profile` が（symlink を解いて）`~/Library/Application Support/` の下なら断る（Product Manager のふだんのブラウザの profile）。
+- **profile**: `--profile` が無ければ、一時の folder（`$TMPDIR/roster-chrome-<Key>-XXXX`）を作り、`run` は終わりに、`start` は `stop` で消す。`--profile` で渡した folder は消さない。動いている process が使っている folder を `--profile` で渡すと断る（新しい Chrome は前の Chrome に渡して直ぐ終わり、片付けが前の Chrome を止めるため）。旗の検査は一時の folder を作る前にするので、断った時に folder は残らない。
+- **使わせない旗**（断って、訳を出す）: `--password-store=` の basic 以外の値、Chrome の引数の `--user-data-dir`（`--profile` で渡す）と `--profile-directory`、loopback の外の `--remote-debugging-address`、`--headed` と担当の `--headless` の両方、`--port` と違う値の `--remote-debugging-port`。`--profile` が（symlink を解き、大小を分けずに比べて）`~/Library/Application Support/` の下なら断る（Product Manager のふだんのブラウザの profile）。Chromium は 1 本の `-` の旗（`-password-store=keychain`）も同じ旗として受けるので、`-` 1 本で始まる旗は `--` の形に揃えて見て、揃えた形を Chrome に渡す。`--port` は 0〜65535、`--timeout` は 1 以上の整数。
 - **記録**: `start` は state の `chrome.jsonl` に起こした行を、`stop` は止めた行を足す。「まだ動いている」は、止めた行が無く、pid が居て、その command line に起こした時の profile がある物（`list` と `stop` は同じ判じ方をする。pid が使い回されていても当てない）。
-- **起こす前**に、profile に残った `DevToolsActivePort` を消し、口は起こした時刻より新しい file からだけ読む（前に落ちた Chrome の口を読まない）。10 秒で口を書かなければ、止めて片付け、log の終わりを出して誤りにする。
+- **口の知り方**: 口 0 なら、Chrome が profile に書く `DevToolsActivePort` から読む。起こす前に残った file を消し、起こした時刻より新しい file だけを読む（前に落ちた Chrome の口を読まない）。口を決めた時は、Chrome はこの file を書かないので、log の、起こす前の大きさより後ろに出た `DevTools listening on ws://…:<口>/` の行から読む。10 秒で口が開かなければ、止めて片付け、log の終わりを出して誤りにする。
 - puppeteer・playwright は 2 つの旗を既定で付けるので、e2e や BrowserHive の撮り（container の Chromium に繋ぐ）は `roster chrome` を通さなくてよい。`ignoreDefaultArgs` は使わない。
 
 ## 手元の builder（buildkit）

@@ -2,10 +2,10 @@
 // いつも keychain を読ませない旗を付け（src/chrome.ts）、profile は roster が作って片付ける。
 // 裏で起こした物は state の chrome.jsonl に、起こした行と止めた行を足していく（台帳 #402・#403・#404）。
 import { spawn, spawnSync, execFileSync } from 'node:child_process';
-import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync } from 'node:fs';
+import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { chromeArgs, DEVTOOLS_PORT_FILE, readDevToolsPort, resolveChrome } from '../chrome.ts';
+import { checkChromeArgs, chromeArgs, DEVTOOLS_PORT_FILE, flagValue, normalizeChromeArgs, readDevToolsPort, readListeningPort, resolveChrome } from '../chrome.ts';
 import type { Context } from '../context.ts';
 import { envOf } from '../env.ts';
 import { TpmError } from '../skill-sets.ts';
@@ -29,8 +29,10 @@ export interface ChromeOps {
   run(exe: string, args: string[], timeoutMs: number): { status: number, stdout: string, stderr: string, timedOut: boolean }
   /** pid の process の command line。居なければ undefined。 */
   commandLine(pid: number): string | undefined
-  /** command line に字 text を含む process の pid（自分は除く）。 */
-  pidsWith(text: string): number[]
+  /** profile を使う process（command line に profile の path があり、その後ろが /・空白・終わり）の pid（自分は除く）。 */
+  pidsUsing(profile: string): number[]
+  /** file が在るか。 */
+  exists(path: string): boolean
   /** 合図を送る。もう居なくても誤りにしない。 */
   signal(pid: number, sig: 'SIGTERM' | 'SIGKILL'): void
 }
@@ -38,12 +40,20 @@ export interface ChromeOps {
 /** 正規表現の特別な字を逃がす（pgrep -f に字のまま当てるため）。 */
 const escapeRegExp = (s: string): string => s.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/**
+ * command line が profile を使っているか。path の後ろが /・空白・終わりの時だけ当てる（`/tmp/p` で `/tmp/p2` に当てない。
+ * chrome_crashpad_handler の `--database=<profile>/Crashpad` の形にも当たる。review-3 の指摘 3）。
+ */
+export const usesProfile = (line: string, profile: string): boolean => new RegExp(`${escapeRegExp(profile)}(?:/| |$)`).test(line);
+
 /** 本物の口。 */
 export const realChromeOps: ChromeOps = {
   spawnDetached(exe, args, log) {
     const fd = openSync(log, 'a');
     try {
       const child = spawn(exe, args, { detached: true, stdio: ['ignore', fd, fd] });
+      // 起こせなかった誤り（ENOENT など）は後で知らせとして来る。受け手が無いと node ごと落ちるので受ける（pid が無いので下で断る）。
+      child.on('error', () => undefined);
       child.unref();
       if (child.pid === undefined) throw new TpmError(`Chrome を起こせません: ${exe}`);
       return child.pid;
@@ -69,15 +79,16 @@ export const realChromeOps: ChromeOps = {
       return undefined;
     }
   },
-  pidsWith(text) {
+  pidsUsing(profile) {
     try {
-      const out = execFileSync('pgrep', ['-f', '--', escapeRegExp(text)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 2000 });
+      const out = execFileSync('pgrep', ['-f', '--', `${escapeRegExp(profile)}(/| |$)`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 2000 });
       return out.split('\n').map(Number).filter(pid => Number.isInteger(pid) && pid > 0 && pid !== process.pid);
     }
     catch {
       return [];
     }
   },
+  exists: path => existsSync(path),
   signal(pid, sig) {
     try {
       process.kill(pid, sig);
@@ -105,11 +116,22 @@ export interface ChromeOptions {
   timeout?: number
 }
 
-/** profile を決める。渡されなければ一時の folder を作る（roster が片付ける）。 */
-function profileOf(ctx: Context, given: string | undefined): { profile: string, own: boolean } {
-  if (given !== undefined) return { profile: resolve(given), own: false };
+/** 起こす前の支度: Chrome を選んで在るかを見る・使わせない旗を見る・profile を決める（渡されなければ一時の folder を作り、roster が片付ける）。 */
+function prepare(ctx: Context, args: string[], options: ChromeOptions, ops: ChromeOps, port?: number): { exe: string, profile: string, own: boolean, full: string[] } {
+  const exe = resolveChrome(options.bin, ctx.env);
+  if (!ops.exists(exe)) throw new TpmError(`Chrome がありません: ${exe}（--bin か $ROSTER_CHROME で在り処を渡す）`);
+  const launch = { args, ...(options.headed === true ? { headed: true } : {}), ...(port === undefined ? {} : { port }) };
+  if (options.profile !== undefined) {
+    const profile = resolve(options.profile);
+    // 動いている Chrome と同じ profile で起こすと、新しい Chrome は前の Chrome に渡して直ぐ終わり、後の片付けが前の Chrome を止める（review-3 の指摘 3）。
+    if (ops.pidsUsing(profile).length > 0) throw new TpmError(`--profile ${profile} は、動いている process が使っています（roster chrome list・pgrep -fl で見る）。別の folder を渡してください`);
+    return { exe, profile, own: false, full: chromeArgs({ ...launch, profile }) };
+  }
+  // 旗は、一時の folder を作る前に見る（断った時に folder を残さない。review-3 の指摘 5）。
+  checkChromeArgs({ ...launch, profile: tmpdir() });
   const key = (envOf(ctx.env, 'KEY') ?? 'x').replaceAll(/[^A-Za-z0-9.-]/g, '-');
-  return { profile: mkdtempSync(join(tmpdir(), `roster-chrome-${key}-`)), own: true };
+  const profile = mkdtempSync(join(tmpdir(), `roster-chrome-${key}-`));
+  return { exe, profile, own: true, full: chromeArgs({ ...launch, profile }) };
 }
 
 /** 待つ（ctx.sleep で。試験は待たない）。 */
@@ -126,11 +148,11 @@ async function waitUntil(ctx: Context, ms: number, done: () => boolean): Promise
  * roster の作った profile を消す（親が居るうちに消すと、Chrome が書き戻して folder が残る）。
  */
 async function tidyUp(ctx: Context, ops: ChromeOps, profile: string, own: boolean): Promise<void> {
-  const marker = `--user-data-dir=${profile}`;
-  const rest = ops.pidsWith(marker);
+  const using = (pid: number): boolean => usesProfile(ops.commandLine(pid) ?? '', profile);
+  const rest = ops.pidsUsing(profile);
   for (const pid of rest) ops.signal(pid, 'SIGTERM');
-  if (!await waitUntil(ctx, STOP_WAIT_MS, () => rest.every(pid => !(ops.commandLine(pid) ?? '').includes(marker)))) {
-    for (const pid of rest) if ((ops.commandLine(pid) ?? '').includes(marker)) ops.signal(pid, 'SIGKILL');
+  if (!await waitUntil(ctx, STOP_WAIT_MS, () => !rest.some(using))) {
+    for (const pid of rest) if (using(pid)) ops.signal(pid, 'SIGKILL');
   }
   if (own) {
     rmSync(profile, { recursive: true, force: true });
@@ -140,10 +162,8 @@ async function tidyUp(ctx: Context, ops: ChromeOps, profile: string, own: boolea
 
 /** roster chrome run: 前で動かし、終わるまで待つ（撮り・--dump-dom）。Chrome の出力と終了コードを返す。 */
 export async function chromeRun(ctx: Context, args: string[], options: ChromeOptions, ops: ChromeOps = realChromeOps): Promise<{ status: number, stdout: string, stderr: string }> {
-  const exe = resolveChrome(options.bin, ctx.env);
-  const { profile, own } = profileOf(ctx, options.profile);
+  const { exe, profile, own, full } = prepare(ctx, args, options, ops);
   try {
-    const full = chromeArgs({ args, profile, ...(options.headed === true ? { headed: true } : {}) });
     const seconds = options.timeout ?? RUN_TIMEOUT_SECONDS;
     const r = ops.run(exe, full, seconds * 1000);
     if (r.timedOut) return { status: 1, stdout: r.stdout, stderr: `${r.stderr}roster chrome: ${seconds} 秒を過ぎたので止めました（--timeout で替える）\n` };
@@ -165,22 +185,32 @@ export function aliveStarts(all: ChromeRecord[], ops: ChromeOps): StartRecord[] 
   const stopped = new Set(all.filter(r => r.event === 'stop').map(r => `${r.pid} ${r.profile}`));
   return all.filter((r): r is StartRecord => r.event === 'start')
     .filter(r => !stopped.has(`${r.pid} ${r.profile}`))
-    .filter(r => (ops.commandLine(r.pid) ?? '').includes(`--user-data-dir=${r.profile}`));
+    .filter(r => usesProfile(ops.commandLine(r.pid) ?? '', r.profile));
 }
 
 /** roster chrome start: 裏で起こし、pid・CDP の URL・profile・log を出す。 */
 export async function chromeStart(ctx: Context, args: string[], options: ChromeOptions, ops: ChromeOps = realChromeOps): Promise<string[]> {
-  const exe = resolveChrome(options.bin, ctx.env);
-  const { profile, own } = profileOf(ctx, options.profile);
-  const full = chromeArgs({ args, profile, port: options.port ?? 0, ...(options.headed === true ? { headed: true } : {}) });
-  // 前に落ちた Chrome の口を読まないように、起こす前に消す（読むのも、起こした時刻より新しい物だけ）。
-  rmSync(join(profile, DEVTOOLS_PORT_FILE), { force: true });
+  // --port が無く、担当が Chrome の引数に口を書いていれば、その口を使う（0 を足さない。review-3 の指摘 4）。
+  const written = flagValue(normalizeChromeArgs(args), '--remote-debugging-port');
+  const { exe, profile, own, full } = prepare(ctx, args, options, ops, options.port ?? (written === undefined ? 0 : undefined));
   const log = `${profile}.log`;
   const since = ctx.now().getTime();
-  const pid = ops.spawnDetached(exe, full, log);
+  // log は足していくので、起こす前の大きさから後ろだけを読む（前の回の行を読まない）。
+  const offset = existsSync(log) ? statSync(log).size : 0;
+  let pid: number;
+  try {
+    // 前に落ちた Chrome の口を読まないように、起こす前に消す（読むのも、起こした時刻より新しい物だけ）。
+    rmSync(join(profile, DEVTOOLS_PORT_FILE), { force: true });
+    pid = ops.spawnDetached(exe, full, log);
+  }
+  catch (e) {
+    if (own) rmSync(profile, { recursive: true, force: true });
+    throw e;
+  }
   let port: number | undefined;
   const up = await waitUntil(ctx, PORT_WAIT_MS, () => {
-    port = readDevToolsPort(profile, since);
+    // 口 0 なら DevToolsActivePort、口を決めたなら log の「DevTools listening on」で知る（Chrome は口を決めると file を書かない）。
+    port = readDevToolsPort(profile, since) ?? readListeningPort(log, offset);
     return port !== undefined || ops.commandLine(pid) === undefined;
   });
   if (!up || port === undefined) {
@@ -188,7 +218,7 @@ export async function chromeStart(ctx: Context, args: string[], options: ChromeO
     await waitUntil(ctx, STOP_WAIT_MS, () => ops.commandLine(pid) === undefined);
     const tail = existsSync(log) ? readFileSync(log, 'utf8').trimEnd().split('\n').slice(-5) : [];
     await tidyUp(ctx, ops, profile, own);
-    throw new TpmError([`Chrome（pid ${pid}）が CDP の口を書きませんでした。止めて片付けました。log の終わり:`, ...tail.map(l => `  ${l}`)].join('\n'));
+    throw new TpmError([`Chrome（pid ${pid}）が CDP の口を開きませんでした（10 秒）。止めて片付けました。log の終わり:`, ...tail.map(l => `  ${l}`)].join('\n'));
   }
   ctx.state.append(CHROME_RECORD, { event: 'start', at: new Date(since).toISOString(), pid, key: envOf(ctx.env, 'KEY'), exe, profile, ownProfile: own, log, port } satisfies ChromeRecord);
   return [
