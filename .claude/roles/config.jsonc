@@ -106,6 +106,20 @@
         "container rm buildkit",
       ],
     },
+    // レビューの席が試験と build を流す、使い捨ての container と、その専用の network（t-n4j9 の段 3。roster review run・serve が名を字で書いて打つ）。
+    // 名の頭は roster-review（container は roster-review-<Key>-<run|serve>-<時刻>、network は roster-review、image は roster-review-<node|rust>:<hash>）。
+    // 自分の課題の使い捨ての物なので、手続きは自由（Product Manager が 2026-11-28 に通した）。消すのは名を書いて 1 つずつ（prune・--all は使わない）。
+    "review": {
+      "guard": "free",
+      "match": [
+        "--name roster-review*",
+        "container network create roster-review",
+        "container network delete roster-review",
+        "container stop roster-review*",
+        "container rm roster-review*",
+        "container delete roster-review*",
+      ],
+    },
     // container の仕組みそのものと、名を取らずにまとめて消す命令（t-9tac）。どれも、castlist（pm-only）の container か volume に届き得る:
     // system stop は仕組みごと止め、prune は止めてある container を、volume prune は container の無い volume（作り直しの間の castlist-data-v1 など）を消す。
     // castlist より緩くできないので pm-only。s・v・n は system・volume・network の略。

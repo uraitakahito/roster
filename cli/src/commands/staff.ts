@@ -17,7 +17,8 @@ import { putPage } from './page.ts';
 import { pageOwner } from './reply.ts';
 import { markBrief, markVerdict } from './review-marks.ts';
 import { isPageUrl } from './store.ts';
-import { checkoutPull, ensurePlace, parsePull, placeDir, prunePlaces } from '../review-place.ts';
+import { checkoutPull, ensurePlace, parsePull, placeDir } from '../review-place.ts';
+import { pruneReview } from '../review-run.ts';
 
 /** Staff Engineer 担当の役割の名。 */
 export const STAFF: RoleName = 'staff-engineer';
@@ -272,9 +273,8 @@ export async function askReview(ctx: Context, options: { url: string, focus?: st
  * 席が頼みに取りかかる時に roster review checkout を打つ。review-8 の指摘 5）。head を出せなくても頼みは止めない。出す行を返す。
  */
 function preparePlace(ctx: Context, key: string, url: string, checkout: boolean): string[] {
-  const pruned = prunePlaces(ctx, k => readRole(ctx, staffKey(k)) !== undefined);
+  const lines = pruneReview(ctx, k => readRole(ctx, staffKey(k)) !== undefined);
   const dir = ensurePlace(ctx, key);
-  const lines = pruned.map(p => `名簿に居ない課題のレビューの場所を消した: ${p}`);
   if (!checkout || parsePull(url) === undefined) return lines;
   try {
     const { tree, head } = checkoutPull(ctx, key, url);
