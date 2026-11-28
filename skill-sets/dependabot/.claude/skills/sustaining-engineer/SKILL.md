@@ -76,11 +76,16 @@ node "${CLAUDE_SKILL_DIR}/../../../../../cli/src/release-age.ts" <config.owner>/
 
 CI が全部緑で、2 の判定が 0 のとき:
 
+1. レビューを頼む: `roster ask review --url <PR の URL> --light`（protocol.md の「レビュー」。Dependabot の PR もみな頼む）。判定（【review】）が届くまで待つ。「直すべき」「見られなかった」なら、protocol.md の「レビュー」の表のとおりに扱う。
+2. merge を頼む（判定の頼みの番号と判定を書く）:
+
 ```sh
-roster report merge-request "<PR の URL>／CI: 緑／公開から <最も新しい version の hours> 時間（eligibleAt <時刻>・depsSource <diff か commit-message>）／変えた物: <無し か 足した commit・別の PR>"
+roster report merge-request "<PR の URL>／CI: 緑／公開から <最も新しい version の hours> 時間（eligibleAt <時刻>・depsSource <diff か commit-message>）／変えた物: <無し か 足した commit・別の PR>／レビュー: #<頼みの番号> <判定>"
 ```
 
 TPM 担当に【merge-request】が行き、状態が `回答待ち(TPM): merge` になる。
+
+- **判定の後に PR の head が変わったら**（自分の commit・`git merge origin/main`・Dependabot の rebase や作り直し）、1 から頼み直す（見た commit が今の head と違うと、TPM 担当の `roster pr merge` が断る）。
 
 ## 5. 困ったら
 

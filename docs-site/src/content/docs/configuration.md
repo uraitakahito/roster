@@ -326,7 +326,7 @@ Dependabot の skill を使う project では、`.claude/roles/config.jsonc` の
 | `model` | Sustaining Engineer 担当の model（無ければ `ROSTER_MODEL`、それも無ければ既定） | `"claude-opus-5-5"` |
 | `effort` | Sustaining Engineer 担当の effort（無ければ `ROSTER_EFFORT`、それも無ければ既定） | `"medium"` |
 | `permissionMode` | Sustaining Engineer 担当の `--permission-mode`（無ければ `ROSTER_PERMISSION_MODE`、それも無ければ既定） | `"bypassPermissions"` |
-| `mergeMethod` | `gh pr merge` の方法 | `"squash"` |
+| `mergeMethod` | `roster pr merge` の方法（`--squash` など） | `"squash"` |
 | `rebaseWaitMinutes` | `@dependabot rebase` の応じた印 👍 を待つ分 | `20` |
 
 ### `.claude/dependabot/rules.md`
