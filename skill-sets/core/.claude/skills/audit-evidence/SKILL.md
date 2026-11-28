@@ -5,7 +5,7 @@ when_to_use: Auditor の居場所で、/audit の「調べる」の段から、�
 argument-hint: "<件の番号>"
 user-invocable: false
 context: fork
-agent: Explore
+agent: audit-reader
 background: false
 ---
 

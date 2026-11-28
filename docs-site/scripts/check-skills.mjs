@@ -39,6 +39,17 @@
 // 14. context: fork の skill が background: false を書かない（既定は裏で動き、呼んだ担当が結果を待たずに進む）
 // 15. context: fork の skill の本文が、読む物のほかの roster の命令を書く（subagent の roster は呼んだ担当として
 //     動くので、知らせ・状態・名簿が呼んだ担当の名で変わる。知らせるのは呼んだ担当）
+//
+// skill セットの .claude/agents/*.md は、手伝い（subagent）の定義。--add-dir の先の定義も Claude Code が読み、
+// 同じ名なら組み込みの手伝いより勝つ（文書には無い。Claude Code 2.1.332 の中と、手元の試しで確かめた。
+// 2026-11-28 t-cjj4。core の Explore.md で、どの席の Explore も Haiku で動かす）。次も止める:
+//
+// 16. 手伝いの定義の frontmatter が無い・YAML の mapping として読めない・欄の名が AGENT_FIELDS に無い
+// 17. name が file の名と違う・description が空・model が無い（書かないと親の model を受け継ぎ、定義を置いた訳が消える）
+// 18. READ_ONLY_AGENTS の定義の disallowedTools が、READ_ONLY_DENIED をみな持たない（定義し直すと組み込みの
+//     止めは引き継がれない。roster の guard は Artifact を見ないので、ここで止める。MCP の道具は、組み込みと同じく止めていない）
+// 19. skill の agent の値が、組み込みの手伝いの名でも、skill セットの .claude/agents/ にある名でもない
+// 20. 同じ名の手伝いの定義が、2 つ以上の skill セットにある（どの skill セットも全部渡るので、どちらが勝つかが読む順しだいになる）
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -103,6 +114,118 @@ const FIELDS = new Set([
   "compatibility",
 ]);
 
+// 16. 手伝いの定義の欄。Claude Code 2.1.332 の中の、手伝いの定義の欄の並べ（JSON の定義の prompt を除く）に、
+// .md の frontmatter を読む所が読む color を足した物。omitClaudeMd（CLAUDE.md を読まない）は文書に無く、版の中にだけある
+const AGENT_FIELDS = new Set([
+  "name",
+  "description",
+  "tools",
+  "disallowedTools",
+  "model",
+  "effort",
+  "permissionMode",
+  "mcpServers",
+  "hooks",
+  "maxTurns",
+  "autoCompactWindow",
+  "skills",
+  "initialPrompt",
+  "memory",
+  "background",
+  "omitClaudeMd",
+  "isolation",
+  "color",
+]);
+// 18. 読むだけの手伝いと、止める道具。Claude Code 2.1.332 の Agent tool の説明の Explore の行
+// 「All tools except …」から写した。版が上がると組み込みの並べが増えうるので、版上げの時に見直す
+const READ_ONLY_AGENTS = new Set(["Explore", "audit-reader"]);
+export const READ_ONLY_DENIED = [
+  "Agent",
+  "Artifact",
+  "ArtifactComments",
+  "ArtifactData",
+  "ArtifactCheck",
+  "ExitPlanMode",
+  "Edit",
+  "Write",
+  "NotebookEdit",
+];
+// 19. 組み込みの手伝いの名（Claude Code 2.1.332）
+const BUILTIN_AGENTS = new Set([
+  "general-purpose",
+  "Explore",
+  "Plan",
+  "claude",
+  "statusline-setup",
+  "claude-code-guide",
+  "web-fetch",
+]);
+
+/** frontmatter を読む。読めなければ違反の文を返す */
+function frontmatter(file, text) {
+  const m = /^---\r?\n([\s\S]*?)\r?\n---(\r?\n|$)/.exec(text);
+  if (!m) return { error: `${file}: 頭に --- で囲んだ frontmatter が無い` };
+  let fm;
+  try {
+    fm = parse(m[1]);
+  } catch (e) {
+    return {
+      error: `${file}: frontmatter が YAML として読めない（値に「: 」があれば言い換える）: ${e.message.split("\n")[0]}`,
+    };
+  }
+  if (!fm || typeof fm !== "object" || Array.isArray(fm))
+    return { error: `${file}: frontmatter が YAML の mapping でない` };
+  return { fm, head: m[0] };
+}
+
+/** 道具の並べ（「A, B」の字か配列）を名の配列にする */
+function toolList(value) {
+  if (typeof value === "string")
+    return value
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s !== "");
+  return Array.isArray(value) ? value.map(String) : [];
+}
+
+/** 1 つの手伝いの定義（.claude/agents/*.md）の字を見て、違反の文を返す（16〜18） */
+export function checkAgent(file, text) {
+  const { fm, error } = frontmatter(file, text);
+  if (error) return [error];
+  const errors = [];
+  for (const key of Object.keys(fm))
+    if (!AGENT_FIELDS.has(key)) errors.push(`${file}: 知らない欄: ${key}`);
+  const stem = basename(file).replace(/\.md$/, "");
+  if (fm.name !== stem)
+    errors.push(`${file}: name（${fm.name}）が file の名（${stem}）と違う`);
+  if (typeof fm.description !== "string" || fm.description.trim() === "")
+    errors.push(`${file}: description が無い`);
+  if (typeof fm.model !== "string" || fm.model.trim() === "")
+    errors.push(
+      `${file}: model が無い（書かないと親の model を受け継ぐ。親と同じでよければ inherit と書く）`,
+    );
+  if (READ_ONLY_AGENTS.has(fm.name)) {
+    const denied = new Set(toolList(fm.disallowedTools));
+    const missing = READ_ONLY_DENIED.filter((t) => !denied.has(t));
+    if (missing.length > 0)
+      errors.push(
+        `${file}: 読むだけの手伝いの disallowedTools に ${missing.join("・")} が無い（定義し直すと組み込みの止めは引き継がれない）`,
+      );
+  }
+  return errors;
+}
+
+/** skill の agent の値が、組み込みか定義にある名か（19） */
+export function checkAgentRef(file, text, defined) {
+  const { fm } = frontmatter(file, text);
+  if (!fm || fm.agent === undefined) return [];
+  return BUILTIN_AGENTS.has(fm.agent) || defined.has(fm.agent)
+    ? []
+    : [
+        `${file}: agent（${fm.agent}）が組み込みの手伝いにも skill セットの .claude/agents/ にも無い`,
+      ];
+}
+
 /** 本文が Claude Code の引数の置き場を使うか（前に \ がある $ は置き換わらないので数えない） */
 function usesArguments(body, fm) {
   if (/(?<!\\)\$(ARGUMENTS\b|\d)/.test(body)) return true;
@@ -131,18 +254,9 @@ function tpmCommands(body) {
 
 /** 1 つの SKILL.md の字を見て、違反の文を返す */
 export function checkSkill(file, text) {
-  const m = /^---\r?\n([\s\S]*?)\r?\n---(\r?\n|$)/.exec(text);
-  if (!m) return [`${file}: 頭に --- で囲んだ frontmatter が無い`];
-  let fm;
-  try {
-    fm = parse(m[1]);
-  } catch (e) {
-    return [
-      `${file}: frontmatter が YAML として読めない（値に「: 」があれば言い換える）: ${e.message.split("\n")[0]}`,
-    ];
-  }
-  if (!fm || typeof fm !== "object" || Array.isArray(fm))
-    return [`${file}: frontmatter が YAML の mapping でない`];
+  const { fm, head, error } = frontmatter(file, text);
+  if (error) return [error];
+  const body = text.slice(head.length);
 
   const errors = [];
   for (const key of Object.keys(fm))
@@ -181,7 +295,7 @@ export function checkSkill(file, text) {
     errors.push(
       `${file}: argument-hint が字でない（"[…]" のように引用符で囲む）`,
     );
-  if (usesArguments(text.slice(m[0].length), fm)) {
+  if (usesArguments(body, fm)) {
     if (hint === undefined)
       errors.push(
         `${file}: 本文が引数を使うのに argument-hint が無い（渡せる物を書く）`,
@@ -221,11 +335,7 @@ export function checkSkill(file, text) {
         `${file}: context: fork の skill は background: false を書く（既定は裏で動き、呼んだ担当が結果を待たずに進む）`,
       );
     const denied = [
-      ...new Set(
-        tpmCommands(text.slice(m[0].length)).filter(
-          (c) => !FORK_COMMANDS.includes(c),
-        ),
-      ),
+      ...new Set(tpmCommands(body).filter((c) => !FORK_COMMANDS.includes(c))),
     ];
     if (denied.length > 0)
       errors.push(
@@ -241,15 +351,35 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     "git",
     ["ls-files", "--cached", "--others", "--exclude-standard"],
     { cwd: REPO, encoding: "utf8" },
-  )
-    .split("\n")
-    .filter((f) => f.startsWith("skill-sets/") && f.endsWith("/SKILL.md"));
-  const errors = files.flatMap((f) =>
-    checkSkill(f, readFileSync(join(REPO, f), "utf8")),
+  ).split("\n");
+  const skills = files.filter(
+    (f) => f.startsWith("skill-sets/") && f.endsWith("/SKILL.md"),
   );
+  const agents = files.filter((f) =>
+    /^skill-sets\/[^/]+\/\.claude\/agents\/[^/]+\.md$/.test(f),
+  );
+  const names = agents.map((f) => basename(f).replace(/\.md$/, ""));
+  const defined = new Set(names);
+  const errors = [
+    ...[...defined]
+      .filter((n) => names.filter((m) => m === n).length > 1)
+      .map(
+        (n) =>
+          `skill-sets/*/.claude/agents/${n}.md: 同じ名の手伝いの定義が 2 つ以上の skill セットにある（どちらが勝つかが読む順しだいになる）`,
+      ),
+    ...skills.flatMap((f) => {
+      const text = readFileSync(join(REPO, f), "utf8");
+      return [...checkSkill(f, text), ...checkAgentRef(f, text, defined)];
+    }),
+    ...agents.flatMap((f) =>
+      checkAgent(f, readFileSync(join(REPO, f), "utf8")),
+    ),
+  ];
   if (errors.length > 0) {
     for (const error of errors) console.error(`✗ ${error}`);
     process.exit(1);
   }
-  console.log(`✓ check-skills: ${files.length} skill`);
+  console.log(
+    `✓ check-skills: ${skills.length} skill・${agents.length} 手伝いの定義`,
+  );
 }
