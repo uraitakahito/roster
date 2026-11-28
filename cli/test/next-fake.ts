@@ -42,9 +42,13 @@ export function nextHandler(answer: (seen: NextSeen) => NextAnswer | undefined, 
       const text = bytes?.toString();
       const json = (request.headers['content-type'] ?? '').startsWith('application/json') && text !== undefined && text !== '';
       const one: NextSeen = { method: request.method, origin: `${request.protocol}//${request.hostname}${request.port === undefined ? '' : `:${request.port}`}`, path: request.path, query: { ...request.query }, headers: { ...request.headers }, text, bytes, body: json ? JSON.parse(text) as Record<string, unknown> : undefined };
+      // roster の client は、どの頼みにも日本語を頼む（clients.ts の askingJapanese）。頭の無い頼みは、askingJapanese を通していない client の物なので、
+      // 残さずに 400 で断る（AI-48）。投げずに答えるのは、投げると「つながらない」と読まれ、つながらない時の道を見る試験が通ってしまうため。
+      if (one.headers['accept-language'] !== 'ja') {
+        const refused = JSON.stringify({ message: `accept-language: ja の無い頼み（${one.method} ${one.path}）。client を askingJapanese に通す` });
+        return Promise.resolve({ response: { statusCode: 400, reason: '', headers: { 'content-type': 'application/json', 'x-amzn-errortype': 'MissingAcceptLanguage' }, body: Readable.from([Buffer.from(refused)]) } });
+      }
       if (record(one)) seen.push(one);
-      // roster の client は、どの頼みにも日本語を頼む（clients.ts の askingJapanese）。頭の無い頼みは、askingJapanese を通していない client の物なので断る（AI-48）。
-      if (one.headers['accept-language'] !== 'ja') return Promise.reject(new Error(`accept-language: ja の無い頼み（${one.method} ${one.path}）。client を askingJapanese に通す`));
       const got = answer(one) ?? { status: 404, type: 'UnknownOperationException', body: '知らない道' };
       if ('throws' in got) return Promise.reject(got.throws);
       const type = 'type' in got ? got.type : undefined;

@@ -66,8 +66,8 @@ export function withoutAwsMiddleware<T extends HasMiddleware>(client: T): T {
   return client;
 }
 
-/** {@link askingJapanese} が足す middleware の名（外す・見分ける時の名）。 */
-export const LANGUAGE_MIDDLEWARE = 'rosterAcceptLanguage';
+/** {@link askingJapanese} が足す middleware の名。 */
+const LANGUAGE_MIDDLEWARE = 'rosterAcceptLanguage';
 
 /** middleware を足せる物（生成した client はどれも。add の引数の型は client ごとに違うので、ここでは問わない）。 */
 export interface CanAddMiddleware {
@@ -85,7 +85,9 @@ export interface CanAddMiddleware {
 export function askingJapanese<T extends CanAddMiddleware>(client: T): T {
   const language: BuildMiddleware<object, object> = next => (args) => {
     const request = args.request as { headers?: Record<string, string> } | undefined;
-    if (request?.headers !== undefined) request.headers['accept-language'] = ASK_LANGUAGE;
+    // 頼みの形が思ったのと違えば止める（@smithy の更新で形が替わると、黙って言語を付けない頼みに戻るため。withoutAwsMiddleware と同じ訳）。
+    if (request?.headers === undefined) throw new TpmError('生成した client の頼みに headers が無く、Accept-Language を付けられない（@smithy の頼みの形が替わった。cli/pnpm-lock.yaml の版に戻すか、askingJapanese を直す）。roster ask tpm で知らせてください');
+    request.headers['accept-language'] = ASK_LANGUAGE;
     return next(args);
   };
   // 頭を組む段（build）に足す。型は client ごとの入力・出力に結ばれているので、足す口だけを、型を問わない形で受ける。
