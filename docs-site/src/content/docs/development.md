@@ -85,6 +85,13 @@ castlist と pagetray の画面をまとめるサーバー（Rust）は、別の
 - **callboard を上げる時**: callboard で release を出す（callboard の docs の「[release を出す](https://uraitakahito.github.io/callboard/release.html)」）→ この repo で `.callboard-version` を新しい版と digest にする PR を出す → [運用](/operations/#画面のサーバーcallboard)の「版を上げる」で container を作り直す。castlist・pagetray の版も上がる時は、`.castlist-version`・`.pagetray-version` の PR と起こし直しを先に済ませる。
 - **画面の URL**: アクターのプロフィールの画面の URL（`roster castlist …` と `roster incident timeline` が出す）は、callboard の物（`<callboard>/actors/<id>`。`cli/src/castlist.ts` の `callboardUrl`。既定は `http://127.0.0.1:8803`、`$ROSTER_CALLBOARD_URL` で替えられる）。castlist は 2.0.0 から画面を持たない。メッセージの記録の画面も、callboard の物（`http://127.0.0.1:8803/messages`。0.3.0 から）。ページの一覧も、callboard の物（`http://127.0.0.1:8803/pages/`。0.4.0 から。Key の画面は `/pages/?project=<状態の folder の名>&key=<Key>`）。pagetray は 2.0.0 から画面を持たず、前の画面の URL（`http://127.0.0.1:8801/`・`/<project>/`・`/<project>/<Key>/`・`/messages`）は 404 を返す（前の URL から callboard へは移さない）。この repo の docs と skill と命令の字は、callboard の画面を指す。置いたページの URL（`http://127.0.0.1:8801/<状態の folder の名>/<Key>/…`）は、pagetray が持つ物で、変わらない。
 
+## usagescope（使用量を見る画面）とのつなぎ
+
+AI の使用量（トークンと額）を、見る人が選んだ欄で見る画面（egui の WebAssembly）は、別の repo [usagescope](https://github.com/uraitakahito/usagescope) にある（[usagescope の docs](https://uraitakahito.github.io/usagescope/)）。castlist の `ListUsage`（`GET /api/usage`）を読むだけで、この repo の cli は usagescope を呼ばない。この repo が持つのは、起こす版と、[運用](/operations/#使用量を見る画面usagescope)の手引きだけ。
+
+- **合わせる版**: `.usagescope-version` に、起こす usagescope の版を `v<版>@<image の digest>` の形で書く（digest は usagescope の release にある。今は `v0.1.0`）。DevOps Engineer 担当は、この版で起こす。この file を読む試験は無い（usagescope を相手にしたつなぎの試験は、この repo に無い）。
+- **usagescope を上げる時**: usagescope で release を出す（usagescope の docs の「[release を出す](https://uraitakahito.github.io/usagescope/release.html)」）→ この repo で `.usagescope-version` を新しい版と digest にする PR を出す → [運用](/operations/#使用量を見る画面usagescope)の「版を上げる」で container を作り直す。castlist の版も上がる時は、`.castlist-version` の PR と起こし直しを先に済ませる。
+
 ## Archify（図を描く道具）とのつなぎ
 
 文書の「流れ」「前と後」の図は、[Archify](https://github.com/tt-a1i/archify)（Apache-2.0。Node の CLI）で描く。担当が図の中身を JSON で書き、`roster figure embed` が Archify で SVG にし、文書の図の決まり（`skill-sets/core/.claude/skills/_shared/figures.md`）の形に整えて埋める（AI-43）。

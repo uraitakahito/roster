@@ -1,6 +1,6 @@
 ---
 title: 運用
-description: この repo を別の folder へ移す手順、Node の version の上げ方、依存が増えた PR を merge した後の手、アクターの台帳（castlist）が止まった時、ページの置き場（pagetray）の起こし方と保ち方、画面のサーバー（callboard）の起こし方、メッセージキュー（NATS）の起こし方と止まった時、手元の builder（buildkit）の守り、レビュー（Staff Engineer 担当の席）と監査（Auditor の席）の運び、課題の時間の分け（roster time）、CI と GitHub の見張り（roster watch）、push の前の確かめ（roster push）、担当が落ちた後の調べ方
+description: この repo を別の folder へ移す手順、Node の version の上げ方、依存が増えた PR を merge した後の手、アクターの台帳（castlist）が止まった時、ページの置き場（pagetray）の起こし方と保ち方、画面のサーバー（callboard）の起こし方、使用量を見る画面（usagescope）の起こし方、メッセージキュー（NATS）の起こし方と止まった時、手元の builder（buildkit）の守り、レビュー（Staff Engineer 担当の席）と監査（Auditor の席）の運び、課題の時間の分け（roster time）、CI と GitHub の見張り（roster watch）、push の前の確かめ（roster push）、担当が落ちた後の調べ方
 ---
 
 ## 課題の時間の分け（roster time）
@@ -301,6 +301,39 @@ castlist（アクターの台帳）と pagetray（ページの置き場）の画
 - **止まっている時**: 画面が開けないだけで、担当の仕事（ページを置く・メッセージを送る・アクターの登録）は止まらない。アクターの画面（一覧・プロフィール・タイムライン・相関図）は callboard だけにある（castlist は 2.0.0 から画面を持たない）ので、止まっている間は見られない。ページの一覧とメッセージの記録も callboard だけにある（pagetray は 2.0.0 から画面を持たない）ので、止まっている間は見られない。`roster castlist …`・`roster page list` の命令（読むだけ）と、置いたページの URL（8801）は、そのまま使える。
 - **版を上げる**: callboard の新しい版が出て、この repo の `.callboard-version` が上がった時（上げ方は [開発](/development/#callboard画面のサーバーとのつなぎ)の「callboard を上げる時」）。callboard の `CHANGELOG.md` の「呼ぶ先の要る版」を見て、castlist・pagetray がその版より古ければ、先にそちらを上げる（castlist を上げるのは Product Manager）。その後、container を消して、新しい版で起こし直す（data が無いので、写しは要らない）。
 - **戻す**: この repo の `.callboard-version` を前の版に戻す PR を先に入れてから、前の版の image で起こし直す（版の file が新しいままだと、次に起こし直す時に、また新しい版で起こしてしまう）。castlist・pagetray も戻す時は、それぞれの版の file の PR を戻して前の版で起こし直してから、callboard を戻す（新しい操作を呼ぶ callboard を、古い castlist・pagetray に向けている間は、その画面が 503 になる。短い間で、data は失わない）。
+
+## 使用量を見る画面（usagescope）
+
+AI の使用量（トークンと額）を、見る人が選んだ欄で見る画面（別の repo の [usagescope](https://github.com/uraitakahito/usagescope)。egui の WebAssembly。AI-46）。castlist の `ListUsage`（`GET /api/usage`）を読むだけの中継を持つ。data は持たない（DB も volume も無い）。Apple Container（`container` CLI）で動かし、`127.0.0.1` だけで待ち受ける。起こす・止める・版を上げるのは DevOps Engineer 担当で、命令は `roster infra run usagescope -- <命令>` で打つ（usagescope の repo の `.claude/roles/config.jsonc` が、環境 `usagescope` を「TPM に相談」の手続きで宣言している。callboard と同じく、roster は project の folder の直下の folder の宣言も合わせて読む）。
+
+| 物 | 値 |
+|---|---|
+| image | `ghcr.io/uraitakahito/usagescope:<版>`。版と digest は、この repo の `.usagescope-version`（`v<版>@<digest>`） |
+| container | `usagescope`（`127.0.0.1:8804` → 中の 8080。メモリは Apple Container の下限の 200 MiB、CPU は 1） |
+| URL | `http://127.0.0.1:8804/`（入口）。`/healthz` が生きているかを返す |
+| 聞く先 | castlist は `http://castlist.box:8080`（`USAGESCOPE_CASTLIST_URL`。必ず要る）。container の名でつなぐ（callboard の「聞く先」と同じ訳）。castlist は 2.1.0 から（`ListUsage`） |
+| 待ち受け | `USAGESCOPE_LISTEN`（container の中。既定は `0.0.0.0:8080`。ふだんは渡さない） |
+| data | 無い。止めても、消しても、起こし直せば元のまま |
+
+**手順は、usagescope の docs の「[動かす](https://uraitakahito.github.io/usagescope/run.html)」にある**。そこの命令のうち、container に触る物は、頭に `roster infra run usagescope --` を付けて打つ。下は、この repo の側の決まりだけを書く。
+
+- **起こす版**: `.usagescope-version` の版。`<版>` は `@` の前。取った image の digest が `@` の後ろと同じかを見る（見方は、上の「ページの置き場」の「起こす」と同じ）。
+- **起こす**:
+
+  ```sh
+  roster infra run usagescope -- container run -d --name usagescope \
+    -p 127.0.0.1:8804:8080 \
+    -m 200M -c 1 \
+    -e USAGESCOPE_CASTLIST_URL=http://castlist.box:8080 \
+    ghcr.io/uraitakahito/usagescope:<版>
+  ```
+
+  `-p` には必ず `127.0.0.1:` を書く（`-p 8804:8080` と書くと LAN に開く）。
+- **起こす順**: castlist より先に起こしてもよい（聞けない間は、画面に「castlist に届きません」と訳を出す）。
+- **確かめる**: usagescope の docs の「[確かめる](https://uraitakahito.github.io/usagescope/run.html#確かめる)」を、1 から 6 まで流す（`/healthz` の `version` が起こした版（`.usagescope-version` の `@` の前）で `web` が `built` か・`127.0.0.1:8804` だけに開いているか・入口の画面・記録の頭の行）。castlist の版が 2.1.0 より古くないことも見る。
+- **止まっている時**: 使用量の画面が開けないだけで、担当の仕事と castlist は止まらない（usagescope は castlist を読むだけ）。止めるのは `roster infra run usagescope -- container stop usagescope`（「TPM に相談」の手続き）。roster を動かす機械を起こし直すと止まったままになるので、`roster infra run usagescope -- container start usagescope` で起こし、「確かめる」をする。
+- **版を上げる**: usagescope の新しい版が出て、この repo の `.usagescope-version` が上がった時（上げ方は [開発](/development/#usagescope使用量を見る画面とのつなぎ)の「usagescope を上げる時」）。castlist がその版の要る版より古ければ、先にそちらを上げる（castlist を上げるのは Product Manager）。その後、container を消して、新しい版で起こし直す（data が無いので、写しも移行も要らない）。
+- **戻す**: この repo の `.usagescope-version` を前の版に戻す PR を先に入れてから、前の版の image で起こし直す（版の file が新しいままだと、次に起こし直す時に、また新しい版で起こしてしまう）。
 
 ## メッセージキュー（NATS）
 
