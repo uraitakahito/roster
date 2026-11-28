@@ -696,9 +696,43 @@ describe('担当の席の素の git push（t-fcp8。監査 audit-2 の R15）', 
     expect(ask(command, 'software-engineer')).toEqual({ allow: true });
   });
 
-  test('役割の無い session（Product Manager の terminal・TPM 担当の席）の push は止めない', () => {
+  test('役割の無い session（Product Manager の terminal・TPM 担当の席）の push は、既定の branch を的にしなければ止めない', () => {
     expect(ask('git push origin v1.2.3', undefined)).toEqual({ allow: true });
     expect(ask('pnpm run check; git push', undefined)).toEqual({ allow: true });
+  });
+
+  test.each([
+    'git push origin HEAD:main',
+    'git push origin main',
+    'git push origin +main',
+    'git push origin refs/heads/main',
+    'git push origin HEAD:refs/heads/master',
+    'git push -f origin t-x/impl:main',
+    'git push -u origin t-x/a main',
+    'git push origin --all',
+    'git push --mirror origin',
+    'git push origin --delete main',
+    'git push origin :main',
+    'git -C /w/roster push origin HEAD:main',
+    'cd /w && git push origin main',
+    'ROSTER_RAW=1 git push origin main',
+  ])('役割の無い session でも、既定の branch を的にする push は止める（review-9 の提案 4）: %s', (command) => {
+    expect(ask(command, undefined)).toEqual({ allow: false, reason: expect.stringContaining('main へは PR と roster pr merge で入れてください') as string });
+  });
+
+  test.each([
+    'git push origin t-x/impl',
+    'git push -u origin HEAD:t-x/impl',
+    'git push origin main-fix',
+    'git push -o ci.skip origin t-x/a',
+    'git push origin --delete t-x/impl',
+    'git push origin :t-x/impl',
+    'git push',
+    'git push origin',
+    'git commit -m "git push origin main を止める"',
+    'echo git push origin main',
+  ])('役割の無い session の、ほかの branch への push と消す push は通す: %s', (command) => {
+    expect(ask(command, undefined)).toEqual({ allow: true });
   });
 
   test('止めた訳の終了コード 2 は、fetch の落ちも言う（skill・docs と同じ字）', () => {
@@ -754,6 +788,24 @@ describe('merge の直打ち（t-pq5v の段 3）', () => {
     'gh alias set mb \'api graphql -f query="mutation{mergeBranch(input:{}){clientMutationId}}"\'',
     'gh alias set mv \'api -X PATCH repos/o/r/git/refs/heads/main\'',
     'gh alias import aliases.yml',
+    // Contents API（branch の欄が無いか main・master。review-9 の指摘 1）。
+    'gh api -X PUT repos/o/r/contents/README.md -f message=x -f content=eA==',
+    'gh api --method DELETE repos/o/r/contents/a.md -f message=x -f sha=abc',
+    'gh api repos/o/r/contents/docs/a.md -f message=x -f content=eA== -f sha=abc',
+    'gh api -X PUT repos/o/r/contents/a.md -f message=x -f content=eA== -f branch=main',
+    'gh api -X PUT repos/o/r/contents/a.md -f message=x --field branch=refs/heads/master',
+    'gh api -X PUT repos/o/r/contents/a.md --input body.json',
+    // URL の形（review-9 の指摘 2）。
+    'gh api -X PUT https://api.github.com/repos/o/r/pulls/1/merge',
+    'gh api https://api.github.com/repos/o/r/merges -f base=main -f head=b',
+    'gh api -X PATCH https://api.github.com/repos/o/r/git/refs/heads/main -f sha=abc',
+    'gh api -X PUT https://ghe.example.com/api/v3/repos/o/r/pulls/1/merge',
+    'gh api -X PUT https://api.github.com/repos/o/r/contents/a.md -f message=x -f content=eA==',
+    'gh api -X POST https://api.github.com/repos/o/r/merge-upstream -f branch=main',
+    'gh api https://api.github.com/graphql -f query=\'mutation { mergePullRequest(input: {pullRequestId: "x"}) { clientMutationId } }\'',
+    // merge-upstream（review-9 の提案 5）。
+    'gh api -X POST repos/o/r/merge-upstream -f branch=main',
+    'gh api repos/o/r/merge-upstream -f branch=t-x/impl',
     'ROSTER_RAW=1 gh pr merge 1',
     'ROSTER_RAW=1 gh api -X PUT repos/o/r/pulls/1/merge',
   ])('止める（役割の有る席・役割の無い session、ROSTER_RAW=1 でも）: %s', (command) => {
@@ -777,6 +829,13 @@ describe('merge の直打ち（t-pq5v の段 3）', () => {
     'gh api -X GET repos/o/r/git/refs/heads/main',
     'gh api -X DELETE repos/o/r/git/refs/heads/t-x/impl',
     'gh api --method DELETE repos/o/r/git/refs/heads/main-fix',
+    'gh api repos/o/r/contents/README.md',
+    'gh api https://api.github.com/repos/o/r/contents/README.md?ref=main',
+    'gh api -X PUT repos/o/r/contents/a.md -f message=x -f content=eA== -f branch=t-x/impl',
+    'gh api --method DELETE repos/o/r/contents/a.md -f message=x -f sha=abc -f branch=t-x/impl',
+    'gh api -X PUT https://api.github.com/repos/o/r/contents/a.md -F branch=t-x/impl -f message=x',
+    'gh api https://api.github.com/repos/o/r/pulls/1',
+    'gh api -X DELETE https://api.github.com/repos/o/r/git/refs/heads/t-x/impl',
     'gh api graphql -f query=\'query { repository(owner: "o", name: "r") { pullRequest(number: 1) { mergeable } } }\'',
     'gh alias set v \'pr view\'',
     'gh alias list',
@@ -834,6 +893,11 @@ describe('役割の有る席の、判定の守りを外す命令（t-pq5v の段
     'sh -c \'ROSTER_ROLE= roster pr merge x\'',
     'ROSTER_ROLE= sh -c \'roster pr merge x\'',
     'eval ROSTER_ROLE= roster pr merge x',
+    'ROSTER_ROLE= timeout 60 roster pr merge x',
+    'ROSTER_KEY=t-x nice -n 5 /r/cli/bin/roster review checkout 1',
+    'ROSTER_ROLE= xargs -n1 roster pr merge < urls',
+    'env -i roster pr merge x',
+    'cd /w/roster && ROSTER_ROLE= roster pr merge x',
   ])('役割と Key の替えを止める: %s', (command) => {
     for (const role of SEATS) expect(ask(command, role), role).toEqual({ allow: false, reason: SPOOF_HINT });
   });
@@ -845,6 +909,11 @@ describe('役割の有る席の、判定の守りを外す命令（t-pq5v の段
     'grep -rn ROSTER_ROLE= src && roster hello',
     'ROSTER_KEY=x pnpm test',
     'env -u ROSTER_KEY git status',
+    // roster の folder の中で、roster を動かさない命令（review-9 の提案 3）。
+    'cd /Users/me/projects/ai/roster && ROSTER_KEY=t-1 pnpm vitest run',
+    'cd /w/roster && ROSTER_ROLE=software-engineer node cli/bin/x.js',
+    'ROSTER_KEY=t-1 ls /w/roster',
+    'env -u ROSTER_ROLE git -C /w/roster status',
   ])('役割の有る席でも通す: %s', (command) => {
     for (const role of SEATS) expect(ask(command, role), role).toEqual({ allow: true });
   });
