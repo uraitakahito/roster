@@ -5,7 +5,7 @@
 // path では選ばず、宣言した確かめを毎回みな流す（4 repo の主な CI は、どれも pull_request に paths が無い）。
 // 確かめは shell を通さずに語の並びで打つ（; や pipe で終了コードが隠れる形を、設定の中にも作らない）。
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync } from 'node:fs';
 import { isAbsolute, join, normalize } from 'node:path';
 import type { Context } from '../context.ts';
 import { envOf } from '../env.ts';
@@ -145,6 +145,43 @@ function trackedChanges(ctx: Context, root: string): string | undefined {
   return r.status === 0 ? r.stdout.trim() : undefined;
 }
 
+/** 指す commit が checkout とずれた submodule の path（`git submodule status` の行の頭が +）。submodule が無ければ空。 */
+function driftedSubmodules(ctx: Context, root: string): string[] {
+  return git(ctx, root, ['submodule', 'status', '--recursive']).stdout.split('\n')
+    .filter(l => l.startsWith('+'))
+    .map(l => l.slice(1).trim().split(/\s+/)[1] ?? '')
+    .filter(p => p !== '');
+}
+
+/**
+ * 追われている file の変更で断る時の訳。submodule の指す commit のずれは、branch を替えた後に submodule を合わせ忘れた時に出るので、
+ * そう言って直し方を出す（t-fcp8 の result-2。capture-ledger の試しで、訳が submodule を言わず戸惑った）。
+ */
+function changesReason(ctx: Context, root: string): string {
+  const drifted = driftedSubmodules(ctx, root);
+  const base = '追われている file に commit していない変更がある。commit してから打つ（確かめた木と push する commit を合わせるため）';
+  if (drifted.length === 0) return base;
+  return `${base}。うち submodule の ${drifted.join('・')} は、指す commit が checkout とずれている（branch を替えた後なら git submodule update --init --recursive で合わせる。submodule を進めたなら、その commit を git add して commit する）`;
+}
+
+/** package.json が依存を書いているか（dependencies などに 1 つでも在るか）。読めなければ書いていないとみなす（依存の無い package.json を拾わない。review-13）。 */
+function declaresDeps(file: string): boolean {
+  try {
+    const pkg = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+    return ['dependencies', 'devDependencies', 'optionalDependencies'].some(k => typeof pkg[k] === 'object' && pkg[k] !== null && Object.keys(pkg[k]).length > 0);
+  }
+  catch {
+    return false;
+  }
+}
+
+/** 依存の入っていない folder（dir と、その直下の folder の package.json のうち、依存を書いていて、隣に node_modules が無い物）。dir は repo の根からの path。 */
+function bareDeps(root: string, dir: string): string[] {
+  const base = join(root, dir);
+  const candidates = [dir, ...(existsSync(base) ? readdirSync(base, { withFileTypes: true }).filter(e => e.isDirectory() && e.name !== 'node_modules' && !e.name.startsWith('.')).map(e => dir === '.' ? e.name : join(dir, e.name)) : [])];
+  return candidates.filter(d => existsSync(join(root, d, 'package.json')) && declaresDeps(join(root, d, 'package.json')) && !existsSync(join(root, d, 'node_modules')));
+}
+
 /** 秒の字。 */
 const secs = (s: number): string => `${s} 秒`;
 
@@ -226,7 +263,7 @@ export function push(ctx: Context, options: PushOptions): PushResult {
   if (options.noChecks?.trim() === '') return refuse(target, '--no-checks には訳を書く（空は受けない）');
   const changes = trackedChanges(ctx, root);
   if (changes === undefined) return refuse(target, 'git status が読めない（index.lock など）。git status を見てから打ち直す');
-  if (changes !== '') return refuse(target, '追われている file に commit していない変更がある。commit してから打つ（確かめた木と push する commit を合わせるため）');
+  if (changes !== '') return refuse(target, changesReason(ctx, root));
   const sha = gitLine(ctx, root, ['rev-parse', '--verify', '--quiet', 'HEAD']);
   if (sha === undefined) return refuse(target, 'HEAD に commit が無い');
 
@@ -258,8 +295,9 @@ export function push(ctx: Context, options: PushOptions): PushResult {
     const failed = results.filter(r => r.code !== 0);
     if (failed.length > 0) {
       for (const r of failed) lines.push('', `--- ${r.name} の出力の終わり（全部は ${r.log}）`, ...tail(r.log));
-      const bare = checks.filter(c => failed.some(f => f.name === c.name) && existsSync(join(root, c.dir ?? '.', 'package.json')) && !existsSync(join(root, c.dir ?? '.', 'node_modules')));
-      if (bare.length > 0) lines.push('', `注意: ${bare.map(c => c.dir ?? '.').join('・')} に node_modules が無い（作ったばかりの worktree なら、依存を入れてから打ち直す）`);
+      // 根で流す確かめ（site:check が docs-site の依存を使う、など）も拾うため、dir の直下の folder も見る（t-fcp8 の result-2）。
+      const bare = [...new Set(checks.filter(c => failed.some(f => f.name === c.name)).flatMap(c => bareDeps(root, c.dir ?? '.')))];
+      if (bare.length > 0) lines.push('', `注意: ${bare.join('・')} に node_modules が無い（作ったばかりの worktree なら、依存を入れてから打ち直す。入れ方は repo の設定の push の欄の注）`);
       lines.push('', `push していない: 確かめ ${failed.length} つが落ちた（${failed.map(r => r.name).join('・')}）。直して commit し、もう 1 度 roster push`);
       return finish({ repo, target, sha, checks: results.map(({ name, code, seconds }) => ({ name, code, seconds })), code: PUSH_EXIT.failed, result: 'failed' }, lines);
     }
