@@ -329,7 +329,8 @@ AI の使用量（トークンと額）を、見る人が選んだ欄で見る�
   ```
 
   `-p` には必ず `127.0.0.1:` を書く（`-p 8804:8080` と書くと LAN に開く）。
-- **確かめる**: `container list` で動いていること。`curl -s http://127.0.0.1:8804/healthz` の `status` が `ok`、`web` が `built` であること。`lsof -nP -iTCP:8804 -sTCP:LISTEN` で `127.0.0.1:8804` だけに開いていること。browser で入口（`http://127.0.0.1:8804/`）が開くこと。`container logs usagescope` に誤りの行が無いこと。castlist の版が 2.1.0 より古くないこと。
+- **起こす順**: castlist より先に起こしてもよい（聞けない間は、画面に「castlist に届きません」と訳を出す）。
+- **確かめる**: usagescope の docs の「[確かめる](https://uraitakahito.github.io/usagescope/run.html#確かめる)」を、1 から 6 まで流す（`/healthz` の `version` が起こした版（`.usagescope-version` の `@` の前）で `web` が `built` か・`127.0.0.1:8804` だけに開いているか・入口の画面・記録の頭の行）。castlist の版が 2.1.0 より古くないことも見る。
 - **止まっている時**: 使用量の画面が開けないだけで、担当の仕事と castlist は止まらない（usagescope は castlist を読むだけ）。止めるのは `roster infra run usagescope -- container stop usagescope`（「TPM に相談」の手続き）。roster を動かす機械を起こし直すと止まったままになるので、`roster infra run usagescope -- container start usagescope` で起こし、「確かめる」をする。
 - **版を上げる**: usagescope の新しい版が出て、この repo の `.usagescope-version` が上がった時（上げ方は [開発](/development/#usagescope使用量を見る画面とのつなぎ)の「usagescope を上げる時」）。castlist がその版の要る版より古ければ、先にそちらを上げる（castlist を上げるのは Product Manager）。その後、container を消して、新しい版で起こし直す（data が無いので、写しも移行も要らない）。
 - **戻す**: この repo の `.usagescope-version` を前の版に戻す PR を先に入れてから、前の版の image で起こし直す（版の file が新しいままだと、次に起こし直す時に、また新しい版で起こしてしまう）。

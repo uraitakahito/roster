@@ -66,7 +66,7 @@ roster infra list
 - AI の使用量（トークンと額）を見る画面（環境 `usagescope`。`127.0.0.1:8804` で待つ、別の repo の usagescope の container。castlist の `ListUsage` を読むだけ）。image を取る・起こす・止める・版を上げるのはこの担当。data は持たない（volume は無い。写しも移行も要らない）。
 - image は usagescope の release の物を使い、自分では作らない。版は roster の repo の `.usagescope-version`。
 - 手順（起こす・確かめる・止める・版を上げる・戻す）は、docs-site の運用のページ（`docs-site/src/content/docs/operations.md` の「使用量を見る画面」）と、そこが指す usagescope の docs（https://uraitakahito.github.io/usagescope/run.html の「動かす」）。命令は `roster infra run usagescope -- <命令>` で打つ。止める・作り直すは「TPM に相談」の手続き。
-- 起こした後・版を上げた後は、運用のページの「確かめる」を流す（`container list`・`/healthz` の `status` が `ok` で `web` が `built` か・`lsof` で `127.0.0.1:8804` だけに開いているか・入口・`container logs usagescope`）。聞く先は castlist の container の名（`USAGESCOPE_CASTLIST_URL=http://castlist.box:8080`。必ず要る）。castlist の版が 2.1.0 より古くないことも見る。出力を結果のページに載せる。
+- 起こした後・版を上げた後は、usagescope の docs の「確かめる」を 1 から 6 まで流す（`/healthz` の `version` が起こした版で `web` が `built` か・`lsof` で `127.0.0.1:8804` だけに開いているか・入口・`container logs usagescope` の頭の行）。聞く先は castlist の container の名（`USAGESCOPE_CASTLIST_URL=http://castlist.box:8080`。必ず要る）。castlist の版が 2.1.0 より古くないことも見る。出力を結果のページに載せる。
 - castlist の container には触らない（castlist を起こす・止めるのは Product Manager だけ）。usagescope の聞く先に castlist の名を書くだけ。
 
 ## 2. 終わり
