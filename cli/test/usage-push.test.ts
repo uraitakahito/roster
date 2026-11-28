@@ -117,9 +117,10 @@ describe('席が閉じる時の hook（roster castlist session-end）', () => {
       buckets: [{ bucket: 0, turns: 2, costMicroUsd: (sent[0]?.body as { costMicroUsd: number }).costMicroUsd }],
     });
     expect(sent[0]?.body).not.toHaveProperty('agent');
-    expect(sent[0]?.body).toMatchObject({ fromAt: '2026-11-20T10:05:00.000Z', toAt: '2026-11-20T10:09:59.000Z' });
-    expect(sent[1]?.body).toMatchObject({ turns: 1, fromAt: '2026-11-20T10:50:00.000Z', toAt: '2026-11-20T10:50:00.000Z' });
-    expect(sent[2]?.body).toMatchObject({ turns: 1, fromAt: '2026-11-20T11:01:00.000Z', toAt: '2026-11-20T11:01:00.000Z' });
+    // 送る本文の時刻は、秒がちょうどなら小数を書かない形（送る client の決まり）。
+    expect(sent[0]?.body).toMatchObject({ fromAt: '2026-11-20T10:05:00Z', toAt: '2026-11-20T10:09:59Z' });
+    expect(sent[1]?.body).toMatchObject({ turns: 1, fromAt: '2026-11-20T10:50:00Z', toAt: '2026-11-20T10:50:00Z' });
+    expect(sent[2]?.body).toMatchObject({ turns: 1, fromAt: '2026-11-20T11:01:00Z', toAt: '2026-11-20T11:01:00Z' });
     const state = readUsageState(se, SID);
     expect(state.n).toBe(3);
     expect(state.ids).toEqual(['m1', 'm2', 'm3', 'm4']);

@@ -410,8 +410,8 @@ export async function usageCheck(ctx: Context, options: { from?: string, to?: st
   const now = ctx.now().getTime();
   const given = { to: new Date(options.to ?? now - USAGE_CHECK_EVERY_MS), from: options.from === undefined ? undefined : new Date(options.from) };
   if (Number.isNaN(given.to.getTime()) || (given.from !== undefined && Number.isNaN(given.from.getTime()))) return ['--from・--to は、読める時刻（2026-11-27T00:00:00Z など）にしてください'];
-  // 窓の端は、時の境（UTC）に揃える。castlist の行は時計の 1 時間ごとで、窓に入るかは行の終わりの時刻で決まるので、
-  // 時の途中で切ると、端の 1 時間の行が、記録の側と castlist の側で食い違う。
+  // 窓の端は、時の境（UTC）に揃える。castlist の行は UTC の時をまたがず（今は 10 分の枠ごと。前の版の行は 1 時間ごと）、窓に入るかは
+  // 行の終わりの時刻で決まるので、時の途中で切ると、端の行（前の版の 1 時間の行）が、記録の側と castlist の側で食い違う。
   const to = hourOf(given.to);
   const from = hourOf(given.from ?? new Date(to.getTime() - WINDOW_DAYS * 24 * 60 * 60 * 1000));
   if (to.getTime() - from.getTime() > WINDOW_DAYS * 24 * 60 * 60 * 1000) return [`窓（--from から --to）は ${WINDOW_DAYS} 日までにしてください`];
