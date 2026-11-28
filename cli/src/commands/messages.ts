@@ -100,7 +100,8 @@ async function assertNotRepeat(ctx: Context, id: HeadingId, from: string, to: st
   const since = ctx.now().getTime() - REPEAT_SECONDS * 1000;
   // 返事の先を名指さずに呼んだ時（送る前の検査。返事の先は、送る所で命令が引く）は、返事の先を問わずに比べる:
   // 命令が引いた返事の先は、1 度目が頼みを済ませると 2 度目には違う物になるので、比べると 2 度送りを見逃す。
-  const same = ctx.state.lines<Sent>('log.jsonl').findLast(l => l.from === from && l.to === to && l.text === text && (replyTo === undefined || l.replyTo === replyTo));
+  // 席を起こす時の頼みの行（launch）は、送った物ではないので比べない（起こした直後に、同じ依頼書を【brief】で送り直せる）。
+  const same = ctx.state.lines<Sent>('log.jsonl').findLast(l => l.launch !== true && l.from === from && l.to === to && l.text === text && (replyTo === undefined || l.replyTo === replyTo));
   if (same === undefined || Date.parse(same.at) < since) return;
   recordGateStop(ctx, 'repeat', same.id);
   throw new TpmError(`同じ【${id}】を、${same.at} にもう送っています（id ${same.id}）。2 度目は送っていません。\n打ち直しを ; や || で 1 行に続けて書いていないか確かめてください。もう 1 度送る必要があれば、${REPEAT_SECONDS} 秒待つか、中身を変えて打つ。`);
@@ -211,6 +212,36 @@ async function deliverSent(ctx: Context, id: HeadingId, key: string, from: strin
   ctx.state.append('log.jsonl', sent);
   copyMessageRecord(ctx, sent);
   return sent;
+}
+
+/**
+ * 席を起こす時に渡した頼み（新しい席への最初の依頼書・Staff Engineer 担当の席を起こす時のレビューの頼み）を、送った記録に 1 行残し、作った id を返す。
+ * 配りの口には置かない（中身は、起こす時の依頼書で渡してある）。行は印（launch）を持ち、置き場には「ほかの道具で運んだ」（carried）の記録として写る。
+ * 返事（最初の【done】・【review】）が、この行を返事の先にする。依頼書の数え・まだ見ていない物には数えない（openBriefs・unsettled）。
+ * seat は起こした席の名簿の行（宛先が書いてある物）。key は記録の行の Key（【brief】は受け手の Key、【ask-review】は頼んだ課題の担当の Key。送る時と同じ）。
+ * asker は、頼んだ担当（無ければ、命令を打った担当）。TPM 担当が Staff Engineer 担当の席を起こし直す時も、頼みの送り手は課題の担当にする
+ * （送り手の名 from と、送り手の担当 sender を食い違わせない）。
+ * replyTo は、この行が閉じる前の頼み（返っていない頼みのまま席を起こし直した時の、元の【ask-review】）。
+ */
+export function recordLaunchAsk(ctx: Context, id: 'brief' | 'ask-review', key: string, from: string, seat: RoleRecord, body: string, asker?: RoleRecord, replyTo?: string): string {
+  const sent: Sent = {
+    at: ctx.now().toISOString(),
+    key,
+    heading: id,
+    from,
+    to: seat.address ?? '',
+    ...(replyTo === undefined ? {} : { replyTo }),
+    ...(id === 'ask-review' ? { peer: true as const } : {}),
+    sender: asker === undefined ? selfParty(ctx.env) : partyOf(asker),
+    recipient: partyOf(seat),
+    carrier: 'launch',
+    launch: true,
+    text: message(id, body),
+    id: randomUUID(),
+  };
+  ctx.state.append('log.jsonl', sent);
+  copyMessageRecord(ctx, sent);
+  return sent.id;
 }
 
 /** 担当から TPM 担当へ。 */

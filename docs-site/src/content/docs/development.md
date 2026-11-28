@@ -59,7 +59,7 @@ build は無い。`cli/bin/roster` は `cli/src/cli.ts` を node で直に動か
 
 - **合わせる版**: `.pagetray-version` に、合わせる pagetray の版を `v<版>@<image の digest>` の形で書く（digest は pagetray の release にある。今は `v2.0.0`）。[運用](/operations/#ページの置き場pagetray)で起こす image も、この版。つなぎの試験（下の「[つなぎの試験](#つなぎの試験)」）が、この版の image に向けて流す。
 - **送った記録の写し**: メッセージを送るたびに（`cli/src/commands/messages.ts` の `deliver`）、送った記録（`log.jsonl` の 1 行）を、置き場に `PutMessage`（`PUT /api/projects/<状態の folder の名>/messages/<メッセージの id>`。pagetray 1.1.0 から）で 1 件置く。Product Manager は、メッセージの記録の画面（callboard の `http://127.0.0.1:8803/messages`。callboard 0.3.0 から）で、誰が誰に何を送ったかを見る。
-  - 状態は、送った時は `waiting`（届くのを待っている）。受け手の hook が渡した時・届かないまま終わった時に、受け手の側と TPM 担当の側が書き足す（`delivered`・`undeliverable`・`expired`）。`carried`（ほかの道具で運んだ）は、前の版で cmux が運んだ行（`carrier` の無い行）の状態で、届いたかは置き場に書いていない。
+  - 状態は、送った時は `waiting`（届くのを待っている）。受け手の hook が渡した時・届かないまま終わった時に、受け手の側と TPM 担当の側が書き足す（`delivered`・`undeliverable`・`expired`）。`carried`（ほかの道具で運んだ）は、席を起こす時の依頼書で渡した頼みの行（`carrier` が `launch`）と、前の版で cmux が運んだ行（`carrier` の無い行）の状態で、届いたかは置き場に書いていない。
   - 置き場の記録の `from`・`to` は、担当の Key（人が読む名。TPM 担当は `tpm`）。置き場は初めの値から替えないので、頼みのたびに替わる居場所の題では書かない。配りの受け手の名（Key と起こした回の組。`cli/src/mail.ts` の `recipientName`）とは別。送り手の組の無い前の版の行だけ居場所の題に、届く担当の分からない行は宛先の字に落とす。200 字を超える名は頭の 200 字に切り、空になる時は写さない。
   - **写せなくても、送りは止めない**。置き場が応えない・古い版（操作を持たない 404）・形の誤り（400）のどれでも、誤りを投げず、画面にも出さず、状態の folder の `message-records.jsonl` に 1 行（時刻・id・訳）だけ残す。写せた時は残さない。メッセージの id の形が置き場の決まり（英数字と `.`・`_`・`-` で 128 字まで）に合わない時は、字を替えずに、写さない（これも 1 行残す）。置き場が 2xx を返したのに答えを読めない時は、応えない時と分けて「答えを読めない（置けたかは分からない）」と残す。
   - 送り手の付随する id を付けた要求を、置き場が castlist に聞けない（503）・castlist に登録が無いと断った（400 の `/actorRef`）時は、付随する id を外して 1 度だけ置き直す（送り手が空の記録になる）。置けたら、`message-records.jsonl` の行に `"placed": "without-sender"` を付けて残す（この欄の無い行は、写せなかった回）。

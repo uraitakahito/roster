@@ -29,7 +29,8 @@ async function morning(): Promise<World & { texts: string[] }> {
   return { ...w, texts };
 }
 
-const log = (w: World): Sent[] => w.tpm.state.lines<Sent>('log.jsonl');
+/** 送ったメッセージの行（席を起こす時の頼みの行は除く）。 */
+const log = (w: World): Sent[] => w.tpm.state.lines<Sent>('log.jsonl').filter(l => l.launch !== true);
 
 describe('送りの記録に、送り手と届く担当を書く', () => {
   test('TPM 担当 → 担当は名簿の Key と起こし、担当 → TPM 担当は tpm。箱は、届く担当の受け手の名（起こした回が入る）', async () => {

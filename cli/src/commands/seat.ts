@@ -11,7 +11,7 @@ import { isRepoSeat, noteRepoSeat, readRole, repoSeatKey, repoSeats, requireSelf
 import { resolveSettings } from '../settings.ts';
 import { skillSetDir, TpmError } from '../skill-sets.ts';
 import { launch, roleDefaults } from './launch.ts';
-import { assertRead, assertSettled, brief, dismissSeat, notifySeat, type Sent } from './messages.ts';
+import { assertRead, assertSettled, brief, dismissSeat, issueCopyLine, notifySeat, recordLaunchAsk, type Sent } from './messages.ts';
 import { openReviews, patchReview } from '../reviews.ts';
 import { markWithdrawn } from './review-marks.ts';
 import { closeWithChildren } from './tpm-side.ts';
@@ -89,7 +89,9 @@ export async function seatAdd(ctx: Context, name: string, options: SeatAddOption
   };
   const sid = ctx.env.CLAUDE_CODE_SESSION_ID;
   noteRepoSeat(ctx, self.key, key);
-  return await launch(ctx, record, existing !== undefined, options.wait, [`名簿の Key: ${key}`, ...skew], sid ? sessionRef(sid) : undefined);
+  // 起こす時に渡した依頼書を、送った記録に残す（席の最初の【done】の返事の先になる）。送り手は Tech Lead 担当。
+  const spawned = (seat: RoleRecord): void => void recordLaunchAsk(ctx, 'brief', seat.key, self.title, seat, [options.brief, issueCopyLine(seat)].filter(v => v !== undefined).join(' '));
+  return await launch(ctx, record, existing !== undefined, options.wait, [`名簿の Key: ${key}`, ...skew], sid ? sessionRef(sid) : undefined, undefined, spawned);
 }
 
 /** 自分の課題の repo の席の、名簿の行。無ければ止まる。 */

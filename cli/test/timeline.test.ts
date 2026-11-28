@@ -102,11 +102,11 @@ describe('roster incident timeline', () => {
     const out = await incidentTimeline(w.tpm, '#1', { minutes: 1 });
     const url = readIncidents(w.tpm)[0]?.timeline ?? '';
     expect(url).toMatch(/\/t-x7k2\/timeline-1\.html$/);
-    expect(out).toEqual([`時系列を置いた（5 行）: ${url}`, '件に結んだ: #1']);
+    expect(out).toEqual([`時系列を置いた（6 行）: ${url}`, '件に結んだ: #1']);
     const page = [...w.store.pages.values()].find(p => p.record.kind === 'timeline');
     expect(page?.record).toMatchObject({ key: 't-x7k2', kind: 'timeline', role: 'tpm', title: '台帳 #1（t-x7k2）の時系列' });
     const html = page?.body.toString() ?? '';
-    expect(html).toContain('引き金のメッセージ（12:01:00）の前後 1 分の、t-x7k2 の記録（5 行）。');
+    expect(html).toContain('引き金のメッセージ（12:01:00）の前後 1 分の、t-x7k2 の記録（6 行）。');
     expect(html).toContain('<tr class="trigger"><td class="t">2026-11-20<br>12:01:00</td>');
     expect(html).toContain('<span class="cross">行き違い: これが届く前に、相手が 1 件送った（【merged】12:02:00）</span>');
     // 前後 1 分の外（12:02:30 の wait）は入らない。字は HTML として安全にする
@@ -116,7 +116,7 @@ describe('roster incident timeline', () => {
 
   test('課題の Key: その Key の記録をみな拾う。件には結ばない', async () => {
     const w = await crossed();
-    expect((await incidentTimeline(w.tpm, 't-x7k2'))[0]).toMatch(/^時系列を置いた（6 行）: .*\/t-x7k2\/timeline-1\.html$/);
+    expect((await incidentTimeline(w.tpm, 't-x7k2'))[0]).toMatch(/^時系列を置いた（7 行）: .*\/t-x7k2\/timeline-1\.html$/);
     expect((await incidentTimeline(w.se, 't-x7k2'))[0]).toMatch(/timeline-2\.html$/);
   });
 
@@ -126,10 +126,10 @@ describe('roster incident timeline', () => {
     w.tpm.now = clock('13:00:00');
     incidentAdd(w.tpm, 't-x7k2', { text: 'x', type: 'safety', tags: [], severe: false });
     incidentAdd(w.tpm, 't-x7k2', { text: 'y', type: 'safety', tags: [], msg: 'no-such-id', severe: false });
-    expect((await incidentTimeline(w.tpm, '1', { minutes: 5 }))[0]).toMatch(/^時系列を置いた（8 行）/);
+    expect((await incidentTimeline(w.tpm, '1', { minutes: 5 }))[0]).toMatch(/^時系列を置いた（9 行）/);
     await incidentTimeline(w.tpm, '2', { minutes: 5 });
     const [first, second] = [...w.store.pages.values()].filter(p => p.record.kind === 'timeline').map(p => p.body.toString());
-    expect(first).toContain('引き金のメッセージが書かれていないので、t-x7k2 の初めから、件を書いた時刻（13:00:00）の 5 分後までの記録を並べた（8 行）。');
+    expect(first).toContain('引き金のメッセージが書かれていないので、t-x7k2 の初めから、件を書いた時刻（13:00:00）の 5 分後までの記録を並べた（9 行）。');
     expect(first).toContain('【ask-tpm】tag を打ってよいか');
     expect(second).toContain('引き金のメッセージが（id no-such-id）log.jsonl に無いので、');
     await expect(incidentTimeline(w.tpm, 't-zzzz')).rejects.toThrow(/t-zzzz の記録がありません/);

@@ -1,5 +1,5 @@
 // 送った記録を置き場に写す（commands/message-record.ts）: 送るたびに、log.jsonl の 1 行を PutMessage で 1 件置く。写せなくても、送りは止めない。
-import { existsSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { Command } from 'commander';
@@ -30,6 +30,12 @@ async function started(): Promise<World & { se: Context, project: string }> {
   const base = w.role('t-x7k2', 'file:1');
   const se = { ...base, root: staffRoot(), env: { ...base.env, ROSTER_ROLE: 'software-engineer' } };
   await hello(se);
+  // 席を起こす時の頼みの行（launch）と、その写しを、ここで片付ける（下の試験は、送る命令 1 つの写しを見る。行そのものは、下の「席を起こす時の頼みの行」で見る）。
+  await messageRecordsSettled();
+  w.store.messages.clear();
+  w.store.messagePuts.length = 0;
+  rmSync(join(w.tpm.state.dir, 'log.jsonl'), { force: true });
+  rmSync(join(w.tpm.state.dir, MESSAGE_RECORDS_FILE), { force: true });
   return { ...w, tpm, se, project: basename(w.tpm.state.dir) };
 }
 
@@ -44,6 +50,17 @@ const notes = (w: World): MessageRecordNote[] => w.tpm.state.lines<MessageRecord
 const seated = (ctx: Context): Context => ({ ...ctx, env: { ...ctx.env, ROSTER_CASTLIST_URL: 'http://127.0.0.1:8802', CLAUDE_CODE_SESSION_ID: 's-1' } });
 
 describe('送った記録を置き場に写す', () => {
+  test('席を起こす時の頼みの行: 「ほかの道具で運んだ」（carried）で置く。送り手は TPM 担当の名、受け手は起こした席の Key。届いたかは書かない', async () => {
+    const w = world();
+    await hello(w.tpm, TPM);
+    await assign(w.tpm, 't-x7k2', { role: 'software-engineer', title: '計画と実装', brief: BRIEF, wait: 0 });
+    const [sent] = log(w);
+    expect(sent).toMatchObject({ heading: 'brief', key: 't-x7k2', to: 'file:1', text: `【brief】${BRIEF}`, carrier: 'launch', launch: true, recipient: { key: 't-x7k2' } });
+    expect(await records(w.store)).toMatchObject([{ id: sent?.id, key: 't-x7k2', heading: 'brief', from: TPM_PARTY, to: 't-x7k2', text: `【brief】${BRIEF}`, state: 'carried' }]);
+    // 配りの口には置いていない。
+    expect(w.posted('t-x7k2')).toEqual([]);
+  });
+
   test('TPM 担当 → 担当: 1 件を waiting（届くのを待っている）で置く。送り手は TPM 担当の名（TPM_PARTY）、受け手は担当の Key、id と時刻は送った記録の物', async () => {
     const w = await started();
     await notify(w.tpm, 't-x7k2', { text: 'A で進める' });

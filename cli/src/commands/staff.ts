@@ -12,7 +12,7 @@ import { isRepoSeat, readRole, staffKey, subjectOf, writeRole, type RoleRecord }
 import { resolveSettings, type SettingsLayer } from '../settings.ts';
 import { skillSetDir, TpmError } from '../skill-sets.ts';
 import { issueCopy, launch, NotStartedError, roleDefaults } from './launch.ts';
-import { notAuditor, notRepeatToPeer, oneLine, record, sender, showWait, toPeer, wait } from './messages.ts';
+import { notAuditor, notRepeatToPeer, oneLine, record, recordLaunchAsk, sender, showWait, toPeer, wait } from './messages.ts';
 import { putPage } from './page.ts';
 import { pageOwner } from './reply.ts';
 import { markBrief, markVerdict } from './review-marks.ts';
@@ -164,7 +164,17 @@ export async function launchStaff(ctx: Context, subject: RoleRecord, asks: Revie
   const before = readRole(ctx, seat.key)?.address;
   let out: string[];
   try {
-    out = await launch(ctx, seat, options.again, options.wait, [...(options.more?.(issue) ?? []), ...skew], sid ? sessionRef(sid) : undefined, label.description);
+    // 起こす時に渡した頼みを、送った記録に残す（依頼書 1 つに 1 行。判定は依頼書ごとに 1 通で返るので、その返事の先になる）。
+    // 返っていない頼みのまま起こし直した時は、新しい行が、元の頼み（前に渡した【ask-review】のうち、いちばん古い物）を返事の先に持つ
+    // （頼みが、前の頼みを閉じる。元の頼みが、返事の無いまま残らない）。頼みの ask は、みな新しい行に替える（判定は、新しい行に返る）。
+    const spawned = (made: RoleRecord): void => {
+      const last = asks.at(-1);
+      if (last === undefined) return;
+      const before = asks.find(r => r.ask !== undefined)?.ask;
+      const id = recordLaunchAsk(ctx, 'ask-review', subject.key, subject.title, made, `${briefUrl} 頼み: ${asks.map(r => `#${r.n}`).join(' ')} ${last.url}`, subject, before);
+      for (const r of asks) patchReview(ctx, r.n, { ask: id });
+    };
+    out = await launch(ctx, seat, options.again, options.wait, [...(options.more?.(issue) ?? []), ...skew], sid ? sessionRef(sid) : undefined, label.description, spawned);
     markDelivered(ctx, asks, seat);
   }
   catch (e) {

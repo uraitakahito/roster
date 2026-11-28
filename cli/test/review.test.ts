@@ -76,7 +76,11 @@ describe('roster ask review（席が無い時: 命令が席を起こす）', () 
     const html = readFileSync((await pagePath(w.tpm, brief))[0] ?? '', 'utf8');
     expect(html).toContain('<section id="summary">');
     for (const part of ['頼み #1', w.plan, '名簿の Key の決め方', SE_TITLE, BRIEF]) expect(html, part).toContain(part);
-    expect(readReviews(w.tpm)).toEqual([{ n: 1, key: 'AI-8', url: w.plan, focus: '名簿の Key の決め方', by: SE_TITLE, askedAt: '2026-11-20T12:00:00.000Z', brief }]);
+    // 席を起こす時の頼みは、送った記録に印の行で残り、その id が頼みの記録に入る（判定の返事の先になる）。配りの口には置かない
+    const launched = w.tpm.state.lines<{ id: string, heading: string, key: string, to: string, text: string, launch?: true, peer?: true, carrier?: string }>('log.jsonl').find(l => l.heading === 'ask-review');
+    expect(launched).toMatchObject({ key: 'AI-8', to: 'file:2', text: `【ask-review】${brief} 頼み: #1 ${w.plan}`, launch: true, peer: true, carrier: 'launch' });
+    expect(w.posted('file:2')).toEqual([]);
+    expect(readReviews(w.tpm)).toEqual([{ n: 1, key: 'AI-8', url: w.plan, focus: '名簿の Key の決め方', by: SE_TITLE, askedAt: '2026-11-20T12:00:00.000Z', brief, ask: launched?.id }]);
     expect(w.wire.status('file:1')?.wait).toBe('回答待ち(レビュー): 計画 plan-1');
   });
 
