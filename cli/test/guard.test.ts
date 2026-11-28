@@ -647,6 +647,8 @@ describe('担当の席の素の git push（t-fcp8。監査 audit-2 の R15）', 
     // 消すだけの形に見えて、ほかの語が並ぶ・消してはいけない名（review-2 の指摘 3）。
     'git push origin -fd x',
     'git push origin --delete --forc x',
+    'git push -q origin --delete --force x',
+    'git push --qui origin --delete x',
     'git push origin --delete main',
     'git push origin -d master',
     'git push origin :main',
@@ -678,6 +680,10 @@ describe('担当の席の素の git push（t-fcp8。監査 audit-2 の R15）', 
     'git push origin :t-x/impl',
     'git push origin --delete refs/heads/t-x/impl',
     'git push origin --delete v2-cleanup',
+    // 台帳 #430（t-qx3r の片付け）: -C・-q・branch をいくつも並べる消すだけの形。
+    'git -C /w/roster push -q origin --delete t-x/a t-x/b t-x/c',
+    'git push --quiet origin -d t-x/a',
+    'git push -v origin :t-x/a',
     'git commit -m "git push"',
     'git commit -m "roster push の前に git push を打たない"',
     'echo git push',
@@ -693,6 +699,10 @@ describe('担当の席の素の git push（t-fcp8。監査 audit-2 の R15）', 
   test('役割の無い session（Product Manager の terminal・TPM 担当の席）の push は止めない', () => {
     expect(ask('git push origin v1.2.3', undefined)).toEqual({ allow: true });
     expect(ask('pnpm run check; git push', undefined)).toEqual({ allow: true });
+  });
+
+  test('止めた訳の終了コード 2 は、fetch の落ちも言う（skill・docs と同じ字）', () => {
+    expect(ask('git push', 'software-engineer')).toEqual({ allow: false, reason: expect.stringContaining('2 git fetch か git push が落ちた（fetch なら確かめは流していない）') as string });
   });
 
   test('読むだけの担当には、今までの「repo を変えません」が先に当たる', () => {
@@ -731,8 +741,22 @@ describe('Auditor は repo を変えない', () => {
     ['gh pr merge 141 --squash', false],
     // 手元の checkout と GitHub の側の branch を変える（t-xdmv）。
     ['gh pr checkout 141', false],
+    ['gh co 141', false],
+    ['gh co 141 --detach', false],
+    ['gh pr -R o/r checkout 141', false],
+    ['gh pr --repo o/r checkout 141', false],
+    ['gh pr --repo=o/r merge 141', false],
+    ['gh pr -Ro/r review 141 --approve', false],
+    ['gh issue -R o/r develop 12 --checkout', false],
     ['gh pr update-branch 141', false],
     ['gh pr revert 141', false],
+    ['gh pr lock 141', false],
+    ['gh repo set-default o/r', false],
+    ['gh cache delete --all', false],
+    // 旗を前に置いた読む命令と、co で始まる別の命令は通す。
+    ['gh pr -R o/r view 141', true],
+    ['gh pr --repo o/r checks 141', true],
+    ['gh codespace list', true],
     ['gh release create v1', false],
     ['gh api -X POST repos/o/r/rulesets', false],
     ['gh api --method=PUT repos/o/r/pages', false],
@@ -752,6 +776,7 @@ describe('Auditor は repo を変えない', () => {
     expect(ask('git commit -m x && git push origin --delete t-x/impl', 'software-engineer').allow).toBe(true);
     expect(ask('gh pr merge 141 --squash').allow).toBe(true);
     expect(ask('gh pr checkout 141', 'software-engineer').allow).toBe(true);
+    expect(ask('gh co 141', 'software-engineer').allow).toBe(true);
     expect(ask('gh pr checkout 141').allow).toBe(true);
     expect(ask('git -C /w/skills pull --ff-only', 'auditor')).toEqual({ allow: false, reason: expect.stringContaining('Auditor は repo を変えません（git -C /w/skills）。直すことは、監査のページの勧告に') as string });
   });
@@ -801,6 +826,9 @@ describe('Staff Engineer 担当は repo を変えない', () => {
     ['gh pr merge 141 --squash', false],
     ['gh pr checkout 141', false],
     ['gh pr checkout https://github.com/o/r/pull/141 --detach', false],
+    ['gh co 141', false],
+    ['gh pr -R o/r checkout 141', false],
+    ['gh pr -R o/r diff 141', true],
     ['ROSTER_RAW=1 git push', false],
     // 命令の名の途中の置き換え（t-ta2b の review-2 の指摘 2）。
     ['git$(true) push', false],

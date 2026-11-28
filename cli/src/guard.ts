@@ -95,8 +95,25 @@ const GIT_READ_ARGS: Record<string, RegExp> = {
   tag: /^(?:-l|-n\d*|--list)$/,
   worktree: /^list$|^--porcelain$/,
 };
-/** gh の、変える命令（`gh <語> <語>` の 2 語）。`gh pr checkout` は手元の checkout を、`update-branch`・`revert` は GitHub の側を変える（t-xdmv）。 */
-const GH_CHANGES = /^gh (?:pr (?:create|merge|close|edit|ready|reopen|review|comment|checkout|update-branch|revert)|issue (?:create|edit|delete|reopen|close|comment)|release (?:create|delete|edit|upload)|repo (?:create|delete|edit|rename|archive|sync)|workflow (?:run|enable|disable)|run (?:rerun|cancel|delete)|(?:secret|variable|label) (?:set|delete|create|edit))\b/;
+/**
+ * gh の、変える命令（`gh <語> <語>` の 2 語。`-R`・`--repo` を除いた語で当てる。ghWords）。
+ * 手元の checkout か git の設定を変える物（`pr checkout` と gh が初めから持つ別名の `co`・`issue develop`・`repo set-default`）と、GitHub の側を変える物（t-xdmv）。
+ */
+const GH_CHANGES = /^gh (?:co|pr (?:create|merge|close|edit|ready|reopen|review|comment|checkout|update-branch|revert|lock|unlock)|issue (?:create|edit|delete|reopen|close|comment|develop|transfer|pin|unpin|lock|unlock)|release (?:create|delete|edit|upload)|repo (?:create|delete|edit|rename|archive|sync|fork|set-default)|workflow (?:run|enable|disable)|run (?:rerun|cancel|delete)|cache delete|(?:secret|variable|label) (?:set|delete|create|edit))\b/;
+/** gh の、repo を名指す旗（値を次の語に取る形と、`-Ro/r`・`--repo=o/r` の形）。小命令の前にも置けるので、当てる前に除く（t-xdmv）。 */
+const GH_REPO_FLAG = /^(?:-R|--repo)$/;
+const GH_REPO_JOINED = /^(?:-R.|--repo=)/;
+
+/** gh の命令の語から、repo を名指す旗（GH_REPO_FLAG）とその値を除く（`gh pr -R o/r checkout 1` を `gh pr checkout 1` と読む）。 */
+function ghWords(words: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < words.length; i += 1) {
+    const word = words[i] ?? '';
+    if (i > 0 && GH_REPO_FLAG.test(word)) i += 1;
+    else if (i === 0 || !GH_REPO_JOINED.test(word)) out.push(word);
+  }
+  return out;
+}
 /** gh api の、書き込みになる旗（-X GET のほかの method と、欄を送る旗。欄を送ると POST になる）。 */
 const GH_API_WRITES = /^(?:-f|-F|--field|--raw-field|--input)$/;
 
@@ -118,13 +135,17 @@ function changesRepo(words: string[]): boolean {
     return read !== undefined && git.args.some(a => !read.test(a));
   }
   if (words[0] !== 'gh') return false;
-  if (GH_CHANGES.test(words.join(' '))) return true;
-  if (words[1] !== 'api') return false;
-  const args = words.slice(2);
+  const gh = ghWords(words);
+  if (GH_CHANGES.test(gh.join(' '))) return true;
+  if (gh[1] !== 'api') return false;
+  const args = gh.slice(2);
   const method = args.findIndex(a => a === '-X' || a === '--method');
   const named = args.find(a => /^(?:-X|--method=)./.test(a))?.replace(/^(?:-X|--method=)/, '') ?? (method === -1 ? undefined : args[method + 1]);
   return (named !== undefined && named.toUpperCase() !== 'GET') || (named === undefined && args.some(a => GH_API_WRITES.test(a)));
 }
+
+/** 消すだけの push に並べてよい、出力の量だけを替える旗（字のまま。略しは数えない）。 */
+const QUIET_FLAGS = new Set(['-q', '--quiet', '-v', '--verbose']);
 
 /** 消すだけの push で、消してはいけない名（既定の branch と、release の tag の版の形 v1.2.3・1.2.3。review-9 の提案 3）。 */
 const KEEP_REFS = /^(?:main|master|HEAD|refs\/tags\/.*|v?\d+\.\d+.*)$/;
@@ -135,7 +156,8 @@ const KEEP_REFS = /^(?:main|master|HEAD|refs\/tags\/.*|v?\d+\.\d+.*)$/;
  * （`-fd` のまとめ・`--forc` などの略しも、並べた形に無いので外れる。review-2 の指摘 3）。消す名が既定の branch・tag の形なら外す。
  */
 function deletesOnly(args: string[]): boolean {
-  const flags = args.filter(a => a.startsWith('-'));
+  // 出力の量だけを替える旗は、並べてよい（t-qx3r の片付けの -q が止まった。台帳 #430）。略しは数えない。
+  const flags = args.filter(a => a.startsWith('-') && !QUIET_FLAGS.has(a));
   const words = args.filter(a => !a.startsWith('-'));
   const [remote, ...names] = words;
   if (remote === undefined || remote.startsWith(':') || names.length === 0) return false;
@@ -908,7 +930,7 @@ export function judge(asked: Asked): Verdict {
   // 担当の席の push は roster push で（t-fcp8）。ROSTER_RAW=1 でも外さない（確かめを外す道にしない）。役割の無い session（Product Manager の terminal・TPM 担当の席。TPM 担当は repo を触らない）には効かない。
   const bare = asked.role === undefined ? undefined : pushesBare(asked.command);
   if (bare !== undefined) {
-    return { allow: false, reason: `push は roster push で打ってください（${bare.slice(0, 3).join(' ')}）。roster push は repo に宣言した確かめをみな流し、みな通った時だけ、確かめた commit を push します（Bash の run_in_background で起こして手を止め、終了コードで結果を見る: 0 push した・10 確かめが落ちた・1 断った・2 git push が落ちた）。release の tag は roster push --tag <tag>。branch を消す push（git push origin --delete <branch>）はそのまま打てます。` };
+    return { allow: false, reason: `push は roster push で打ってください（${bare.slice(0, 3).join(' ')}）。roster push は repo に宣言した確かめをみな流し、みな通った時だけ、確かめた commit を push します（Bash の run_in_background で起こして手を止め、終了コードで結果を見る: 0 push した・10 確かめが落ちた・1 断った・2 git fetch か git push が落ちた（fetch なら確かめは流していない））。release の tag は roster push --tag <tag>。branch を消す push（git push origin --delete <branch>）はそのまま打てます。` };
   }
   if (!asked.command.includes(RAW)) {
     const heads = commands.map(words => words.join(' '));

@@ -170,7 +170,7 @@ describe('roster page put（CreatePage）', () => {
   test('送り手が castlist に無い（400 の fieldList に /actorRef）・置き場が castlist に聞けない（503）は、送り手の訳で止まる', async () => {
     const unknown = setup(() => ({ status: 400, type: 'ValidationException', body: 'castlist に登録の無い送り手', fieldList: [{ path: '/actorRef', message: 'castlist に登録の無い送り手' }] }), { castlist: 'http://127.0.0.1:1' });
     const at = (s: typeof unknown): Context => ({ ...s.role, env: { ...s.role.env, CLAUDE_CODE_SESSION_ID: SID } });
-    expect(await thrown(() => pagePut(at(unknown), unknown.html, { kind: 'plan' }))).toBe(`この session（claude.session:${SID}）は castlist に登録が無いと、置き場が答えました（400）。ページは置けていません。session は guard が Bash の前に登録するので、打ち直してください。続く時は roster report incident で台帳に挙げてください`);
+    expect(await thrown(() => pagePut(at(unknown), unknown.html, { kind: 'plan' }))).toBe(`この session（claude.session:${SID}）は castlist に登録が無いと、置き場が答えました（400）。ページは置けていません。session は guard が Bash・Monitor の前に登録するので、打ち直してください。続く時は roster report incident で台帳に挙げてください`);
     const busy = setup(() => ({ status: 503, type: 'Unavailable', body: 'castlist に聞けない' }), { castlist: 'http://127.0.0.1:1' });
     expect(await thrown(() => pagePut(at(busy), busy.html, { kind: 'plan' }))).toMatch(/^置き場（http:\/\/127\.0\.0\.1:8801）が castlist に送り手を聞けませんでした（503）。ページは置けていません。/);
     // ほかの欄の 400 は、送り手の訳にしない。

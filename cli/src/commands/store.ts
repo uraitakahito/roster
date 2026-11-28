@@ -247,7 +247,7 @@ export function senderRefused(ctx: Context, query: URLSearchParams, reply: Pick<
   const ref = query.get('actor_ref');
   if (ref === null) return undefined;
   if (code === '503') return new TpmError(`置き場（${pagesUrl(ctx.env)}）が castlist に送り手を聞けませんでした（503）。${what}。castlist が起きてから打ち直してください。続く時は roster report incident で台帳に挙げてください`);
-  if (reply.unknownSender === true) return new TpmError(`この session（${ref}）は castlist に登録が無いと、置き場が答えました（${code}）。${what}。session は guard が Bash の前に登録するので、打ち直してください。続く時は roster report incident で台帳に挙げてください`);
+  if (reply.unknownSender === true) return new TpmError(`この session（${ref}）は castlist に登録が無いと、置き場が答えました（${code}）。${what}。session は guard が Bash・Monitor の前に登録するので、打ち直してください。続く時は roster report incident で台帳に挙げてください`);
   return undefined;
 }
 

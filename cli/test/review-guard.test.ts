@@ -196,6 +196,8 @@ describe('どの席の guard も Monitor の命令を見る（台帳 #416）', (
     const w = world({});
     const seat = { ...w.role('t-x7k2', 'file:2'), env: { ROSTER_KEY: 't-x7k2', ROSTER_ROLE: role } };
     expect(await guard(seat, monitor('gh pr checkout 141'))).toEqual({ allow: false, reason: expect.stringContaining('repo を変えません（gh pr checkout）') as string });
+    expect((await guard(seat, monitor('gh co 141'))).allow).toBe(false);
+    expect((await guard(seat, monitor('gh pr -R o/r checkout 141'))).allow).toBe(false);
     expect((await guard(seat, monitor('gh pr checks 141 --watch'))).allow).toBe(true);
   });
 });
