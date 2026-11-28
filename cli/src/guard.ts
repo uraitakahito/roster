@@ -8,14 +8,15 @@
 // (5) Audit の席を起こす命令（roster audit start。起こすのは Product Manager）。
 // (6) pattern で選んだ process に合図を送る命令（pkill・killall と、pid を名指さない kill。どの席からも。台帳 #89・#92）。
 // (1) は、命令を単純な命令に分けて match の語で当て、語で当たらなくても命令の字全体に match の字が含まれれば止める（共有の環境は、疑わしければ止める）。
-//     字の含みだけの当たりを通すのは、命令がみな引数の字を命令として動かさない物（roster・git commit・grep・rg）で、書き出しも無い時だけ（touched）。
+//     字の含みだけの当たりを通すのは、どの単純な命令も、引数も入力も命令として動かさない道具の表（cat・grep・tail・roster・git の読む命令など。字を動かす旗は外す）か、
+//     命令を起こす呼び出しの字の無い python・node の時だけ（textStays。t-y67q の案 B）。
 // (2)〜(6) の shell の命令は、単純な命令に分け、その頭（実際に打つ道具の命令）だけを見る。commit の文・grep の型・here-document に道具の名が入っても止めない。
 // どれも字で見るので、防げるのは「うっかり」まで。script に包んだ命令や、shell の redirect での書き込みはすり抜ける。確実な守りは、担当に渡す権限の方で行う。
 import { existsSync, realpathSync } from 'node:fs';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { envLabel, type InfraEnv, type RolesConfig } from './config.ts';
 import type { RoleName } from './protocol.ts';
-import { rawCommands, shellQuote, splitCommands, splitCommandsMarked, SUBSTITUTED } from './shell.ts';
+import { rawCommands, scanCommand, shellQuote, splitCommands, splitCommandsMarked, SUBSTITUTED } from './shell.ts';
 import type { State } from './state.ts';
 
 /** 環境を変えてよい担当。 */
@@ -205,7 +206,7 @@ export function hitsWords(words: string[], match: string): boolean {
 
 /**
  * 引数の字を命令として動かさないと分かっている単純な命令（語の頭が path・頭の代入・前置きの語の無い形だけ）。
- * 字の含みだけで match に当たる命令を通してよいのは、どの単純な命令もこれに当たる時（#253 の roster file put … --name callboard-x.png など）。
+ * 粗い区切りの当たりを外す quietForSegments が使う（字の含みを外す条件は、広い表の passesText。t-y67q）。
  * 字を命令として動かす道は道具の数だけあるので、止める側を並べず、通す側を要る物だけ並べる（t-7j37 の review-5）。
  */
 function inert(words: string[]): boolean {
@@ -238,14 +239,142 @@ function quietForSegments(words: string[]): boolean {
   return inert(words);
 }
 
+/** 引数も入力も命令として動かさない道具（字を出す・読む・比べる・並べる・場所を移す）。字を動かす旗のある道具は TEXT_FLAGS で外す。 */
+const TEXT_TOOLS = new Set(['cat', 'echo', 'printf', 'tee', 'head', 'tail', 'wc', 'sort', 'uniq', 'cut', 'tr', 'diff', 'ls', 'cd', 'pwd', 'mkdir', 'test', '[', 'true', 'false', 'date', 'jq', 'basename', 'dirname', 'realpath', 'grep', 'rg']);
+/** 表の道具の、値を命令として動かす長い旗（頭の 3 字以上の略も当てる）。 */
+const TEXT_FLAGS: Record<string, string[]> = { sort: ['--compress-program'], rg: ['--pre', '--pre-glob'] };
+/** git の、字を命令として動かさない命令。 */
+const GIT_TEXT = new Set(['commit', 'grep', 'show', 'log', 'diff', 'status', 'rev-parse', 'ls-files', 'blame']);
+/** git の、命令の前に置くと設定の字を命令にする旗（-c は丸ごと、ほかは略も当てる）。 */
+const GIT_CONFIG_FLAGS = ['--config-env', '--exec-path'];
+/** git の、pager や外の道具を動かす旗（命令の後ろ。略も当てる）。grep の -O は束ねた短い旗（-nO…）も当てる。 */
+const GIT_RUN_FLAGS = ['--open-files-in-pager', '--ext-diff', '--textconv'];
+/** gh の、字を命令として動かさない命令（`gh <語> <語>`）。 */
+const GH_TEXT = /^(?:pr (?:create|comment|edit|review|view|ready|checks|diff|list)|issue (?:create|comment|edit|view|list)|release (?:create|edit|view|list)|run (?:view|list))$/;
+/** pnpm の、package.json の script を動かすだけの命令（知らない語は script か exec として動くので並べない）。 */
+const PNPM_TEXT = new Set(['test', 't', 'run']);
+/** pnpm の命令の前に置いてよい旗（閉じて並べる）と、そのうち値を取る旗。 */
+const PNPM_FLAGS = new Set(['-C', '--dir', '--filter', '-F', '-r', '--recursive', '-s', '--silent']);
+const PNPM_VALUE_FLAGS = new Set(['-C', '--dir', '--filter', '-F']);
+/** npx で動かしてよい道具（この repo の道具。zx・tsx などは字を動かす）。 */
+const NPX_TEXT = new Set(['vitest', 'tsc', 'eslint', 'prettier', 'typedoc']);
+/** npx の的の前に置いてよい旗（npm の設定はどれも旗で渡せ、--node-options などが字を動かすので、閉じて並べる。review-3 の指摘 2）。 */
+const NPX_FLAGS = new Set(['--yes', '-y', '--no']);
+/** 環境変数を読んで字を命令として動かしうる道具（EDITOR・GIT_EDITOR・PAGER・NODE_OPTIONS・PYTHONSTARTUP など）。代入だけの命令と並べない（review-3 の指摘 1）。 */
+const ENV_READERS = new Set(['git', 'gh', 'pnpm', 'npx', 'python', 'python3', 'node']);
+/** 命令の頭の、飛ばしてよい shell の語（`for … do x; done` の do・done など）。 */
+const SHELL_WORDS = new Set(['{', '}', 'do', 'done', 'then', 'else', 'fi', '!']);
+/** 頭の代入（FOO=1）。 */
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+
 /**
- * file への書き出し（fd への写し `2>&1`・`>&2`・`>&-` と `/dev/null` を除く。`>& file`・`&> file` は書き出し）・here-document・here-string・
- * process substitution・命令の置き換え（`$(…)` と backtick。中の命令は rawCommands でも整えた形で入るので、頭の代入や path を見られない）。
- * 引用の中の字でも当てる（止める方に倒す）。
+ * python・node の、命令を起こす呼び出しの字（案 B。t-y67q）。止める側を並べる表なので、並べていない API（言い換え・版で増える API）は通る。言語の版を上げる時に見直す。
  */
-function feedsOrWrites(command: string): boolean {
-  const rest = command.replace(/\d*>&(\d+|-)/g, '').replace(/\d*>>?\s*\/dev\/null/g, '');
-  return rest.includes('>') || rest.includes('<<') || rest.includes('<(') || rest.includes('$(') || rest.includes('`');
+const RUN_CALLS = /subprocess|os\.system|os\.popen|os\.exec|os\.spawn|posix_spawn|\bexecv(?:e|p|pe)?\b|pty\.spawn|child_process|execSync|execFileSync|spawnSync|\bspawn\s*\(|\bexeca\b|\bexec\s*\(|\bsystem\s*\(|\bpopen\b/;
+/** 字を読ませて動く道具の中で、命令の字に RUN_CALLS が無ければ通す言語。 */
+const QUIET_LANGS = new Set(['python', 'python3', 'node']);
+
+/** 語が、長い旗のどれかか、その略（`--` の後ろ 3 字以上）か。`=` の後ろは値。 */
+function abbreviates(word: string, flags: string[]): boolean {
+  const name = word.split('=')[0] ?? '';
+  return name.length >= 5 && name.startsWith('--') && flags.some(flag => flag.startsWith(name));
+}
+
+/** 単純な命令（書いたままの語）の、飛ばしてよい shell の語の後ろ。 */
+function withoutShellWords(words: string[]): string[] {
+  let k = 0;
+  while (k < words.length && SHELL_WORDS.has(words[k] ?? '')) k += 1;
+  return words.slice(k);
+}
+
+/** git の命令（書いたままの語）が、字を命令として動かさない形か。 */
+function gitPasses(words: string[]): boolean {
+  const git = gitCommand(words);
+  if (git === undefined) return true;
+  const before = words.slice(1, words.length - git.args.length - 1);
+  if (before.some(a => a === '-c' || abbreviates(a, GIT_CONFIG_FLAGS))) return false;
+  if (git.args.some(a => abbreviates(a, GIT_RUN_FLAGS) || (git.name === 'grep' && /^-[A-Za-z]*O/.test(a)))) return false;
+  return GIT_TEXT.has(git.name);
+}
+
+/**
+ * pnpm・npx の命令（書いたままの語）の、旗でも旗の値でもない初めの語。その前に、並べた旗（allowed）のほかの旗があれば undefined（通さない）。
+ * 旗の値（`--dir=x`）は、旗の名で見る。
+ */
+function firstOperand(args: string[], allowed: Set<string>, valued: Set<string>): string | undefined {
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i] ?? '';
+    if (!arg.startsWith('-')) return arg;
+    const name = arg.split('=')[0] ?? '';
+    if (!allowed.has(name)) return undefined;
+    if (valued.has(arg)) i += 1;
+  }
+  return undefined;
+}
+
+/** uniq の、値を取る旗。 */
+const UNIQ_VALUE_FLAGS = new Set(['-f', '-s']);
+
+/**
+ * redirect と tee のほかに、file を書く表の道具の形（`sort -o`・`uniq IN OUT`・git の `--output`）。設定を読む道具を外す条件に数える（review-3 の指摘 3）。
+ */
+function writesByFlag(raw: string[]): boolean {
+  const [name, ...args] = withoutShellWords(raw);
+  if (name === 'sort') return args.some(a => /^-[A-Za-z]*o/.test(a) || abbreviates(a, ['--output']));
+  if (name === 'git') return args.some(a => abbreviates(a, ['--output']));
+  if (name !== 'uniq') return false;
+  const operands = args.filter((a, i) => !a.startsWith('-') && !UNIQ_VALUE_FLAGS.has(args[i - 1] ?? ''));
+  return operands.length >= 2;
+}
+
+/**
+ * 単純な命令（rawCommands の、書いたままの語）が、字の含みを効かせなくてよい道具か（t-y67q の案 B）。
+ * 頭の代入（GIT_PAGER=… など、字を命令として読む変数かもしれない）・前置きの語（sudo・env・xargs など）・path の付いた名は当てない。
+ * 代入だけの命令（S=/tmp/x）と `for x in …` は通す（中の命令は別の単純な命令として見る。代入だけの命令を環境を読む道具と並べる形は textStays が外す）。
+ * 設定を読む道具（git・pnpm・npx）は、同じ命令に log でない file への書き出しか python・node があれば外す（`.git/config`・package.json を書いて読ませる形）。
+ */
+function passesText(raw: string[], command: string, configWrites: boolean): boolean {
+  const words = withoutShellWords(raw);
+  if (words.length === 0 || words[0] === 'for') return true;
+  if (words.every(w => ASSIGNMENT.test(w))) return true;
+  const [name, ...args] = words;
+  if (name === undefined || ASSIGNMENT.test(name) || name.includes('/')) return false;
+  if (TEXT_TOOLS.has(name)) return !args.some(a => abbreviates(a, TEXT_FLAGS[name] ?? []));
+  if (name === 'roster') return !(args[0] === 'infra' && args[1] === 'run');
+  if (name === 'gh') return GH_TEXT.test(args.slice(0, 2).join(' '));
+  if (QUIET_LANGS.has(name)) return !RUN_CALLS.test(command);
+  if (configWrites) return false;
+  if (name === 'git') return gitPasses(words);
+  if (name === 'pnpm') return PNPM_TEXT.has(firstOperand(args, PNPM_FLAGS, PNPM_VALUE_FLAGS) ?? '');
+  if (name === 'npx') return NPX_TEXT.has(firstOperand(args, NPX_FLAGS, new Set()) ?? '');
+  return false;
+}
+
+/** 設定にも code にもならない書き出しの先（log と字の出力）。これだけなら、設定を読む道具を外さない（`pnpm test > all.log`）。 */
+const OUTPUT_FILE = /\.(?:log|txt|out)$/;
+
+/**
+ * 字の含みを効かせなくてよい命令か（t-y67q の案 B）: どの単純な命令も passesText に当たり、引用しない here-document に置き換えが無い時。
+ * 設定を読む道具（git・pnpm・npx）は、同じ命令に、log でない file への書き出し（redirect・tee）か python・node があれば外す
+ * （.git/config・.git/hooks・package.json を書いて読ませる形。python は書く先を読めない。review-2 の指摘 1）。
+ */
+function textStays(command: string): boolean {
+  if (runsInHeredoc(command)) return false;
+  const { commands, writes } = scanCommand(command);
+  const tees = commands.flatMap((raw) => {
+    const [name, ...args] = withoutShellWords(raw);
+    return name === 'tee' ? args.filter(a => !a.startsWith('-')) : [];
+  });
+  const names = commands.map(words => withoutShellWords(words)[0] ?? '');
+  const lang = names.some(name => QUIET_LANGS.has(name));
+  const configWrites = lang || commands.some(writesByFlag) || [...writes, ...tees].some(target => !OUTPUT_FILE.test(target));
+  // 代入だけの命令（`GIT_EDITOR=…; git commit`）は、書き出し済みの変数なら子の process に渡る。PATH は、どの道具とも並べない（review-3 の指摘 1）。
+  const assigned = commands.flatMap((raw) => {
+    const words = withoutShellWords(raw);
+    return words.length > 0 && words.every(w => ASSIGNMENT.test(w)) ? words.map(w => w.slice(0, w.indexOf('='))) : [];
+  });
+  if (assigned.includes('PATH') || (assigned.length > 0 && names.some(name => ENV_READERS.has(name)))) return false;
+  return commands.every(words => passesText(words, command, configWrites));
 }
 
 /** 名を宣言する項目（`--name X`・`--name=X`・`-v X`）。X が環境の container か volume の名。 */
@@ -543,7 +672,7 @@ type Touch = 'named' | 'unnamed' | 'variable' | 'verb';
 /**
  * 命令が触る環境。命令を単純な命令に分け、match の項目が命令の語に当たれば触る（hitsWords）。container の命令の語と項目の語は、旗をそろえてから比べる（normalizeFlags）。
  * 語で当たらなくても、命令の字全体に match の字（* を除く）が含まれるか、字を粗く区切りに分けて割った語の container の命令の旗が、頭が旗の項目に当たれば、今までどおり触るとみなす。
- * ただし、どの単純な命令も inert で、書き出し・here-document などが無い時だけは、字の含みでは当てない。
+ * ただし、字が命令として動きうる形でない時（textStays。どの単純な命令も通す道具の表か、呼び出しの無い python・node。t-y67q）は、字の含みでは当てない。
  * 名を書いた項目の動詞に当たり、名を書かずに的を選ぶ命令（`container stop --all`・`container rm $(…)`・`xargs container rm`）も、
  * その環境に触るとみなす（unnamedTarget。どの環境の名にも当たらないので、前は通っていた）。
  * container の命令の --name・-v の値を変数・置き換えで渡し、値の分からない所を何でも当たるとみなすと項目に当たる命令も、触るとみなす（unknownValueHits。t-ta2b）。
@@ -576,7 +705,7 @@ function touchOf(command: string, env: InfraEnv): Touch | undefined {
   const markedContainers = markedRaw.map(containerWords);
   const marked = markedContainers.map((words, i) => words ?? markedRaw[i] ?? []);
   const raws = rawCommands(command);
-  const textOnly = !feedsOrWrites(command) && raws.every(inert);
+  const textOnly = textStays(command);
   const segments = textOnly || (raws.every(quietForSegments) && !runsInHeredoc(command)) ? [] : textSegments(command).map(containerWords).filter((words): words is string[] => words !== undefined);
   // 変数の値で当てるのは、container の命令（と字を粗く割った区切りの container の命令）の旗の値だけ（`grep -v "$X"` には当てない）。
   const containers = [...markedContainers.filter((words): words is string[] => words !== undefined), ...segments];

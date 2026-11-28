@@ -134,7 +134,23 @@ infra: pagetray（roster）（手続きは roster infra list）
 
 `match` は命令の語で当てる（`cli/src/guard.ts` の `touched`）。命令を単純な命令に分け、項目の頭が旗（`--name db`・`-v db-data*`）なら、その語の並びがどこかに続けて現れれば当たる。頭が旗でない（`aws `・`ssh staging`・`container stop db`）なら、語のどこかに頭の語があり、残りの語がその後に順に現れれば当たる（間に旗や値、`sudo -u root`・`timeout 60` のような前置きが挟まってもよい）。ただし、名を宣言しない環境（`--name`・`--name=`・`-v` の項目の無い環境）の項目は、語が続けて並ぶ時だけ当たる（頭の語の前の前置きのほか、間に挟まってよいのは旗とその値だけ。`container exec x make clean` は `container clean` に当たらない。2026-11-27 t-9tac）。`make lint deploy` のように別の語が挟まる形も止めたいなら、その形の項目を足す。語は丸ごと一致で、末尾が `*` の語だけ前方一致（`db-data*` は `db-data-v1:/data` に当たる。`*` は語の末尾にだけ書ける）。
 
-語で当たらなくても、命令の字全体に項目の字（`*` を除く）が含まれれば止める（`sh -c`・`ssh`・here-document など、字を命令として動かす道は数えきれないので、疑わしければ止める）。字の含みだけの当たりを通すのは、どの単純な命令も引数の字を命令として動かさない物（`roster`（`roster infra run` を除く）・直後が `commit` の `git`・`grep`・`rg`。頭の代入・前置き・path の付いた名は除く）で、file への書き出し（`>`・`>>`・`>& file`・`&> file`。`2>&1`・`>&2` と `/dev/null` は除く）・`<<`・`<(`・命令の置き換え（`$(…)`・backtick。中の命令の頭の代入や path を見られないため）が無い時だけ。だから `roster file put x --name db-x.png` や commit の文に環境の名を書いても止まらない。広すぎると読むだけの命令も止まり、狭すぎるとすり抜けるので、その環境を変える命令の頭を書く。名の一部で当てていた項目（`ssh staging` が `ssh staging-01` に当たるなど）は、語で当てると当たらず、字の含みで止まる（`ssh` は通す命令に無いので、今は止まる）。前方一致で当てたい語には `*` を付ける（2026-11-27 t-7j37 で、語で当てる形に替えた。台帳 #253）。
+語で当たらなくても、命令の字全体に項目の字（`*` を除く）が含まれれば止める（`sh -c`・`ssh`・here-document など、字を命令として動かす道は数えきれないので、疑わしければ止める）。字の含みだけの当たりを通すのは、字が命令として動きうる形でない時だけ（2026-11-28 t-y67q。監査 audit-2 の R3 (a)）: どの単純な命令（命令の置き換え `$(…)`・backtick の中も、頭の代入と path を書いたままで見る）も、次の表に当たり、引用しない here-document（`<<EOF`）と命令の置き換えが同じ命令に並ばない時（here-document の中の置き換えは shell が動かす）。手続きに依らず、どの環境も同じ当て方（`pm-only` の環境も）。
+
+| 道具 | 通す形 | 表から外す（字の含みで止める） |
+|---|---|---|
+| `cat`・`echo`・`printf`・`tee`・`head`・`tail`・`wc`・`sort`・`uniq`・`cut`・`tr`・`diff`・`ls`・`cd`・`pwd`・`mkdir`・`test`・`[`・`true`・`false`・`date`・`jq`・`basename`・`dirname`・`realpath`・`grep`・`rg` | どの旗でも | `sort --compress-program`・`rg --pre`・`rg --pre-glob`（長い旗は頭の 3 字以上の略も） |
+| `roster` | どの命令も | `roster infra run` |
+| `git` | `commit`・`grep`・`show`・`log`・`diff`・`status`・`rev-parse`・`ls-files`・`blame` | 命令の前の `-c`・`--config-env`・`--exec-path`、`grep` の `-O`（束ねた `-nO…` も）・`--open-files-in-pager`、`--ext-diff`・`--textconv` |
+| `gh` | `pr`・`issue`・`release` の本文を送る命令と読む命令、`pr ready`・`pr checks`・`run view`・`run list` | ほかの命令（`alias`・`extension`・`api` など） |
+| `pnpm` | `test`・`t`・`run <名>`（前に置いてよい旗は `-C`・`--dir`・`--filter`・`-F`・`-r`・`--recursive`・`-s`・`--silent` だけ） | `exec`・`dlx` と知らない語（script か exec として動く）・ほかの旗 |
+| `npx` | 的が `vitest`・`tsc`・`eslint`・`prettier`・`typedoc`（前に置いてよい旗は `--yes`・`-y`・`--no` だけ） | ほかの的とほかの旗（npm の設定はどれも旗で渡せ、`--node-options`・`-c` などが字を動かす） |
+| `python`・`python3`・`node` | 命令の字に、命令を起こす呼び出しの字（`subprocess`・`os.system`・`posix_spawn`・`execve`・`child_process`・`execSync`・`exec(`・`system(` など。`cli/src/guard.ts` の `RUN_CALLS`）が無い時 | 呼び出しの字がある時 |
+
+- 頭の代入（`GIT_PAGER=…`・`EDITOR=…`）・前置きの語（`sudo`・`env`・`xargs` など）・path の付いた名は、表に当てない。代入だけの命令（`S=/tmp/x`）と `for x in …` は通す。ただし、代入だけの命令が環境変数を読む道具（`git`・`gh`・`pnpm`・`npx`・`python`・`node`）と同じ命令に並ぶ時（`GIT_EDITOR=…; git commit`。書き出し済みの変数なら子の process に渡る）と、`PATH` への代入は通さない。
+- 設定を読む道具（`git`・`pnpm`・`npx`）は、同じ命令に、log（`.log`・`.txt`・`.out`）でない file への書き出し（`>`・`>>`・`>&`・`&>`・`tee`・`sort -o`・`uniq` の 2 つ目の引数・git の `--output`）か `python`・`node` があれば、表から外す（`.git/config`・`.git/hooks`・`package.json` を書いて読ませる形）。
+- `sed` は表に入れない（GNU の sed は `e` の命令で字を shell に流し、どちらの sed かを guard は見分けられない）。
+
+だから here-document で file を書く命令・pipe の先の `tail`・python で文を書き替える命令・`roster file put x --name db-x.png | tail` や commit の文に環境の名を書いても止まらない。`RUN_CALLS` は止める側を並べる表なので、並べていない API（言い換えた呼び出し・言語の版で増える API）を使う python・node は通る。言語の版を上げる時に見直す。自ずと動く file（`~/.zshenv`・`.git/hooks`）に書く命令も通る（次の命令から動く。Write の道具では前から通る）。広すぎると読むだけの命令も止まり、狭すぎるとすり抜けるので、その環境を変える命令の頭を書く。名の一部で当てていた項目（`ssh staging` が `ssh staging-01` に当たるなど）は、語で当てると当たらず、字の含みで止まる（`ssh` は通す命令に無いので、今は止まる）。前方一致で当てたい語には `*` を付ける（2026-11-27 t-7j37 で、語で当てる形に替えた。台帳 #253）。
 
 名を書かずに的を選ぶ命令も当てる（2026-11-27 t-9tac）。環境の名は、名を宣言する項目（`--name db`・`--name=db`・`-v db-data*`）から引き、終わりの語がその名の項目（`container stop db`・`container volume rm db-data*`）の、名の前の語を動詞（`container stop`）と読む。命令の中に動詞の語が続けて並び（間に挟まってよいのは旗とその値だけ）、その後ろの的（旗と `-s`・`-t` などの値を除いた語）が、無い（xargs で渡す・`-a` だけ）か、字で書いた名（英数字・`_`・`.`・`-`）でない語（`$(…)`・変数・glob・`{}`・`%`）を含むか、`--all` があれば、その環境に触るとみなす（`container stop --all`・`container rm -f $(container ls -q)`・`… | xargs container rm`）。名を宣言しない環境と、終わりの語が名でない項目（`container builder stop`）からは動詞を引かないので、`container volume inspect $V` のような読むだけの命令は止まらない。名を取らない命令（`container system stop`・`container prune`・`container volume prune`）は、項目に書いて当てる（roster の設定の `container-system`）。
 
