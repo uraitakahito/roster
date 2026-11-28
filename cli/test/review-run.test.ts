@@ -112,6 +112,18 @@ describe('レビューの container（t-n4j9 の段 3）', () => {
     expect(() => reviewRun(ctx, 'AI-8', {}, ['true'])).toThrow(/もう流れています/);
   });
 
+  test('note のまだ無い、できたばかりの lock は、取った物とみなす（review-11 の提案）', () => {
+    const { ctx } = setup();
+    const lock = join(placeDir(ctx, 'AI-8'), 'run.lock');
+    mkdirSync(lock);
+    const fresh = ctx.now().getTime() / 1000;
+    utimesSync(lock, fresh, fresh);
+    expect(() => reviewRun(ctx, 'AI-8', {}, ['true'])).toThrow(/取ったばかり/);
+    const old = (ctx.now().getTime() - 120_000) / 1000;
+    utimesSync(lock, old, old);
+    expect(reviewRun(ctx, 'AI-8', {}, ['true']).lines[0]).toBe(`古い lock を取り直した: ${lock}`);
+  });
+
   test('切られた run の古い lock は、残った container を止めてから取り直す（review-10 の指摘 1）', () => {
     const left = 'roster-review-ai-8-run-old';
     const { ctx, calls } = setup(args => args[0] === 'ls' ? { status: 0, stdout: json([[left, 'AI-8', 'run']]), stderr: '' } : { status: 0, stdout: '', stderr: '' });

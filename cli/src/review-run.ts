@@ -5,7 +5,7 @@
 // host の folder の共有は cargo の lock が効かずに落ちた）。
 // container の命令は、名を字で書いて打つ（roster-review- の頭。共有の環境の決まり）。prune・system は使わない。
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { join } from 'node:path';
 import type { Context } from './context.ts';
@@ -148,6 +148,9 @@ function prepare(ctx: Context, key: string, options: RunOptions): { tree: string
   return { tree, image: imageName(ctx, kind), lines };
 }
 
+/** note の無い lock を、取った直後とみなす長さ。 */
+const FRESH_LOCK_MS = 60_000;
+
 /** lock に書く物（取った roster の pid と、流している container の名）。 */
 interface LockNote {
   pid: number
@@ -188,6 +191,8 @@ function withLock<T>(ctx: Context, key: string, name: string, run: () => T): { v
       catch {
         held = undefined;
       }
+      // note がまだ無い lock（取った直後で、書く前）は、できて間もなければ取った物とみなす（review-11 の提案）。
+      if (held === undefined && ctx.now().getTime() - statSync(lock).mtimeMs < FRESH_LOCK_MS) throw new TpmError(`この課題の container がもう流れています（lock を取ったばかり: ${lock}）。終わってから打ち直してください`);
       if (held !== undefined && alive(held.pid)) throw new TpmError(`この課題の container がもう流れています（pid ${held.pid}・${held.name}）。終わってから打ち直してください`);
       if (held !== undefined && reviewContainers(ctx, key).includes(held.name)) {
         container(ctx, ['stop', held.name], `残った ${held.name} を止めるの`);
