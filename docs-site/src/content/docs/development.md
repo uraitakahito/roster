@@ -74,7 +74,7 @@ build は無い。`cli/bin/roster` は `cli/src/cli.ts` を node で直に動か
 
 アクターの台帳のサーバー（Rust）は、別の repo [castlist](https://github.com/uraitakahito/castlist) にある（[castlist の docs](https://uraitakahito.github.io/castlist/)）。この repo が持つのは、その API を定義から作った client で呼ぶ側（`cli/src/castlist.ts`・`cli/src/castlist-query.ts`）と、新しい API を話す偽の castlist（`cli/test/fake-castlist.ts`。試験の process の中の HTTP の server）。
 
-- **合わせる版**: 版は 3 か所にある。つなぎの試験が起こす image は `.castlist-version`（`.pagetray-version` と同じ `v<版>@<image の digest>` の形）、castlist が止まっていて container も無い時に Product Manager へ出す `container run` の 1 行は `cli/src/castlist.ts` の `CASTLIST_VERSION`（image の版）と `CASTLIST_VOLUME`（volume。今は `castlist-data-v1`）、client を作る定義は `cli/gen/gen.sh` の `DEFS` の castlist の行の tag（今はどれも `v2.1.1`）。`CASTLIST_VERSION` が古いままだと、古い image を起こす 1 行を出してしまう。
+- **合わせる版**: 版は 3 か所にある。つなぎの試験が起こす image は `.castlist-version`（`.pagetray-version` と同じ `v<版>@<image の digest>` の形）、castlist が止まっていて container も無い時に Product Manager へ出す `container run` の 1 行は `cli/src/castlist.ts` の `CASTLIST_VERSION`（image の版）と `CASTLIST_VOLUME`（volume。今は `castlist-data-v1`）、client を作る定義は `cli/gen/gen.sh` の `DEFS` の castlist の行の tag（今は、image の 2 つが `v2.2.0`、定義の tag が `v2.1.1`。castlist 2.2.0 は定義を変えていないので、定義の tag は上げていない）。`CASTLIST_VERSION` が古いままだと、古い image を起こす 1 行を出してしまう。
 - **castlist を上げる時**: castlist で release を出す（castlist の docs の「[release を出す](https://uraitakahito.github.io/castlist/release.html)」）→ この repo で `.castlist-version`・`CASTLIST_VERSION` と、それを名指す試験（`cli/test/castlist.test.ts` の `expect(CASTLIST_VERSION).toBe(…)`）を新しい版にする PR を出す。定義が替わった版なら、同じ PR で `DEFS` の castlist の行（tag と SHA-256）を替えて client を作り直し、偽の castlist（`/healthz` の `version` も）と `cli/src/castlist.ts`・`cli/src/castlist-query.ts` を合わせる。
 
 ## callboard（画面のサーバー）とのつなぎ

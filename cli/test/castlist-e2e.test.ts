@@ -104,6 +104,8 @@ describe.skipIf(CASTLIST === '')('cli と castlist のつなぎ', () => {
   test('知らない名・id は、castlist の訳と find を勧める文で止まる', async () => {
     const s = setup();
     await expect(castlistShow(s.tpm, '019abcde-0000-7000-8000-00000000dead', {})).rejects.toThrow('roster castlist find');
+    // castlist の訳は日本語で届く（castlist 2.2.0 から、言語を付けない頼みには英語で返る。roster は Accept-Language: ja を付ける。AI-48）。
+    await expect(castlistShow(s.tpm, '019abcde-0000-7000-8000-00000000dead', {})).rejects.toThrow('アクター 019abcde-0000-7000-8000-00000000dead は無い');
   });
 });
 
