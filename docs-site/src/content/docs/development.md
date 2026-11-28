@@ -89,7 +89,7 @@ castlist と pagetray の画面をまとめるサーバー（Rust）は、別の
 
 AI の使用量（トークンと額）を、見る人が選んだ欄で見る画面（egui の WebAssembly）は、別の repo [usagescope](https://github.com/uraitakahito/usagescope) にある（[usagescope の docs](https://uraitakahito.github.io/usagescope/)）。castlist の `ListUsage`（`GET /api/usage`）を読むだけで、この repo の cli は usagescope を呼ばない。この repo が持つのは、起こす版と、[運用](/operations/#使用量を見る画面usagescope)の手引きだけ。
 
-- **合わせる版**: `.usagescope-version` に、起こす usagescope の版を `v<版>@<image の digest>` の形で書く（digest は usagescope の release にある。今は `v0.1.0`）。DevOps Engineer 担当は、この版で起こす。この file を読む試験は無い（usagescope を相手にしたつなぎの試験は、この repo に無い）。
+- **合わせる版**: `.usagescope-version` に、起こす usagescope の版を `v<版>@<image の digest>` の形で書く（digest は usagescope の release にある。今は `v0.2.0`）。DevOps Engineer 担当は、この版で起こす。この file を読む試験は無い（usagescope を相手にしたつなぎの試験は、この repo に無い）。
 - **usagescope を上げる時**: usagescope で release を出す（usagescope の docs の「[release を出す](https://uraitakahito.github.io/usagescope/release.html)」）→ この repo で `.usagescope-version` を新しい版と digest にする PR を出す → [運用](/operations/#使用量を見る画面usagescope)の「版を上げる」で container を作り直す。castlist の版も上がる時は、`.castlist-version` の PR と起こし直しを先に済ませる。
 
 ## Archify（図を描く道具）とのつなぎ
