@@ -116,7 +116,7 @@ describe('roster assign --role staff-engineer', () => {
     const args = claudeArgs({ key: 'AI-8.staff', subject: 'AI-8', role: 'staff-engineer', title: 'Staff AI-8', cwd: '/p', addDirs: ['/r/skill-sets/core'], ...ROLES['staff-engineer'].defaults }, '/r');
     expect(JSON.parse(args[1] ?? '')).toEqual({
       hooks: {
-        PreToolUse: [{ matcher: 'Bash|Edit|Write|NotebookEdit', hooks: [{ type: 'command', command: '/r/cli/bin/roster guard' }] }],
+        PreToolUse: [{ matcher: 'Bash|Monitor|Edit|Write|NotebookEdit', hooks: [{ type: 'command', command: '/r/cli/bin/roster guard' }] }],
         SessionStart: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-start' }, { type: 'command', command: '/r/cli/bin/roster mail claim' }, WAITING] }],
         SessionEnd: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-end' }, { type: 'command', command: '/r/cli/bin/roster mail release' }] }],
         ...MAIL_HOOKS,

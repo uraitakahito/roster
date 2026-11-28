@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { chromeArgs, DEFAULT_CHROME } from '../chrome.ts';
+import { chromeArgs, resolveChrome } from '../chrome.ts';
 import type { Context } from '../context.ts';
 import { archifyVersion, runArchify, setupArchify } from '../figure/archify.ts';
 import { CHECK_SCRIPT, flawLine, readFlaws } from '../figure/check.ts';
@@ -278,7 +278,8 @@ export function figureShot(ctx: Context, file: string, options: FigureShotOption
   const target = options.figure === undefined ? undefined : figureId(resolve(options.figure));
   const svgs = target === undefined ? all : all.filter(svg => srcOf(svg) === target);
   if (svgs.length === 0) throw new TpmError(`${file} に、--figure の図がありません（roster figure embed で埋められていない）: ${options.figure ?? ''}`);
-  const chrome = ctx.env.ROSTER_CHROME || DEFAULT_CHROME;
+  // Chrome の選びも roster chrome と同じ（$ROSTER_CHROME の .app も中の実行の file に読む。review-3 の指摘 10）。
+  const chrome = resolveChrome(undefined, ctx.env);
   const dir = options.dir === undefined ? mkdtempSync(join(tmpdir(), 'roster-figure-shot-')) : resolve(options.dir);
   mkdirSync(dir, { recursive: true });
   const lines: string[] = [];

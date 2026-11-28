@@ -1,9 +1,9 @@
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { ALWAYS_FLAGS, chromeArgs, readDevToolsPort, resolveChrome } from '../src/chrome.ts';
-import { CHROME_RECORD, chromeList, chromeRun, chromeStart, chromeStop, type ChromeOps, type ChromeRecord } from '../src/commands/chrome.ts';
+import { ALWAYS_FLAGS, chromeArgs, readDevToolsPort, readListeningPort, resolveChrome } from '../src/chrome.ts';
+import { CHROME_RECORD, chromeList, chromeRun, chromeStart, chromeStop, usesProfile, type ChromeOps, type ChromeRecord } from '../src/commands/chrome.ts';
 import type { Context } from '../src/context.ts';
 import { world } from './helpers.ts';
 
@@ -47,6 +47,23 @@ describe('旗の組み（src/chrome.ts）', () => {
     expect(chromeArgs({ args: ['--remote-debugging-address=127.0.0.1'], profile }, home)).toContain('--remote-debugging-address=127.0.0.1');
   });
 
+  test('1 本の - の旗も -- の形に揃えて見て、揃えた形を Chrome に渡す（review-3 の指摘 1）', () => {
+    expect(() => chromeArgs({ args: ['-password-store=keychain'], profile }, home)).toThrow('--password-store=keychain は使えません');
+    expect(() => chromeArgs({ args: ['-user-data-dir=/tmp/x'], profile }, home)).toThrow('--user-data-dir は Chrome の引数に書かず');
+    expect(() => chromeArgs({ args: ['-profile-directory=Default'], profile }, home)).toThrow('--profile-directory は使えません');
+    expect(() => chromeArgs({ args: ['-remote-debugging-address=0.0.0.0'], profile }, home)).toThrow('--remote-debugging-address=0.0.0.0 は使えません');
+    expect(chromeArgs({ args: ['-headless', '-window-size=900,700', 'https://example.com'], profile }, home)).toEqual([
+      '--use-mock-keychain',
+      '--password-store=basic',
+      '--no-first-run',
+      '--no-default-browser-check',
+      `--user-data-dir=${profile}`,
+      '--headless',
+      '--window-size=900,700',
+      'https://example.com',
+    ]);
+  });
+
   test('profile が ~/Library/Application Support の下なら断る（symlink を通しても。まだ無い folder でも）', () => {
     const support = join(home, 'Library', 'Application Support');
     mkdirSync(join(support, 'Google', 'Chrome'), { recursive: true });
@@ -55,6 +72,8 @@ describe('旗の組み（src/chrome.ts）', () => {
     const link = join(temp('link'), 'chrome');
     symlinkSync(join(support, 'Google'), link);
     expect(() => chromeArgs({ args: [], profile: join(link, 'Chrome') }, home)).toThrow('Product Manager のふだんのブラウザの profile');
+    // macOS の既定の file system は大小を分けない（review-3 の指摘 2）。
+    expect(() => chromeArgs({ args: [], profile: join(home, 'library', 'application support', 'Google', 'Chrome') }, home)).toThrow('Product Manager のふだんのブラウザの profile');
   });
 });
 
@@ -110,11 +129,16 @@ function fakeOps(options: { port?: number, stubborn?: boolean, helperStays?: boo
     procs,
     signals,
     runs,
-    spawnDetached(exe, args) {
+    spawnDetached(exe, args, log) {
       const pid = next += 1;
       procs.set(pid, `${exe} ${args.join(' ')}`);
       procs.set(next += 1, `${exe} Helper --type=renderer --user-data-dir=${profileOf(args)}`);
-      if (options.writesPort !== false) writeFileSync(join(profileOf(args), 'DevToolsActivePort'), `${options.port ?? 9333}\n/devtools/browser/x\n`);
+      // 本物と同じく、口 0 なら DevToolsActivePort を書き、口を決めたなら log に「DevTools listening on」だけを書く。
+      const fixed = args.find(a => a.startsWith('--remote-debugging-port='))?.slice('--remote-debugging-port='.length);
+      if (options.writesPort !== false) {
+        if (fixed === undefined || fixed === '0') writeFileSync(join(profileOf(args), 'DevToolsActivePort'), `${String(options.port ?? 9333)}\n/devtools/browser/x\n`);
+        else appendFileSync(log, `DevTools listening on ws://127.0.0.1:${fixed}/devtools/browser/x\n`);
+      }
       return pid;
     },
     run(exe, args) {
@@ -123,7 +147,8 @@ function fakeOps(options: { port?: number, stubborn?: boolean, helperStays?: boo
       return { status: 0, stdout: 'out', stderr: '', timedOut: false };
     },
     commandLine: pid => procs.get(pid),
-    pidsWith: text => [...procs].filter(([, line]) => line.includes(text)).map(([pid]) => pid),
+    pidsUsing: profile => [...procs].filter(([, line]) => usesProfile(line, profile)).map(([pid]) => pid),
+    exists: path => !path.includes('missing'),
     signal(pid, sig) {
       signals.push(`${sig} ${pid}`);
       const line = procs.get(pid) ?? '';
@@ -153,7 +178,7 @@ describe('roster chrome start・list・stop', () => {
   test('start: 口を書かなければ、止めて片付け、誤りにする（記録しない）', async () => {
     const ctx = seat();
     const ops = fakeOps({ writesPort: false });
-    await expect(chromeStart(ctx, [], { bin: '/x/chromium' }, ops)).rejects.toThrow('CDP の口を書きませんでした');
+    await expect(chromeStart(ctx, [], { bin: '/x/chromium' }, ops)).rejects.toThrow('CDP の口を開きませんでした');
     expect(ops.procs.size).toBe(0);
     expect(recordsOf(ctx)).toEqual([]);
   });
@@ -202,6 +227,88 @@ describe('roster chrome start・list・stop', () => {
     await chromeStart(w.role('t-y', 'file:y'), [], { bin: '/x/chromium' }, ops);
     expect(chromeList(w.role('t-x', 'file:x'), ops)).toEqual(['動いている Chrome は無い']);
     expect(chromeList(w.role('t-y', 'file:y'), ops)[0]).toContain('pid 5001');
+  });
+});
+
+describe('口を決めて起こした時の口の読み（Chrome は DevToolsActivePort を書かない）', () => {
+  test('log の、起こす前の大きさより後ろの「DevTools listening on」から読む', () => {
+    const log = join(temp('log'), 'chrome.log');
+    writeFileSync(log, 'DevTools listening on ws://127.0.0.1:1111/devtools/browser/old\n');
+    const offset = Buffer.byteLength('DevTools listening on ws://127.0.0.1:1111/devtools/browser/old\n');
+    expect(readListeningPort(log, offset)).toBeUndefined();
+    appendFileSync(log, '[x] ERROR: something\nDevTools listening on ws://127.0.0.1:19555/devtools/browser/new\n');
+    expect(readListeningPort(log, offset)).toBe(19555);
+    expect(readListeningPort(join(temp('none'), 'x.log'), 0)).toBeUndefined();
+  });
+
+  test('start --port 19555: 前の回の log の行を読まず、新しい行の口を出す', async () => {
+    const ctx = world().role('t-x', 'file:x');
+    const ops = fakeOps();
+    const profile = join(temp('fixed'), 'p');
+    mkdirSync(profile);
+    writeFileSync(`${profile}.log`, 'DevTools listening on ws://127.0.0.1:1111/devtools/browser/old\n');
+    const lines = await chromeStart(ctx, [], { bin: '/x/chromium', profile, port: 19555 }, ops);
+    expect(lines).toContain('CDP: http://127.0.0.1:19555');
+  });
+});
+
+describe('roster chrome の片付けの当て方と支度（review-3）', () => {
+  const seat = (key = 't-x'): Context => world().role(key, `file:${key}`);
+
+  test('profile の path の後ろが /・空白・終わりの時だけ当てる', () => {
+    expect(usesProfile('chrome --user-data-dir=/tmp/p --headless', '/tmp/p')).toBe(true);
+    expect(usesProfile('chrome_crashpad_handler --database=/tmp/p/Crashpad', '/tmp/p')).toBe(true);
+    expect(usesProfile('chrome --user-data-dir=/tmp/p', '/tmp/p')).toBe(true);
+    expect(usesProfile('chrome --user-data-dir=/tmp/p2 --headless', '/tmp/p')).toBe(false);
+  });
+
+  test('stop は、名の似たほかの profile の Chrome に合図を送らない', async () => {
+    const ctx = seat();
+    const ops = fakeOps();
+    const base = temp('near');
+    const profile = join(base, 'p');
+    mkdirSync(profile);
+    ops.procs.set(4000, `/x/chromium --user-data-dir=${join(base, 'p2')}`);
+    await chromeStart(ctx, [], { bin: '/x/chromium', profile }, ops);
+    await chromeStop(ctx, [5001], ops);
+    expect(ops.signals.some(s => s.endsWith(' 4000'))).toBe(false);
+    expect(ops.procs.has(4000)).toBe(true);
+  });
+
+  test('動いている process が使っている profile では起こさない（前の Chrome を片付けで止めないため）', async () => {
+    const ctx = seat();
+    const ops = fakeOps();
+    const profile = temp('busy');
+    ops.procs.set(4000, `/x/chromium --user-data-dir=${profile}`);
+    await expect(chromeStart(ctx, [], { bin: '/x/chromium', profile }, ops)).rejects.toThrow('動いている process が使っています');
+    await expect(chromeRun(ctx, [], { bin: '/x/chromium', profile }, ops)).rejects.toThrow('動いている process が使っています');
+    expect(ops.signals).toEqual([]);
+  });
+
+  test('start: --port が無く、Chrome の引数に口があれば、その口を使う（--port 0 で断らない）', async () => {
+    const ctx = seat();
+    const ops = fakeOps({ port: 19555 });
+    const lines = await chromeStart(ctx, ['--remote-debugging-port=19555'], { bin: '/x/chromium' }, ops);
+    expect(lines).toContain('CDP: http://127.0.0.1:19555');
+    const ports = (ops.procs.get(5001) ?? '').split(' ').filter(a => a.startsWith('--remote-debugging-port'));
+    expect(ports).toEqual(['--remote-debugging-port=19555']);
+  });
+
+  test('使わせない旗で断った時と、Chrome が無い時は、一時の profile を残さない', async () => {
+    const key = `t-left${String(process.pid)}`;
+    const ctx = seat(key);
+    const left = (): string[] => readdirSync(tmpdir()).filter(n => n.startsWith(`roster-chrome-${key}-`));
+    await expect(chromeStart(ctx, ['--password-store=keychain'], { bin: '/x/chromium' }, fakeOps())).rejects.toThrow('使えません');
+    await expect(chromeRun(ctx, ['-password-store=keychain'], { bin: '/x/chromium' }, fakeOps())).rejects.toThrow('使えません');
+    await expect(chromeStart(ctx, [], { bin: '/missing/chromium' }, fakeOps())).rejects.toThrow('Chrome がありません: /missing/chromium');
+    const throwing = {
+      ...fakeOps(),
+      spawnDetached: (): number => {
+        throw new Error('spawn に落ちた');
+      },
+    };
+    await expect(chromeStart(ctx, [], { bin: '/x/chromium' }, throwing)).rejects.toThrow('spawn に落ちた');
+    expect(left()).toEqual([]);
   });
 });
 
