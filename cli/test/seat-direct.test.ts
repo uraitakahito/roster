@@ -7,7 +7,7 @@ import { seatAdd, seatBrief, seatClose, seatDismiss, seatNotify } from '../src/c
 import { collect } from '../src/commands/timeline.ts';
 import { assign } from '../src/commands/tpm-side.ts';
 import { readRole, writeRole } from '../src/roster.ts';
-import { BRIEF, world, type World, MAIN_PASSED } from './helpers.ts';
+import { BRIEF, world, type World, MAIN_PASSED, REVIEW_NONE } from './helpers.ts';
 
 const BRIEF2 = BRIEF.replace('brief-1', 'brief-2');
 const DONE: DoneOptions = { kind: 'result', summary: 'server を入れた', remaining: 'なし', decisions: 'なし', points: [] };
@@ -35,7 +35,7 @@ describe('repo の席から上へ（Tech Lead 担当へ届く物）', () => {
     expect(out[0]).toBe('送った: 【done】→ file:1（相手の手が空いた時に届く。送り直さない）');
     expect(out.at(-1)).toBe('状態: 回答待ち(Lead): 次の依頼（次の【brief】か【dismiss】を待つ。自分から【end】を送らない）');
     await reportMerged(w.seat, { pr: PR, note: 'server' });
-    expect(w.texts('file:1')).toEqual(['【done】要点: server を入れた／残り: なし／決めてほしいこと: なし', `【merged】${PR} server${MAIN_PASSED}`]);
+    expect(w.texts('file:1')).toEqual(['【done】要点: server を入れた／残り: なし／決めてほしいこと: なし', `【merged】${PR} server${MAIN_PASSED}${REVIEW_NONE}`]);
     expect(w.texts('file:tpm')).toEqual([]);
     expect(w.wire.status('file:2')?.wait).toBe('回答待ち(Lead): 次の依頼');
   });

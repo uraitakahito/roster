@@ -421,6 +421,8 @@ export const mainRun = (workflowName: string, status: string, conclusion: string
 export const MAIN_RUNS_PASSED = [mainRun('test', 'completed', 'success'), mainRun('docs', 'completed', 'success')];
 /** 既定の回の時に、【merged】【doc-fix】の本文に命令が足す字。 */
 export const MAIN_PASSED = '／main: workflow 2 つ通った';
+/** レビューの頼みが無い PR の【merged】【doc-fix】の本文に、命令が足す字。 */
+export const REVIEW_NONE = '／レビュー: 記録無し';
 
 export interface World {
   project: string
@@ -440,6 +442,8 @@ export interface World {
   slept: () => number
   /** PR の URL → `gh pr view` が返す state（無い URL は MERGED）。値が undefined の URL は、gh が読めない（exit 1）。 */
   prs: Map<string, string | undefined>
+  /** PR の URL → `gh pr view` が state のほかに返す欄（headRefOid・isDraft など）。無い URL は足さない。 */
+  prFields: Map<string, Record<string, unknown>>
   /** `gh run list`（merge の commit で main に動いた workflow）が返す回。list が undefined なら、gh が読めない（exit 1）。mergedAt は、`gh pr view` が返す merge の時刻（無ければ、ずっと前）。error は、読めない時の stderr（無ければ 502）。 */
   mainRuns: { list: unknown[] | undefined, mergedAt?: string, error?: string }
   /** 外の命令の答えを替える（`<命令> <引数…>` の字 → 答え）。無い命令は今までどおり exit 0・`{}`。 */
@@ -522,6 +526,7 @@ export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessE
   const calls: Call[] = [];
   const store = new FakeStore();
   const prs = new Map<string, string | undefined>();
+  const prFields = new Map<string, Record<string, unknown>>();
   const mainRuns: { list: unknown[] | undefined, mergedAt?: string, error?: string } = { list: MAIN_RUNS_PASSED };
   const answers = new Map<string, ExecResult>();
   const exec: Exec = (cmd, args, options) => {
@@ -531,7 +536,7 @@ export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessE
       const state = prs.has(pr) ? prs.get(pr) : 'MERGED';
       // merge 済みの PR は、merge の commit と時刻も返す（roster report merged が、main の workflow を見るのに読む）。merge は、ずっと前（回がまだ無い「merge の直後」ではない）。
       const merge = state === 'MERGED' ? { mergeCommit: { oid: 'merge-sha' }, mergedAt: mainRuns.mergedAt ?? '2020-01-01T00:00:00Z' } : {};
-      return state === undefined ? { status: 1, stdout: '', stderr: 'gh: not logged in' } : { status: 0, stdout: JSON.stringify({ state, ...merge }), stderr: '' };
+      return state === undefined ? { status: 1, stdout: '', stderr: 'gh: not logged in' } : { status: 0, stdout: JSON.stringify({ state, ...merge, ...prFields.get(pr) }), stderr: '' };
     }
     // gh run list は、merge の commit で main に動いた workflow を見る命令（calls には数えない）。既定は「みな通った 2 つ」。
     if (cmd === 'gh' && args[0] === 'run' && args[1] === 'list') {
@@ -600,6 +605,7 @@ export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessE
     wire: new FileTransport(tpm.state, 'file:tpm'),
     slept: () => slept,
     prs,
+    prFields,
     mainRuns,
     answers,
     office,

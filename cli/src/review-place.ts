@@ -192,7 +192,8 @@ export function withRepoLock<T>(ctx: Context, key: string, repo: string, body: (
 /**
  * PR の head を、課題の場所に出す。clone が無ければ作り（GitHub の URL から。本体があれば物を借りて --dissociate で切る）、
  * refs/pull/番号/head を fetch して detach で出す。push の先は無い先にする。見直しでは、同じ clone へ新しい head を出し直す
- * （build の物は残す）。出した head の commit と作業の木の path を返す。
+ * （build の物は残す）。PR の head は `refs/remotes/pull/<番号>` に取る。出した head の commit と作業の木の path を返す。
+ * 見た commit の表（reviews.ts の recordHead）は、ここでは書かない（書くのは席の checkout だけ。呼び手が書く）。
  */
 export function checkoutPull(ctx: Context, key: string, url: string): { tree: string, head: string } {
   const pull = parsePull(url);

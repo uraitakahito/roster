@@ -50,6 +50,27 @@ export interface Review {
   lead?: string
   /** 課題の担当が、判定を受けずに TPM 担当に上げた時刻（roster ask tpm --review）。 */
   escalatedAt?: string
+  /** PR の頼みだけ: 頼んだ時の PR の head（gh pr view の headRefOid。読めなければ無い）。 */
+  askedHead?: string
+  /** PR の頼みだけ: 席が見た commit（roster report review が書く。決められなければ無い）。 */
+  head?: string
+  /** head の出どころ: checkout（頼みより後に roster review checkout で出した head）か asked（判定の時の head が askedHead と同じ）。 */
+  headFrom?: 'checkout' | 'asked'
+  /** 軽い見方でよい頼み（roster ask review --light。版上げ・CHANGELOG・文書・lock だけの差分）。 */
+  light?: boolean
+  /** 「直すべき」を受けずに進めると TPM 担当が決めた時の記録（roster review allow）。 */
+  allowed?: Allowed
+}
+
+/** roster review allow の記録。 */
+export interface Allowed {
+  /** 決めた者（役割の無い session の actor の Key。TPM 担当の席では、Key の代わりの字）。 */
+  by: string
+  at: string
+  /** 決めたこと。 */
+  note: string
+  /** 決めたことを書いたページ。 */
+  page?: string
 }
 
 /** 頼み 1 件の file（状態の folder の `reviews/<番号>.jsonc`）。 */
@@ -89,6 +110,84 @@ export const openReviews = (ctx: Context, key: string): Review[] => readReviews(
  */
 export const leadReviews = (ctx: Context, lead: string): Review[] =>
   readReviews(ctx).filter(r => r.verdict === undefined && r.brief !== undefined && r.reviewer === 'tech-lead' && r.lead === lead);
+
+/** PR の URL か `<owner>/<repo>#<番号>` を読んだ物（大文字と小文字は元のまま）。 */
+export interface PullName {
+  owner: string
+  repo: string
+  number: number
+  /** gh に渡す URL（`https://github.com/<owner>/<repo>/pull/<番号>`。後ろの /files・/・?・# を落とした形）。 */
+  url: string
+}
+
+/** github.com の PR の URL（host は github.com だけ。ほかの host の PR は、名を揃えると github.com の同じ名の PR と取り違えるので受けない）。 */
+const PULL_URL = /^https:\/\/github\.com\/([^\s/]+)\/([^\s/#?]+)\/pull\/(\d+)(?:[/?#]\S*)?$/i;
+const PULL_SHORT = /^([^\s/#]+)\/([^\s/#]+)#(\d+)$/;
+
+/** github.com の PR の URL（後ろに /files などが付いても）か `<owner>/<repo>#<番号>` を読む。読めなければ undefined。 */
+export function parsePullName(text: string): PullName | undefined {
+  const url = PULL_URL.exec(text.trim());
+  if (url !== null) {
+    const [, owner = '', repo = '', n = ''] = url;
+    return { owner, repo, number: Number(n), url: `https://github.com/${owner}/${repo}/pull/${n}` };
+  }
+  const short = PULL_SHORT.exec(text.trim());
+  if (short === null) return undefined;
+  const [, owner = '', repo = '', n = ''] = short;
+  return { owner, repo, number: Number(n), url: `https://github.com/${owner}/${repo}/pull/${n}` };
+}
+
+/** PR を揃えた名（`<owner>/<repo>#<番号>` の小文字）。書き方が違っても同じ PR なら同じ字。PR でなければ undefined。 */
+export function pullKey(text: string): string | undefined {
+  const p = parsePullName(text);
+  return p === undefined ? undefined : `${p.owner}/${p.repo}#${p.number}`.toLowerCase();
+}
+
+/** 同じ見る物か（PR は pullKey で、ページは URL の字で比べる）。 */
+export const sameTarget = (a: string, b: string): boolean => {
+  const key = pullKey(a);
+  return key === undefined ? a === b : key === pullKey(b);
+};
+
+/** その PR の頼みのうち、番号のいちばん大きい物（無ければ undefined）。 */
+export function latestReview(reviews: Review[], key: string): Review | undefined {
+  return reviews.filter(r => pullKey(r.url) === key).reduce<Review | undefined>((a, b) => (a === undefined || b.n > a.n ? b : a), undefined);
+}
+
+/** 判定の短い字（`#12 よい（見た 1a2b3c4）`）。判定がまだなら「判定待ち」。 */
+export function reviewNote(r: Review): string {
+  const verdict = r.verdict === undefined ? '判定待ち' : VERDICTS[r.verdict];
+  return `#${r.n} ${verdict}${r.head === undefined ? '' : `（見た ${r.head.slice(0, 7)}）`}${r.allowed === undefined ? '' : '・TPM 担当が進めると決めた'}`;
+}
+
+/** 席が出した PR の head（見た commit の元）。by は書いた席の Key。 */
+export interface SeatHead {
+  head: string
+  at: string
+  by: string
+}
+
+/**
+ * PR ごとの file（状態の folder の `review-heads/<課題の Key>/<揃えた PR の名を URL の形に符号にした字>.jsonc`）。
+ * PR ごとに分けるので、同じ場所で checkout が並んでも、ほかの PR の分を消さない（書くのは隣に書いてから名を替える）。
+ */
+const headFile = (key: string, pull: string): string => `review-heads/${key}/${encodeURIComponent(pull)}.jsonc`;
+
+/** その課題のレビューの場所で、席が出した PR の head（無ければ undefined）。 */
+export function readHead(ctx: Context, key: string, url: string): SeatHead | undefined {
+  const pull = pullKey(url);
+  return pull === undefined ? undefined : ctx.state.read<SeatHead>(headFile(key, pull));
+}
+
+/**
+ * 席が出した PR の head と時刻と、書いた席の Key を書く。呼ぶのは、Staff の席の roster review checkout と、
+ * roster ask review が席を起こす時の checkout だけ（課題の担当が出した head は、席が見た commit にしない）。
+ */
+export function recordHead(ctx: Context, key: string, url: string, head: string, by: string): void {
+  const pull = pullKey(url);
+  if (pull === undefined) return;
+  ctx.state.write(headFile(key, pull), { head, at: ctx.now().toISOString(), by } satisfies SeatHead);
+}
 
 /** 置き場のページの種類（file の名の頭）を、題に書く名にする。無い種類は file の名だけ。 */
 const KIND_NAMES: Record<string, string> = { plan: '計画', proposal: '提案', result: '結果' };

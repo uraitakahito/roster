@@ -10,7 +10,7 @@ import { recordGateStop, recordWait } from '../evidence.ts';
 import { addIncident, foldIntoIncident, incidentLine, incidentType, INCIDENT_TYPES, readIncidents, tagLines } from '../incidents.ts';
 import { message, ROLES, TPM_TITLE, WAIT, WAIT_CLOSE, WAIT_NEXT_BRIEF, WAIT_NEXT_BRIEF_LEAD, WAIT_SEAT_CLOSE, type HeadingId, type WaitKind } from '../protocol.ts';
 import { isRepoSeat, readRole, repoSeats, requireRole, requireSelf, requireTpm, requireTpmSide, writeRole, type RoleRecord, type TpmRecord } from '../roster.ts';
-import { patchReview, readReviews, VERDICTS } from '../reviews.ts';
+import { latestReview, patchReview, pullKey, readReviews, reviewNote, VERDICTS } from '../reviews.ts';
 import { TpmError } from '../skill-sets.ts';
 import { MAX_POINTS, type Note, type NoteKind, type NoteLink } from '../tracker/types.ts';
 import { isStorePage, pageOwner, replyLine, samePage, waitingByParty, waitingUrls, WAITING_PAGES } from './reply.ts';
@@ -1031,13 +1031,20 @@ export async function askDevops(ctx: Context, options: { what: string, why: stri
   return [await toTpm(ctx, self, 'ask-devops', `何を: ${options.what}／なぜ: ${options.why}／急ぎ: ${options.urgent ? 'はい' : 'いいえ'}`)];
 }
 
+/** 【merged】【doc-fix】の本文に足す、その PR のいちばん新しいレビュー（`／レビュー: #12 よい（見た 1a2b3c4）`。TPM 担当が記録を引かずに見られる）。 */
+function reviewSuffix(ctx: Context, pr: string): string {
+  const key = pullKey(pr);
+  const latest = key === undefined ? undefined : latestReview(readReviews(ctx), key);
+  return `／レビュー: ${latest === undefined ? '記録無し' : reviewNote(latest)}`;
+}
+
 /** 自分の PR を 1 本 merge したと知らせる（【merged】）。 */
 export async function reportMerged(ctx: Context, options: { pr: string, note: string, unchecked?: string }): Promise<string[]> {
   const self = await sender(ctx);
   notAuditor(self, 'roster report merged');
   const checked = assertMerged(ctx, [options.pr], options.unchecked, UNCHECKED_BOTH);
   const main = mainWorkflows(ctx, options.pr, options.unchecked);
-  return [await toBoss(ctx, self, 'merged', `${options.pr} ${options.note}${main}${checked}`)];
+  return [await toBoss(ctx, self, 'merged', `${options.pr} ${options.note}${main}${reviewSuffix(ctx, options.pr)}${checked}`)];
 }
 
 /** 文書やコメントの食い違いを直した PR を merge したと知らせ、課題があれば記録を書く（【doc-fix】）。 */
@@ -1046,7 +1053,7 @@ export async function reportDocFix(ctx: Context, options: { pr: string, note: st
   notAuditor(self, 'roster report doc-fix');
   const checked = assertMerged(ctx, [options.pr], options.unchecked, UNCHECKED_BOTH);
   const main = mainWorkflows(ctx, options.pr, options.unchecked);
-  const body = `${options.pr}（merge 済み）${options.note}${main}${checked}`;
+  const body = `${options.pr}（merge 済み）${options.note}${main}${reviewSuffix(ctx, options.pr)}${checked}`;
   await notRepeatToBoss(ctx, self, 'doc-fix', body);
   const recorded = record(ctx, self, { kind: '文書の修正', role: noteRole(self), summary: options.note, links: [{ label: 'PR（merge 済み）', url: options.pr }], points: [] });
   return [...recorded, await toBoss(ctx, self, 'doc-fix', body)];
