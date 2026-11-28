@@ -26,7 +26,7 @@ roster hello
 - **課題の担当の依頼書**（何が求められたか）と、`roster hello` が返した課題の写し・課題の中身（`roster issue view <Key>`）を読む。レビューは、これに照らしてする。
 - 見る物を読む:
   - 置き場のページ（計画・提案）: `roster page path <URL>` で読む。
-  - PR: `gh pr view <URL>`・`gh pr diff <URL>` で読む。CI の結果は `roster watch pr <URL> --timeout 0` で読む（今の様子を 1 回見て、待たずに終わる。0 = 通った・10 = 落ちた・20 = まだ・30 = check が付いていない）。CI がまだなら、待たずに、ほかを先に読む。周りのコードは、**自分の場所**（席が起きた folder。`roster ask review` が、その下の repo の名の folder に PR の head を出してある。無ければ `roster review checkout <URL>`）の clone を、`roster review git -- <show|diff|log|grep…>` で読む（file は Read tool と `cat`・`rg` でも読める）。project の本体は `roster review git --main <repo> -- …`。素の `git` は打たない（clone の `.git` を読まないため。記録に残る）。**ほかの担当の worktree に入らない**。試験は手元で流さず、CI の結果を見る。
+  - PR: `gh pr view <URL>`・`gh pr diff <URL>` で読む。CI の結果は `roster watch pr <URL> --timeout 0` で読む（今の様子を 1 回見て、待たずに終わる。0 = 通った・10 = 落ちた・20 = まだ・30 = check が付いていない）。CI がまだなら、待たずに、ほかを先に読む。周りのコードは、**自分の場所**（席が起きた folder。`roster ask review` が、その下の repo の名の folder に PR の head を出してある。無ければ `roster review checkout <URL>`）の clone を、`roster review git -- <show|diff|log|grep…>` で読む（file は Read tool と `cat`・`rg` でも読める）。project の本体は `roster review git --main <repo> -- …`。頼みに取りかかる時に `roster review checkout <URL>` を打って、その頼みの head にする（席が居る間に届いた頼みでは、命令は head を出し直さない。同じ head なら何もしない）。素の `git` は打たない（container が書き替えうる clone の `.git` を読まないため。今は記録に残るだけで、段 1b からは guard が止める）。**ほかの担当の worktree に入らない**。試験は手元で流さず、CI の結果を見る。
 - 見る物の repo の `CLAUDE.md`・`.claude/rules/`・教訓（`tasks/lessons.md` など）を読む。決まりに合っているかも見る。
 - 新しい頼みが【ask-review】で届いたら（TPM 担当が起こし直した時などは【brief】で届く）、同じように依頼書を読んで続ける。見直しなら、前のレビューのページも読む。「#<番号> を済ませてから、これをする」とあれば、前の頼みを先に返す（`roster report review` は、いちばん古い依頼書の頼みから返す）。
 

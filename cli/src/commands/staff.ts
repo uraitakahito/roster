@@ -214,7 +214,7 @@ export async function askReview(ctx: Context, options: { url: string, focus?: st
   const loose = open.filter(r => r.brief === undefined);
   const review = addReview(ctx, { key: self.key, url: options.url, ...(focus === undefined ? {} : { focus }), by: self.title });
   const asks = [...loose, review];
-  const place = preparePlace(ctx, self.key, options.url);
+  const place = preparePlace(ctx, self.key, options.url, !(seat !== undefined && alive));
   let out: string[];
   if (seat !== undefined && alive) {
     let url: string;
@@ -267,14 +267,15 @@ export async function askReview(ctx: Context, options: { url: string, focus?: st
 }
 
 /**
- * レビューの席の場所を用意する（t-n4j9 の段 2）: 名簿に居ない古い課題の場所を片付け、この課題の場所を作り、見る物が PR なら head を出す。
- * head を出せなくても頼みは止めない（席が roster review checkout で打ち直せる）。出す行を返す。
+ * レビューの席の場所を用意する（t-n4j9 の段 2）: 名簿に居ない古い課題の場所を片付け、この課題の場所を作る。
+ * 席を起こす時（checkout が true）だけ、見る物が PR なら head を出す。席が居る時は出し直さない（前の頼みを見ている途中で作業の木を替えない。
+ * 席が頼みに取りかかる時に roster review checkout を打つ。review-8 の指摘 5）。head を出せなくても頼みは止めない。出す行を返す。
  */
-function preparePlace(ctx: Context, key: string, url: string): string[] {
+function preparePlace(ctx: Context, key: string, url: string, checkout: boolean): string[] {
   const pruned = prunePlaces(ctx, k => readRole(ctx, staffKey(k)) !== undefined);
   const dir = ensurePlace(ctx, key);
   const lines = pruned.map(p => `名簿に居ない課題のレビューの場所を消した: ${p}`);
-  if (parsePull(url) === undefined) return lines;
+  if (!checkout || parsePull(url) === undefined) return lines;
   try {
     const { tree, head } = checkoutPull(ctx, key, url);
     return [...lines, `レビューの場所に PR の head を出した: ${tree}（${head.slice(0, 7)}）`];

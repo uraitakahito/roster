@@ -3,20 +3,42 @@
 // この folder で起きるので、PR の head を探して課題の担当の worktree へ行く訳が無くなる（段 0 の 1 で確かめた）。
 // clone の git の folder は作業の木の外（<場所>/.git-<repo>/）に分け、手元の git はいつも git の folder を名指して打つ。
 // 作業の木の .git の file や入れ子の .git を、container の中のコード（段 3）が書き替えても、手元の git が自前の config を読まないため（review-4 の指摘 1・段 0 の 6）。
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import type { Context } from './context.ts';
 import { envOf } from './env.ts';
 import { TpmError } from './skill-sets.ts';
 
-/** 手元の git にいつも付ける守り（hook・fsmonitor・外の diff・pager を動かさない）。 */
-export const SAFE_GIT_CONFIG = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'diff.external=', '-c', 'core.pager=cat'];
+/**
+ * 手元の git にいつも付ける守り（hook・fsmonitor・外の diff・pager を動かさない）。submodule に降りない（gitlink の path に container が置いた .git で、
+ * 子の git が起き、その config の filter を動かすため。review-8 の指摘 3）。
+ */
+export const SAFE_GIT_CONFIG = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'diff.external=', '-c', 'core.pager=cat', '-c', 'diff.ignoreSubmodules=all', '-c', 'submodule.recurse=false', '-c', 'status.submoduleSummary=false'];
 
 /** roster review git が通す、読むだけの git の命令。 */
 export const REVIEW_GIT_READS = new Set(['show', 'diff', 'log', 'status', 'rev-parse', 'ls-files', 'ls-tree', 'blame', 'grep', 'cat-file', 'merge-base']);
-/** roster review git が断る旗（外の道具・file を開く道具・書き出し・取り寄せの命令を動かす）。 */
-const REVIEW_GIT_BAD_FLAG = /^(?:--ext-diff|--textconv|-O.*|--open-files-in-pager(?:=.*)?|--output(?:=.*)?|--upload-pack(?:=.*)?|--exec(?:=.*)?)$/;
+/** roster review git が断る長い旗（外の道具・file を開く道具・書き出し・取り寄せの命令を動かす・submodule に降りる）。 */
+const REVIEW_GIT_BAD_LONG = ['--ext-diff', '--textconv', '--open-files-in-pager', '--output', '--output-directory', '--upload-pack', '--exec', '--recurse-submodules', '--submodule', '--ignore-submodules'];
+
+/**
+ * 断る旗か。git は長い旗の紛れない略し（`--outp`・`--open-files`）を受けるので、断る名の 2 字以上の頭に当たれば断る（review-8 の指摘 4）。
+ * 短い旗は `-O`（file を開く道具）。
+ */
+function badGitFlag(arg: string): boolean {
+  if (/^-O/.test(arg)) return true;
+  if (!arg.startsWith('--') || arg === '--') return false;
+  const name = arg.split('=')[0] ?? '';
+  return name.length >= 4 && REVIEW_GIT_BAD_LONG.some(bad => bad.startsWith(name));
+}
+
+/** 名（repo・Key）が、1 つの folder の名で、path を外へ出ない字か（英数字で始まり、英数字と . _ # - だけ）。 */
+const SAFE_NAME = /^[A-Za-z0-9][A-Za-z0-9._#-]*$/;
+
+/** 名を確かめる。合わなければ止まる（`''`・`.`・`..`・`/` を含む名で、場所の外を指さない。review-8 の指摘 1・2）。 */
+function assertName(name: string, what: string): void {
+  if (!SAFE_NAME.test(name) || name.includes('..')) throw new TpmError(`${what}は、英数字で始まり、英数字と . _ # - だけの名にしてください: ${JSON.stringify(name)}`);
+}
 
 /** PR の URL を読んだ物。 */
 export interface PullRef {
@@ -28,7 +50,9 @@ export interface PullRef {
 /** PR の URL（`https://<host>/<owner>/<repo>/pull/<番号>`）を読む。読めなければ undefined。 */
 export function parsePull(url: string): PullRef | undefined {
   const m = /^https:\/\/[^\s/]+\/([^\s/]+)\/([^\s/]+)\/pull\/(\d+)/.exec(url);
-  return m === null ? undefined : { owner: m[1] ?? '', repo: m[2] ?? '', number: Number(m[3]) };
+  if (m === null) return undefined;
+  const [owner, repo] = [m[1] ?? '', m[2] ?? ''];
+  return SAFE_NAME.test(owner) && SAFE_NAME.test(repo) && !owner.includes('..') && !repo.includes('..') ? { owner, repo, number: Number(m[3]) } : undefined;
 }
 
 /** レビューの場所の根（`${XDG_CACHE_HOME:-~/.cache}/roster/review`。$ROSTER_REVIEW_DIR で替えられる）。 */
@@ -39,8 +63,14 @@ export function reviewRoot(env: NodeJS.ProcessEnv): string {
 /** project ごとの folder（project の path の字を - でつないだ名）。 */
 export const projectReviewDir = (ctx: Context): string => join(reviewRoot(ctx.env), ctx.project.replace(/[^A-Za-z0-9._]+/g, '-'));
 
-/** 課題ごとの場所（席の起きる folder。repo でない folder）。 */
-export const placeDir = (ctx: Context, key: string): string => join(projectReviewDir(ctx), key);
+/** 課題ごとの場所（席の起きる folder。repo でない folder）。Key を確かめ、project の場所の 1 つ下であることも確かめる。 */
+export function placeDir(ctx: Context, key: string): string {
+  assertName(key, 'レビューの場所の Key ');
+  const base = projectReviewDir(ctx);
+  const dir = resolve(base, key);
+  if (dirname(dir) !== resolve(base)) throw new TpmError(`レビューの場所が、project の場所の外を指します: ${key}`);
+  return dir;
+}
 
 /** 場所の中の、repo ごとの作業の木（container に見せるのはここだけ）。 */
 export const workTree = (ctx: Context, key: string, repo: string): string => join(placeDir(ctx, key), repo);
@@ -72,8 +102,15 @@ function run(ctx: Context, args: string[], what: string): string {
 
 /** 本体（project の folder の直下の、repo の名の git の checkout）。物を借りて clone を速くする。無ければ undefined。 */
 function mainCheckout(ctx: Context, repo: string): string | undefined {
+  assertName(repo, 'repo の名');
   const dir = join(ctx.project, repo);
-  return existsSync(join(dir, '.git')) ? dir : undefined;
+  // .git が folder の物だけ（gitdir を指す file は、場所の作業の木の .git の形なので取らない。review-8 の指摘 2）。
+  try {
+    return lstatSync(join(dir, '.git')).isDirectory() ? dir : undefined;
+  }
+  catch {
+    return undefined;
+  }
 }
 
 /**
@@ -105,7 +142,7 @@ export function checkoutPull(ctx: Context, key: string, url: string): { tree: st
 export function reviewGit(ctx: Context, key: string, options: { repo?: string, main?: string }, args: string[]): { status: number, stdout: string, stderr: string } {
   const [sub, ...rest] = args;
   if (sub === undefined || !REVIEW_GIT_READS.has(sub)) throw new TpmError(`roster review git が通すのは、読むだけの命令だけです（${[...REVIEW_GIT_READS].join('・')}）: ${sub ?? '（無し）'}`);
-  const bad = rest.find(a => REVIEW_GIT_BAD_FLAG.test(a));
+  const bad = rest.find(badGitFlag);
   if (bad !== undefined) throw new TpmError(`roster review git は、外の道具を動かす・書き出す旗を通しません: ${bad}`);
   if (options.main !== undefined) {
     const main = mainCheckout(ctx, options.main);
@@ -115,6 +152,7 @@ export function reviewGit(ctx: Context, key: string, options: { repo?: string, m
   const repos = clonedRepos(ctx, key);
   const repo = options.repo ?? (repos.length === 1 ? repos[0] : undefined);
   if (repo === undefined) throw new TpmError(repos.length === 0 ? 'この課題の場所に clone がありません（roster review checkout <PR の URL> で作る）' : `clone が ${repos.length} つあります。--repo <名> で選んでください: ${repos.join('・')}`);
+  assertName(repo, 'repo の名');
   if (!repos.includes(repo)) throw new TpmError(`この課題の場所に ${repo} の clone がありません: ${repos.join('・') || '（無し）'}`);
   return ctx.exec('git', safeGitArgs(gitDir(ctx, key, repo), workTree(ctx, key, repo), [sub, ...rest]));
 }

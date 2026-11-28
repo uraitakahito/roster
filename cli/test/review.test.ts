@@ -147,7 +147,7 @@ describe('roster ask review（席が居る時: じかに届ける）', () => {
     w.staff.now = () => new Date('2026-11-20T12:05:00.000Z');
     await reportReview(w.staff, { url: await w.put(w.staff, 'review'), verdict: 'approve', summary: 'このままでよい' });
     w.se.now = () => new Date('2026-11-20T12:10:00.000Z');
-    expect(await askReview(w.se, { url: PR })).toEqual(['送った: 【ask-review】→ file:2（相手の手が空いた時に届く。送り直さない）', expect.stringMatching(/^置き場の印: レビュー待ちにした http:\/\/127\.0\.0\.1:8801\/.+\/AI-8\/brief-2\.html$/) as string, expect.stringMatching(/^レビューの場所に PR の head を出した: .+\/review\/.+\/AI-8\/r（/) as string, '状態: 回答待ち(レビュー): PR #7']);
+    expect(await askReview(w.se, { url: PR })).toEqual(['送った: 【ask-review】→ file:2（相手の手が空いた時に届く。送り直さない）', expect.stringMatching(/^置き場の印: レビュー待ちにした http:\/\/127\.0\.0\.1:8801\/.+\/AI-8\/brief-2\.html$/) as string, '状態: 回答待ち(レビュー): PR #7']);
     const got = w.posted('file:2').at(-1);
     expect(got?.from).toBe(SE_TITLE);
     expect(got?.text).toMatch(new RegExp(`^【ask-review】http://127\\.0\\.0\\.1:8801/.+/AI-8/brief-2\\.html 頼み: #2 ${PR}$`));
@@ -227,7 +227,7 @@ describe('roster ask review（席が居る時: じかに届ける）', () => {
       throw new Error('Workspace ref not found');
     };
     const se = { ...w.se, seats: Object.assign(Object.create(w.se.seats) as Context['seats'], { relabel }) };
-    expect(await askReview(se, { url: PR })).toEqual(['送った: 【ask-review】→ file:2（相手の手が空いた時に届く。送り直さない）', '居場所の題を替えられなかった（名簿の題は レビュー AI-8: 計画 plan-1 のまま）: Workspace ref not found', expect.stringMatching(/^置き場の印: レビュー待ちにした http:\/\/127\.0\.0\.1:8801\/.+\/AI-8\/brief-2\.html$/) as string, expect.stringMatching(/^レビューの場所に PR の head を出した: .+\/review\/.+\/AI-8\/r（/) as string, '状態: 回答待ち(レビュー): PR #7']);
+    expect(await askReview(se, { url: PR })).toEqual(['送った: 【ask-review】→ file:2（相手の手が空いた時に届く。送り直さない）', '居場所の題を替えられなかった（名簿の題は レビュー AI-8: 計画 plan-1 のまま）: Workspace ref not found', expect.stringMatching(/^置き場の印: レビュー待ちにした http:\/\/127\.0\.0\.1:8801\/.+\/AI-8\/brief-2\.html$/) as string, '状態: 回答待ち(レビュー): PR #7']);
     expect(requireRole(w.tpm, 'AI-8.staff').title).toBe('レビュー AI-8: 計画 plan-1');
     expect(readReviews(w.tpm)[1]?.brief).toMatch(/brief-2\.html$/);
   });

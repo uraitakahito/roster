@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
@@ -123,6 +123,63 @@ describe('レビューの場所（t-n4j9 の段 2）', () => {
     git(ctx.project, 'clone', '--quiet', join(base, 'remote', 'o', 'r.git'), 'r');
     checkoutPull(ctx, 'AI-8', PR);
     expect(existsSync(join(gitDir(ctx, 'AI-8', 'r'), 'objects', 'info', 'alternates'))).toBe(false);
+  });
+
+  test('Key と repo の名を確かめ、場所の外を指す名を断る（review-8 の指摘 1・2）', () => {
+    const { ctx } = setup();
+    const keep = ensurePlace(ctx, 'AI-1');
+    for (const key of ['', '.', '..', '../x', 'a/b', '../../..', '-x']) {
+      expect(() => removePlace(ctx, key)).toThrow(/英数字で始まり/);
+    }
+    expect(existsSync(keep)).toBe(true);
+    expect(() => reviewGit(ctx, 'AI-8', { main: '../x' }, ['log'])).toThrow(/英数字で始まり/);
+    expect(() => reviewGit(ctx, 'AI-8', { repo: '../r' }, ['log'])).toThrow(/英数字で始まり/);
+    // .git が gitdir の file の folder（場所の作業の木の形）は、本体とみなさない。
+    checkoutPull(ctx, 'AI-8', PR);
+    symlinkSync(workTree(ctx, 'AI-8', 'r'), join(ctx.project, 'linked'));
+    expect(() => reviewGit(ctx, 'AI-8', { main: 'linked' }, ['log'])).toThrow(/本体がありません/);
+    expect(() => checkoutPull(ctx, 'AI-8', 'https://github.com/o/../pull/1')).toThrow(/PR の URL ではありません/);
+  });
+
+  test('git の長い旗の略しと submodule の旗も断る（review-8 の指摘 3・4）', () => {
+    const { ctx } = setup();
+    checkoutPull(ctx, 'AI-8', PR);
+    for (const flag of ['--open-files=sh', '--outp=/tmp/x', '--ext', '--textc', '--recurse-sub', '--submodule=diff', '--ignore-sub=none', '-Ovim']) {
+      expect(() => reviewGit(ctx, 'AI-8', {}, ['diff', flag])).toThrow(/旗を通しません/);
+    }
+    expect(reviewGit(ctx, 'AI-8', {}, ['log', '--oneline', '-1']).status).toBe(0);
+  });
+
+  test('gitlink の path に置いた .git があっても、手元の git は子の git を起こさない（review-8 の指摘 3）', () => {
+    const { ctx, base } = setup();
+    // head に gitlink（submodule の入り口）を入れる。
+    const work = join(base, 'work');
+    const sha = git(work, 'rev-parse', 'HEAD');
+    git(work, 'update-index', '--add', '--cacheinfo', `160000,${sha},sub`);
+    git(work, 'commit', '--quiet', '-m', 'gitlink');
+    git(work, 'push', '--quiet', '--force', join(base, 'remote', 'o', 'r.git'), 'HEAD:refs/pull/1/head');
+    const { tree } = checkoutPull(ctx, 'AI-8', PR);
+    // container が置く形: gitlink の path に子の repo を作り、中を変える。
+    mkdirSync(join(tree, 'sub'), { recursive: true });
+    git(join(tree, 'sub'), 'init', '--quiet');
+    writeFileSync(join(tree, 'sub', 'x.txt'), 'x\n');
+    const trace = join(base, 'trace.txt');
+    const traced = (run: () => void): string => {
+      process.env.GIT_TRACE = trace;
+      try {
+        run();
+      }
+      finally {
+        delete process.env.GIT_TRACE;
+      }
+      const text = existsSync(trace) ? readFileSync(trace, 'utf8') : '';
+      writeFileSync(trace, '');
+      return text;
+    };
+    // 対照: 素の git status は、子の git を起こす。
+    expect(traced(() => spawnSync('git', ['status', '--short'], { cwd: tree, encoding: 'utf8' }))).toMatch(/run_command:.*status --porcelain/);
+    expect(traced(() => reviewGit(ctx, 'AI-8', {}, ['status', '--short']))).not.toMatch(/run_command:.*status --porcelain/);
+    expect(traced(() => reviewGit(ctx, 'AI-8', {}, ['diff']))).not.toMatch(/run_command:.*status --porcelain/);
   });
 
   test('場所を消す。名簿に居ない Key の場所は、1 時間より古い物だけを消す', () => {
