@@ -80,6 +80,9 @@ describe('roster push', () => {
     expect(sh(r.work, 'rev-parse', '--abbrev-ref', '@{u}')).toBe('origin/b');
     const rec = r.records().at(-1);
     expect(rec).toMatchObject({ result: 'pushed', code: 0, target: 'b', key: 't-x', checks: [{ name: 'one', code: 0 }, { name: 'two', code: 0 }] });
+    // 一覧を変えていなければ、差の行も記録の欄も無い。
+    expect(rec?.configDiff).toBeUndefined();
+    expect(res.lines.join('\n')).not.toContain('確かめの一覧の差');
   });
 
   test('確かめが 1 つ落ちれば push せず 10。残りの確かめも流し、落ちた出力の終わりを出す', () => {
@@ -94,11 +97,140 @@ describe('roster push', () => {
     expect(r.records().at(-1)).toMatchObject({ result: 'failed', code: 10 });
   });
 
-  test('一覧は origin の既定の branch から読む（branch の中で落ちる確かめを消しても効かない）', () => {
-    const r = repo([{ name: 'bad', run: FAIL }]);
-    writeFileSync(join(r.work, '.claude', 'roles', 'config.jsonc'), configText([{ name: 'ok', run: PASS }]));
-    sh(r.work, 'commit', '--quiet', '-am', 'weaken');
-    expect(push(r.ctx, { cwd: r.work }).code).toBe(PUSH_EXIT.failed);
+  /** 手元の branch の config.jsonc を書き替えて commit する。 */
+  const commitConfig = (r: Repo, text: string, message = 'config'): void => {
+    writeFileSync(join(r.work, '.claude', 'roles', 'config.jsonc'), text);
+    sh(r.work, 'commit', '--quiet', '-am', message);
+  };
+
+  test('一覧は push する commit から読む。branch で消した確かめは流さず、差に出して記録に残し、レビューを頼む案内を出す（t-f73c）', () => {
+    const r = repo([{ name: 'bad', run: FAIL }, { name: 'keep', run: PASS }]);
+    commitConfig(r, configText([{ name: 'keep', run: PASS }]), 'weaken');
+    const res = push(r.ctx, { cwd: r.work });
+    expect(res.code).toBe(PUSH_EXIT.pushed);
+    const out = res.lines.join('\n');
+    expect(out).toContain('確かめの一覧の差（main と分かれた所と比べて）: 消した: bad');
+    expect(out).toContain('レビューを必ず頼む');
+    expect(out).not.toContain('落ちた: bad');
+    expect(r.records().at(-1)?.configDiff).toEqual({ base: 'merge-base', removed: ['bad'], changed: [], added: [] });
+  });
+
+  test('main に一覧が無くても、branch で足した一覧で確かめて push する（一覧を足す PR・新しい repo の初めの PR）', () => {
+    const r = repo();
+    commitConfig(r, configText([{ name: 'x', run: FAIL }]));
+    const failed = push(r.ctx, { cwd: r.work });
+    expect(failed.code).toBe(PUSH_EXIT.failed);
+    expect(failed.lines.join('\n')).toContain('足した: x');
+    commitConfig(r, configText([{ name: 'x', run: PASS }]));
+    const res = push(r.ctx, { cwd: r.work });
+    expect(res.code).toBe(PUSH_EXIT.pushed);
+    expect(res.lines.join('\n')).not.toContain('レビューを必ず頼む');
+    expect(r.records().at(-1)?.configDiff).toEqual({ base: 'merge-base', removed: [], changed: [], added: ['x'] });
+  });
+
+  test('同じ名の確かめの欄を変えたら、変えた欄の名を出す', () => {
+    const r = repo([{ name: 'one', run: PASS }]);
+    commitConfig(r, configText([{ name: 'one', run: FAIL, timeoutSeconds: 30 }]));
+    const res = push(r.ctx, { cwd: r.work });
+    expect(res.code).toBe(PUSH_EXIT.failed);
+    expect(res.lines.join('\n')).toContain('変えた: one（run・timeoutSeconds）');
+    expect(r.records().at(-1)?.configDiff).toMatchObject({ changed: ['one'], removed: [] });
+  });
+
+  test('main に後から足された確かめは「消した」と読まず、取り込めば流れると出す', () => {
+    const r = repo([{ name: 'one', run: PASS }]);
+    sh(r.work, 'checkout', '--quiet', 'main');
+    commitConfig(r, configText([{ name: 'one', run: PASS }, { name: 'late', run: FAIL }]), 'add late');
+    sh(r.work, 'push', '--quiet', 'origin', 'main');
+    sh(r.work, 'checkout', '--quiet', 'b');
+    const res = push(r.ctx, { cwd: r.work });
+    expect(res.code).toBe(PUSH_EXIT.pushed);
+    const out = res.lines.join('\n');
+    expect(out).toContain('main に後から足された確かめ・変えられた確かめが、この branch に無いか古いまま');
+    expect(out).toContain('足された: late');
+    expect(out).not.toContain('消した');
+    expect(r.records().at(-1)?.configDiff).toEqual({ base: 'merge-base', removed: [], changed: [], added: [], mainAdded: ['late'] });
+  });
+
+  test('push の欄ごと消した branch は、宣言の無い repo と同じに断り、--no-checks なら push する。どちらも差に出す（confirm-1 の項目 2）', () => {
+    const r = repo([{ name: 'one', run: PASS }]);
+    commitConfig(r, configText());
+    const refused = push(r.ctx, { cwd: r.work });
+    expect(refused.code).toBe(PUSH_EXIT.error);
+    expect(refused.lines.join('\n')).toContain('push の欄ごと消した（あった確かめ: one）');
+    expect(r.records().at(-1)).toMatchObject({ result: 'refused', configDiff: { sectionRemoved: true, removed: ['one'] } });
+    const res = push(r.ctx, { cwd: r.work, noChecks: '欄を外す' });
+    expect(res.code).toBe(PUSH_EXIT.pushed);
+    expect(r.records().at(-1)).toMatchObject({ result: 'pushed', noChecks: '欄を外す', configDiff: { sectionRemoved: true } });
+  });
+
+  test('config.jsonc が作業の木に在って git に入っていなければ、そう言って断る', () => {
+    const r = repo([{ name: 'one', run: PASS }]);
+    sh(r.work, 'rm', '--quiet', '--cached', '.claude/roles/config.jsonc');
+    sh(r.work, 'commit', '--quiet', '-m', 'untrack');
+    const res = push(r.ctx, { cwd: r.work });
+    expect(res.code).toBe(PUSH_EXIT.error);
+    expect(res.lines.join('\n')).toContain('作業の木に在るが git に入っていない');
+  });
+
+  test('push する commit の一覧の形が違えば断る。比べる元の一覧の形が違うだけなら断らず、差は出さない', () => {
+    const bad = repo([{ name: 'one', run: PASS }]);
+    commitConfig(bad, JSON.stringify({ push: { checks: [] } }));
+    const refused = push(bad.ctx, { cwd: bad.work });
+    expect(refused.code).toBe(PUSH_EXIT.error);
+    expect(refused.lines.join('\n')).toContain('push する commit');
+    const r = repo([]);
+    commitConfig(r, configText([{ name: 'one', run: PASS }]));
+    const res = push(r.ctx, { cwd: r.work });
+    expect(res.code).toBe(PUSH_EXIT.pushed);
+    expect(res.lines.join('\n')).toContain('その一覧が読めない');
+    expect(r.records().at(-1)?.configDiff).toMatchObject({ baseUnreadable: true });
+  });
+
+  test('main と分かれた所が取れなければ、origin の既定の branch の先と比べ、そう出す（review-1 の指摘 3）', () => {
+    const r = repo([{ name: 'one', run: PASS }, { name: 'two', run: PASS }]);
+    sh(r.work, 'checkout', '--quiet', '--orphan', 'o');
+    commitConfig(r, configText([{ name: 'one', run: PASS }]), 'orphan');
+    const res = push(r.ctx, { cwd: r.work });
+    expect(res.code).toBe(PUSH_EXIT.pushed);
+    expect(res.lines.join('\n')).toContain('main と分かれた所が取れないので');
+    expect(r.records().at(-1)?.configDiff).toEqual({ base: 'default-branch', removed: ['two'], changed: [], added: [] });
+  });
+
+  /** main で config.jsonc を書き替えて push し、branch b に戻る。 */
+  const advanceMain = (r: Repo, text: string): void => {
+    sh(r.work, 'checkout', '--quiet', 'main');
+    commitConfig(r, text, 'main config');
+    sh(r.work, 'push', '--quiet', 'origin', 'main');
+    sh(r.work, 'checkout', '--quiet', 'b');
+  };
+
+  test('分かれた後に main が確かめの中身を変えたら、取り込んでいない branch では古いままと出す（review-2 の指摘 1）', () => {
+    const r = repo([{ name: 'one', run: PASS }]);
+    advanceMain(r, configText([{ name: 'one', run: FAIL }]));
+    const res = push(r.ctx, { cwd: r.work });
+    expect(res.code).toBe(PUSH_EXIT.pushed);
+    expect(res.lines.join('\n')).toContain('変えられた: one（run）');
+    expect(r.records().at(-1)?.configDiff).toEqual({ base: 'merge-base', removed: [], changed: [], added: [], mainChanged: ['one'] });
+  });
+
+  test('main が宣言を足す前に切った branch は、--no-checks でも断り、取り込むよう言う（review-2 の指摘 2）', () => {
+    const r = repo();
+    advanceMain(r, configText([{ name: 'one', run: PASS }]));
+    const refused = push(r.ctx, { cwd: r.work, noChecks: '古い branch' });
+    expect(refused.code).toBe(PUSH_EXIT.error);
+    expect(refused.lines.join('\n')).toContain('取り込んでから打つ（--no-checks は受けない）');
+    expect(remoteSha(r, 'refs/heads/b')).toBeUndefined();
+  });
+
+  test('分かれた所の一覧が読めなければ、origin の既定の branch の先と比べる（review-2 の指摘 3）', () => {
+    const r = repo([]);
+    advanceMain(r, configText([{ name: 'one', run: PASS }]));
+    commitConfig(r, configText([{ name: 'one', run: PASS }, { name: 'two', run: PASS }]));
+    const res = push(r.ctx, { cwd: r.work });
+    expect(res.code).toBe(PUSH_EXIT.pushed);
+    expect(res.lines.join('\n')).toContain('main と分かれた所が読めないので、origin/main の先と比べて');
+    expect(r.records().at(-1)?.configDiff).toEqual({ base: 'default-branch', removed: [], changed: [], added: ['two'] });
   });
 
   test('dir の下で流し、env を足す', () => {
@@ -264,6 +396,76 @@ describe('roster push', () => {
     const r = repo([{ name: 'one', run: PASS }]);
     sh(r.work, 'remote', 'set-url', 'origin', join(r.remote, 'missing'));
     expect(push(r.ctx, { cwd: r.work }).code).toBe(PUSH_EXIT.pushFailed);
+  });
+
+  /** 空の remote（main がまだ無い）と、main に初めの commit を作った clone（台帳 #531 の空の repo の初めの push）。 */
+  function emptyRepo(checks?: unknown[]): Repo {
+    const dir = mkdtempSync(join(tmpdir(), 'roster-push-empty-'));
+    const remote = join(dir, 'remote.git');
+    const work = join(dir, 'work');
+    sh(dir, 'init', '--quiet', '--bare', '-b', 'main', remote);
+    sh(dir, 'clone', '--quiet', remote, work);
+    sh(work, 'checkout', '--quiet', '-b', 'main');
+    mkdirSync(join(work, '.claude', 'roles'), { recursive: true });
+    writeFileSync(join(work, '.claude', 'roles', 'config.jsonc'), configText(checks));
+    sh(work, 'add', '.claude/roles/config.jsonc');
+    sh(work, 'commit', '--quiet', '-m', 'init');
+    const w = world();
+    const ctx: Context = { ...w.role('t-x', 'file:swe'), exec };
+    return { remote, work, ctx, records: () => ctx.state.lines<PushRecord>(PUSH_LOG) };
+  }
+
+  test('origin に main がまだ無い空の repo では、main の上から、push する commit の一覧で確かめて初めの push をする', () => {
+    const r = emptyRepo([{ name: 'one', run: PASS }]);
+    const res = push(r.ctx, { cwd: r.work });
+    expect(res.code).toBe(PUSH_EXIT.pushed);
+    expect(remoteSha(r, 'refs/heads/main')).toBe(sh(r.work, 'rev-parse', 'HEAD'));
+    expect(res.lines.join('\n')).toContain('確かめの一覧の差（origin に main がまだ無い（初めの push）ので、空の一覧と比べて）: 足した: one');
+    expect(r.records().at(-1)?.configDiff).toEqual({ base: 'none', removed: [], changed: [], added: ['one'] });
+  });
+
+  test('空の repo で宣言が無ければ断り、--no-checks なら初めの push をする', () => {
+    const r = emptyRepo();
+    expect(push(r.ctx, { cwd: r.work }).code).toBe(PUSH_EXIT.error);
+    expect(push(r.ctx, { cwd: r.work, noChecks: '初めの push' }).code).toBe(PUSH_EXIT.pushed);
+    expect(remoteSha(r, 'refs/heads/main')).toBe(sh(r.work, 'rev-parse', 'HEAD'));
+  });
+
+  test('空の repo でも確かめが落ちれば push しない。tag は断る', () => {
+    const r = emptyRepo([{ name: 'bad', run: FAIL }]);
+    expect(push(r.ctx, { cwd: r.work }).code).toBe(PUSH_EXIT.failed);
+    expect(remoteSha(r, 'refs/heads/main')).toBeUndefined();
+    sh(r.work, 'tag', 'v0.0.1');
+    expect(push(r.ctx, { cwd: r.work, tag: 'v0.0.1' }).code).toBe(PUSH_EXIT.error);
+  });
+
+  test('空の repo の初めの push を main でない branch から打てば断る（その branch が既定の branch になるため。review-5 の指摘 2）', () => {
+    const r = emptyRepo([{ name: 'one', run: PASS }]);
+    sh(r.work, 'checkout', '--quiet', '-b', 't-x/impl');
+    const res = push(r.ctx, { cwd: r.work });
+    expect(res.code).toBe(PUSH_EXIT.error);
+    expect(res.lines.join('\n')).toContain('初めの push は main の上から打つ');
+    expect(remoteSha(r, 'refs/heads/t-x/impl')).toBeUndefined();
+  });
+
+  test('中身の在る remote で main だけが無い（手元の origin/HEAD が古い）時は、初めの push とみなさず 2（review-5 の指摘 1）', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'roster-push-trunk-'));
+    const remote = join(dir, 'remote.git');
+    const work = join(dir, 'work');
+    sh(dir, 'init', '--quiet', '--bare', '-b', 'trunk', remote);
+    sh(dir, 'clone', '--quiet', remote, work);
+    sh(work, 'checkout', '--quiet', '-b', 'trunk');
+    writeFileSync(join(work, 'a.txt'), 'a\n');
+    sh(work, 'add', 'a.txt');
+    sh(work, 'commit', '--quiet', '-m', 'init');
+    sh(work, 'push', '--quiet', '-u', 'origin', 'trunk');
+    // 既定の branch の名を替える前の clone の形: 手元の origin/HEAD が、もう無い origin/main を指す。
+    sh(work, 'symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main');
+    sh(work, 'checkout', '--quiet', '-b', 'main');
+    const w = world();
+    const ctx: Context = { ...w.role('t-x', 'file:swe'), exec };
+    expect(push(ctx, { cwd: work, noChecks: '試し' }).code).toBe(PUSH_EXIT.pushFailed);
+    expect(exec('git', ['rev-parse', '--verify', '--quiet', 'refs/heads/main'], { cwd: remote }).status).not.toBe(0);
   });
 
   test('git の worktree の外では断る', () => {
