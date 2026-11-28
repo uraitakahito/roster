@@ -388,8 +388,9 @@ export function push(ctx: Context, options: PushOptions): PushResult {
     finish({ repo, target, ...(sha === undefined ? {} : { sha }), checks: [], code: PUSH_EXIT.error, result: 'refused', reason, ...(diff === undefined ? {} : { configDiff: diff.result.diff }) }, [...(diff === undefined ? [] : diffLines(diff.result, diff.from)), `断った: ${reason}`]);
   const main = defaultBranch(ctx, root);
   const fetched = git(ctx, root, ['fetch', '--quiet', 'origin', main]);
-  // origin に既定の branch がまだ無い（空の repo の初めの push）: fetch は落ちるが、ls-remote は繋がって「無い」（2）を返す。網の誤りと分ける（台帳 #531）。
-  const firstPush = fetched.status !== 0 && git(ctx, root, ['ls-remote', '--exit-code', '--heads', 'origin', main]).status === 2;
+  // origin が空（ref が 1 つも無い。空の repo の初めの push）: fetch は落ちるが、名指し無しの ls-remote は繋がって「無い」（2）を返す。
+  // 網の誤り（128）と、中身は在って main だけが無い repo（既定の branch の名を替えた・手元の origin/HEAD が古い）とは分ける（台帳 #531・review-5 の指摘 1）。
+  const firstPush = fetched.status !== 0 && git(ctx, root, ['ls-remote', '--exit-code', 'origin']).status === 2;
   if (fetched.status !== 0 && !firstPush) {
     return finish({ repo, target: options.tag === undefined ? '' : `tags/${options.tag}`, checks: [], code: PUSH_EXIT.pushFailed, result: 'push-failed', reason: 'fetch が落ちた' }, [`git fetch origin ${main} が落ちた（確かめは流していない・push していない）: ${fetched.stderr.trim().split('\n').pop() ?? ''}`, '網の誤り（5xx・繋がらない）なら、roster watch github を裏で起こして待ち、戻ってから打ち直す']);
   }
@@ -400,7 +401,8 @@ export function push(ctx: Context, options: PushOptions): PushResult {
   const branch = gitLine(ctx, root, ['symbolic-ref', '--quiet', '--short', 'HEAD']);
   if (branch === undefined) return refuse('', 'HEAD が branch でない（detached）。branch を作ってから打つ');
   const target = branch;
-  // 空の repo の初めの push は、既定の branch を作る push なので、main の上から打ってよい（ほかの名の branch を先に出すと、GitHub はそれを既定の branch にする）。
+  // 空の repo の初めの push は、既定の branch を作る push なので、main の上からだけ打つ（ほかの名の branch を先に出すと、GitHub はそれを既定の branch にする。review-5 の指摘 2）。
+  if (firstPush && target !== main) return refuse(target, `origin が空（ref が 1 つも無い）。初めの push は ${main} の上から打つ（既定の branch を作るため。ほかの名の branch を先に出すと、それが既定の branch になる）`);
   if (target === main && !firstPush) return refuse(target, `既定の branch（${main}）の上にいる。main から branch を切り（git switch -c <名>）、その branch で打つ`);
   if (options.noChecks?.trim() === '') return refuse(target, '--no-checks には訳を書く（空は受けない）');
   const changes = trackedChanges(ctx, root);

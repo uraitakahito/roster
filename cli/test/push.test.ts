@@ -439,6 +439,35 @@ describe('roster push', () => {
     expect(push(r.ctx, { cwd: r.work, tag: 'v0.0.1' }).code).toBe(PUSH_EXIT.error);
   });
 
+  test('空の repo の初めの push を main でない branch から打てば断る（その branch が既定の branch になるため。review-5 の指摘 2）', () => {
+    const r = emptyRepo([{ name: 'one', run: PASS }]);
+    sh(r.work, 'checkout', '--quiet', '-b', 't-x/impl');
+    const res = push(r.ctx, { cwd: r.work });
+    expect(res.code).toBe(PUSH_EXIT.error);
+    expect(res.lines.join('\n')).toContain('初めの push は main の上から打つ');
+    expect(remoteSha(r, 'refs/heads/t-x/impl')).toBeUndefined();
+  });
+
+  test('中身の在る remote で main だけが無い（手元の origin/HEAD が古い）時は、初めの push とみなさず 2（review-5 の指摘 1）', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'roster-push-trunk-'));
+    const remote = join(dir, 'remote.git');
+    const work = join(dir, 'work');
+    sh(dir, 'init', '--quiet', '--bare', '-b', 'trunk', remote);
+    sh(dir, 'clone', '--quiet', remote, work);
+    sh(work, 'checkout', '--quiet', '-b', 'trunk');
+    writeFileSync(join(work, 'a.txt'), 'a\n');
+    sh(work, 'add', 'a.txt');
+    sh(work, 'commit', '--quiet', '-m', 'init');
+    sh(work, 'push', '--quiet', '-u', 'origin', 'trunk');
+    // 既定の branch の名を替える前の clone の形: 手元の origin/HEAD が、もう無い origin/main を指す。
+    sh(work, 'symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main');
+    sh(work, 'checkout', '--quiet', '-b', 'main');
+    const w = world();
+    const ctx: Context = { ...w.role('t-x', 'file:swe'), exec };
+    expect(push(ctx, { cwd: work, noChecks: '試し' }).code).toBe(PUSH_EXIT.pushFailed);
+    expect(exec('git', ['rev-parse', '--verify', '--quiet', 'refs/heads/main'], { cwd: remote }).status).not.toBe(0);
+  });
+
   test('git の worktree の外では断る', () => {
     const w = world();
     const res = push({ ...w.role('t-x', 'file:swe'), exec }, { cwd: mkdtempSync(join(tmpdir(), 'roster-push-out-')) });
