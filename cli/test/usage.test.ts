@@ -205,18 +205,18 @@ describe('文脈の長さと段', () => {
   });
 });
 
-describe('toRows: 時計の 1 時間と種類ごとに 1 行', () => {
-  test('同じ時・同じ種類の回は 1 行にまとめ、段ごとの数と額の和が行と合う', () => {
+describe('toRows: 時計の 10 分の枠と種類ごとに 1 行', () => {
+  test('同じ 10 分の枠・同じ種類の回は 1 行にまとめ、段ごとの数と額の和が行と合う', () => {
     const rows = toRows([
-      turn({ id: 'a', at: '2026-11-27T01:10:00.000Z', inputTokens: 10_000, outputTokens: 100 }),
-      turn({ id: 'b', at: '2026-11-27T01:50:00.000Z', inputTokens: 30_000, cacheReadTokens: 200_000 }),
-      turn({ id: 'c', at: '2026-11-27T01:05:00.000Z', inputTokens: 20_000 }),
+      turn({ id: 'a', at: '2026-11-27T01:12:00.000Z', inputTokens: 10_000, outputTokens: 100 }),
+      turn({ id: 'b', at: '2026-11-27T01:19:59.999Z', inputTokens: 30_000, cacheReadTokens: 200_000 }),
+      turn({ id: 'c', at: '2026-11-27T01:10:00.000Z', inputTokens: 20_000 }),
     ]);
     expect(rows).toHaveLength(1);
     const [row] = rows;
     expect(row).toMatchObject({
-      fromAt: '2026-11-27T01:05:00.000Z',
-      toAt: '2026-11-27T01:50:00.000Z',
+      fromAt: '2026-11-27T01:10:00.000Z',
+      toAt: '2026-11-27T01:19:59.999Z',
       model: 'claude-opus-5-5',
       speed: 'standard',
       serviceTier: 'standard',
@@ -230,6 +230,22 @@ describe('toRows: 時計の 1 時間と種類ごとに 1 行', () => {
     expect(row?.buckets.map(b => [b.bucket, b.turns])).toEqual([[0, 2], [9, 1]]);
     expect(row?.buckets.reduce((n, b) => n + b.turns, 0)).toBe(row?.turns);
     expect(row?.buckets.reduce((n, b) => n + b.costMicroUsd, 0)).toBe(row?.costMicroUsd);
+  });
+
+  test('10 分の境をまたぐ回は別の行になり、どの行も 1 つの 10 分の枠（UTC）に収まる', () => {
+    const rows = toRows([
+      turn({ id: 'a', at: '2026-11-27T01:09:59.999Z' }),
+      turn({ id: 'b', at: '2026-11-27T01:10:00.000Z' }),
+      turn({ id: 'c', at: '2026-11-27T01:50:00.000Z' }),
+      turn({ id: 'd', at: '2026-11-27T01:05:00.000Z' }),
+    ]);
+    expect(rows.map(r => [r.fromAt, r.toAt, r.turns])).toEqual([
+      ['2026-11-27T01:05:00.000Z', '2026-11-27T01:09:59.999Z', 2],
+      ['2026-11-27T01:10:00.000Z', '2026-11-27T01:10:00.000Z', 1],
+      ['2026-11-27T01:50:00.000Z', '2026-11-27T01:50:00.000Z', 1],
+    ]);
+    // 枠は、分の十の位まで（`2026-11-27T01:0`）が同じ。枠は時の内に収まるので、castlist の検査（同じ UTC の時）も通る。
+    for (const r of rows) expect(r.fromAt.slice(0, 15)).toBe(r.toAt.slice(0, 15));
   });
 
   test('時の境をまたぐ回は別の行になり、どの行も 1 つの時の内に収まる', () => {
@@ -260,7 +276,7 @@ describe('toRows: 時計の 1 時間と種類ごとに 1 行', () => {
 
   test('並びは、回の順に依らない', () => {
     const a = turn({ id: 'a', at: '2026-11-27T01:30:00.000Z' });
-    const b = turn({ id: 'b', at: '2026-11-27T01:40:00.000Z' });
+    const b = turn({ id: 'b', at: '2026-11-27T01:35:00.000Z' });
     const c = turn({ id: 'c', at: '2026-11-27T03:00:00.000Z', model: 'claude-fable-5-2' });
     expect(toRows([a, b, c])).toEqual(toRows([c, b, a]));
     expect(toRows([a, b])).toHaveLength(1);
@@ -272,11 +288,11 @@ describe('toRows: 時計の 1 時間と種類ごとに 1 行', () => {
 });
 
 describe('sumRows: 読む側の決まり', () => {
-  test('同じ 1 時間を 2 回に分けて送った行は、数を足し、いちばん長い値は大きい方を取る', () => {
+  test('同じ 10 分の枠を 2 回に分けて送った行は、数を足し、いちばん長い値は大きい方を取る', () => {
     const turns = [
       turn({ id: 'a', at: '2026-11-27T01:05:00.000Z', inputTokens: 300_000, outputTokens: 10 }),
-      turn({ id: 'b', at: '2026-11-27T01:20:00.000Z', inputTokens: 10_000 }),
-      turn({ id: 'c', at: '2026-11-27T01:40:00.000Z', inputTokens: 12_000, cacheWrite1hTokens: 5 }),
+      turn({ id: 'b', at: '2026-11-27T01:07:00.000Z', inputTokens: 10_000 }),
+      turn({ id: 'c', at: '2026-11-27T01:09:00.000Z', inputTokens: 12_000, cacheWrite1hTokens: 5 }),
     ];
     const whole = toRows(turns);
     const parts = [...toRows(turns.slice(0, 2)), ...toRows(turns.slice(2))];
@@ -285,6 +301,26 @@ describe('sumRows: 読む側の決まり', () => {
     expect([model, speed, serviceTier]).toEqual(['claude-opus-5-5', 'standard', 'standard']);
     expect(sumRows(parts)).toEqual(rest);
     expect(sumRows(parts)?.maxContext).toBe(300_000);
+  });
+
+  test('和は、行の切り方に依らない（10 分の枠ごとの行を足すと、回をみな足した数になる）', () => {
+    const turns = [
+      turn({ id: 'a', at: '2026-11-27T01:05:00.000Z', inputTokens: 300_000, outputTokens: 10 }),
+      turn({ id: 'b', at: '2026-11-27T01:20:00.000Z', inputTokens: 10_000 }),
+      turn({ id: 'c', at: '2026-11-27T01:40:00.000Z', inputTokens: 12_000, cacheWrite1hTokens: 5 }),
+    ];
+    const rows = toRows(turns);
+    expect(rows).toHaveLength(3);
+    expect(sumRows(rows)).toMatchObject({
+      fromAt: '2026-11-27T01:05:00.000Z',
+      toAt: '2026-11-27T01:40:00.000Z',
+      turns: 3,
+      inputTokens: 322_000,
+      outputTokens: 10,
+      cacheWrite1hTokens: 5,
+      maxContext: 300_000,
+      costMicroUsd: rows.reduce((n, r) => n + r.costMicroUsd, 0),
+    });
   });
 
   test('行が無ければ undefined', () => {

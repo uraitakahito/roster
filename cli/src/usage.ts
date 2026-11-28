@@ -1,10 +1,17 @@
 // 席（Claude Code の session）の「トークンの使用量」を、session の記録（写し。JSONL）から数える、純な関数。
 //
-// castlist の数の表（PutUsage）へ送る行を作る。1 行は、席 1 つの、時計の 1 時間（UTC の時）の内の、同じ種類の回のまとめ。
+// castlist の数の表（PutUsage）へ送る行を作る。1 行は、席 1 つの、時計の 10 分の枠（UTC。{@link SLOT_CHARS}）の内の、同じ種類の回のまとめ。
+// 枠は UTC の時の内に収まる（castlist が受けるのは、区間が同じ UTC の時の内の行）。読む側（callboard）は、この枠で 10 分ごとの額を出す。
 // 「同じ種類」は、model・本体か手伝いか（手伝いならその種類）・速さの種類（speed）・service tier が同じ物。
 //
 // ここは file も castlist も触らない（読むのは渡された行の字だけ）。読んで送るのは、取り込みの側。
 // 会話の字・命令の出力・path は読まない（使うのは、時刻・model・usage の数・応答の id・圧縮の印だけ）。
+
+/**
+ * 行をまとめる枠の鍵にする、回の時刻（`2026-11-27T01:05:00.000Z` の形）の頭の長さ。分の十の位まで（`2026-11-27T01:0`）なので、枠は UTC の 10 分。
+ * roster の PR #302 より前は時まで（13 字。1 時間の枠）だった。castlist の行は書き替えられないので、その前の行は 1 時間の枠のまま残る。
+ */
+export const SLOT_CHARS = '2026-11-27T01:0'.length;
 
 /** 文脈の長さの段の幅（トークン）。castlist の数の表の決まりと揃える。 */
 export const BUCKET_WIDTH = 25_000;
@@ -230,14 +237,14 @@ export function readTurns(lines: Iterable<string>, options: { agent?: string, sk
 }
 
 /**
- * 回を、castlist の数の行にまとめる: 時計の 1 時間（UTC の時）と種類（model・手伝いの種類・speed・service tier）ごとに 1 行。
- * 行は、時 → 種類の順（同じ入力なら、いつも同じ並び。送り直しの時に、同じ id に同じ本文を当てるため）。
+ * 回を、castlist の数の行にまとめる: 時計の 10 分の枠（UTC。{@link SLOT_CHARS}）と種類（model・手伝いの種類・speed・service tier）ごとに 1 行。
+ * 行の区間（fromAt〜toAt）は、まとめた回の初めと終わりの時刻で、1 つの枠の内に収まる。行は、枠 → 種類の順（同じ入力なら、いつも同じ並び。送り直しの時に、同じ id に同じ本文を当てるため）。
  */
 export function toRows(turns: readonly Turn[], prices: readonly Price[] = PRICES): UsageRow[] {
   const groups = new Map<string, { row: UsageRow, buckets: Map<number, Bucket> }>();
   for (const turn of turns) {
     const { at } = turn;
-    const key = [at.slice(0, 13), turn.model, turn.agent ?? '', turn.speed, turn.serviceTier].join('\u0000');
+    const key = [at.slice(0, SLOT_CHARS), turn.model, turn.agent ?? '', turn.speed, turn.serviceTier].join('\u0000');
     let group = groups.get(key);
     if (group === undefined) {
       group = {
