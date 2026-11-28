@@ -137,15 +137,65 @@ describe('roster push', () => {
     expect(res.lines.join('\n')).toContain('既定の branch');
   });
 
-  test('upstream が origin の別の名なら、その branch へ push する（Dependabot の PR の直し）', () => {
+  test('origin/main から -b で切った branch（upstream が origin/main）も、同じ名へ push し、upstream を付け直す（review-3 の指摘 1）', () => {
+    const r = repo([{ name: 'one', run: PASS }]);
+    sh(r.work, 'checkout', '--quiet', 'main');
+    sh(r.work, 'checkout', '--quiet', '-b', 't-x/impl', '--track', 'origin/main');
+    sh(r.work, 'commit', '--quiet', '--allow-empty', '-m', 'impl');
+    const res = push(r.ctx, { cwd: r.work });
+    expect(res.code).toBe(PUSH_EXIT.pushed);
+    expect(res.lines.at(-1)).toContain('→ origin/t-x/impl');
+    expect(remoteSha(r, 'refs/heads/t-x/impl')).toBe(sh(r.work, 'rev-parse', 'HEAD'));
+    expect(remoteSha(r, 'refs/heads/main')).toBe(sh(r.work, 'rev-parse', 'main'));
+    expect(sh(r.work, 'rev-parse', '--abbrev-ref', '@{u}')).toBe('origin/t-x/impl');
+  });
+
+  test('別の PR の branch を追う branch も、その PR の branch でなく同じ名へ push する（Dependabot の直しは同じ名の branch を作る）', () => {
     const r = repo([{ name: 'one', run: PASS }]);
     sh(r.work, 'push', '--quiet', 'origin', 'main:refs/heads/dependabot/x');
     sh(r.work, 'fetch', '--quiet', 'origin');
     sh(r.work, 'checkout', '--quiet', '-b', 'fix', '--track', 'origin/dependabot/x');
     sh(r.work, 'commit', '--quiet', '--allow-empty', '-m', 'fix');
     expect(push(r.ctx, { cwd: r.work }).code).toBe(PUSH_EXIT.pushed);
+    expect(remoteSha(r, 'refs/heads/fix')).toBe(sh(r.work, 'rev-parse', 'HEAD'));
+    expect(remoteSha(r, 'refs/heads/dependabot/x')).toBe(sh(r.work, 'rev-parse', 'main'));
+    sh(r.work, 'checkout', '--quiet', '-b', 'dependabot/x', '--track', 'origin/dependabot/x');
+    sh(r.work, 'commit', '--quiet', '--allow-empty', '-m', 'fix2');
+    expect(push(r.ctx, { cwd: r.work }).code).toBe(PUSH_EXIT.pushed);
     expect(remoteSha(r, 'refs/heads/dependabot/x')).toBe(sh(r.work, 'rev-parse', 'HEAD'));
-    expect(remoteSha(r, 'refs/heads/fix')).toBeUndefined();
+  });
+
+  test('時間の限りを過ぎた確かめは止めて、落ちた（時間切れ）にする（review-3 の指摘 2）', () => {
+    const r = repo([{ name: 'slow', run: ['node', '-e', 'setTimeout(() => {}, 60000)'], timeoutSeconds: 1 }]);
+    const res = push(r.ctx, { cwd: r.work });
+    expect(res.code).toBe(PUSH_EXIT.failed);
+    expect(res.lines.join('\n')).toContain('落ちた: slow（終了コード 124');
+    expect(res.lines.join('\n')).toContain('時間切れ');
+  });
+
+  test('dir が木に無ければ、命令が無いとは言わず dir が無いと出す（review-3 の指摘 9）', () => {
+    const r = repo([{ name: 'gone', dir: 'nope', run: PASS }]);
+    const res = push(r.ctx, { cwd: r.work });
+    expect(res.code).toBe(PUSH_EXIT.failed);
+    expect(res.lines.join('\n')).toContain('dir（nope）が、この木に無い');
+  });
+
+  test('package.json があって node_modules が無い dir の確かめが落ちたら、依存を入れる注意を出す（review-3 の指摘 10）', () => {
+    const r = repo([{ name: 'deps', dir: 'pkg', run: FAIL }]);
+    mkdirSync(join(r.work, 'pkg'));
+    writeFileSync(join(r.work, 'pkg', 'package.json'), '{}');
+    const res = push(r.ctx, { cwd: r.work });
+    expect(res.lines.join('\n')).toContain('pkg に node_modules が無い');
+  });
+
+  test('--no-checks の空の訳と、commit の無い branch は断る（review-3 の指摘 6・8）', () => {
+    const none = repo();
+    expect(push(none.ctx, { cwd: none.work, noChecks: '  ' }).code).toBe(PUSH_EXIT.error);
+    sh(none.work, 'checkout', '--quiet', '--orphan', 'empty');
+    sh(none.work, 'rm', '-rq', '--cached', '.');
+    const res = push(none.ctx, { cwd: none.work, noChecks: '試し' });
+    expect(res.code).toBe(PUSH_EXIT.error);
+    expect(res.lines.join('\n')).toContain('commit が無い');
   });
 
   test('rebase した branch は --force-with-lease の時だけ上書きする', () => {

@@ -1,9 +1,11 @@
 // roster push: repo に宣言した確かめ（push の前に流す物）をみな流し、みな通った時だけ、確かめた commit を push する（t-fcp8。監査 audit-2 の R15）。
 // 確かめの一覧は、push する branch でなく origin の既定の branch の .claude/roles/config.jsonc の push の欄から読む（branch の中で一覧を減らしても、merge まで効かない）。
+// 固めるのは一覧（名と命令）だけで、命令が中で読む物（package.json の scripts・lint や試験の設定・ci/*.sh）は branch の木の物（PR の差分とレビューで見る。review-3 の指摘 4）。
+// push の先は、いつも手元の branch と同じ名（upstream では決めない。origin/main から切った branch は origin/main を追うため。review-3 の指摘 1）。
 // path では選ばず、宣言した確かめを毎回みな流す（4 repo の主な CI は、どれも pull_request に paths が無い）。
 // 確かめは shell を通さずに語の並びで打つ（; や pipe で終了コードが隠れる形を、設定の中にも作らない）。
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, closeSync, mkdirSync, openSync, readFileSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync } from 'node:fs';
 import { isAbsolute, join, normalize } from 'node:path';
 import type { Context } from '../context.ts';
 import { envOf } from '../env.ts';
@@ -24,6 +26,8 @@ export interface PushCheck {
   dir?: string
   /** 足す環境変数（値は字）。 */
   env?: Record<string, string>
+  /** 時間の限り（秒。無ければ CHECK_TIMEOUT_SECONDS）。過ぎたら止めて「落ちた（時間切れ）」とする。 */
+  timeoutSeconds?: number
 }
 
 /** roster push の旗と、打った folder。 */
@@ -68,6 +72,11 @@ export interface PushRecord {
   reason?: string
 }
 
+/** 確かめ 1 つの時間の限りの既定（秒）。止まったまま返らない確かめで、roster push が返らなくならないため（review-3 の指摘 2）。 */
+export const CHECK_TIMEOUT_SECONDS = 600;
+/** 時間切れの確かめの終了コード（timeout(1) に合わせる）。 */
+const TIMED_OUT = 124;
+
 /** 落ちた確かめの log から出す終わりの行の数。 */
 const TAIL_LINES = 40;
 /** 注意に名を出す untracked の file の数。 */
@@ -103,6 +112,10 @@ export function parsePushChecks(text: string, where: string): PushCheck[] | unde
       if (typeof o.env !== 'object' || o.env === null || Array.isArray(o.env) || !Object.values(o.env).every(v => typeof v === 'string')) bad(`${name} の env は 名 → 字`);
       check.env = o.env as Record<string, string>;
     }
+    if (o.timeoutSeconds !== undefined) {
+      if (typeof o.timeoutSeconds !== 'number' || !Number.isInteger(o.timeoutSeconds) || o.timeoutSeconds <= 0) bad(`${name} の timeoutSeconds は 1 以上の整数`);
+      check.timeoutSeconds = o.timeoutSeconds as number;
+    }
     return check;
   });
 }
@@ -118,15 +131,18 @@ function gitLine(ctx: Context, cwd: string, args: string[]): string | undefined 
   return r.status === 0 ? r.stdout.trim() : undefined;
 }
 
-/** origin の既定の branch の名（origin/HEAD が無ければ main）。 */
+/** origin の既定の branch の名（手元の origin/HEAD、無ければ remote に聞き、それも読めなければ main）。 */
 function defaultBranch(ctx: Context, root: string): string {
   const head = gitLine(ctx, root, ['symbolic-ref', '--quiet', 'refs/remotes/origin/HEAD']);
-  return head?.replace(/^refs\/remotes\/origin\//, '') || 'main';
+  if (head !== undefined && head !== '') return head.replace(/^refs\/remotes\/origin\//, '');
+  const remote = /^ref: refs\/heads\/(\S+)\s+HEAD$/m.exec(git(ctx, root, ['ls-remote', '--symref', 'origin', 'HEAD']).stdout);
+  return remote?.[1] ?? 'main';
 }
 
-/** 追われている file の、commit していない変更（無ければ空）。 */
-function trackedChanges(ctx: Context, root: string): string {
-  return git(ctx, root, ['status', '--porcelain', '--untracked-files=no']).stdout.trim();
+/** 追われている file の、commit していない変更（無ければ空）。git status が落ちたら undefined（読めない物を「変更が無い」と読まない。review-3 の指摘 7）。 */
+function trackedChanges(ctx: Context, root: string): string | undefined {
+  const r = git(ctx, root, ['status', '--porcelain', '--untracked-files=no']);
+  return r.status === 0 ? r.stdout.trim() : undefined;
 }
 
 /** 秒の字。 */
@@ -137,14 +153,24 @@ function runCheck(root: string, logDir: string, check: PushCheck, now: () => Dat
   const log = join(logDir, `${check.name}.log`);
   const fd = openSync(log, 'w');
   const start = now().getTime();
+  const cwd = join(root, check.dir ?? '.');
+  const limit = check.timeoutSeconds ?? CHECK_TIMEOUT_SECONDS;
   try {
+    if (!existsSync(cwd)) {
+      appendFileSync(log, `dir（${check.dir ?? '.'}）が、この木に無い（branch で folder の名を替えたなら、origin/main の一覧と合っていない）\n`);
+      return { name: check.name, code: 127, seconds: 0, log };
+    }
     const r = spawnSync(check.run[0] as string, check.run.slice(1), {
-      cwd: join(root, check.dir ?? '.'),
+      cwd,
       env: { ...process.env, ...check.env },
       stdio: ['ignore', fd, fd],
+      timeout: limit * 1000,
+      killSignal: 'SIGKILL',
     });
-    if (r.error !== undefined) appendFileSync(log, `起こせなかった: ${r.error.message}\n`);
-    const code = r.error === undefined ? (r.status ?? 1) : 127;
+    const timedOut = r.error !== undefined && 'code' in r.error && r.error.code === 'ETIMEDOUT';
+    if (timedOut) appendFileSync(log, `\n時間切れ: ${limit} 秒を過ぎたので止めた（設定の timeoutSeconds で替えられる）\n`);
+    else if (r.error !== undefined) appendFileSync(log, `起こせなかった: ${r.error.message}\n`);
+    const code = timedOut ? TIMED_OUT : r.error === undefined ? (r.status ?? 1) : 127;
     return { name: check.name, code, seconds: Math.round((now().getTime() - start) / 1000), log };
   }
   finally {
@@ -188,18 +214,21 @@ export function push(ctx: Context, options: PushOptions): PushResult {
   const main = defaultBranch(ctx, root);
   const fetched = git(ctx, root, ['fetch', '--quiet', 'origin', main]);
   if (fetched.status !== 0) {
-    return finish({ repo, target: options.tag === undefined ? '' : `tags/${options.tag}`, checks: [], code: PUSH_EXIT.pushFailed, result: 'push-failed', reason: 'fetch が落ちた' }, [`git fetch origin ${main} が落ちた（push していない）: ${fetched.stderr.trim()}`, 'GitHub が応えないなら、roster watch github を裏で起こして待ち、戻ってから打ち直す']);
+    return finish({ repo, target: options.tag === undefined ? '' : `tags/${options.tag}`, checks: [], code: PUSH_EXIT.pushFailed, result: 'push-failed', reason: 'fetch が落ちた' }, [`git fetch origin ${main} が落ちた（確かめは流していない・push していない）: ${fetched.stderr.trim().split('\n').pop() ?? ''}`, '網の誤り（5xx・繋がらない）なら、roster watch github を裏で起こして待ち、戻ってから打ち直す']);
   }
 
   if (options.tag !== undefined) return pushTag(ctx, root, main, options.tag, refuse, finish, repo);
 
   const branch = gitLine(ctx, root, ['symbolic-ref', '--quiet', '--short', 'HEAD']);
   if (branch === undefined) return refuse('', 'HEAD が branch でない（detached）。branch を作ってから打つ');
-  const upstream = gitLine(ctx, root, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']);
-  const target = upstream?.startsWith('origin/') === true ? upstream.slice('origin/'.length) : branch;
-  if (target === main) return refuse(target, `既定の branch（${main}）へは push しない。main から branch を切り、PR で入れる`);
-  if (trackedChanges(ctx, root) !== '') return refuse(target, '追われている file に commit していない変更がある。commit してから打つ（確かめた木と push する commit を合わせるため）');
-  const sha = gitLine(ctx, root, ['rev-parse', 'HEAD']) as string;
+  const target = branch;
+  if (target === main) return refuse(target, `既定の branch（${main}）の上にいる。main から branch を切り（git switch -c <名>）、その branch で打つ`);
+  if (options.noChecks?.trim() === '') return refuse(target, '--no-checks には訳を書く（空は受けない）');
+  const changes = trackedChanges(ctx, root);
+  if (changes === undefined) return refuse(target, 'git status が読めない（index.lock など）。git status を見てから打ち直す');
+  if (changes !== '') return refuse(target, '追われている file に commit していない変更がある。commit してから打つ（確かめた木と push する commit を合わせるため）');
+  const sha = gitLine(ctx, root, ['rev-parse', '--verify', '--quiet', 'HEAD']);
+  if (sha === undefined) return refuse(target, 'HEAD に commit が無い');
 
   const shown = git(ctx, root, ['show', `origin/${main}:.claude/roles/config.jsonc`]);
   let checks: PushCheck[] | undefined;
@@ -229,6 +258,8 @@ export function push(ctx: Context, options: PushOptions): PushResult {
     const failed = results.filter(r => r.code !== 0);
     if (failed.length > 0) {
       for (const r of failed) lines.push('', `--- ${r.name} の出力の終わり（全部は ${r.log}）`, ...tail(r.log));
+      const bare = checks.filter(c => failed.some(f => f.name === c.name) && existsSync(join(root, c.dir ?? '.', 'package.json')) && !existsSync(join(root, c.dir ?? '.', 'node_modules')));
+      if (bare.length > 0) lines.push('', `注意: ${bare.map(c => c.dir ?? '.').join('・')} に node_modules が無い（作ったばかりの worktree なら、依存を入れてから打ち直す）`);
       lines.push('', `push していない: 確かめ ${failed.length} つが落ちた（${failed.map(r => r.name).join('・')}）。直して commit し、もう 1 度 roster push`);
       return finish({ repo, target, sha, checks: results.map(({ name, code, seconds }) => ({ name, code, seconds })), code: PUSH_EXIT.failed, result: 'failed' }, lines);
     }
@@ -247,9 +278,10 @@ export function push(ctx: Context, options: PushOptions): PushResult {
   const pushed = git(ctx, root, args);
   const record = { repo, target, sha, checks: results.map(({ name, code, seconds }) => ({ name, code, seconds })), ...(options.noChecks === undefined ? {} : { noChecks: options.noChecks }) };
   if (pushed.status !== 0) {
-    return finish({ ...record, code: PUSH_EXIT.pushFailed, result: 'push-failed', reason: pushed.stderr.trim().split('\n').pop() ?? '' }, [...lines, `git push が落ちた（確かめは通った）: ${pushed.stderr.trim()}`, 'GitHub が応えない（5xx・繋がらない）なら、roster watch github を裏で起こして待ち、戻ってから打ち直す']);
+    return finish({ ...record, code: PUSH_EXIT.pushFailed, result: 'push-failed', reason: pushed.stderr.trim().split('\n').pop() ?? '' }, [...lines, `git push が落ちた（確かめは通った）: ${pushed.stderr.trim().split('\n').pop() ?? ''}`, '網の誤り（5xx・繋がらない）なら、roster watch github を裏で起こして待ち、戻ってから打ち直す。remote が先に進んでいる（rejected）なら、取り込んでから打ち直す']);
   }
-  if (upstream === undefined) git(ctx, root, ['branch', `--set-upstream-to=origin/${target}`, branch]);
+  // origin/main から切った branch は origin/main を追っているので、push した branch を追うように付け直す。
+  if (gitLine(ctx, root, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']) !== `origin/${target}`) git(ctx, root, ['branch', `--set-upstream-to=origin/${target}`, branch]);
   return finish({ ...record, code: PUSH_EXIT.pushed, result: 'pushed' }, [...lines, `push した: ${sha.slice(0, 7)} → origin/${target}${options.noChecks === undefined ? `（確かめ ${results.length} つが通った）` : `（確かめ無し: ${options.noChecks}）`}`]);
 }
 

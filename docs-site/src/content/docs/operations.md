@@ -52,7 +52,7 @@ roster watch pr <PR の URL> --timeout 0  # 今の様子を 1 回見て、待た
 担当の push は `roster push` で打つ（2026-11-28 t-fcp8。監査 audit-2 の R15。確かめと `git commit`・`git push` を 1 行に続け、確かめが落ちたまま push した件が 2 日で 4 件あった）。`roster push` は、repo の設定に宣言した確かめ（[設定](/configuration/#push-の前の確かめpush)）をみな流し、みな通った時だけ、確かめた commit を push する。確かめは数十秒かかりうるので、担当は `roster watch` と同じく**裏で起こして**手を止める。
 
 ```sh
-roster push                       # 今の branch を、origin の追う branch（無ければ同じ名）へ
+roster push                       # 今の branch を、origin の同じ名の branch へ
 roster push --force-with-lease    # rebase した branch（remote が動いていない時だけ上書き。--force は受けない）
 roster push --tag v1.2.3          # release の tag（確かめは流さない。tag の commit が origin の既定の branch に在る時だけ）
 roster push --no-checks "<訳>"    # 確かめの宣言の無い repo だけ（宣言のある repo では断る）
@@ -61,13 +61,13 @@ roster push --no-checks "<訳>"    # 確かめの宣言の無い repo だけ（�
 | 終了コード | 意味 |
 |---|---|
 | 0 | push した |
-| 10 | 確かめが落ちた（push していない）。落ちた確かめの名・終了コード・出力の終わり 40 行と、全部の log の path を出す |
-| 1 | 断った（git の worktree の外・detached・既定の branch の上・追われている file に commit していない変更がある・宣言が無い・宣言の形が違う・確かめの間に HEAD か追われた file が動いた） |
-| 2 | `git fetch` か `git push` が落ちた（確かめは通った）。GitHub が応えないなら `roster watch github` で待って打ち直す |
+| 10 | 確かめが落ちた（push していない）。落ちた確かめの名・終了コード（時間切れは 124）・出力の終わり 40 行と、全部の log の path を出す。node_modules の無い dir の確かめが落ちたら、依存を入れる注意も出す |
+| 1 | 断った（git の worktree の外・detached・既定の branch の上・HEAD に commit が無い・追われている file に commit していない変更がある・`git status` が読めない・宣言が無い・宣言の形が違う・`--no-checks` の訳が空・確かめの間に HEAD か追われた file が動いた） |
+| 2 | `git fetch` が落ちた（確かめは流していない）か、`git push` が落ちた（確かめは通った）。どちらかは出る行で分かる。網の誤りなら `roster watch github` で待って打ち直す（remote が先に進んで断られたなら、取り込んでから打ち直す） |
 
-- 確かめは、落ちても残りをみな流す（1 度で全部の落ちを見せる）。出力は状態の folder の `push/` の下の log に書き、画面には 1 つにつき 1 行（名・終了コード・秒）を出す。
+- 確かめは、落ちても残りをみな流す（1 度で全部の落ちを見せる）。1 つにつき時間の限りがあり（既定 600 秒。設定の `timeoutSeconds`）、過ぎたら止めて落ちた（時間切れ）とする（止まったまま返らない確かめで、裏の `roster push` が返らなくならないため）。出力は状態の folder の `push/` の下の log に書き、画面には 1 つにつき 1 行（名・終了コード・秒）を出す。
 - 初めに HEAD の sha を取り、確かめの後に HEAD と追われた file が同じかをもう 1 度見てから、その sha を push する（裏で流す間に commit を足しても、確かめていない commit は出ない）。git に入っていない file（`.gitignore` に無い物）は、確かめの木には在るが commit には無いので、名を注意に出す（断らない）。
-- push の先は、今の branch の upstream が `origin/<名>` ならその名（Dependabot の PR の branch を追う手元の branch で直す時も、PR の branch へ出る）、無ければ同じ名。push の後に upstream を付ける。
+- push の先は、いつも手元の branch と同じ名（upstream では決めない。`origin/main` から `-b` で切った branch は `origin/main` を追うため）。push の後、upstream を push した branch に付け直す。Dependabot の PR を直す時は、PR の branch と同じ名の手元の branch を作る（`git worktree add -b <PR の branch の名> <置き場所> --track origin/<PR の branch の名>`）。
 - 1 回につき 1 行が、状態の folder の `pushes.jsonl` に残る（時刻・Key・repo・先・sha・確かめごとの終了コードと秒・結果・`--no-checks` の訳）。確かめが落ちて止めた回（10）は、前なら CI で落ちていた回として数えられる。
 
 ## 移す手順

@@ -164,7 +164,7 @@ container の命令の `--name`・`-v` の値に、変数（`$N`・`${N}`）・�
 
 ### push の前の確かめ（`push`）
 
-`roster push`（[運用](/operations/#push-の前の確かめroster-push)）が push の前に流す確かめを、repo ごとの `.claude/roles/config.jsonc` に書く。`roster push` は、push する branch の設定でなく、`git fetch` した後の **origin の既定の branch**（`origin/HEAD`、無ければ `main`）の設定を読む。branch の中で一覧を変えても、merge されるまで効かない（確かめを減らして push する道にしないため）。新しく足した確かめも、merge の後から効く。
+`roster push`（[運用](/operations/#push-の前の確かめroster-push)）が push の前に流す確かめを、repo ごとの `.claude/roles/config.jsonc` に書く。`roster push` は、push する branch の設定でなく、`git fetch` した後の **origin の既定の branch**（`origin/HEAD`、無ければ `main`）の設定を読む。branch の中で一覧を変えても、merge されるまで効かない（うっかり確かめを減らして push しないため）。新しく足した確かめも、merge の後から効く。固めるのは一覧（名と命令）だけで、命令が中で読む物（`package.json` の scripts・lint や試験の設定・`ci/*.sh`）は branch の木の物を使う（そこを変えた branch は、PR の差分とレビューで見る）。
 
 | `checks` の 1 つの欄 | 中身 |
 |---|---|
@@ -172,6 +172,7 @@ container の命令の `--name`・`-v` の値に、変数（`$N`・`${N}`）・�
 | `run` | 打つ命令の語の並び。shell を通さない（`;`・pipe・`&&` で終了コードが隠れる形を作らない。shell の形が要る確かめは、repo の script にして、その path を書く） |
 | `dir` | repo の根からの folder（無ければ根）。`..` と絶対の path は受けない |
 | `env` | 足す環境変数（名 → 字。任意） |
+| `timeoutSeconds` | 時間の限り（秒。任意。既定 600）。過ぎたら止めて落ちた（時間切れ。終了コード 124）とする |
 
 ```jsonc
 {
