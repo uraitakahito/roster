@@ -102,5 +102,7 @@ describe('案内の 1 行（chromeSuggestion）', () => {
       .toBe('roster chrome run --bin \'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\' -- --screenshot=/tmp/a.png x');
     // 変数を含む path は、shell が展開するように二重引用で包む。
     expect(suggest('D="$HOME/opt/chromium"; "$D" --dump-dom x')).toBe('roster chrome run --bin "$HOME/opt/chromium" -- --dump-dom x');
+    // 1 本の - の旗も揃えて外す・替える。
+    expect(suggest('chromium -headless -remote-debugging-port=9222 -user-data-dir=/tmp/q')).toBe('roster chrome start --bin chromium --profile /tmp/q --port 9222 -- --headless');
   });
 });

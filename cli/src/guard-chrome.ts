@@ -2,7 +2,7 @@
 // 直に起こすと、旗を書き忘れた時に Chrome が macOS の keychain を読もうとし、Product Manager の画面にダイアログが出る。
 // 起こす道を roster chrome 1 つにし、旗は roster chrome が付ける。guard.ts とは別の file に置く（同じ時に guard を直す課題とぶつかりにくく）。
 // 見るのは Bash の字だけ。script・node の child_process の中から起こす Chrome は見えない（守りは「うっかり」まで）。
-import { CHROME_NAMES, flagValue } from './chrome.ts';
+import { CHROME_NAMES, flagValue, normalizeChromeArgs } from './chrome.ts';
 import { rawCommands, scanCommand, shellQuote, splitCommands, SUBSTITUTED } from './shell.ts';
 
 /** 変数への代入（CH=…）。 */
@@ -153,7 +153,8 @@ function binWord(path: string): string {
 
 /** 止めた命令に近い roster chrome の 1 行（CDP の口を開くなら start、ほかは run）。 */
 export function chromeSuggestion(launch: Extract<ChromeLaunch, { kind: 'direct' }>): string {
-  const { args } = launch;
+  // 1 本の - の旗も、roster chrome と同じく -- の形に揃えて見る。
+  const args = normalizeChromeArgs(launch.args);
   const port = flagValue(args, '--remote-debugging-port');
   const profile = flagValue(args, '--user-data-dir');
   const rest = args.filter(a => !MANAGED.test(a));
