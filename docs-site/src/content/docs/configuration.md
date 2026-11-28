@@ -17,7 +17,7 @@ TPM 担当を起こした folder（project）に置くと、道具の選び方�
 | `infra` | インフラの環境の宣言。環境の名前（英小文字・数字・`-`）ごとに `guard`（手続き）と `match`（その環境に触る命令の語の並びの配列。語の末尾の `*` は前方一致） | 宣言なし（guard は環境を見ない） |
 | `skill-sets` | core のほかに加える、追加の skill セットの名前の配列 | core だけ |
 | `folders` | 設定を集める folder（project の folder からの path）の配列。書くと、直下を探さずに書いた folder だけを集める。`[]` なら集めない | 直下の folder のうち、設定がある物を全部集める |
-| `push` | `roster push` が push の前に流す確かめの一覧（`checks`）。repo の設定に書き、origin の既定の branch の物を読む（下の「[push の前の確かめ](#push-の前の確かめpush)」） | `roster push` は断る（`--no-checks "<訳>"` を付けた時だけ確かめ無しで push） |
+| `push` | `roster push` が push の前に流す確かめの一覧（`checks`）。repo の設定に書き、push する commit の物を読む（下の「[push の前の確かめ](#push-の前の確かめpush)」） | `roster push` は断る（`--no-checks "<訳>"` を付けた時だけ確かめ無しで push） |
 | `castlist` | アクターの台帳（castlist）の URL（`http://127.0.0.1:<port>` か `http://localhost:<port>`）。project の folder の設定だけが効く（下の「[アクターの台帳（castlist）](#アクターの台帳castlist任意)」） | castlist に何も送らない |
 | `software-engineer`・`tech-lead`・`devops-engineer`・`staff-engineer`・`auditor` | 起こす担当の `model`・`effort`・`permissionMode` | [環境変数](#model-などの既定の環境変数任意)、それも無ければ既定（Software Engineer 担当と Tech Lead 担当は Opus 5.5・medium、DevOps Engineer 担当は Opus 5.5・low、Staff Engineer 担当は Opus 5.5・high、Auditor は Fable 5.2・high、どれも `bypassPermissions`） |
 
@@ -164,7 +164,7 @@ container の命令の `--name`・`-v` の値に、変数（`$N`・`${N}`）・�
 
 ### push の前の確かめ（`push`）
 
-`roster push`（[運用](/operations/#push-の前の確かめroster-push)）が push の前に流す確かめを、repo ごとの `.claude/roles/config.jsonc` に書く。`roster push` は、push する branch の設定でなく、`git fetch` した後の **origin の既定の branch**（`origin/HEAD`、無ければ `main`）の設定を読む。branch の中で一覧を変えても、merge されるまで効かない（うっかり確かめを減らして push しないため）。新しく足した確かめも、merge の後から効く。固めるのは一覧（名と命令）だけで、命令が中で読む物（`package.json` の scripts・lint や試験の設定・`ci/*.sh`）は branch の木の物を使う（そこを変えた branch は、PR の差分とレビューで見る）。
+`roster push`（[運用](/operations/#push-の前の確かめroster-push)）が push の前に流す確かめを、repo ごとの `.claude/roles/config.jsonc` に書く。`roster push` は、**push する commit**（HEAD。作業の木でなく、commit した物）の設定を読む（2026-11-29 t-f73c。前は origin の既定の branch の物を読み、一覧を足す PR・新しい repo の初めの PR を断っていた）。一覧を足す・変える PR は、その PR から変えた一覧で確かめる。branch が一覧に加えた変更（消した・変えた・足した確かめ）は、`git fetch` した origin の既定の branch（`origin/HEAD`、無ければ `main`）と分かれた所（`git merge-base`）の一覧と比べて、push のたびに出し、記録（`pushes.jsonl` の `configDiff`）に残す。main の先でなく分かれた所と比べるのは、main に後から足された確かめを「消した」と読まないため（分かれた後に main が足した・中身を変えた確かめは、branch に無いか古いままなら「取り込めば流れる」と別に出す）。分かれた所が取れない・読めない branch は、origin の既定の branch の先と比べ、そう出す。push する commit に宣言が無く、origin の既定の branch に在る branch（宣言が足される前に切った branch）は、`--no-checks` も受けずに断る（取り込めば済むため）。確かめを消す・変えるのを見るのは PR のレビューで、差に消した・変えたが出たら、担当は PR の本文に差と訳を書き、依頼書に無くてもレビューを必ず頼む（`/software-engineer` の 2）。命令が中で読む物（`package.json` の scripts・lint や試験の設定・`ci/*.sh`）も、同じく branch の物を使い、PR の差分とレビューで見る。
 
 | `checks` の 1 つの欄 | 中身 |
 |---|---|
