@@ -23,7 +23,7 @@ skill セットの `.claude/agents/<名>.md` は、手伝い（subagent。Agent 
 | `Explore` | `haiku` | 組み込みの `Explore` を置き換える。組み込みは親の model を受け継ぎ（Opus より上の model の下では Opus に止める）、担当の読むだけの探しが Opus で動いていた（7 日で $98.96）。探しは軽い仕事なので Haiku で動かす（入れる前に、記録の頼み 10 本を Opus と Haiku で比べた） |
 | `audit-reader` | `opus` | `audit-evidence` だけが使う、読むだけの手伝い。監査の証拠の字をそのまま写す仕事を、`Explore` の Haiku に替えずに今までどおり Opus で動かす |
 
-- 定義し直すと、組み込みの道具の止めは引き継がれない。読むだけの 2 つは、Claude Code 2.1.332 の Agent tool の説明の `Explore` の行（「All tools except …」）から写した 9 つ（`Agent`・`Artifact`・`ArtifactComments`・`ArtifactData`・`ArtifactCheck`・`ExitPlanMode`・`Edit`・`Write`・`NotebookEdit`）を `disallowedTools` に書く。roster の guard は Artifact を見ないので、ここで止める。版が上がると組み込みの並べが増えうるので、版上げの時に見直す（`check-skills.mjs` の `READ_ONLY_DENIED`）。
+- 定義し直すと、組み込みの道具の止めは引き継がれない。読むだけの 2 つは、Claude Code 2.1.332 の Agent tool の説明の `Explore` の行（「All tools except …」）から写した 9 つ（`Agent`・`Artifact`・`ArtifactComments`・`ArtifactData`・`ArtifactCheck`・`ExitPlanMode`・`Edit`・`Write`・`NotebookEdit`）を `disallowedTools` に書く。roster の guard は Artifact を見ないので、ここで止める。MCP の道具（課題管理や文書の書き込みなど）は止めていない（組み込みの `Explore` と同じ。guard も MCP を見ない）。版が上がると組み込みの並べが増えうるので、版上げの時に見直す（`check-skills.mjs` の `READ_ONLY_DENIED`）。
 - `omitClaudeMd: true` は、組み込みの `Explore` と同じく CLAUDE.md を読ませない欄（文書に無く、版の中にだけある）。
 - 効くのは、定義を merge して roster の本体の checkout を pull した後に起こした席から。動いている席は、起こし直すまで前の定義のまま。
 - Claude Code の版を上げた時は、`--add-dir` の先の定義がまだ読まれるかを確かめる（文書に無い振る舞いなので、黙って読まれなくなりうる。その時は組み込みの `Explore`（Opus）に戻る）。手伝いの写しの `*.meta.json` の `model` が `claude-haiku-5-5` なら効いている。

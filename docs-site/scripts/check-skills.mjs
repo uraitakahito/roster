@@ -47,8 +47,9 @@
 // 16. 手伝いの定義の frontmatter が無い・YAML の mapping として読めない・欄の名が AGENT_FIELDS に無い
 // 17. name が file の名と違う・description が空・model が無い（書かないと親の model を受け継ぎ、定義を置いた訳が消える）
 // 18. READ_ONLY_AGENTS の定義の disallowedTools が、READ_ONLY_DENIED をみな持たない（定義し直すと組み込みの
-//     止めは引き継がれない。roster の guard は Artifact を見ないので、ここで止める）
+//     止めは引き継がれない。roster の guard は Artifact を見ないので、ここで止める。MCP の道具は、組み込みと同じく止めていない）
 // 19. skill の agent の値が、組み込みの手伝いの名でも、skill セットの .claude/agents/ にある名でもない
+// 20. 同じ名の手伝いの定義が、2 つ以上の skill セットにある（どの skill セットも全部渡るので、どちらが勝つかが読む順しだいになる）
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -357,8 +358,15 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const agents = files.filter((f) =>
     /^skill-sets\/[^/]+\/\.claude\/agents\/[^/]+\.md$/.test(f),
   );
-  const defined = new Set(agents.map((f) => basename(f).replace(/\.md$/, "")));
+  const names = agents.map((f) => basename(f).replace(/\.md$/, ""));
+  const defined = new Set(names);
   const errors = [
+    ...[...defined]
+      .filter((n) => names.filter((m) => m === n).length > 1)
+      .map(
+        (n) =>
+          `skill-sets/*/.claude/agents/${n}.md: 同じ名の手伝いの定義が 2 つ以上の skill セットにある（どちらが勝つかが読む順しだいになる）`,
+      ),
     ...skills.flatMap((f) => {
       const text = readFileSync(join(REPO, f), "utf8");
       return [...checkSkill(f, text), ...checkAgentRef(f, text, defined)];
