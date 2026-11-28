@@ -69,6 +69,7 @@ describe('scanCommand（t-y67q）', () => {
     ['cat <<\'EOF\' | grep x\n<p>a > b</p>\nEOF', false],
     ['grep x < in.txt', false],
     ['tee >(cat > f)', true],
+    ['printf x 1<> .git/config', true],
     ['echo x | tee >(grep y)', false],
   ])('書き出し: %s', (command, writes) => {
     expect(scanCommand(command).writes.length > 0).toBe(writes);
@@ -1608,6 +1609,9 @@ describe('字の含みを効かせる形（t-y67q）', () => {
     ['PR の本文に \' と )', `gh pr create --title t --body "$(cat <<'EOF'\nit's done (${C})\nEOF\n)"`],
     ['git の書き出しは fd と /dev/null だけ', `git status >&2; git log 2>/dev/null | grep "${C}"`],
     ['代入だけの命令と表の道具', `S=/tmp/s; grep -n "${C}" $S/x.md`],
+    ['git diff --text（--textconv の略でない）', `git diff --text | grep "${C}"`],
+    ['引用した印が数字の here-document', `cat > /tmp/x <<'1'\n$(${C})\n1`],
+    ['node -e（呼び出しの無い字）', `node -e "console.log('${C}')"`],
   ])('通る: %s', (_, command) => {
     expect(stops(command)).toBe(false);
   });
@@ -1703,6 +1707,25 @@ describe('字の含みを効かせる形（t-y67q）', () => {
     ['PATH=…; grep', `PATH=/tmp/e:$PATH; grep -n x f # ${C}`],
     ['npx --node-options', `npx --node-options="--import=data:text/javascript,1" vitest # ${C}`],
     ['pnpm の並べていない旗', `pnpm --config.x=y test # ${C}`],
+    // review-4 の指摘 1〜9
+    ['印が数字の引用しない here-document', `cat > /tmp/x <<1\n$(${C})\n1`],
+    ['印が @ の引用しない here-document', `cat > /tmp/x <<@\n\`${C}\`\n@`],
+    ['git grep --op=（短い略）', `git grep --op='${C}' -e x`],
+    ['sort --co=（短い略）', `sort --co=/tmp/z.sh x # ${C}`],
+    ['sort --ou= で設定を書いて git', `printf x | sort --ou=.git/config && git log # ${C}`],
+    ['git -c … --help', `git -c man.viewer=z -c man.z.cmd='${C}' --help`],
+    ['gh の設定を書いて gh', `printf 'browser: %s\\n' '${C}' >> ~/.config/gh/config.yml; gh pr view 1 --web`],
+    ['for の変数で GIT_EDITOR', `for GIT_EDITOR in '${C}'; do git commit --amend; done`],
+    ['printf -v で GIT_EDITOR', `printf -v GIT_EDITOR '%s' '${C}'; git commit --amend`],
+    ['for の変数で PATH', `for PATH in /tmp/e; do grep x f; done # ${C}`],
+    ['printf -v で PATH', `printf -v PATH '%s' /tmp/e; grep x f # ${C}`],
+    ['1<> で設定を書いて git', `printf '[core]\\n\\tfsmonitor = ${C}\\n#' 1<> .git/config; git status`],
+    ['package.json を書いて node --run', `cat > package.json <<'EOF'\n{"scripts":{"x":"${C}"}}\nEOF\nnode --run x`],
+    ['node --import', `node --import=data:text/javascript,1 x.js # ${C}`],
+    ['python -m', `python3 -m x # ${C}`],
+    ['命令の名の位置の置き換え', `$(printf 'eval x #')echo '${C}'`],
+    ['rg --hostname-bin', `rg --hostname-bin=/tmp/s/h.sh --hyperlink-format=default x # ${C}`],
+    ['zsh の typeset で PATH（表に無い）', `typeset PATH=/tmp/e; grep x f # ${C}`],
     ['置き換えの中の here-document の後ろの bash', `gh pr create --title t --body "$(cat <<'EOF'\nit's done\nEOF\n)"\nprintf '%s' '${C}' | bash`],
     // 置き換えの中は、頭の代入・path を書いたままで見る
     ['置き換えの中の頭の代入', `git commit -m "$(GIT_EDITOR='${C}' git commit --amend)"`],

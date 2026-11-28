@@ -20,10 +20,11 @@ const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
  */
 export const SUBSTITUTED = '\u0000';
 
-/** here-document の終わりの印（`<<-` なら字下げを許す）。 */
+/** here-document の終わりの印（`<<-` なら字下げを許す。quoted は印を引用したか（`'EOF'`・`"EOF"`・`\EOF`。引用しない本文は shell が置き換えを動かす））。 */
 interface Heredoc {
   end: string
   strip: boolean
+  quoted: boolean
 }
 
 /** `<<` の後ろ（i）から終わりの印を読む。印と、読み終えた位置（印が読めなければ、`-` と空白の後ろ）。 */
@@ -34,7 +35,8 @@ function heredocMark(s: string, i: number): { doc: Heredoc | undefined, next: nu
   while (s[j] === ' ' || s[j] === '\t') j += 1;
   const m = /^(?:'([^']*)'|"([^"]*)"|([^\s;&|<>()]+))/.exec(s.slice(j));
   if (m === null) return { doc: undefined, next: j };
-  return { doc: { end: m[1] ?? m[2] ?? (m[3] ?? '').replaceAll('\\', ''), strip }, next: j + m[0].length };
+  const quoted = m[3] === undefined || m[3].includes('\\') || /['"]/.test(m[3]);
+  return { doc: { end: m[1] ?? m[2] ?? (m[3] ?? '').replace(/['"\\]/g, ''), strip, quoted }, next: j + m[0].length };
 }
 
 /** 改行の後ろ（i）から、here-document の中身を、終わりの印の行まで（いくつもあれば順に）読み飛ばした位置。 */
@@ -65,6 +67,8 @@ class Lexer {
   readonly commands: string[][] = [];
   /** file への書き出しの先（先が `/dev/null`・fd の番号・`-` の物は数えない。命令の置き換えの中も数える）。 */
   readonly writes: string[] = [];
+  /** 引用しない here-document の本文に、置き換え（`$(…)`・backtick）があったか（shell が動かす。命令の置き換えの中も数える）。 */
+  heredocRuns = false;
 
   private readonly src: string;
   /** 命令の置き換えの中を、頭を整えずに書いたままで入れるか（rawCommands・scanCommand）。 */
@@ -209,6 +213,7 @@ class Lexer {
     const commands = lexer.run();
     this.commands.push(...(this.raw ? commands : commands.flatMap(head)));
     this.writes.push(...lexer.writes);
+    if (lexer.heredocRuns) this.heredocRuns = true;
   }
 
   /** `<`・`>`・`>>`・`>&`・`<<`（here-document）・`<<<`（here-string）。次の語は redirect の先なので命令の語にしない。 */
@@ -228,16 +233,20 @@ class Lexer {
       this.i = mark.next;
       return;
     }
-    this.redirectOut = s[this.i] === '>';
+    // `<>`（読み書きで開く）も書き出しに数える（review-4 の指摘 6）。
+    this.redirectOut = s[this.i] === '>' || s.startsWith('<>', this.i);
     this.i += 1;
     while (s[this.i] === '>' || s[this.i] === '&' || s[this.i] === '|') this.i += 1;
     // 2>&1 の 1、>&- の - は redirect の先。
     this.redirect = true;
   }
 
-  /** 改行の後、here-document の中身（命令ではない字）を、終わりの印の行まで読み飛ばす。 */
+  /** 改行の後、here-document の中身（命令ではない字）を、終わりの印の行まで読み飛ばす。引用しない本文に置き換えがあれば覚える。 */
   private skipHeredocs(): void {
+    const from = this.i;
     this.i = skipHeredocBodies(this.src, this.i, this.heredocs);
+    const body = this.src.slice(from, this.i);
+    if (this.heredocs.some(doc => !doc.quoted) && (body.includes('$(') || body.includes('`'))) this.heredocRuns = true;
     this.heredocs = [];
   }
 }
@@ -267,16 +276,20 @@ export interface Scanned {
   commands: string[][]
   /** file への書き出し（`>`・`>>`・`>|`・`>&`・`&>`）の先（書いたままの字。印は除く）。先が `/dev/null`・fd の番号・`-` の物と、引用の中と here-document の中身の `>` は数えない。 */
   writes: string[]
+  /** 引用しない here-document の本文に置き換えがあるか（印の頭の字に依らない。`<<1`・`<<@` も。review-4 の指摘 1）。 */
+  heredocRuns: boolean
+  /** 単純な命令（commands と同じ並び）の語に、置き換えの跡の印を残した形（命令の名の位置の置き換え `$(…)echo` を見分けるため。review-4 の指摘 8）。 */
+  marked: string[][]
 }
 
 /**
- * 字の命令を、単純な命令に分けるが、頭を整えない（頭の代入・前置きの語・命令の名の path を、書いたまま残す）。$(…)・`…` の中も書いたままで入る。印は除く。
- * file への書き出しの先も返す。命令の名を書いたままの字で見たい時に使う（guard の、字の含みだけの当たりを通してよいか。t-y67q）。
+ * 字の命令を、単純な命令に分けるが、頭を整えない（頭の代入・前置きの語・命令の名の path を、書いたまま残す）。$(…)・`…` の中も書いたままで入る。
+ * file への書き出しの先と、引用しない here-document の本文の置き換えも返す。命令の名を書いたままの字で見たい時に使う（guard の、字の含みだけの当たりを通してよいか。t-y67q）。
  */
 export function scanCommand(src: string): Scanned {
   const lexer = new Lexer(src, true);
-  const commands = lexer.run().map(unmarkAll);
-  return { commands, writes: lexer.writes.map(w => w.replaceAll(SUBSTITUTED, '')) };
+  const marked = lexer.run();
+  return { commands: marked.map(unmarkAll), writes: lexer.writes.map(w => w.replaceAll(SUBSTITUTED, '')), heredocRuns: lexer.heredocRuns, marked };
 }
 
 /** scanCommand の単純な命令だけ。 */

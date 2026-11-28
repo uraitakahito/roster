@@ -241,8 +241,8 @@ function quietForSegments(words: string[]): boolean {
 
 /** 引数も入力も命令として動かさない道具（字を出す・読む・比べる・並べる・場所を移す）。字を動かす旗のある道具は TEXT_FLAGS で外す。 */
 const TEXT_TOOLS = new Set(['cat', 'echo', 'printf', 'tee', 'head', 'tail', 'wc', 'sort', 'uniq', 'cut', 'tr', 'diff', 'ls', 'cd', 'pwd', 'mkdir', 'test', '[', 'true', 'false', 'date', 'jq', 'basename', 'dirname', 'realpath', 'grep', 'rg']);
-/** 表の道具の、値を命令として動かす長い旗（頭の 3 字以上の略も当てる）。 */
-const TEXT_FLAGS: Record<string, string[]> = { sort: ['--compress-program'], rg: ['--pre', '--pre-glob'] };
+/** 表の道具の、値を命令として動かす長い旗（略も当てる）。 */
+const TEXT_FLAGS: Record<string, string[]> = { sort: ['--compress-program'], rg: ['--pre', '--pre-glob', '--hostname-bin'] };
 /** git の、字を命令として動かさない命令。 */
 const GIT_TEXT = new Set(['commit', 'grep', 'show', 'log', 'diff', 'status', 'rev-parse', 'ls-files', 'blame']);
 /** git の、命令の前に置くと設定の字を命令にする旗（-c は丸ごと、ほかは略も当てる）。 */
@@ -274,10 +274,16 @@ const RUN_CALLS = /subprocess|os\.system|os\.popen|os\.exec|os\.spawn|posix_spaw
 /** 字を読ませて動く道具の中で、命令の字に RUN_CALLS が無ければ通す言語。 */
 const QUIET_LANGS = new Set(['python', 'python3', 'node']);
 
-/** 語が、長い旗のどれかか、その略（`--` の後ろ 3 字以上）か。`=` の後ろは値。 */
+/** 略と読まない、ほかの旗の丸ごとの名（git diff の --text は --textconv の略でない）。 */
+const EXACT_FLAGS = new Set(['--text']);
+
+/**
+ * 語が、長い旗のどれかか、その略（`--` の後ろ 1 字以上。getopt_long と git は、見分けがつけば 1 字の略も受ける。review-4 の指摘 2）か。`=` の後ろは値。
+ * 止める側に倒れる（`--o` も当たる）が、表の道具の読む命令では困らない。
+ */
 function abbreviates(word: string, flags: string[]): boolean {
   const name = word.split('=')[0] ?? '';
-  return name.length >= 5 && name.startsWith('--') && flags.some(flag => flag.startsWith(name));
+  return name.length >= 3 && name.startsWith('--') && !EXACT_FLAGS.has(name) && flags.some(flag => flag.startsWith(name));
 }
 
 /** 単純な命令（書いたままの語）の、飛ばしてよい shell の語の後ろ。 */
@@ -289,10 +295,10 @@ function withoutShellWords(words: string[]): string[] {
 
 /** git の命令（書いたままの語）が、字を命令として動かさない形か。 */
 function gitPasses(words: string[]): boolean {
+  // 命令の名を探す前に、設定の旗を語の全体で見る（`git -c … --help` は命令の名が無く、help が設定の命令を動かす。review-4 の指摘 3）。
+  if (words.some(a => a === '-c' || abbreviates(a, GIT_CONFIG_FLAGS))) return false;
   const git = gitCommand(words);
-  if (git === undefined) return true;
-  const before = words.slice(1, words.length - git.args.length - 1);
-  if (before.some(a => a === '-c' || abbreviates(a, GIT_CONFIG_FLAGS))) return false;
+  if (git === undefined) return false;
   if (git.args.some(a => abbreviates(a, GIT_RUN_FLAGS) || (git.name === 'grep' && /^-[A-Za-z]*O/.test(a)))) return false;
   return GIT_TEXT.has(git.name);
 }
@@ -310,6 +316,24 @@ function firstOperand(args: string[], allowed: Set<string>, valued: Set<string>)
     if (valued.has(arg)) i += 1;
   }
   return undefined;
+}
+
+/** python・node の、script（字か file）の前に置いてよい旗。値を取る旗（-c・-e・-p）の後ろは script の字。node --run・-r・--import・python -m などは止める（review-4 の指摘 7）。 */
+const LANG_FLAGS: Record<string, { plain: Set<string>, code: Set<string> }> = {
+  python: { plain: new Set(['-u', '-B', '-I']), code: new Set(['-c']) },
+  python3: { plain: new Set(['-u', '-B', '-I']), code: new Set(['-c']) },
+  node: { plain: new Set(['--input-type=module', '--input-type=commonjs']), code: new Set(['-e', '--eval', '-p', '--print']) },
+};
+
+/** python・node の旗が、並べた形だけか（script の path か `-` か、字を渡す旗に着くまで）。 */
+function quietLang(name: string, args: string[]): boolean {
+  const flags = LANG_FLAGS[name];
+  if (flags === undefined) return false;
+  for (const arg of args) {
+    if (arg === '-' || !arg.startsWith('-') || flags.code.has(arg)) return true;
+    if (!flags.plain.has(arg)) return false;
+  }
+  return true;
 }
 
 /** uniq の、値を取る旗。 */
@@ -331,7 +355,7 @@ function writesByFlag(raw: string[]): boolean {
  * 単純な命令（rawCommands の、書いたままの語）が、字の含みを効かせなくてよい道具か（t-y67q の案 B）。
  * 頭の代入（GIT_PAGER=… など、字を命令として読む変数かもしれない）・前置きの語（sudo・env・xargs など）・path の付いた名は当てない。
  * 代入だけの命令（S=/tmp/x）と `for x in …` は通す（中の命令は別の単純な命令として見る。代入だけの命令を環境を読む道具と並べる形は textStays が外す）。
- * 設定を読む道具（git・pnpm・npx）は、同じ命令に log でない file への書き出しか python・node があれば外す（`.git/config`・package.json を書いて読ませる形）。
+ * 設定を読む道具（git・gh・pnpm・npx）は、同じ命令に log でない file への書き出しか python・node があれば外す（`.git/config`・package.json を書いて読ませる形）。
  */
 function passesText(raw: string[], command: string, configWrites: boolean): boolean {
   const words = withoutShellWords(raw);
@@ -341,16 +365,20 @@ function passesText(raw: string[], command: string, configWrites: boolean): bool
   if (name === undefined || ASSIGNMENT.test(name) || name.includes('/')) return false;
   if (TEXT_TOOLS.has(name)) return !args.some(a => abbreviates(a, TEXT_FLAGS[name] ?? []));
   if (name === 'roster') return !(args[0] === 'infra' && args[1] === 'run');
-  if (name === 'gh') return GH_TEXT.test(args.slice(0, 2).join(' '));
-  if (QUIET_LANGS.has(name)) return !RUN_CALLS.test(command);
+  if (QUIET_LANGS.has(name)) return quietLang(name, args) && !RUN_CALLS.test(command);
   if (configWrites) return false;
+  // gh も設定（~/.config/gh/config.yml の browser・editor・pager）と .git/config を読む（review-4 の指摘 4）。
+  if (name === 'gh') return GH_TEXT.test(args.slice(0, 2).join(' '));
   if (name === 'git') return gitPasses(words);
   if (name === 'pnpm') return PNPM_TEXT.has(firstOperand(args, PNPM_FLAGS, PNPM_VALUE_FLAGS) ?? '');
   if (name === 'npx') return NPX_TEXT.has(firstOperand(args, NPX_FLAGS, new Set()) ?? '');
   return false;
 }
 
-/** 設定にも code にもならない書き出しの先（log と字の出力）。これだけなら、設定を読む道具を外さない（`pnpm test > all.log`）。 */
+/**
+ * 設定にも code にもならない書き出しの先（log と字の出力）。これだけなら、設定を読む道具を外さない（`pnpm test > all.log`）。
+ * 読む側（git・gh・pnpm・npx）の設定の file の名が決まっている（.git/config・package.json・config.yml など）ことに依る。道具を表に足す時に見直す（review-4 の指摘 10）。
+ */
 const OUTPUT_FILE = /\.(?:log|txt|out)$/;
 
 /**
@@ -359,8 +387,10 @@ const OUTPUT_FILE = /\.(?:log|txt|out)$/;
  * （.git/config・.git/hooks・package.json を書いて読ませる形。python は書く先を読めない。review-2 の指摘 1）。
  */
 function textStays(command: string): boolean {
-  if (runsInHeredoc(command)) return false;
-  const { commands, writes } = scanCommand(command);
+  const { commands, writes, heredocRuns, marked } = scanCommand(command);
+  if (heredocRuns) return false;
+  // 命令の名の位置の置き換え（`$(…)echo`）は、出力が命令の語になる（review-4 の指摘 8）。
+  if (marked.some(words => (withoutShellWords(words).find(w => !ASSIGNMENT.test(w)) ?? '').includes(SUBSTITUTED))) return false;
   const tees = commands.flatMap((raw) => {
     const [name, ...args] = withoutShellWords(raw);
     return name === 'tee' ? args.filter(a => !a.startsWith('-')) : [];
@@ -369,8 +399,11 @@ function textStays(command: string): boolean {
   const lang = names.some(name => QUIET_LANGS.has(name));
   const configWrites = lang || commands.some(writesByFlag) || [...writes, ...tees].some(target => !OUTPUT_FILE.test(target));
   // 代入だけの命令（`GIT_EDITOR=…; git commit`）は、書き出し済みの変数なら子の process に渡る。PATH は、どの道具とも並べない（review-3 の指摘 1）。
+  // for の変数と printf -v の名も、同じく変数を替える（review-4 の指摘 5）。
   const assigned = commands.flatMap((raw) => {
     const words = withoutShellWords(raw);
+    if (words[0] === 'for') return words.slice(1, 2);
+    if (words[0] === 'printf') return words.flatMap((w, i) => (w === '-v' ? [words[i + 1] ?? ''] : w.startsWith('-v') ? [w.slice(2)] : []));
     return words.length > 0 && words.every(w => ASSIGNMENT.test(w)) ? words.map(w => w.slice(0, w.indexOf('='))) : [];
   });
   if (assigned.includes('PATH') || (assigned.length > 0 && names.some(name => ENV_READERS.has(name)))) return false;
