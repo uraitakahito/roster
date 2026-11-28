@@ -175,7 +175,8 @@ describe('Staff が打たない命令', () => {
     expect((await askTpm(w.staff, { text: '見る物が読めない', waitingFor: '見る物' }))[0]).toBe('送った: 【ask-tpm】→ file:tpm（相手の手が空いた時に届く。送り直さない）');
     expect((await reportIncident(w.staff, { text: '依頼書の URL が 404', type: 'reliability', tags: [], severe: false })).at(-1)).toBe('送った: 【incident】→ file:tpm（相手の手が空いた時に届く。送り直さない）');
     w.posted('tpm');
-    expect(await notify(w.tpm, 'AI-8.staff', { text: 'URL を直した' })).toEqual(['送った: 【notify】→ file:2（相手の手が空いた時に届く。送り直さない）']);
+    // まだ応えていない問いが 1 つなので、命令がそれを返事の先にする（【incident】は問いでない）。
+    expect(await notify(w.tpm, 'AI-8.staff', { text: 'URL を直した' })).toEqual(['送った: 【notify】→ file:2（相手の手が空いた時に届く。送り直さない）', expect.stringMatching(/^返事の先: 【ask-tpm】見る物が読めない（id [0-9a-f-]+）を付けた$/) as string]);
   });
 
   test('Staff の席に【dismiss】は送れない（roster close で閉じる）', async () => {

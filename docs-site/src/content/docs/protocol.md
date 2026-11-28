@@ -249,7 +249,10 @@ sequenceDiagram
 | 【answer】 | 【ask-pm】 | 答えた確認のページを送った【ask-pm】（いくつもあれば、いちばん古い物）。`--reply-to` があれば、旗が勝つ |
 | 前の依頼書を取り消す【brief】（`--supersede`） | 【brief】 | 取り消した依頼書（送った id の分かるいちばん古い物） |
 | 前の確認を置き換える【ask-pm】（`--supersede`） | 【ask-pm】 | 置き換えた確認を送った【ask-pm】 |
+| 仕事を振る者の【notify】 | 【ask-tpm】【ask-devops】（Tech Lead 担当は【ask-lead】） | 相手の席の、まだ応えていない問いが 1 つなら、それ（付けたことを結果に 1 行出す）。`--reply-to` があれば旗、`--no-reply` なら付けない。問いが 2 つ以上なら、送らずに止まって問いを並べる |
+| 仕事を振る者の【brief】【dismiss】 | 同じ | 相手の席の、まだ応えていない問いが 1 つなら、それ（付けたことを結果に 1 行出す。取り消す依頼書があれば、そちらが勝つ）。2 つ以上なら付けずに送る（止めない） |
 
+- **まだ応えていない問い**: その席（今の居場所）が送った問いのうち、返事の先に指されておらず、仕事を振る者が「広く応えうる送り」をその席へ最後に送った時より後の物。広く応えうる送りは、返事の先を持たない【notify】【brief】【dismiss】【answer】（返事の先を付ける前の版の返事も、ここに入る。前の問いを溜めない）。返事の先を名指した送りは、指した問いだけを閉じる（ほかの問いは残り、次の【notify】が返事の先にする）。`--no-reply` の知らせは、行に印（`noReply: true`）を残し、どの問いも閉じない。先を名指さない【notify】は、返事の先を引く前に、同じ本文の 2 度送りを見る。【notify】が 2 つ以上の問いで止まった回は、`gate.jsonl` に種類 `asks` で残る。
 - 返事の先は 1 つしか書けない（置き場の欄が 1 つ）。1 通でいくつもの頼みを閉じる時（`--briefs` に 2 つ以上・`roster answer --all`）は、いちばん古い 1 つだけを指す。
 - 頼みが記録に無い時（前の版で起こした席・記録の抜け）は、返事の先を付けずに送る（送るのを止めない）。
 - 片道の知らせ（【merged】【doc-fix】【incident】など）は、返事の先を持たない。
@@ -385,7 +388,7 @@ Tech Lead 担当（役割 `tech-lead`。題は `Lead <課題の Key>: <短い題
 | `roster assign <課題の Key> --role tech-lead --seats <数>` | TPM 担当 | Tech Lead 担当を起こす。`--seats` は、起こしてよい repo の席の数の上限（Product Manager が計画で通した数。名簿の行の `seats` に書く）。動いている Tech Lead 担当への続きの依頼書に付けると、上限を替える。落ちた Tech Lead 担当の起こし直しで付けなければ、前の行の上限を受け継ぐ。`--role tech-lead` のほかに付けると断る |
 | `roster seat add <名> --brief <依頼書の URL> [--cwd <repo の folder>] [--title <短い題>]` | Tech Lead 担当 | 名簿に `<課題の Key>.<名>` の行（役割 `software-engineer`・`subject` は課題の Key・課題管理の課題は Tech Lead 担当と同じ）を書き、席を起こして、名乗りを待つ。依頼書は名簿の行で渡す（課題の概要の節が要る）。課題の写しは、Tech Lead 担当が受けた物（か、作らなかった訳）をそのまま渡し、席ごとに写し直さない。題は `SWE <課題の Key> <名>: <短い題>`。席を起こす所は `roster assign` と同じ関数（`cli/src/commands/launch.ts` の `launch`）を通るので、hook・色・castlist への知らせは同じ |
 | `roster seat brief <名> --brief <依頼書の URL> [--note <一言>] [--supersede\|--after]` | Tech Lead 担当 | 居る repo の席に、次の依頼書を送る（【brief】）。済んでいない前の依頼書があれば止まり、`--supersede`（取り消す）か `--after`（済ませてから）で進む。TPM 担当の続きの `roster assign` と同じ検査と数え |
-| `roster seat notify <名> <本文> [--reply-to <id>]` | Tech Lead 担当 | repo の席に、知らせ・問いへの答えを送る（【notify】） |
+| `roster seat notify <名> <本文> [--reply-to <id>\|--no-reply]` | Tech Lead 担当 | repo の席に、知らせ・問いへの答えを送る（【notify】。返事の先は、上の「[返事の先](#返事の先)」） |
 | `roster seat dismiss <名> [--supersede]` | Tech Lead 担当 | repo の席に、片付けの指示を送る（【dismiss】）。席は worktree を片付けて【end】を Tech Lead 担当へ返す |
 | `roster seat close <名>` | Tech Lead 担当 | 自分の課題の repo の席を閉じ、名簿から消す。居場所の無い席か、片付けの終わり（【end】）を送った席だけ（起こし直して、まだ名乗っていない席は、前の席の【end】では閉じない）。その席の Staff Engineer 担当の席が残っていれば、一緒に閉じる |
 | `roster ask lead <問い> --waiting-for <何を>` | repo の席 | Tech Lead 担当に問いを送り（【ask-lead】）、状態を `回答待ち(Lead)` にする。repo の席でない担当からは断る |

@@ -50,9 +50,10 @@ export function recordReviewGuardHit(ctx: Context, hit: Omit<ReviewGuardHit, 'at
  * 入口の検査の種類: 読んでいないメッセージ・merge していない PR・状態を読めない PR・同じメッセージの 2 度送り・TPM 担当が送って済んでいない物・
  * 前の監査の文脈が残ったまま始めようとした監査・担当の session から打った TPM 担当だけの命令・
  * メッセージキュー（NATS）が応えない・写しが遅れている（queue）・hook がメッセージを渡した直後の送り（fresh）・
- * merge の後の main の workflow がまだ動いている（main-running）・main の workflow を読めない（main-unreadable）。
+ * merge の後の main の workflow がまだ動いている（main-running）・main の workflow を読めない（main-unreadable）・
+ * 【notify】の相手に、まだ応えていない問いがいくつもあり、どれへの返事かが決まらない（asks）。
  */
-export type GateKind = 'unread' | 'not-merged' | 'pr-unreadable' | 'repeat' | 'unsettled' | 'stale-context' | 'tpm-only' | 'queue' | 'fresh' | 'main-running' | 'main-unreadable';
+export type GateKind = 'unread' | 'not-merged' | 'pr-unreadable' | 'repeat' | 'unsettled' | 'stale-context' | 'tpm-only' | 'queue' | 'fresh' | 'main-running' | 'main-unreadable' | 'asks';
 
 /** 入口の検査が送るのを止めた 1 件（gate.jsonl）。 */
 export interface GateStop {

@@ -11,7 +11,7 @@ import { isRepoSeat, noteRepoSeat, readRole, repoSeatKey, repoSeats, requireSelf
 import { resolveSettings } from '../settings.ts';
 import { skillSetDir, TpmError } from '../skill-sets.ts';
 import { launch, roleDefaults } from './launch.ts';
-import { assertRead, assertSettled, brief, dismissSeat, issueCopyLine, notifySeat, recordLaunchAsk, type Sent } from './messages.ts';
+import { assertRead, assertSettled, brief, dismissSeat, issueCopyLine, notifySeat, recordLaunchAsk, type NotifyOptions, type Sent } from './messages.ts';
 import { openReviews, patchReview } from '../reviews.ts';
 import { markWithdrawn } from './review-marks.ts';
 import { closeWithChildren } from './tpm-side.ts';
@@ -142,7 +142,7 @@ export async function seatBrief(ctx: Context, name: string, options: SeatBriefOp
 }
 
 /** Tech Lead 担当が、repo の席に、返事の要らないメッセージ（知らせ・【ask-lead】への答え）を送る（【notify】）。 */
-export async function seatNotify(ctx: Context, name: string, options: { text: string, replyTo?: string }): Promise<string[]> {
+export async function seatNotify(ctx: Context, name: string, options: NotifyOptions): Promise<string[]> {
   const self = requireLead(ctx, 'roster seat notify');
   return await notifySeat(ctx, self, liveSeat(ctx, self, name), options);
 }

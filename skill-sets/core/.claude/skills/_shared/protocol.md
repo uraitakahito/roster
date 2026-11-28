@@ -10,7 +10,7 @@ TPM 担当（`/tpm`）・Software Engineer 担当（`/software-engineer`）・Te
 - メッセージは、メッセージキュー（NATS）が預かり、席の hook が本文を渡す（連携の道具の cmux は運ばない）。渡るのは 3 つの時: 手を止めている間（届くと起こされる）・人が入力した時・送る前の検査が命令を止めた直後。段の区切り（PR を出す前・merge を頼む前）と、戻せない手（tag を打つ・release を出す・消す）の前には `roster inbox` で、まだ渡っていない自分宛てのメッセージを見る（出るだけで、届いたにはならない。hook が後で渡す）。
 - メッセージを送る命令は、送る前に、自分宛てでまだ渡っていないメッセージが無いかを見る（TPM 担当は、送る相手の担当から来た物だけ）。あれば 1 度止まる（送っていない。課題の記録も書いていない）。本文は、止まった直後に hook が渡す。渡された物を読んで、同じ命令を打ち直す。届いたメッセージで事情が変わっていたら、中身を変えて打つ。「直前に、hook がメッセージを渡しました」と止まった時も、渡された物を読んでから打ち直す。渡す hook を持たない session（名乗れなかった席・前の版で起こした席）では、検査と `roster inbox` が、本文を命令の結果に出す（打ち直しは通る）。`roster page put` も、確認・提案・計画・結果・レビューのページ（`--kind confirm|proposal|plan|result|review`）は、置く前に同じように見て 1 度止まる（置いていない）。事情が変わっていたら、ページを書き直して置く。
 - **打ち直しは、止まったのを見てから別の回に打つ。**`;` や `||` で 1 行に続けて書かない（止まらなかった時にも 2 度目が動く）。同じメッセージを 30 秒の内に 2 度送ろうとすると、命令は 2 度目を送らずに止まる。
-- 届いたメッセージには id が付いている。そのメッセージへの返事は `--reply-to <id>` を付けて送る。
+- 届いたメッセージには id が付いている。**返事の先（どのメッセージへの返事か）は、命令が自分で付ける**: 【done】は済ませる依頼書、【end】は受けた【dismiss】、【review】は頼み（【ask-review】）、【answer】は答えた確認の【ask-pm】。担当は何も足さない。TPM 担当（Tech Lead 担当）の【notify】は、相手の席にまだ応えていない問い（【ask-tpm】【ask-devops】。repo の席の【ask-lead】）が 1 つあれば、それを返事の先にし、付けたことを 1 行出す（【brief】【dismiss】も同じ: 問いが 1 つなら、それを返事の先にして 1 行出す。担当から見ると、問いに次の依頼書や片付けの指示で応えたことになる）。問いへの返事でない知らせは `--no-reply` を付ける（問いは、まだ応えていない物として残る）。問いが 2 つ以上あると、【notify】は送らずに止まって問いを並べるので、`--reply-to <id>` で名指すか `--no-reply` を付けて打ち直す（名指して答えた後も、残りの問いは数えたままで、次の【notify】が返事の先にする）。問いでないメッセージ（【incident】など）への返事は、今までどおり `--reply-to <id>` で名指す。
 - 宛先は書かない。担当のメッセージは TPM 担当へ行き、TPM 担当は課題の Key で担当を名指す。**レビューの頼みと判定だけは、TPM 担当を通らない**: 命令が、課題の担当と、その課題の Staff Engineer 担当の席の間を、じかに届ける（下の「レビュー」）。**分けた課題の中**（Tech Lead 担当と、その repo の席の間）も、TPM 担当を通らない（下の「分けた課題の中」）。
 - **Product Manager に直接聞かない。** Product Manager とのやりとりは、すべて TPM 担当を通す。例外は Auditor だけ: Product Manager が起こした `Audit` の席で、Product Manager とじかに話す（下の「監査」）。
 - **メッセージキューが応えない時**: 送る命令は、どれも「メッセージキューが応えません。送っていません」で止まり、席の状態にもそう出る（`roster ask devops` も同じ。ほかの道具で送らない）。`roster report incident` だけは、台帳に書いて「TPM 担当には送っていない」と出して終わる（打ち直さない。台帳に 2 件になる）。メッセージキュー（NATS）が動いているかを確かめてもらい（担当は送れないので、止まった事を返答に書く。TPM 担当は Product Manager に伝える）、動いてから同じ命令を打ち直す。
@@ -55,7 +55,7 @@ Staff Engineer 担当は、【done】【end】【merged】【doc-fix】【ask-pm
 | 見出し | 誰から誰へ | いつ | 命令 |
 |---|---|---|---|
 | 【ask-lead】 | repo の席 → Tech Lead 担当 | Tech Lead 担当に聞きたいこと・決めてほしいことがある（Product Manager に決めてほしいことも、これで送る。repo の席は【ask-pm】を送れない） | `roster ask lead "<問い・試したこと・案>" --waiting-for "<何を>"` |
-| 【brief】【notify】【dismiss】 | Tech Lead 担当 → repo の席 | 次の依頼書・知らせと問いへの答え・片付けの指示（中身は、下の「TPM 担当から」と同じ） | `roster seat brief <名> --brief <URL> [--supersede\|--after]`・`roster seat notify <名> "<本文>"`・`roster seat dismiss <名> [--supersede]` |
+| 【brief】【notify】【dismiss】 | Tech Lead 担当 → repo の席 | 次の依頼書・知らせと問いへの答え・片付けの指示（中身は、下の「TPM 担当から」と同じ） | `roster seat brief <名> --brief <URL> [--supersede\|--after]`・`roster seat notify <名> "<本文>" [--reply-to <id>\|--no-reply]`・`roster seat dismiss <名> [--supersede]` |
 
 - repo の席の【done】【merged】【doc-fix】【end】は、命令が Tech Lead 担当へ届ける（命令は同じ。宛先を書かない）。【incident】【ask-devops】【ask-tpm】は、repo の席からも TPM 担当へ届く（Tech Lead 担当の席が応えない時の相談は【ask-tpm】）。
 - repo の席の【ask-review】は、Staff Engineer 担当の席でなく、Tech Lead 担当へ届く（命令は同じ `roster ask review`）。Tech Lead 担当は、Staff Engineer 担当と同じ `roster report review` で返す（返していない頼みがいくつもある時は、`--review <番号>` で名指す）。Tech Lead 担当自身の計画と PR は、Staff Engineer 担当が見る。
@@ -69,7 +69,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 |---|---|---|
 | 【brief】 | 新しい依頼書の URL（Staff Engineer 担当への依頼書は、レビューの頼みから命令が作る）。下の「ページ」のとおり読み、それに従う。「取り消す: brief-N」とあれば brief-N の作業をやめてこちらに従い、「brief-N を済ませてから、これをする」とあれば brief-N の【done】の後に始める | `roster assign <Key> --role <役割> --brief <URL> [--supersede\|--after]` |
 | 【answer】 | Product Manager の答え。待ちの表示を作業中に戻して続ける | `roster answer <Key> "<答え>" [--url <確認の URL>…\|--all]` |
-| 【notify】 | 知っておくこと・中身のある返事（決定・直し・次の手）。「受け取った」だけの返事は、TPM 担当は送らない。返事は要らない | `roster notify <Key> "<本文>"` |
+| 【notify】 | 知っておくこと・中身のある返事（決定・直し・次の手）。「受け取った」だけの返事は、TPM 担当は送らない。返事は要らない | `roster notify <Key> "<本文>" [--reply-to <id>\|--no-reply]` |
 | 【dismiss】 | この課題に続きは無い（Product Manager が決めたか、TPM 担当が聞かなくてよいと決めた）。worktree を片付けて【end】を返す。担当の交代のためなら、そう書いてある。「取り消す: brief-N」とあれば brief-N の作業もやめる | `roster dismiss <Key> [--handover] [--supersede]` |
 
 この表の命令と `roster close` は、担当の session から打つと断られる（送り手の名は命令が付けるので、担当が打つと TPM 担当の名で届いてしまう）。TPM 担当に頼むことは `roster ask tpm` で送る。
