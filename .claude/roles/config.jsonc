@@ -2,6 +2,35 @@
 {
   // 課題の記録は Jira（acli が login している site。今は future-gadget-laboratory.atlassian.net の AI）に書く。
   "tracker": "jira",
+  // roster push が、push の前に流す確かめ（書き方は docs-site の設定のページの「push」）。CI（test.yml の test・site.yml）の中で手元で速く流せる物。
+  // origin/main のこの欄を読むので、変えた一覧は merge の後から効く。e2e（nats-e2e.yml・pagetray-e2e.yml）と生成の検査（test.yml の gen）は CI に任せる。
+  // 長さ（2026-11-28 に一時の worktree で測った）: 型 2 秒・lint 5〜6 秒・doccheck 2 秒・試験 21 秒・docs の check 2〜4 秒・format 1 秒。
+  "push": {
+    "checks": [
+      {
+        "name": "cli-typecheck",
+        "dir": "cli",
+        "run": ["pnpm", "run", "typecheck"],
+      },
+      { "name": "cli-lint", "dir": "cli", "run": ["pnpm", "run", "lint"] },
+      {
+        "name": "cli-doccheck",
+        "dir": "cli",
+        "run": ["pnpm", "run", "doccheck"],
+      },
+      { "name": "cli-test", "dir": "cli", "run": ["pnpm", "test"] },
+      {
+        "name": "docs-check",
+        "dir": "docs-site",
+        "run": ["pnpm", "run", "check"],
+      },
+      {
+        "name": "docs-format",
+        "dir": "docs-site",
+        "run": ["pnpm", "run", "format:check"],
+      },
+    ],
+  },
   "infra": {
     // ページの置き場（別の repo の pagetray の image で動かす container と、DB を置く volume）。
     // 止めると担当はページを置けず、volume を消すと置かれたページの記録（役割・workspace の ID）が消える。
