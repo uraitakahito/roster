@@ -360,7 +360,25 @@ castlist と pagetray は、1.0.0 で API も DB も替えた（AI-36 の切り�
 
 ## 図を描く道具（Archify）
 
-文書の図を Archify で描く担当の命令（`roster figure embed`・`roster figure shot`）は、roster を動かす機械に置いた Archify を使う。置くのは `roster figure setup`（どの担当が打ってもよい。置いてあれば何もしない）。初めてと、`.archify-version` を上げる PR を merge した後に 1 度打つ。GitHub から版を固定して取り、commit を確かめて `$XDG_DATA_HOME`（無ければ `~/.local/share`）の `roster/tools/archify/<commit>/` に置く。前の setup が途中で殺されて残した一時の folder（`.tmp-*`）は、次の setup が消す（[開発](/development/#archify図を描く道具とのつなぎ)）。`roster figure shot` は Chrome（`/Applications/Google Chrome.app`。在り処が違えば `$ROSTER_CHROME`）を使う。
+文書の図を Archify で描く担当の命令（`roster figure embed`・`roster figure shot`）は、roster を動かす機械に置いた Archify を使う。置くのは `roster figure setup`（どの担当が打ってもよい。置いてあれば何もしない）。初めてと、`.archify-version` を上げる PR を merge した後に 1 度打つ。GitHub から版を固定して取り、commit を確かめて `$XDG_DATA_HOME`（無ければ `~/.local/share`）の `roster/tools/archify/<commit>/` に置く。前の setup が途中で殺されて残した一時の folder（`.tmp-*`）は、次の setup が消す（[開発](/development/#archify図を描く道具とのつなぎ)）。`roster figure shot` は Chrome（`/Applications/Google Chrome.app`。在り処が違えば `$ROSTER_CHROME`）を、下の `roster chrome` と同じ旗で起こす。
+
+## 手元で起こす Chrome（roster chrome）
+
+担当が手元で Chrome・Chromium を起こす道は `roster chrome` 1 つ。Chrome をそのまま起こすと、Chrome が macOS の keychain（「Chrome Safe Storage」など）を読もうとし、Product Manager の画面に keychain のパスワードを求めるダイアログが出る（2026-11-28。台帳 #402・#403・#404）。`roster chrome` は、いつも次の旗を担当の引数の前に付ける: `--use-mock-keychain`・`--password-store=basic`（keychain を読ませない）、`--no-first-run`・`--no-default-browser-check`（初めの画面と「既定のブラウザ」の問いを出さない）。担当が `--headless` を書かず、`--headed` でもなければ `--headless=new` も付ける。
+
+| 命令 | すること |
+|---|---|
+| `roster chrome run [--bin …] [--profile <dir>] [--timeout <秒>] -- <Chrome の引数>` | 前で動かし、終わるまで待つ（`--screenshot=<png>`・`--dump-dom` の撮り）。Chrome の出力と終了コードを返す。`--timeout`（既定 60 秒）を過ぎたら止めて 1 で終わる |
+| `roster chrome start [--bin …] [--profile <dir>] [--port <n>] -- <Chrome の引数>` | 裏で起こし、pid・CDP の URL（`http://127.0.0.1:<口>`）・profile・log を出す。口は既定で Chrome が選ぶ（`--port 0`）。TPM 担当が口の帯を分けた時は `--port` で帯の中を書く |
+| `roster chrome list` | 自分の Key が `start` で起こし、まだ動いている物 |
+| `roster chrome stop <pid>…` | `start` で起こした物だけを止める。SIGTERM の後 5 秒で居なくならなければ SIGKILL。親が居なくなってから、profile を command line に持つ残り（Renderer・GPU の helper・`chrome_crashpad_handler`）を pid で止め、roster が作った profile と log を消す |
+
+- **起こす Chrome**（`--bin`）: 既定は `$ROSTER_CHROME`、無ければ `/Applications/Google Chrome.app`。`.app` の path は中の実行の file に読み替える。`for-testing` は、puppeteer が `~/.cache/puppeteer/chrome/` に置いた Chrome for Testing のいちばん新しい版（`for-testing@156` で版の頭を絞る）。Chrome の仲間（Google Chrome・Chrome for Testing・Chromium・chrome-headless-shell・Microsoft Edge・Brave Browser など）でなければ断る。
+- **profile**: `--profile` が無ければ、一時の folder（`$TMPDIR/roster-chrome-<Key>-XXXX`）を作り、`run` は終わりに、`start` は `stop` で消す。`--profile` で渡した folder は消さない。
+- **使わせない旗**（断って、訳を出す）: `--password-store=` の basic 以外の値、Chrome の引数の `--user-data-dir`（`--profile` で渡す）と `--profile-directory`、loopback の外の `--remote-debugging-address`、`--headed` と担当の `--headless` の両方、`--port` と違う値の `--remote-debugging-port`。`--profile` が（symlink を解いて）`~/Library/Application Support/` の下なら断る（Product Manager のふだんのブラウザの profile）。
+- **記録**: `start` は state の `chrome.jsonl` に起こした行を、`stop` は止めた行を足す。「まだ動いている」は、止めた行が無く、pid が居て、その command line に起こした時の profile がある物（`list` と `stop` は同じ判じ方をする。pid が使い回されていても当てない）。
+- **起こす前**に、profile に残った `DevToolsActivePort` を消し、口は起こした時刻より新しい file からだけ読む（前に落ちた Chrome の口を読まない）。10 秒で口を書かなければ、止めて片付け、log の終わりを出して誤りにする。
+- puppeteer・playwright は 2 つの旗を既定で付けるので、e2e や BrowserHive の撮り（container の Chromium に繋ぐ）は `roster chrome` を通さなくてよい。`ignoreDefaultArgs` は使わない。
 
 ## 手元の builder（buildkit）
 
