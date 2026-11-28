@@ -87,17 +87,19 @@ async function launched(): Promise<{ w: World, tpm: Context, se: Context, config
 }
 
 describe('席が閉じる時の hook（roster castlist session-end）', () => {
-  test('写しの回を、時計の 1 時間と種類ごとの行にして castlist へ送り、どこまで読んだかを控える', async () => {
+  test('写しの回を、時計の 10 分の枠と種類ごとの行にして castlist へ送り、どこまで読んだかを控える', async () => {
     const { se, transcript } = await launched();
     writeFileSync(transcript, line('m1', '2026-11-20T10:05:00.000Z') + other('2026-11-20T10:05:01.000Z') + line('m1', '2026-11-20T10:05:02.000Z')
-    + line('m2', '2026-11-20T10:50:00.000Z', { cache_creation_input_tokens: 30, cache_creation: { ephemeral_1h_input_tokens: 30 } }) + line('m3', '2026-11-20T11:01:00.000Z'));
+    + line('m2', '2026-11-20T10:09:59.000Z', { cache_creation_input_tokens: 30, cache_creation: { ephemeral_1h_input_tokens: 30 } })
+    + line('m3', '2026-11-20T10:50:00.000Z') + line('m4', '2026-11-20T11:01:00.000Z'));
     await sessionStart(se, startInput('startup', SID, transcript));
     expect(readSession(se, SID)?.transcript).toBe(transcript);
     const puts = mark();
     await sessionEnd(se, endInput(SID, transcript));
     const sent = puts();
-    expect(sent.map(r => r.status)).toEqual([201, 201]);
-    expect(sent.map(r => r.path)).toEqual([1, 2].map(n => expect.stringMatching(new RegExp(`^/api/usage/u-[0-9a-f]{8}-${SID}-${n}$`)) as unknown));
+    // 10:05 と 10:09 は同じ枠（10:00〜10:10）で 1 行。10:50 は同じ時の別の枠、11:01 は次の時で、それぞれ 1 行。
+    expect(sent.map(r => r.status)).toEqual([201, 201, 201]);
+    expect(sent.map(r => r.path)).toEqual([1, 2, 3].map(n => expect.stringMatching(new RegExp(`^/api/usage/u-[0-9a-f]{8}-${SID}-${n}$`)) as unknown));
     expect(sent[0]?.body).toMatchObject({
       by: `claude.session:${SID}`,
       model: 'claude-opus-5-5',
@@ -115,10 +117,12 @@ describe('席が閉じる時の hook（roster castlist session-end）', () => {
       buckets: [{ bucket: 0, turns: 2, costMicroUsd: (sent[0]?.body as { costMicroUsd: number }).costMicroUsd }],
     });
     expect(sent[0]?.body).not.toHaveProperty('agent');
-    expect(sent[1]?.body).toMatchObject({ turns: 1 });
+    expect(sent[0]?.body).toMatchObject({ fromAt: '2026-11-20T10:05:00.000Z', toAt: '2026-11-20T10:09:59.000Z' });
+    expect(sent[1]?.body).toMatchObject({ turns: 1, fromAt: '2026-11-20T10:50:00.000Z', toAt: '2026-11-20T10:50:00.000Z' });
+    expect(sent[2]?.body).toMatchObject({ turns: 1, fromAt: '2026-11-20T11:01:00.000Z', toAt: '2026-11-20T11:01:00.000Z' });
     const state = readUsageState(se, SID);
-    expect(state.n).toBe(2);
-    expect(state.ids).toEqual(['m1', 'm2', 'm3']);
+    expect(state.n).toBe(3);
+    expect(state.ids).toEqual(['m1', 'm2', 'm3', 'm4']);
     expect(state.pending).toBeUndefined();
     expect(Object.keys(state.files)).toEqual([transcript]);
   });
