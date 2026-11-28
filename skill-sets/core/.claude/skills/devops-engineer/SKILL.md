@@ -68,4 +68,4 @@ roster infra list
 roster report done --kind result --summary "<したこと・確かめた結果>" --remaining "<残り>" --decisions "<決めてほしいこと>"
 ```
 
-次の【brief】を待つ。TPM 担当から【dismiss】が来たら `roster report end --left "<残っている物>"` を打つ。**居場所は自分で閉じない。**
+次の【brief】を待つ。TPM 担当から【dismiss】が来たら、`roster chrome list` に自分が起こした Chrome が残っていれば `roster chrome stop <pid>` で止めてから、`roster report end --left "<残っている物>"` を打つ。**居場所は自分で閉じない。**

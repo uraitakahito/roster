@@ -260,6 +260,7 @@ describe('roster chrome の片付けの当て方と支度（review-3）', () => 
     expect(usesProfile('chrome_crashpad_handler --database=/tmp/p/Crashpad', '/tmp/p')).toBe(true);
     expect(usesProfile('chrome --user-data-dir=/tmp/p', '/tmp/p')).toBe(true);
     expect(usesProfile('chrome --user-data-dir=/tmp/p2 --headless', '/tmp/p')).toBe(false);
+    expect(usesProfile('chrome --user-data-dir=/Users/me/tmp/p --headless', '/tmp/p')).toBe(false);
   });
 
   test('stop は、名の似たほかの profile の Chrome に合図を送らない', async () => {
