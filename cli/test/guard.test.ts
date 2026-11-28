@@ -710,6 +710,160 @@ describe('担当の席の素の git push（t-fcp8。監査 audit-2 の R15）', 
   });
 });
 
+/** 役割の有る席（読むだけの担当の外）。 */
+const SEATS = ['software-engineer', 'tech-lead', 'devops-engineer', 'sustaining-engineer'] as const;
+
+describe('merge の直打ち（t-pq5v の段 3）', () => {
+  const MERGE_HINT = expect.stringContaining('merge は roster pr merge で打ってください') as string;
+  test.each([
+    'gh pr merge 141 --squash',
+    'gh pr merge --auto --squash 141',
+    'gh pr merge https://github.com/o/r/pull/1 --merge --delete-branch',
+    'gh pr -R o/r merge 1',
+    'gh -R o/r pr merge 1',
+    'gh --repo o/r pr merge 1',
+    'gh --repo=o/r pr merge 1',
+    '/opt/homebrew/bin/gh pr merge 1',
+    'cd /w && gh pr merge 1',
+    'timeout 60 gh pr merge 1',
+    'sh -c \'gh pr merge 1\'',
+    'x=$(gh pr merge 1)',
+    // merge の endpoint（review-2 の指摘 3）。
+    'gh api -X PUT repos/o/r/pulls/1/merge',
+    'gh api -XPUT repos/o/r/pulls/1/merge',
+    'gh api --method PUT repos/o/r/pulls/1/merge',
+    'gh api --method=PUT /repos/o/r/pulls/1/merge',
+    'gh api -X put repos/{owner}/{repo}/pulls/1/merge -f merge_method=squash',
+    'gh api repos/o/r/pulls/1/merge -f merge_method=squash',
+    'gh api repos/o/r/merges -f base=main -f head=t-x/impl',
+    'gh api -X POST repos/o/r/merges --input body.json',
+    'gh api -X PATCH repos/o/r/git/refs/heads/main -f sha=abc -F force=true',
+    'gh api repos/o/r/git/refs/heads/master -f sha=abc',
+    'gh api -X DELETE repos/o/r/git/refs/heads/main',
+    'gh api repos/o/r/git/refs -f ref=refs/heads/main -f sha=abc',
+    // GraphQL の mutation。
+    'gh api graphql -f query=\'mutation { mergePullRequest(input: {pullRequestId: "x"}) { clientMutationId } }\'',
+    'gh api graphql -f query=\'mutation { enablePullRequestAutoMerge(input: {pullRequestId: "x"}) { clientMutationId } }\'',
+    'gh api graphql -F query=\'mutation { mergeBranch(input: {repositoryId: "x", base: "main", head: "b"}) { clientMutationId } }\'',
+    'gh api graphql -f query=\'mutation { updateRef(input: {refId: "x", oid: "y"}) { clientMutationId } }\'',
+    'gh api graphql -f query=\'mutation { updateRefs(input: {}) { clientMutationId } }\'',
+    'gh api graphql --input - <<\'EOF\'\n{"query": "mutation { mergePullRequest(input: {pullRequestId: \\"x\\"}) { clientMutationId } }"}\nEOF',
+    // 別名。
+    'gh alias set m \'pr merge\'',
+    'gh alias set --shell m \'gh pr merge "$1" --squash\'',
+    'gh alias set mb \'api graphql -f query="mutation{mergeBranch(input:{}){clientMutationId}}"\'',
+    'gh alias set mv \'api -X PATCH repos/o/r/git/refs/heads/main\'',
+    'gh alias import aliases.yml',
+    'ROSTER_RAW=1 gh pr merge 1',
+    'ROSTER_RAW=1 gh api -X PUT repos/o/r/pulls/1/merge',
+  ])('止める（役割の有る席・役割の無い session、ROSTER_RAW=1 でも）: %s', (command) => {
+    for (const role of [...SEATS, undefined]) {
+      expect(ask(command, role), role).toEqual({ allow: false, reason: MERGE_HINT });
+      expect(ask(`ROSTER_RAW=1 ${command}`, role), role).toEqual({ allow: false, reason: MERGE_HINT });
+    }
+  });
+
+  test.each([
+    'roster pr merge https://github.com/o/r/pull/1 --squash',
+    'roster pr merge https://github.com/o/r/pull/1',
+    'gh pr view 1 --json state,mergedAt',
+    'gh pr list --state merged',
+    'gh pr create --title x --body "merge は roster pr merge で"',
+    'gh pr checks 1 --watch',
+    'gh pr diff 1',
+    'gh api repos/o/r/pulls/1',
+    'gh api repos/o/r/pulls/1/merge',
+    'gh api repos/o/r/git/refs/heads/main',
+    'gh api -X GET repos/o/r/git/refs/heads/main',
+    'gh api -X DELETE repos/o/r/git/refs/heads/t-x/impl',
+    'gh api --method DELETE repos/o/r/git/refs/heads/main-fix',
+    'gh api graphql -f query=\'query { repository(owner: "o", name: "r") { pullRequest(number: 1) { mergeable } } }\'',
+    'gh alias set v \'pr view\'',
+    'gh alias list',
+    'git commit -m "gh pr merge を止める"',
+    'echo gh pr merge 1',
+    'grep -rn "gh pr merge" docs',
+    'roster ask tpm --what "gh pr merge 1 を打ちたい" --why x',
+  ])('通す: %s', (command) => {
+    for (const role of [...SEATS, undefined]) expect(ask(command, role), role).toEqual({ allow: true });
+  });
+
+  test('読むだけの担当の gh pr merge には、今までの「repo を変えません」が先に当たる', () => {
+    expect(ask('gh pr merge 1', 'staff-engineer')).toEqual({ allow: false, reason: expect.stringContaining('repo を変えません') as string });
+    expect(ask('gh alias set m \'pr merge\'', 'auditor')).toEqual({ allow: false, reason: MERGE_HINT });
+  });
+
+  test('止めた訳は、TPM 担当の席も同じで、Product Manager の terminal は止めないと言う', () => {
+    expect(ask('gh pr merge 1')).toEqual({ allow: false, reason: expect.stringMatching(/担当の席も TPM 担当の席も同じ.*ROSTER_RAW=1 でも外れません。Product Manager の terminal（hook が無い）は止めません/) as string });
+  });
+});
+
+describe('役割の有る席の、判定の守りを外す命令（t-pq5v の段 3）', () => {
+  const ALLOW_HINT = expect.stringContaining('roster review allow は、役割の無い session') as string;
+  const SPOOF_HINT = expect.stringContaining('役割と Key は席の物を使ってください') as string;
+  test.each([
+    'roster review allow 3 --note x',
+    'ROSTER_ROLE= roster review allow 3 --note x',
+    'env -u ROSTER_ROLE roster review allow 3 --note x',
+    'ROSTER_RAW=1 roster review allow 3 --note x',
+    '/r/cli/bin/roster review allow 3 --note x',
+    'cd /w && roster review allow 3 --note x',
+  ])('roster review allow を止める: %s', (command) => {
+    for (const role of SEATS) expect(ask(command, role), role).toEqual({ allow: false, reason: ALLOW_HINT });
+  });
+
+  test('役割の無い session（TPM 担当の席）は roster review allow を打てる', () => {
+    expect(ask('roster review allow 3 --note "PM が通した"')).toEqual({ allow: true });
+    expect(ask('echo roster review allow 3', 'software-engineer')).toEqual({ allow: true });
+  });
+
+  test.each([
+    'ROSTER_ROLE= roster pr merge https://github.com/o/r/pull/1',
+    'ROSTER_ROLE=tech-lead roster report review --verdict approve',
+    'ROSTER_KEY=t-xxxx.staff roster review checkout 1',
+    'ROSTER_RAW=1 ROSTER_KEY=t-x roster ask tpm --what x --why y',
+    'env ROSTER_ROLE= roster pr merge https://github.com/o/r/pull/1',
+    'env -u ROSTER_ROLE roster pr merge https://github.com/o/r/pull/1',
+    'env -uROSTER_KEY roster review checkout 1',
+    'env --unset=ROSTER_ROLE roster pr merge x',
+    'env --unset ROSTER_KEY roster pr merge x',
+    'env -i PATH=/usr/bin roster pr merge x',
+    'unset ROSTER_ROLE; roster pr merge x',
+    'export ROSTER_KEY=t-x.staff && roster review checkout 1',
+    'ROSTER_ROLE=; roster pr merge x',
+    'sh -c \'ROSTER_ROLE= roster pr merge x\'',
+    'ROSTER_ROLE= sh -c \'roster pr merge x\'',
+    'eval ROSTER_ROLE= roster pr merge x',
+  ])('役割と Key の替えを止める: %s', (command) => {
+    for (const role of SEATS) expect(ask(command, role), role).toEqual({ allow: false, reason: SPOOF_HINT });
+  });
+
+  test.each([
+    'roster pr merge https://github.com/o/r/pull/1',
+    'ROSTER_RAW=1 roster ask tpm --what x --why y',
+    'roster report --what "ROSTER_ROLE= で外れる形を止めた"',
+    'grep -rn ROSTER_ROLE= src && roster hello',
+    'ROSTER_KEY=x pnpm test',
+    'env -u ROSTER_KEY git status',
+  ])('役割の有る席でも通す: %s', (command) => {
+    for (const role of SEATS) expect(ask(command, role), role).toEqual({ allow: true });
+  });
+
+  test('役割の無い session の替えは止めない', () => {
+    expect(ask('ROSTER_ROLE=software-engineer roster hello')).toEqual({ allow: true });
+    expect(ask('env -u ROSTER_KEY roster status')).toEqual({ allow: true });
+  });
+
+  test('hook は、命令の前の ROSTER_ROLE= でなく、hook の process の役割で見る', async () => {
+    const w = world();
+    const hook = (command: string): string => JSON.stringify({ tool_name: 'Bash', tool_input: { command } });
+    const seat = { ...w.role('t-x7k2', 'file:1'), env: { ROSTER_KEY: 't-x7k2', ROSTER_ROLE: 'software-engineer' } };
+    expect(await guard(seat, hook('ROSTER_ROLE= roster review allow 3 --note x'))).toEqual({ allow: false, reason: ALLOW_HINT });
+    expect((await guard(w.tpm, hook('roster review allow 3 --note x'))).allow).toBe(true);
+    expect((await guard(w.tpm, hook('gh pr merge 1'))).allow).toBe(false);
+  });
+});
+
 describe('Auditor は repo を変えない', () => {
   test.each<[string, boolean]>([
     ['git status', true],
@@ -777,7 +931,7 @@ describe('Auditor は repo を変えない', () => {
 
   test('ほかの担当と TPM 担当の git・gh は止めない。止めた訳に、勧告に書くよう言う', () => {
     expect(ask('git commit -m x && git push origin --delete t-x/impl', 'software-engineer').allow).toBe(true);
-    expect(ask('gh pr merge 141 --squash').allow).toBe(true);
+    expect(ask('gh pr view 141').allow).toBe(true);
     expect(ask('gh pr checkout 141', 'software-engineer').allow).toBe(true);
     expect(ask('gh co 141', 'software-engineer').allow).toBe(true);
     expect(ask('gh pr checkout 141').allow).toBe(true);
