@@ -82,7 +82,7 @@ Sustaining Engineer 担当から届くメッセージ:
 
 | 見出し | すること |
 |---|---|
-| 【merge-request】 | CI が緑か（`gh pr checks`）、`release-age.ts` がまだ 0 か、差分が依頼のとおりかを自分で見てから `gh pr merge <PR> --repo <config.owner>/<repo> --<config.mergeMethod>`（repo の作法が違えばそれに従う）。merge の commit を `roster notify "<repo>#<PR>" "merge した: <commit>"` で返す。 |
+| 【merge-request】 | CI が緑か（`gh pr checks`）、`release-age.ts` がまだ 0 か、差分が依頼のとおりか、本文のレビューの判定（`roster review list --key <Key>` でも見られる）を自分で見てから `roster pr merge <PR の URL> --<config.mergeMethod>`（repo の作法が違えばそれに従う。判定が無い・見た後に head が変わった PR は命令が断るので、担当にレビューを頼み直させる）。merge の commit を `roster notify "<repo>#<PR>" "merge した: <commit>"` で返す。 |
 | 【ask-tpm】 | 答える（`roster notify`）。Product Manager の判断が要るなら、Product Manager に聞いてから答える。 |
 | 【ask-pm】 | Product Manager に、確認のページの URL と項目を伝える（その場で開いて見せる時だけ `roster show <URL>`）。答えを `roster answer` で返す（置き場の返事待ちの確認のページが「答えた」になる）。 |
 | 【not-yet】 | 時間の【not-yet】なら表の「待ち」に戻し、その担当は 5 と同じに閉じる。`rebase に … 分応じない` の【not-yet】なら、もう一度待たせるか、worktree で `origin/main` を merge させるかを決めて返す。 |

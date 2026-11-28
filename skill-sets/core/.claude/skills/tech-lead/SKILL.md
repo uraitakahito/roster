@@ -78,7 +78,7 @@ roster seat add <名> --brief <依頼書の URL> [--cwd <受け持つ repo の f
 ```
 
 - 名簿の Key は `<課題の Key>.<名>`、題は `SWE <課題の Key> <名>: <短い題>`。命令は、席が名乗るまで 90 秒待つ。名乗らなければ、出た文に従う（信頼のダイアログなら、`roster ask tpm` で Product Manager に頼む）。
-- 依頼書には、境の取り決めのページの URL・課題全体の計画の URL・その席の受け持ち（repo・段・やらないこと）・「レビューを受ける: 計画と PR を Tech Lead 担当に頼む」（どの席の依頼書にも書く。repo の席は、この字があれば計画と PR を必ず頼む）を書く。連絡の仕方などの決まり文句は書かない（席の skill と protocol.md にある）。
+- 依頼書には、境の取り決めのページの URL・課題全体の計画の URL・その席の受け持ち（repo・段・やらないこと）・「レビューを受ける: 計画と PR を Tech Lead 担当に頼む」（どの席の依頼書にも書く。repo の席は、この字があれば計画を必ず頼む。PR は、字が無くてもみな頼む）を書く。連絡の仕方などの決まり文句は書かない（席の skill と protocol.md にある）。
 - `--cwd` は、その席が受け持つ repo の folder（信頼済みの folder）。
 
 居る席への続きは、次の命令で送る。
@@ -124,14 +124,16 @@ repo の席の `roster ask review` は、あなたに【ask-review】で届く�
    - 判定は、頼んだ席へじかに届く。**返していない頼みがいくつもある時は、どの頼みへの判定かを `--review <番号>` で名指す**（番号は【ask-review】の `頼み: #<番号>`。名指さなければ、命令が頼みを並べて止まる）。結果の「届けた先」で、席と見る物を確かめる。溜まった頼みは `roster review list --key <課題の Key>` で見る。
 - **レビューでは直さない。**直すのは、頼んだ席。取り決めの方が誤りなら、取り決めを直して（3）、関わる席に知らせる。
 - 席が「直すべき」を受けない時は、席が TPM 担当に上げる（`roster ask tpm --review <番号>`）。
-- repo の席の PR を merge するのは、その席。あなたは merge しない。
+- repo の席の PR を merge するのは、その席（`roster pr merge`）。あなたは merge しない。
+- **見た commit**: PR の判定には、命令が見た commit を書く。Tech Lead 担当が repo の席の PR を見た時は（Tech Lead 担当の checkout は数えない。数えるのは Staff の席の checkout だけ）、判定の時の head が頼んだ時の head と同じ時だけ、それを見た commit にする。見ている間に席が push したら、見た commit は書かれず（【review】に「merge の前に見直しが要る」と載る）、席は見直しを頼み直す。
+- 見直しの依頼書には、前の頼みの番号と見た commit が載る。前に見た commit からの差分を見る。
 
 ## 7. 合わせる（repo をまたぐ PR）
 
 repo ごとの実装が済んだら、またぐ合わせ（切り替え・版を上げる PR・またぐ試験）を自分でする。
 
 - **repo を変えるときは git worktree で作業する。**置き場所は repo の決まり（`CLAUDE.md` など）に従い、無ければ `<repo の親>/<repo の名前>-worktrees/<branch の / を - に>`。branch は `<課題の Key を小文字に>/<段>`。本体の checkout は動かさない。
-- PR は main から切った branch で出し、題か本文に課題の Key。push は `roster push` で打つ（素の `git push` は guard が止める。`${CLAUDE_SKILL_DIR}/../software-engineer/SKILL.md` の 2）。**あなたの PR は、Staff Engineer 担当にレビューを頼む**（`roster ask review --url <PR の URL>`）。判定が届くまで merge しない。CI が緑になってから自分で merge し、main の workflow が終わってから `roster report merged` を打つ。CI も main の workflow も自分で待たず、`roster watch pr <PR の URL>`・`roster watch main <PR の URL>` を裏で起こして手を止める（`roster report merged` も main の workflow を見て、結果を本文に足す。`${CLAUDE_SKILL_DIR}/../software-engineer/SKILL.md` の 2）。
+- PR は main から切った branch で出し、題か本文に課題の Key。push は `roster push` で打つ（素の `git push` は guard が止める。`${CLAUDE_SKILL_DIR}/../software-engineer/SKILL.md` の 2）。**あなたの PR は、Staff Engineer 担当にレビューを頼む**（`roster ask review --url <PR の URL>`）。判定が届くまで merge しない（判定の後に commit を足したら、見直しを頼み、返るまで）。CI が緑になってから `roster pr merge <PR の URL>` で自分で merge し、main の workflow が終わってから `roster report merged` を打つ。CI も main の workflow も自分で待たず、`roster watch pr <PR の URL>`・`roster watch main <PR の URL>` を裏で起こして手を止める（`roster report merged` も main の workflow を見て、結果を本文に足す。`${CLAUDE_SKILL_DIR}/../software-engineer/SKILL.md` の 2）。
 - `git add -A`・`git add .` は使わない。process を止める時は、pid を名指す（protocol.md の「共有の環境」）。
 - 環境を変える前に、protocol.md の「共有の環境」を見る。自分が変えてよくない環境は `roster ask devops`。
 - 思わぬ出来事に気づいたら、その場で `roster report incident` で台帳に 1 行書いて続ける。

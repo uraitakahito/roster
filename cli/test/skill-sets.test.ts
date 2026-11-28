@@ -1,6 +1,7 @@
-import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { readSkillSets, TpmError } from '../src/skill-sets.ts';
 
@@ -46,5 +47,20 @@ describe('readSkillSets', () => {
     const file = config(text);
     expect(() => readSkillSets(file, root)).toThrow(TpmError);
     expect(() => readSkillSets(file, root)).toThrow(message);
+  });
+});
+
+// merge は roster pr merge だけで打つ（t-pq5v）。skill の文に gh pr merge を打つ手が戻らないように見る（「打たない」と書いた行だけを許す）。
+describe('skill の文の merge', () => {
+  const repo = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+  const skills = (dir: string): string[] => readdirSync(dir, { withFileTypes: true, recursive: true })
+    .filter(e => e.isFile() && e.name.endsWith('.md'))
+    .map(e => join(e.parentPath, e.name));
+
+  test('gh pr merge は「打たない」の行にしか無い', () => {
+    const found = skills(join(repo, 'skill-sets')).flatMap(file => readFileSync(file, 'utf8').split('\n')
+      .filter(line => line.includes('gh pr merge') && !line.includes('打たない'))
+      .map(line => `${file}: ${line}`));
+    expect(found).toEqual([]);
   });
 });

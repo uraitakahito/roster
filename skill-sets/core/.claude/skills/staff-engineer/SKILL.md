@@ -26,7 +26,7 @@ roster hello
 - **課題の担当の依頼書**（何が求められたか）と、`roster hello` が返した課題の写し・課題の中身（`roster issue view <Key>`）を読む。レビューは、これに照らしてする。
 - 見る物を読む:
   - 置き場のページ（計画・提案）: `roster page path <URL>` で読む。
-  - PR: `gh pr view <URL>`・`gh pr diff <URL>` で読む。CI の結果は `roster watch pr <URL> --timeout 0` で読む（今の様子を 1 回見て、待たずに終わる。0 = 通った・10 = 落ちた・20 = まだ・30 = check が付いていない）。CI がまだなら、待たずに、ほかを先に読む。周りのコードは、**自分の場所**（席が起きた folder。`roster ask review` が、その下の repo の名の folder に PR の head を出してある。無ければ `roster review checkout <URL>`）の clone を、`roster review git -- <show|diff|log|grep…>` で読む（file は Read tool と `cat`・`rg` でも読める）。今の main（変える前のコード）は `roster review git --main <repo> -- …`（打つたびに GitHub から main を取り直し、自分の場所の `.main/<repo>` に出して読む。PR の clone がまだ無い repo は `--main <owner>/<repo>`。project の folder の本体は古いことがあるので読まない。取り直せなければ止まるので、古い main で代えない。`.main/<repo>` の file は、直前の `--main` が通った後なら Read tool でも読める（取り直しに失敗した後は読まない）。`.main/` の下は PR の head ではない）。PR の head と今の main を比べるのは、PR の clone の `roster review git -- diff origin/main...HEAD`（clone の `origin/main` は、`roster review checkout` と `--main` のたびに取り直す）。頼みに取りかかる時に `roster review checkout <URL>` を打って、その頼みの head にする（席が居る間に届いた頼みでは、命令は head を出し直さない。同じ head なら何もしない）。素の `git` は打たない（container が書き替えうる clone の `.git` を読まないため。今は記録に残るだけで、段 1b からは guard が止める）。**ほかの担当の worktree に入らない**。試験・build・lint・動かして試すのは、`roster review run [--repo <名>] -- <命令>`（使い捨ての container の中。見えるのは自分の clone の作業の木と課題の cache だけ。長い物は Bash の `run_in_background` で）と `roster review serve -- <命令>`（起こしたままにして IP を出す。止めるのは `roster review stop`）だけで流す。手元の Bash では流さない（段 1b からは guard が止める）。CI の結果も見る。試したら、レビューのページの「試したこと」に、命令と結果（終了コード・出力の置き場）を書く。
+  - PR: `gh pr view <URL>`・`gh pr diff <URL>` で読む。CI の結果は `roster watch pr <URL> --timeout 0` で読む（今の様子を 1 回見て、待たずに終わる。0 = 通った・10 = 落ちた・20 = まだ・30 = check が付いていない）。CI がまだなら、待たずに、ほかを先に読む。周りのコードは、**自分の場所**（席が起きた folder。`roster ask review` が、その下の repo の名の folder に PR の head を出してある。無ければ `roster review checkout <URL>`）の clone を、`roster review git -- <show|diff|log|grep…>` で読む（file は Read tool と `cat`・`rg` でも読める）。今の main（変える前のコード）は `roster review git --main <repo> -- …`（打つたびに GitHub から main を取り直し、自分の場所の `.main/<repo>` に出して読む。PR の clone がまだ無い repo は `--main <owner>/<repo>`。project の folder の本体は古いことがあるので読まない。取り直せなければ止まるので、古い main で代えない。`.main/<repo>` の file は、直前の `--main` が通った後なら Read tool でも読める（取り直しに失敗した後は読まない）。`.main/` の下は PR の head ではない）。PR の head と今の main を比べるのは、PR の clone の `roster review git -- diff origin/main...HEAD`（clone の `origin/main` は、`roster review checkout` と `--main` のたびに取り直す）。**頼みに取りかかる時に、見る前に `roster review checkout <URL>` を打って、その頼みの head にする**（判定に書く見た commit は、この head から取られる。`roster pr merge` は、見た commit が今の head と同じ時だけ merge する。席が居る間に届いた頼みでは、命令は head を出し直さない。同じ head なら何もしない）。素の `git` は打たない（container が書き替えうる clone の `.git` を読まないため。今は記録に残るだけで、段 1b からは guard が止める）。**ほかの担当の worktree に入らない**。試験・build・lint・動かして試すのは、`roster review run [--repo <名>] -- <命令>`（使い捨ての container の中。見えるのは自分の clone の作業の木と課題の cache だけ。長い物は Bash の `run_in_background` で）と `roster review serve -- <命令>`（起こしたままにして IP を出す。止めるのは `roster review stop`）だけで流す。手元の Bash では流さない（段 1b からは guard が止める）。CI の結果も見る。試したら、レビューのページの「試したこと」に、命令と結果（終了コード・出力の置き場）を書く。
 - 見る物の repo の `CLAUDE.md`・`.claude/rules/`・教訓（`tasks/lessons.md` など）を読む。決まりに合っているかも見る。
 - 新しい頼みが【ask-review】で届いたら（TPM 担当が起こし直した時などは【brief】で届く）、同じように依頼書を読んで続ける。見直しなら、前のレビューのページも読む。「#<番号> を済ませてから、これをする」とあれば、前の頼みを先に返す（`roster report review` は、いちばん古い依頼書の頼みから返す）。
 
@@ -37,6 +37,9 @@ roster hello
 - **求められたことに合っているか**: 課題の担当の依頼書と課題の項ごとに、合う・合わない・見ていない、を出す。依頼に無いことを足していないか、依頼の一部を落としていないかも見る。
 - **計画・提案**: 段の順・直す所の抜け・前提の誤り・試し方・戻し方・もっと小さく済む道が無いか。挙げた file や行は、自分で開いて確かめる。
 - **PR**: 差分のバグ探しは、Claude Code の `/code-review` を、自分の場所（席が起きた folder）のまま使う（手伝いも同じ folder で起き、PR の head を手元に持つ）（要れば `/security-review` も）。その指摘は、自分で差分を開いて確かめてから載せる。`/code-review` が見ない所（依頼書・計画との合い、repo の決まり、試験が求めを確かめているか、文書とコードの食い違い）は自分で見る。
+- **軽い見方**（依頼書に「軽い見方でよい」とある時）: 版の番号が揃っているか（`package.json`・CHANGELOG・tag など）・CHANGELOG の字・link・秘密が無いか・差分が本当に版上げ・CHANGELOG・文書・lock だけか、を見る。それを超える差分があれば、普段の見方で見る（ページにそう書く）。
+- **見直し**: 依頼書に前の頼みの番号と見た commit があれば、`roster review checkout` で出し直してから、依頼書の 1 行（`roster review git --repo <repo> -- diff <前の head>..refs/remotes/pull/<番号>`）で前の判定からの差分を見る。前の指摘が直ったかと、足した commit が新しく壊していないかを見る。
+- **まとめた頼み**（依頼書に PR がいくつも）: 頼みは PR ごとに 1 件。PR ごとに `roster review checkout` してから見る。判定が PR で違えば、`roster report review … --review <番号>` で PR ごとに返す（下の 3）。
 - **push の前の確かめの一覧**: PR が `.claude/roles/config.jsonc` の `push` の欄を変えていたら（`roster push` は push する commit の一覧を読むので、branch で消した・緩めた確かめはその PR から流れない）、消した・変えた確かめごとに、訳が PR の本文に在るか、変えた後も CI の中の確かめを手元で流す形のままか、を見る。訳が無い・CI より狭める訳が通らなければ、判定は「気になる所あり」以上にする。
 - **workflow を手で起こす手**: workflow を手で起こして確かめるよう勧める前と、計画・PR のその手を通す前に、その workflow の `runs-on` と、動いている runner を見る（`${CLAUDE_SKILL_DIR}/../software-engineer/SKILL.md` の 2。見る命令は読むだけ）。合う runner が無ければ、手元の手順を勧める。
 - **見ていない所を隠さない**: 読めなかった物・時間の都合で見なかった所は、レビューのページの「見ていない所」に書く。材料が足りず判じられなければ、判定は「見られなかった」にする（「よい」と見分ける）。
@@ -48,8 +51,9 @@ roster hello
 2. 置いて、返す:
    ```sh
    roster page put <file> --kind review
-   roster report review --url <レビューのページの URL> --verdict <approve|concerns|reject|not-assessed> --summary "<一言>"
+   roster report review --url <レビューのページの URL> --verdict <approve|concerns|reject|not-assessed> --summary "<一言>" [--review <頼みの番号>]
    ```
+   - まとめた頼みは、名指さなければ、まだ返していない頼みにみな同じ判定を書く。PR で判定が違えば、`--review <番号>` で 1 つずつ返す（先に返した判定は上書きされない）。
    - ページは、課題の Key の folder に置かれる。【review】が、頼んだ課題の担当へじかに届き（TPM 担当は通らない）、課題があれば記録が書かれ、状態が `回答待ち(レビュー): 次の頼み` になる。課題の担当の居場所が無くて止まったら、`roster ask tpm` で TPM 担当に知らせる。
 3. 次の頼み（【ask-review】。見直し・別の物のレビュー）を待つ。席は TPM 担当が閉じる（自分で閉じない）。
 
@@ -95,7 +99,7 @@ roster hello
 
 ## しないこと
 
-- **repo・PR・ページを変えない。** commit・push・PR の作成と merge・`gh pr review`・`gh pr comment` は打たない（guard が止める。止まったら、shell の redirect など別の書き方で通そうとしない）。直すのは課題の担当。
+- **repo・PR・ページを変えない。** commit・push・PR の作成と merge（`roster pr merge` も。命令が断る）・`gh pr review`・`gh pr comment` は打たない（guard が止める。止まったら、shell の redirect など別の書き方で通そうとしない）。直すのは課題の担当。
 - **決めない。** 進めるか・どの案にするかは、課題の担当・TPM 担当・Product Manager が決める。Product Manager に決めてほしいことを見つけたら、レビューのページに書く（確認のページと `roster ask pm` は使わない）。
 - 見つけた文書やコメントの食い違いも、直さない。指摘に挙げる（protocol.md の「文書の食い違い」）。
 - 【done】【end】【merged】【doc-fix】は送らない（命令が断る）。成果は `roster report review` で返す。
