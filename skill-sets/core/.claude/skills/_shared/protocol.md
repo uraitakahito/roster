@@ -138,7 +138,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 
 計画・提案・PR を、書いた者から離れた目で見るのは、Staff Engineer 担当。課題ごとに、課題の担当の隣に席が立つ（名簿の Key は `<課題の Key>.staff`、居場所の題は `レビュー <課題の Key>: <見る物>`（`PR #180`・`計画 plan-2` など）。題の下の説明は見てほしい所で、席の左の端に紫の帯が付く。題と説明は、命令が頼みのたびに替える）。**頼みと判定は、TPM 担当を通らず、課題の担当と席の間をじかに届く。**
 
-1. **頼む**（課題の担当）: `roster ask review --url <見る物の URL> [--focus "<見てほしい所>"]`。見る物は、置き場のページ（計画・提案）か PR の URL。命令が、頼みから席への依頼書を作って置き、**席が無ければ起こし**（名乗るまで待つ。90 秒まで）、**居れば【ask-review】を席へじかに送る**（見直しは、前の指摘を知る同じ席がする。前の頼みがまだ返っていなければ、その後ろに積まれる）。状態が `回答待ち(レビュー): <見る物>` になる。待つ間、レビューに依らない作業は続けてよい。
+1. **頼む**（課題の担当）: `roster ask review --url <見る物の URL> [--url <PR>…] [--focus "<見てほしい所>"] [--light]`。見る物は、置き場のページ（計画・提案）か PR の URL。命令が、頼みから席への依頼書を作って置き、**席が無ければ起こし**（名乗るまで待つ。90 秒まで）、**居れば【ask-review】を席へじかに送る**（見直しは、前の指摘を知る同じ席がする。前の頼みがまだ返っていなければ、その後ろに積まれる）。状態が `回答待ち(レビュー): <見る物>` になる。待つ間、レビューに依らない作業は続けてよい。
 2. **見て返す**（Staff Engineer 担当）: レビューのページを置き（`roster page put <file> --kind review`。課題の Key の folder に入る）、`roster report review` で返す。【review】が、頼んだ課題の担当へじかに届き、課題があれば「レビュー」の記録が書かれる。
 3. **扱う**（課題の担当）: レビューのページを読み、指摘を自分で確かめてから扱う。
 
@@ -153,8 +153,11 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 - **意見がぶつかった時だけ、TPM 担当に上げる。** 課題の担当が「直すべき」を受けない時は、自分で決めず、`roster ask tpm "<受けない訳・案とお勧め>" --waiting-for "<何を>" --review <頼みの番号>` で上げる（TPM 担当は判定を受け取っていないので、命令がレビューのページの URL を本文に足し、上げたことを頼みの記録に残す。`--review` が受けるのは、自分の課題の、判定が「直すべき」の頼みだけ）。決まるまで、その PR は merge しない。TPM 担当は、依頼書と Product Manager の言葉で決まる物は自分で決め、範囲・優先・設計の好みは Product Manager に聞く。レビューの担当に伝えることがあれば、TPM 担当が `roster notify <課題の Key>.staff` で伝える（repo の席の頼みなら、見たのは Tech Lead 担当なので `roster notify <課題の Key>`）。
 - **Staff Engineer 担当は、直さない・決めない。** repo・PR・ページを変えず、merge もしない（書き込みと `git`・`gh` の変える命令は guard が止める）。merge するのは、今までどおり課題の担当。**じかに届くのは、頼みと判定だけ。**そのほかのこと（見る物が読めない・依頼書が足りない）を、課題の担当にじかに聞く道は無い: 判定「見られなかった」で返すか、`roster ask tpm` で TPM 担当に送る。
 - **分けた課題では**: repo の席の計画と PR は、その課題の Tech Lead 担当が見る（repo の席の `roster ask review` が、Tech Lead 担当へじかに届く。Staff Engineer 担当の席は起こさない）。Tech Lead 担当は、自分の計画と境の取り決めに照らして見て、Staff Engineer 担当と同じ `roster report review` で返す（返していない頼みがいくつもある時は、`--review <番号>` で名指して返す）。Tech Lead 担当も、レビューでは直さない（直すのは頼んだ席。merge するのも頼んだ席）。Tech Lead 担当自身の計画と PR は、Staff Engineer 担当が見る。「直すべき」を受けない時に TPM 担当へ上げるのは、どちらも同じ。
-- **いつ頼むか**: 計画・提案を置く前と、PR を merge する前に、課題の担当が要ると見たら頼む（設計の判断がある・戻しにくい・広く触る、など）。**依頼書に「レビューを受ける」とあれば、計画と PR を必ず頼む。**文書の食い違いだけを直す PR は、頼まなくてよい。
-- **残す**: 課題の担当は、成果のページ（計画・結果）に「レビュー: 誰が・判定・どう扱ったか」を必ず書く（レビューのページの URL を添える）。頼まなかった時は「レビュー: 無し」と書く。TPM 担当と Product Manager は、メッセージを受けなくても、この行・課題の記録・置き場のレビューのページ・`roster review list` でレビューを見られる。
+- **いつ頼むか**: **PR は、みな merge の前に頼む**（文書の食い違いだけを直す PR・Dependabot の PR も。例外は無い）。計画・提案は、置く前に、課題の担当が要ると見たら頼む（設計の判断がある・戻しにくい・広く触る、など）。**依頼書に「レビューを受ける」とあれば、計画・提案も必ず頼む。**
+- **merge は `roster pr merge <PR の URL> [--merge|--squash|--rebase]` で打つ**（ほかの道で merge しない）。命令は、その PR のいちばん新しい判定が「よい」「気になる所あり」（「直すべき」は TPM 担当が `roster review allow` で通した時だけ）で、席が見た commit が今の head と同じ時だけ merge する。判定が届くまで merge しない。**判定の後に commit を足したら（直し・rebase も）、見直しを頼み、返ってから merge する**（直しや rebase だけなら `--light` で足りる。依頼書に、前に見た commit からの差分を見る 1 行が載る）。
+- **まとめて頼む・軽く頼む**: 同じ時に出した PR は、`--url` をいくつも書いて 1 度に頼める（PR だけ。ページと混ぜない。頼みは PR ごとに 1 件で、判定も PR ごとに返ることがある）。版上げ・CHANGELOG・文書・lock だけの差分は、`--light` で軽い見方を頼める。
+- **上げた「直すべき」が決まったら**: TPM 担当（か Product Manager）が `roster review allow <頼みの番号> --note "<決めたこと>"` で記録し（受けずに進めると決めた時）、レビューのページの「上げた」も「決まった」になる。その後に、課題の担当が `roster pr merge` で merge する。
+- **残す**: 課題の担当は、成果のページ（計画・結果）に「レビュー: 誰が・判定・どう扱ったか」を必ず書く（レビューのページの URL を添える）。計画・提案で頼まなかった時は「レビュー: 無し」と書く。【merged】【doc-fix】の本文には、命令がその PR の頼みの番号・判定を載せる。TPM 担当と Product Manager は、メッセージを受けなくても、この行・課題の記録・置き場のレビューのページ・`roster review list` でレビューを見られる。
 - 頼んだ回数・判定・TPM 担当に上げた数は、命令が記録する。`roster review list [--key <Key>]` で読める（この記録も、roster を動かす機械の外に写さない）。
 - **席を起こす・閉じる**: 起こすのは `roster ask review`（課題の担当の命令）。席の model と effort は、設定（`.claude/roles/config.jsonc` の `staff-engineer`）で決まる。起こした席が名乗らない時は、課題の担当が `roster ask tpm` で知らせる。返っていない頼みがあるのに席が落ちた時は、次の `roster ask review` が起こし直す（TPM 担当も起こし直せる: 居場所が残っていれば `roster close <課題の Key>.staff` で閉じてから、`roster assign <課題の Key> --role staff-engineer`）。席は、TPM 担当が課題の担当の席を `roster close` で閉じる時に、一緒に閉じる（先に閉じるなら、TPM 担当が `roster close <課題の Key>.staff`。課題の担当は `roster ask tpm` で頼む）。Staff Engineer 担当に【dismiss】は送らず、Staff Engineer 担当は【end】を返さない。
 
@@ -255,7 +258,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 |---|---|
 | TPM 担当 | 自分で直さず、課題として Software Engineer 担当に回す（`/tpm` の 2） |
 | Staff Engineer 担当 | **直さない。**レビューのページの指摘に挙げる。直すのは、課題の担当 |
-| Software Engineer 担当・Tech Lead 担当・DevOps Engineer 担当・Sustaining Engineer 担当 | お勧めの直し方で直し、PR を merge まで自分で進める（Product Manager の確認は要らない）。worktree で作業し、PR の題か本文に課題の Key を入れる。merge したら【doc-fix】で知らせ、成果のページにも一覧で載せる |
+| Software Engineer 担当・Tech Lead 担当・DevOps Engineer 担当・Sustaining Engineer 担当 | お勧めの直し方で直し、PR をレビュー（`roster ask review`。`--light` で足りる）と merge（`roster pr merge`）まで自分で進める（Product Manager の確認は要らない）。worktree で作業し、PR の題か本文に課題の Key を入れる。merge したら【doc-fix】で知らせ、成果のページにも一覧で載せる |
 | Auditor | **直さない。**監査のページの「見つけた食い違い」に、file・今の文・コードの実際・お勧めの直し方を挙げる。Product Manager が通せば、TPM 担当が課題にして振る |
 
 文書とコードが食い違うときは、コードの方に合わせる。

@@ -40,7 +40,7 @@ roster hello
   - 本体の checkout は動かさない。動いている物がその checkout を読んでいる repo（この roster の repo など）は、merge の後に `git -C <本体> pull --ff-only` だけをする。
 - **push は `roster push` で打つ**（素の `git push` は guard が止める。台帳 #217・#241・#327・#383）。`roster push` は repo に宣言した確かめ（origin/main の `.claude/roles/config.jsonc` の `push` の欄）をみな流し、みな通った時だけ、確かめた commit を origin の同じ名の branch へ push する（worktree を作ったら、依存（`node_modules` など）を入れてから打つ。無いと確かめが落ちる）。Bash の `run_in_background` で起こして手を止め、終了コードで見る（0 = push した・10 = 確かめが落ちた（出力の終わりと log の path が出る。直して commit し、打ち直す）・1 = 断った（訳が出る）・2 = `git fetch` か `git push` が落ちた（fetch なら確かめは流していない。GitHub が応えないなら protocol.md の「待つ・見張る」））。rebase した branch は `--force-with-lease`。宣言の無い repo で断られたら、`--no-checks` を自分で付けず `roster ask tpm` で聞く。branch を消す push（`git push origin --delete <branch>`）はそのまま打てる。
   - 確かめの命令（lint・型・試験・docs の検査）と `git commit` を、`;`・`&&`・pipe で 1 行に続けない。`;` は終了コードを見ずに次を動かし、pipe（`| tail`）の終了コードは最後の命令の物なので、確かめが落ちても後ろが動く。確かめの結果を見てから、別の回に commit を打つ（2026-11-26T23:02Z AI-45 の roster #236・2026-11-27T16:55Z t-j4pp の roster #268 で、確かめが落ちたまま push した。台帳 #241・#327）。
-- PR は main から切った branch で出す。題か本文に課題の Key（GitHub の Issue なら `Refs #12`。`Closes` は書かない）。CI が緑になってから、自分で merge する（依頼書が TPM 担当の merge を求めたら `roster ask tpm` で頼む）。merge したら、main の workflow が終わるのを待ってから `roster report merged` を打つ（下の 2 つ目。PR が merge 済みでなければ、送らずに止まる。merge の命令と 1 行に続けて書かず、merge できたのを見てから打つ）。
+- PR は main から切った branch で出す。題か本文に課題の Key（GitHub の Issue なら `Refs #12`。`Closes` は書かない）。**PR はみな、merge の前にレビューを頼む**（下の「レビュー」）。CI が緑になり、判定が届いてから、`roster pr merge <PR の URL>` で自分で merge する（ほかの道で merge しない。依頼書が TPM 担当の merge を求めたら `roster ask tpm` で頼む）。merge したら、main の workflow が終わるのを待ってから `roster report merged` を打つ（下の 2 つ目。PR が merge 済みでなければ、送らずに止まる。merge の命令と 1 行に続けて書かず、merge できたのを見てから打つ）。
   - **CI は、自分で待たない。**`roster watch pr <PR の URL>` を裏で起こして（Bash の `run_in_background`）、手を止める（protocol.md の「待つ・見張る」）。終わると起こされ、終了コードで結果が分かる（0 = 通った・10 = 落ちた・20 = まだ・30 = check が付いていない）。0 なら merge へ進む。`gh pr checks --watch`・`sleep`・`gh run watch` で待たない。check の数でも待たない（数は PR で違う）。待つ間に、CI に依らない仕事（次の段の準備・成果のページ）があれば進めてよい。
   - **merge したら、先に `roster watch main <PR の URL>` を裏で起こして手を止め、終わってから `roster report merged` を打つ**（`gh run list` を自分で打たない）。`roster watch main` は、main の push で動く workflow が、みな終わるまで待つ（0 = 通った・10 = 落ちた物がある・30 = この merge で動いた workflow が無い）。`roster report merged` も同じ物を見て、結果を【merged】の本文に足す。先に待つのは、落ちた workflow を、【merged】を送る前に知るため（送った後では、流し直しを伝える道が無い）。待たずに打って「まだ終わっていません」と止まった時も、`roster watch main` で待ってから打ち直す。
   - PR の check が緑でも、docs の公開（`docs`）は main でしか動かない。落ちていたら（`roster watch main` が 10 で終わる）、次の順で流し直す。
@@ -55,7 +55,7 @@ roster hello
 - 動くことを示してから「できた」と言う。試験を流し、要るなら実際に起こして見る。
 - 環境（container・サーバーなど）を変える前に、protocol.md の「共有の環境」を見る。自分が変えてよくない環境は、自分では変えず `roster ask devops`。
 - 思わぬ出来事（うその知らせ・行き違い・session の権限で断られた命令・計画と違う公開や削除・自分の誤り）に気づいたら、その場で `roster report incident` で台帳に 1 行書いて続ける（protocol.md の「思わぬ出来事」）。原因は調べなくてよい（調べるのは Auditor。protocol.md の「監査」）。
-- **レビュー**（protocol.md の「レビュー」）: 計画・提案を置く前と、PR を merge する前に、別の目が要ると見たら（設計の判断がある・戻しにくい・広く触る）、`roster ask review --url <見る物の URL> --focus "<見てほしい所>"` で Staff Engineer 担当に頼む。**依頼書に「レビューを受ける」とあれば、計画と PR を必ず頼む。**頼みは TPM 担当を通らず、命令が Staff Engineer 担当の席へじかに届ける（席が無ければ、命令が起こす。起こした席が名乗らなければ、`roster ask tpm` で知らせる）。判定は、席から【review】でじかに届く。レビューのページを読み、指摘を自分で確かめてから扱う（レビューは助言）。**「直すべき」を受けない時だけ、自分で決めず、訳と案を付けて `roster ask tpm … --review <頼みの番号>` で TPM 担当に上げる**（決まるまで、その PR は merge しない）。PR のレビューを頼んだら、判定が届くまで merge しない。
+- **レビュー**（protocol.md の「レビュー」）: **PR は、みな merge の前に**、`roster ask review --url <PR の URL> --focus "<見てほしい所>"` で Staff Engineer 担当に頼む（同じ時に出した PR は `--url` を並べて 1 度に。版上げ・CHANGELOG・文書・lock だけなら `--light`）。計画・提案は、置く前に、別の目が要ると見たら（設計の判断がある・戻しにくい・広く触る）頼む。**依頼書に「レビューを受ける」とあれば、計画・提案も必ず頼む。**頼みは TPM 担当を通らず、命令が Staff Engineer 担当の席へじかに届ける（席が無ければ、命令が起こす。起こした席が名乗らなければ、`roster ask tpm` で知らせる）。判定は、席から【review】でじかに届く。レビューのページを読み、指摘を自分で確かめてから扱う（レビューは助言）。**「直すべき」を受けない時だけ、自分で決めず、訳と案を付けて `roster ask tpm … --review <頼みの番号>` で TPM 担当に上げる**（決まるまで、その PR は merge しない。TPM 担当が `roster review allow` で通せば、`roster pr merge` が通る）。PR のレビューを頼んだら、判定が届くまで merge しない。**判定の後に commit を足したら（直し・rebase も）、見直しを頼み（`--light` で足りる）、返ってから merge する**（`roster pr merge` は、席が見た commit と今の head が違えば断る）。
 - 迷ったら `roster ask tpm` で、困っていること・試したこと・案とお勧めを送る。
 
 ## 3. 成果を出す
@@ -63,7 +63,7 @@ roster hello
 - 提案・計画・報告は HTML の file に書き、`roster page put <file> --kind <proposal|plan|result>` で置く（protocol.md の「ページ」）。図は protocol.md の「ページ」の図の項に従い、ひな形 `${CLAUDE_SKILL_DIR}/../_shared/figures.md` を写して描く。
 - 画面の写しや PDF をページに付けるときは `roster file put <file> --reviewed` で上げ、ページから相対で参照する（protocol.md の「ページ」）。画像や PDF を上げる前に Read で見て、秘密が写っていないか確かめる。
 - 直した PR（文書の食い違いを含む）は、成果のページに一覧で載せる。
-- 計画と結果のページには、「レビュー: 誰が・判定・どう扱ったか」を書く（レビューのページの URL を添える。頼まなかった時は「レビュー: 無し」）。
+- 計画と結果のページには、「レビュー: 誰が・判定・どう扱ったか」を書く（レビューのページの URL を添える。計画・提案で頼まなかった時は「レビュー: 無し」）。
 - 成果に Product Manager に決めてほしいことがあれば、ページに書くだけで済ませない。protocol.md の「Product Manager に確かめる」で `roster ask pm` も送る。前の確認（まだ返事待ちの物）を置き換えるなら、`--supersede <古い確認の URL>` で名指す。
 - 置いたら、出た URL で `roster report done` を打つ:
   ```sh
@@ -98,7 +98,7 @@ TPM 担当から【dismiss】（この課題に続きは無い）が来たら:
 |---|---|
 | 1. 読む | 依頼書のほかに、依頼書が挙げた**課題全体の計画**と **repo の境の取り決め**のページを読む。次の依頼書（【brief】）と片付けの指示（【dismiss】）は、Tech Lead 担当から来る |
 | 2. 進める | **自分の計画は、Tech Lead 担当の計画と境の取り決めに従う。**触るのは、受け持ちの repo だけ。ほかの repo・共有の物（共有の環境・版の tag・ほかの repo の設定）は変えない。変える要があれば `roster ask lead` で頼む。取り決めの名や形が足りない・合わない時も、自分で決めずに `roster ask lead` |
-| レビュー | `roster ask review` は、Staff Engineer 担当でなく、**Tech Lead 担当**に届く（命令は同じ）。依頼書に「レビューを受ける」とあれば、計画と PR を必ず頼む。判定（【review】）は Tech Lead 担当から届く。「直すべき」を受けない時だけ、`roster ask tpm … --review <番号>` で TPM 担当に上げる |
+| レビュー | `roster ask review` は、Staff Engineer 担当でなく、**Tech Lead 担当**に届く（命令は同じ）。PR はみな頼む。依頼書に「レビューを受ける」とあれば、計画も必ず頼む。判定（【review】）は Tech Lead 担当から届く。「直すべき」を受けない時だけ、`roster ask tpm … --review <番号>` で TPM 担当に上げる |
 | 迷ったら | `roster ask lead "<困っていること・試したこと・案とお勧め>" --waiting-for "<何を>"`（答えは【notify】で来る）。Tech Lead 担当の席が無い・応えない時だけ `roster ask tpm` |
 | 3. 成果を出す | `roster report done`・`roster report merged`・`roster report doc-fix` は、命令が Tech Lead 担当へ届ける（打ち方は同じ）。**`roster ask pm` は打てない**（命令が断る）。Product Manager に決めてほしいことは、ページに書いて `roster ask lead` で Tech Lead 担当に送る（Tech Lead 担当が、まとめて確認にする）。【done】の「決めてほしいこと」には、Tech Lead 担当に送った項目の題を書く |
 | 4・5. 終わり方 | 【dismiss】は Tech Lead 担当から来る。worktree と branch を片付けて `roster report end` を返す（Tech Lead 担当へ届く。**課題管理の課題は済みにならない**。済みにするのは Tech Lead 担当）。席は Tech Lead 担当が閉じる |

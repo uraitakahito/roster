@@ -94,7 +94,7 @@ flowchart TB
 - **レビューの印**: 置き場は、返事待ちの相手（Product Manager・レビューの席・TPM 担当）と、レビューの判定・見た物も持つ。TPM 担当を通らないレビューのやりとりを、Product Manager と TPM 担当が callboard のページの一覧で追うための物。書くのは `roster` の命令で、担当は手で書かない。置き場に写すのは、判定の語・見た物の URL・時刻だけ。
   - `roster ask review` と、Staff Engineer 担当の席の起こし直し（`roster ask review`・`roster assign --role staff-engineer`）が、依頼書に見る物（置き場のページは path、PR は URL）を書いて「レビュー待ち」にする。起こし直しで置き換えた前の依頼書は、返っていない頼みがほかに無ければ待ちを外す。
   - `roster report review` が、レビューのページに判定と、済ませた頼みの見る物をみな書き、依頼書を「レビュー済み」にする。ページの一覧は、レビューの行に判定の印と「見た物:」の link、見られたページの行に「レビュー: review-N 判定」を出す。
-  - `roster ask tpm --review <番号>` が、レビューのページを「上げた」（TPM 担当の返事待ち）にする。TPM 担当は、決めたら `roster page reply <URL> --answered --on tpm` で「決まった」にする。ページの一覧の操作の帯に「レビュー待ち N 件」「上げた N 件」が出る。
+  - `roster ask tpm --review <番号>` が、レビューのページを「上げた」（TPM 担当の返事待ち）にする。TPM 担当は、受けずに進めると決めたら `roster review allow <番号> --note "<決めたこと>"` で、直させると決めたら `roster page reply <URL> --answered --on tpm` で「決まった」にする。ページの一覧の操作の帯に「レビュー待ち N 件」「上げた N 件」が出る。
   - 「返事待ち N 件」・`roster answer` の数・`roster ask pm --supersede` の確かめは、Product Manager の待ちだけを見る。`roster page list --reply waiting --on review|tpm` で、ほかの相手の待ちを並べる。`roster dismiss` は、残ったレビュー待ち・上げた件も、相手ごとに並べる。
 - `roster page import` が、控えの folder にあって置き場に無いページを、同じ番号・file の時刻で置き場に入れる（DB を失った後。何度打っても同じ結果）。置いた担当はわからないので、役割は依頼書と課題の写しだけ `roster`、ほかは `unknown` で入る。控えの `<Key>/files/` の file も同じ決まりで入れる（役割は `unknown`）。
 - `roster page delete` が、ページを置き場と控えの folder から消す（戻せない）。**消してよいのは TPM 担当だけ**で、担当の居場所から打つと止まる。Auditor が置いたページ（置いた担当の役割が `auditor`）は、Product Manager の言葉を `--pm "<言葉>"` に添えなければ消せず、消した事は `audits.jsonl` に残る（担当は `roster ask tpm` で、消すページの URL と訳を送って頼む。置き場に消す要求を直に送る `curl` と、置き場の CLI の `pagetray page delete` も guard が止める）。URL を名指すと 1 枚、`--key <Key>` でその Key のページみな、`--project <名>` だけで、その project（状態の folder の名）のページみなを消す（`--key`・`--project` は、合う file も一緒に消す）。まず消す物を一覧で出し、`--yes` を付けたときだけ消す。消したページの URL は `410` を返し、その番号は 2 度使われず、`roster page import` でも入らない。
@@ -352,9 +352,12 @@ sequenceDiagram
   SE->>SE: 指摘を確かめて扱う
   opt 「直すべき」を受けない時だけ
     SE->>TPM: 【ask-tpm】（roster ask tpm --review <番号>）
-    TPM->>SE: 決めて返す（要れば Product Manager に聞く）
+    TPM->>SE: 決めて返す（受けずに進めるなら roster review allow。要れば Product Manager に聞く）
   end
+  SE->>SE: roster pr merge（PR の時。見た commit が今の head と同じ時だけ）
 ```
+
+PR はみな、merge の前にレビューを受け、`roster pr merge` で merge する（Dependabot の PR・文書の食い違いだけを直す PR も。例外は無い）。判定の後に commit を足したら、見直し（`--light` で足りる）が返るまで merge しない。計画・提案は、担当が要ると見た時と、依頼書に「レビューを受ける」とある時に頼む。
 
 | 命令 | 打つ人 | すること |
 |---|---|---|
