@@ -64,8 +64,9 @@ export function nextHandler(answer: (seen: NextSeen) => NextAnswer | undefined, 
  * 何も待っていない所（`127.0.0.1:1`）。
  *
  * 空いた口を取って閉じた所にすると、並んで流れる別の試験の偽の server が同じ口を取ることがあり、頼みがそこに届いて
- * 試験が揺れうる（AI-56。Linux では手放した口がまた渡る）。番号 1 は、OS が `listen(0)` で渡す帯（Linux は 32768〜、
- * macOS は 49152〜）の外で、root でなければ待ち受けもできない。万一つながれば、揺れでなく、deadUrl で落ちる。
+ * 試験が揺れうる（AI-56。Linux では手放した口がまた渡る）。番号 1 は、OS が `listen(0)` で渡す帯（既定で Linux は
+ * 32768〜、macOS は 49152〜）の外なので、並ぶ試験の偽の server が取ることは無い。待ち受ける物が居れば、揺れでなく、
+ * deadUrl で落ちる。
  */
 export const NOWHERE = { host: '127.0.0.1', port: 1 } as const;
 
