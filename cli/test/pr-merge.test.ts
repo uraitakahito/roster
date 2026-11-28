@@ -23,6 +23,9 @@ describe('pullKey（PR の名を揃える）', () => {
     for (const url of [PR, `${PR}/files`, `${PR}/`, 'o/r#7', 'https://github.com/O/R/pull/7?w=1', `${PR}#discussion_r1`]) expect(pullKey(url), url).toBe('o/r#7');
     expect(pullKey('http://127.0.0.1:8801/p/AI-8/plan-1.html')).toBeUndefined();
     expect(pullKey(PR2)).toBe('o/r#8');
+    // github.com でない host は、github.com の同じ名の PR と取り違えないよう受けない
+    expect(pullKey('https://ghe.example.com/o/r/pull/7')).toBeUndefined();
+    expect(pullKey('https://github.com/o/r/pull/12)')).toBeUndefined();
   });
 });
 
@@ -120,6 +123,17 @@ describe('prMerge（gh を打つ）', () => {
     expect(() => prMerge(unread.tpm, PR, { method: 'merge' })).toThrow(/^PR を gh で読めません。merge していません: gh: not logged in/);
     for (const w of [pending, pushed, draft, closed, unread]) expect(merges(w)).toEqual([]);
     expect(() => prMerge(ready().tpm, 'cli/src/pr.ts', {})).toThrow(/PR の URL/);
+  });
+
+  test('Staff Engineer 担当と Auditor の席からは打てない（見る者が自分で merge しない）', () => {
+    for (const role of ['staff-engineer', 'auditor']) {
+      const w = ready();
+      const ctx = { ...w.tpm, env: { ...w.tpm.env, ROSTER_ROLE: role } };
+      expect(() => prMerge(ctx, PR, { method: 'squash' }), role).toThrow(/は roster pr merge を打ちません/);
+      expect(merges(w)).toEqual([]);
+    }
+    const se = ready();
+    expect(prMerge({ ...se.tpm, env: { ...se.tpm.env, ROSTER_ROLE: 'software-engineer' } }, PR, { method: 'squash' })[0]).toMatch(/^merge した: /);
   });
 
   test('gh pr merge が断れば（確かめた後の push など）、止まって訳を出す', () => {

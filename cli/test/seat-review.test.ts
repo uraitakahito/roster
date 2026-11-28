@@ -91,7 +91,7 @@ describe('Tech Lead 担当の roster report review', () => {
     expect(first).toContain('送った: 【review】→ file:2（相手の手が空いた時に届く。送り直さない）');
     expect(first).toContain(`届けた先: AI-36.pagetray（頼み #2 ${PR1}）`);
     expect(first.at(-1)).toBe('返していない頼みが、あと 1 件あります（roster review list）');
-    expect(w.texts('file:2').at(-1)).toMatch(/^【review】\S+\/AI-36\/review-\d+\.html 判定: 直すべき（reject）／一言: 欄の名が違う／頼み: #2$/);
+    expect(w.texts('file:2').at(-1)).toMatch(/^【review】\S+\/AI-36\/review-\d+\.html 判定: 直すべき（reject）／一言: 欄の名が違う／頼み: #2／見た commit を記録できなかった（頼んだ時の head を読めず、頼みの後の checkout も無い）。merge の前に見直しが要る$/);
     expect(w.texts('file:3').some(t => t.startsWith('【review】'))).toBe(false);
     expect(w.wire.status('file:1')?.wait).not.toMatch(/回答待ち\(レビュー\)/);
     expect(readReviews(w.tpm).map(r => [r.key, r.verdict])).toEqual([['AI-36.castlist', undefined], ['AI-36.pagetray', 'reject']]);

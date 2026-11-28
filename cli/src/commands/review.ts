@@ -2,7 +2,7 @@
 // roster review allow: 担当が上げた「直すべき」を、TPM 担当が受けずに進めると決めた時に書く（役割の無い session だけ）。
 import type { Command } from 'commander';
 import { createContext, type Context } from '../context.ts';
-import { patchReview, readReviews, VERDICTS, type Review, type Verdict } from '../reviews.ts';
+import { patchReview, readReviews, recordHead, sameTarget, VERDICTS, type Review, type Verdict } from '../reviews.ts';
 import { envOf } from '../env.ts';
 import { actor } from '../evidence.ts';
 import { markAllowed } from './review-marks.ts';
@@ -72,6 +72,10 @@ export async function reviewAllow(ctx: Context, n: number, options: { note: stri
   if (review === undefined) throw new TpmError(`レビューの頼み #${n} はありません（roster review list で見る）`);
   if (review.verdict !== 'reject') throw new TpmError(`レビュー #${n} の判定は「${review.verdict === undefined ? 'まだ' : VERDICTS[review.verdict]}」です。roster review allow が受けるのは「直すべき」だけです`);
   if (review.escalatedAt === undefined) throw new TpmError(`レビュー #${n} は、TPM 担当に上げられていません。受けるのは、担当が roster ask tpm --review ${n} で上げた頼みだけです`);
+  if (review.allowed !== undefined) throw new TpmError(`レビュー #${n} は、もう進めると決めてあります（${review.allowed.by}・${review.allowed.at}: ${review.allowed.note}）。書き替えていません`);
+  // roster pr merge は、いちばん新しい頼みだけで判じる。古い頼みに書いても効かないので断る。
+  const latest = readReviews(ctx).filter(r => sameTarget(r.url, review.url)).at(-1);
+  if (latest !== undefined && latest.n !== n) throw new TpmError(`レビュー #${n} は、その見る物のいちばん新しい頼みではありません（いちばん新しいのは #${latest.n}）。roster pr merge は、いちばん新しい頼みで判じます`);
   const note = options.note.trim();
   if (note === '') throw new TpmError('--note に、決めたことを書いてください');
   const at = ctx.now().toISOString();
@@ -80,6 +84,18 @@ export async function reviewAllow(ctx: Context, n: number, options: { note: stri
     `レビュー #${n} の「直すべき」を受けずに進めると書いた（${review.url}）。merge は roster pr merge で打つ（見た commit の後に commit が入れば止まる）`,
     ...(review.page === undefined ? [] : await markAllowed(ctx, review.page)),
   ];
+}
+
+/**
+ * roster review checkout: 課題のレビューの場所に PR の head を出す。Staff の席が打った時だけ、出した head を見た commit の表に書く
+ * （課題の担当も打てるが、担当が push の後に出した head を、席が見た commit にしない）。
+ */
+export function reviewCheckout(ctx: Context, url: string): string[] {
+  const key = placeKey(ctx);
+  const { tree, head } = checkoutPull(ctx, key, url);
+  const self = envOf(ctx.env, 'KEY') ?? '';
+  if (isStaffKey(self)) recordHead(ctx, key, url, head, self);
+  return [`PR の head を出した: ${tree}（${head.slice(0, 7)}）`];
 }
 
 /** `roster review` の命令を命令の木に足す。 */
@@ -97,11 +113,7 @@ export function registerReview(program: Command, print: (lines: string[]) => voi
     });
   // レビューの席の自分の場所（t-n4j9 の段 2。review-place.ts）。
   review.command('checkout <url>').description('課題のレビューの場所に、PR の head を出す（clone が無ければ作る。見直しでは新しい head に替える）')
-    .action((url: string) => {
-      const ctx = createContext();
-      const { tree, head } = checkoutPull(ctx, placeKey(ctx), url);
-      print([`PR の head を出した: ${tree}（${head.slice(0, 7)}）`]);
-    });
+    .action((url: string) => print(reviewCheckout(createContext(), url)));
   review.command('git <args...>').description('レビューの場所の clone（--main なら GitHub から取り直した main）を、読むだけの git で読む（roster review git -- log --oneline -3）')
     .option('--repo <名>', 'clone が 2 つ以上ある時の repo の名')
     .option('--main <名>', 'GitHub から取り直した main を読む（<repo> は場所の clone の origin から。clone が無ければ <owner>/<repo>）')

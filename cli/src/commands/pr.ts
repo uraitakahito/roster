@@ -3,6 +3,7 @@
 import { mkdirSync } from 'node:fs';
 import type { Command } from 'commander';
 import { createContext, type Context } from '../context.ts';
+import { envOf } from '../env.ts';
 import { latestReview, parsePullName, pullKey, readReviews, reviewNote, VERDICTS, type Review } from '../reviews.ts';
 import { TpmError } from '../skill-sets.ts';
 
@@ -81,8 +82,11 @@ function repoMethod(ctx: Context, owner: string, repo: string): MergeMethod {
  * --delete-branch は付けない（branch の片付けは今どおり担当がする）。
  */
 export function prMerge(ctx: Context, url: string, options: { method?: MergeMethod }): string[] {
+  // 見る者（Staff Engineer 担当）と Auditor は merge しない（自分で「よい」を返して merge できないように）。
+  const role = envOf(ctx.env, 'ROLE');
+  if (role === 'staff-engineer' || role === 'auditor') throw new TpmError(`${role === 'auditor' ? 'Auditor' : 'Staff Engineer 担当'}は roster pr merge を打ちません（merge は PR を出した担当がする）`);
   const pull = parsePullName(url);
-  if (pull === undefined) throw new TpmError(`PR の URL（https://github.com/<owner>/<repo>/pull/<番号>）か <owner>/<repo>#<番号> にしてください: ${url}`);
+  if (pull === undefined) throw new TpmError(`github.com の PR の URL（https://github.com/<owner>/<repo>/pull/<番号>）か <owner>/<repo>#<番号> にしてください: ${url}`);
   const pr = ghJson<Partial<PrView>>(ctx, ['pr', 'view', pull.url, '--json', 'state,headRefOid,isDraft'], 'PR ');
   const judged = judgeMerge(readReviews(ctx), pull.url, { state: pr.state ?? '', headRefOid: pr.headRefOid ?? '', isDraft: pr.isDraft === true });
   if (!judged.ok) throw new TpmError(judged.why);

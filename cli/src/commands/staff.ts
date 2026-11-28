@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { requireUp, sessionRef } from '../castlist.ts';
 import type { Context } from '../context.ts';
 import { ROLES, WAIT, type RoleName } from '../protocol.ts';
-import { addReview, leadReviews, openReviews, parsePullName, patchReview, pullKey, readHeads, readReviews, removeReview, reviewLabel, sameTarget, VERDICTS, type Review, type Verdict } from '../reviews.ts';
+import { addReview, leadReviews, openReviews, parsePullName, patchReview, pullKey, readHead, readReviews, recordHead, removeReview, reviewLabel, sameTarget, VERDICTS, type Review, type Verdict } from '../reviews.ts';
 import { isRepoSeat, readRole, staffKey, subjectOf, writeRole, type RoleRecord } from '../roster.ts';
 import { resolveSettings, type SettingsLayer } from '../settings.ts';
 import { skillSetDir, TpmError } from '../skill-sets.ts';
@@ -46,12 +46,14 @@ function staffBriefPage(subject: RoleRecord, asks: Review[], previous: Map<numbe
   const e = escapeHtml;
   const link = (url: string): string => `<a href="${e(url)}">${e(url)}</a>`;
   const light = asks.filter(r => r.light === true);
-  // 見直しの頼み: 前の頼みの番号と判定・前に見た commit と、前の判定からの差分を見る 1 行。
-  const again = (prev: Review | undefined): string => {
+  // 見直しの頼み: 前の頼みの番号と判定・前に見た commit と、前の判定からの差分を見る 1 行。右はその PR の head の ref
+  // （roster review checkout が refs/remotes/pull/<番号> に取る。HEAD は、最後に出した PR なので、まとめた頼みでは別の PR になりうる）。
+  const again = (ask: Review, prev: Review | undefined): string => {
     if (prev?.verdict === undefined) return '';
-    const seen = prev.head === undefined
+    const pull = parsePullName(ask.url);
+    const seen = prev.head === undefined || pull === undefined
       ? '見た commit の記録は無い。全体を見る'
-      : `見た ${e(prev.head.slice(0, 7))}。前の判定からの差分を見る: <code>roster review git -- diff ${e(prev.head)}..HEAD</code>`;
+      : `見た ${e(prev.head.slice(0, 7))}。前の判定からの差分を見る（roster review checkout で出してから）: <code>roster review git --repo ${e(pull.repo)} -- diff ${e(prev.head)}..refs/remotes/pull/${pull.number}</code>`;
     return `。見直し: 前の頼み #${prev.n}（${VERDICTS[prev.verdict]}・${seen}）`;
   };
   const [who, how] = isRepoSeat(subject)
@@ -66,7 +68,7 @@ function staffBriefPage(subject: RoleRecord, asks: Review[], previous: Map<numbe
     '</section>',
     '<h2>見る物</h2>',
     '<ul>',
-    ...asks.map(r => `<li>頼み #${r.n}: ${link(r.url)}${r.focus === undefined ? '' : `（見てほしい所: ${e(r.focus)}）`}${again(previous.get(r.n))}</li>`),
+    ...asks.map(r => `<li>頼み #${r.n}: ${link(r.url)}${r.focus === undefined ? '' : `（見てほしい所: ${e(r.focus)}）`}${again(r, previous.get(r.n))}</li>`),
     '</ul>',
     ...(light.length === 0 ? [] : [`<p>${light.map(r => `頼み #${r.n}`).join('・')}は、軽い見方でよい（版上げ・CHANGELOG・文書・lock だけの差分。超えていれば普段の見方）。</p>`]),
     ...(place === undefined
@@ -215,8 +217,8 @@ export async function launchStaff(ctx: Context, subject: RoleRecord, asks: Revie
 
 // ---- レビュー（課題の担当が頼み、Staff Engineer 担当が返す。どちらも相手へじかに届く） ----
 
-/** PR の URL の形（`https://<host>/<owner>/<repo>/pull/<番号>`）。 */
-const PR_URL = /^https:\/\/[^\s/]+\/[^\s/]+\/[^\s/]+\/pull\/\d+/;
+/** github.com の PR の URL か（pullKey で引ける形だけ。`<owner>/<repo>#<番号>` の短い形は見る物にしない）。 */
+const isPrUrl = (url: string): boolean => url.startsWith('https://') && parsePullName(url) !== undefined;
 /** 置き場のレビューのページの URL の終わり。 */
 const REVIEW_PAGE = /\/review-[1-9]\d*\.html(?:[?#].*)?$/;
 /** roster ask review が、起こした席の名乗りを待つ秒の既定（roster assign と同じ）。 */
@@ -246,8 +248,8 @@ export async function askReview(ctx: Context, options: AskReviewOptions): Promis
   notAuditor(self, 'roster ask review');
   const urls = [options.url].flat();
   if (urls.length === 0) throw new TpmError('--url で、見る物（置き場のページか PR の URL）を書いてください');
-  for (const url of urls) if (!isPageUrl(ctx.env, url) && !PR_URL.test(url)) throw new TpmError(`--url は、置き場のページか PR の URL にしてください（見る物）: ${url}`);
-  if (urls.length > 1 && urls.some(url => !PR_URL.test(url))) throw new TpmError('--url をいくつも書けるのは PR だけです（ページと混ぜない。ページは 1 つずつ頼む）。頼んでいません');
+  for (const url of urls) if (!isPageUrl(ctx.env, url) && !isPrUrl(url)) throw new TpmError(`--url は、置き場のページか github.com の PR の URL にしてください（見る物）: ${url}`);
+  if (urls.length > 1 && urls.some(url => !isPrUrl(url))) throw new TpmError('--url をいくつも書けるのは PR だけです（ページと混ぜない。ページは 1 つずつ頼む）。頼んでいません');
   const twice = urls.find((url, i) => urls.slice(0, i).some(u => sameTarget(u, url)));
   if (twice !== undefined) throw new TpmError(`--url に同じ PR を 2 度書いています: ${twice}。頼んでいません`);
   // 同じ物（PR は書き方が違っても同じ PR）の、判定待ちの頼みがあれば断る。判定の後の頼み（見直し）は通す。
@@ -255,7 +257,7 @@ export async function askReview(ctx: Context, options: AskReviewOptions): Promis
   if (same !== undefined) throw new TpmError(`同じ物のレビューを、もう頼んであります（#${same.n}。${same.askedAt} に頼んだ）。2 度目は送っていません。判定は ${isRepoSeat(self) ? 'Tech Lead 担当' : 'Staff Engineer 担当'}から【review】で届きます`);
   const focus = options.focus?.trim() || undefined;
   const fields = (url: string): Omit<Review, 'n' | 'askedAt' | 'key' | 'by'> => {
-    const head = PR_URL.test(url) ? prHead(ctx, url) : undefined;
+    const head = isPrUrl(url) ? prHead(ctx, url) : undefined;
     return { url, ...(focus === undefined ? {} : { focus }), ...(options.light === true ? { light: true } : {}), ...(head === undefined ? {} : { askedHead: head }) };
   };
   // repo の席の頼みは、親の課題の Tech Lead 担当が見る（Staff Engineer 担当の席は起こさない）。
@@ -357,6 +359,8 @@ function preparePlace(ctx: Context, key: string, urls: string[], checkout: boole
   if (!checkout || urls.length !== 1 || url === undefined || parsePull(url) === undefined) return lines;
   try {
     const { tree, head } = checkoutPull(ctx, key, url);
+    // 起こす席が見る作業の木なので、見た commit の表に、席の Key で書く。
+    recordHead(ctx, key, url, head, staffKey(key));
     return [...lines, `レビューの場所に PR の head を出した: ${tree}（${head.slice(0, 7)}）`];
   }
   catch (e) {
@@ -411,26 +415,27 @@ export interface ReviewOptions {
 const WAIT_NEXT_REVIEW = WAIT.review('次の頼み');
 
 /**
- * PR の頼みの、席が見た commit を決める: 頼みより後に、この場所で出した head（review-heads の表）があれば、それ（checkout）。
+ * PR の頼みの、席が見た commit を決める: 頼みより後に席が出した head（review-heads の表）があれば、それ（checkout）。
  * 無ければ、判定の時の PR の head が頼んだ時の head と同じ時だけ、それ（asked。見ている間に push が無かった）。
- * 違えば 'pushed'（どれを見たか分からない）。head を読めなければ undefined（どちらも head は書かない。merge は見直しを求める）。
- * 頼みより前に出した古い head は使わない。
+ * ただし、頼みより前に席が出した head が表にあり、頼んだ時の head と違えば、席の作業の木は古いままなので使わない。
+ * 決められなければ、その訳の字を返す（head は書かない。merge は見直しを求める）。
  */
-function seenHead(ctx: Context, heads: ReturnType<typeof readHeads>, r: Review): { head: string, headFrom: 'checkout' | 'asked' } | 'pushed' | undefined {
-  const key = pullKey(r.url);
-  const out = key === undefined ? undefined : heads[key];
+function seenHead(ctx: Context, key: string, r: Review): { head: string, headFrom: 'checkout' | 'asked' } | string {
+  const out = readHead(ctx, key, r.url);
   if (out !== undefined && out.at >= r.askedAt) return { head: out.head, headFrom: 'checkout' };
-  if (r.askedHead === undefined) return undefined;
+  if (r.askedHead === undefined) return '頼んだ時の head を読めず、頼みの後の checkout も無い';
+  if (out !== undefined && out.head !== r.askedHead) return '席の作業の木が前の head のまま。roster review checkout で出し直してから見直す';
   const now = prHead(ctx, r.url);
-  if (now === undefined) return undefined;
-  return now === r.askedHead ? { head: now, headFrom: 'asked' } : 'pushed';
+  if (now === undefined) return '判定の時の PR の head を読めなかった';
+  return now === r.askedHead ? { head: now, headFrom: 'asked' } : '頼んだ後に push があった';
 }
 
 /**
  * Staff Engineer 担当が、レビューのページと判定を返す（【review】）。頼んだ課題の担当へじかに届く（TPM 担当を通らない）。
  * いちばん古い依頼書の頼み（まだ返していない物）に判定を書き、課題があれば記録「レビュー」を書く。--review で名指せば、その頼みだけに書く
  * （名指さなければ、同じ依頼書の、まだ返していない頼みにだけ書く。先に返した判定は上書きしない）。
- * PR の頼みには、席が見た commit（seenHead）も書く。頼んだ後に push があって決められなければ、【review】の本文に、merge の前に見直しが要ると書く。
+ * PR の頼みには、席が見た commit（seenHead）も書く。決められなければ（訳を問わず）、【review】の本文と出す行に、merge の前に見直しが要ると書く。
+ * Staff の席の --review は、いちばん古い依頼書の頼みだけを名指せる（後ろの依頼書は、前の依頼書を返してから）。
  * 課題の担当の居場所が無ければ、送らず・記録も書かずに止まる（TPM 担当に知らせる）。
  */
 export async function reportReview(ctx: Context, options: ReviewOptions): Promise<string[]> {
@@ -453,12 +458,13 @@ export async function reportReview(ctx: Context, options: ReviewOptions): Promis
   }
   const named = options.review === undefined ? briefed[0] : briefed.find(r => r.n === options.review);
   if (named === undefined) throw new TpmError([`--review の #${options.review ?? ''} は、返していない頼みにありません。送っていません。`, ...listed].join('\n'));
+  const first = briefed.filter(r => r.brief === briefed[0]?.brief);
+  if (!lead && !first.includes(named)) throw new TpmError([`--review の #${named.n} は、いちばん古い依頼書の頼みではありません。依頼書は積まれた順に返します。送っていません。今の依頼書の頼み:`, ...first.map(r => `#${r.n} ${r.url}`)].join('\n'));
   const asks = options.review === undefined ? briefed.filter(r => r.brief === named.brief) : [named];
   // 見た commit は、席のレビューの場所の表で引く（Staff の席は課題の Key、Tech Lead 担当は自分の Key の場所）。
-  const heads = readHeads(ctx, lead ? self.key : subject);
-  const seen = new Map(asks.filter(r => pullKey(r.url) !== undefined).map(r => [r.n, seenHead(ctx, heads, r)]));
-  const pushed = [...seen].filter(([, h]) => h === 'pushed').map(([n]) => `#${n}`);
-  const unseenNote = pushed.length === 0 ? undefined : `見た commit を記録できなかった（${asks.length === 1 ? '' : `${pushed.join('・')}: `}頼んだ後に push があった）。merge の前に見直しが要る`;
+  const seen = new Map(asks.filter(r => pullKey(r.url) !== undefined).map(r => [r.n, seenHead(ctx, lead ? self.key : subject, r)]));
+  const unseen = [...seen].flatMap(([n, h]) => typeof h === 'string' ? [asks.length === 1 ? h : `#${n}: ${h}`] : []);
+  const unseenNote = unseen.length === 0 ? undefined : `見た commit を記録できなかった（${unseen.join('・')}）。merge の前に見直しが要る`;
   const asker = asks[0]?.key ?? subject;
   const owner = readRole(ctx, asker);
   if (owner === undefined) throw new TpmError(`${asker} の担当が名簿にいません。送っていません・記録も書いていません。roster ask tpm で TPM 担当に知らせてください（レビューのページ: ${options.url}）`);

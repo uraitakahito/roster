@@ -6,8 +6,6 @@ import { describe, expect, test } from 'vitest';
 import type { Context } from '../src/context.ts';
 import { withoutRosterEnv } from '../src/env.ts';
 import { exec } from '../src/exec.ts';
-import { readHeads } from '../src/reviews.ts';
-import { State } from '../src/state.ts';
 import { checkoutPull, clonedRepos, ensurePlace, gitDir, mainGitDir, mainTree, placeDir, prunePlaces, PRUNE_AFTER_MS, removePlace, reviewGit, workTree } from '../src/review-place.ts';
 
 /** git を打つ（試しの repo を作る側。守りは付けない）。 */
@@ -44,7 +42,7 @@ function setup(): { ctx: Context, base: string, head1: string, push: (file: stri
   const project = join(base, 'project');
   mkdirSync(project);
   const env = { ROSTER_REVIEW_DIR: join(base, 'review'), ROSTER_REVIEW_REMOTE: join(base, 'remote') };
-  const ctx = { env, project, exec, now: () => new Date(), state: new State(join(base, 'state')) } as unknown as Context;
+  const ctx = { env, project, exec, now: () => new Date() } as unknown as Context;
   return { ctx, base, head1, push };
 }
 
@@ -69,8 +67,6 @@ describe('レビューの場所（t-n4j9 の段 2）', () => {
     writeFileSync(join(first.tree, 'target.out'), 'build\n');
     const head2 = push('c.txt');
     expect(checkoutPull(ctx, 'AI-8', PR)).toEqual({ tree: first.tree, head: head2 });
-    // 出した head は、状態の folder の表に、揃えた PR の名で残る（新しい head に替わる）。
-    expect(readHeads(ctx, 'AI-8')).toEqual({ 'o/r#1': { head: head2, at: expect.any(String) as string } });
     expect(existsSync(join(first.tree, 'c.txt'))).toBe(true);
     expect(existsSync(join(first.tree, 'target.out'))).toBe(true);
   });
@@ -184,9 +180,8 @@ describe('レビューの場所（t-n4j9 の段 2）', () => {
     const src = join(import.meta.dirname, '..', 'src');
     writeFileSync(script, [
       `import { exec } from ${JSON.stringify(join(src, 'exec.ts'))};`,
-      `import { State } from ${JSON.stringify(join(src, 'state.ts'))};`,
       `import { checkoutPull, reviewGit } from ${JSON.stringify(join(src, 'review-place.ts'))};`,
-      `const ctx = { env: ${JSON.stringify(ctx.env)}, project: ${JSON.stringify(ctx.project)}, exec, now: () => new Date(), state: new State(${JSON.stringify(join(base, 'state'))}) };`,
+      `const ctx = { env: ${JSON.stringify(ctx.env)}, project: ${JSON.stringify(ctx.project)}, exec, now: () => new Date() };`,
       `if (process.argv[2] === 'checkout') { checkoutPull(ctx, 'AI-8', ${JSON.stringify(PR)}); console.log('ok'); }`,
       `else { const r = reviewGit(ctx, 'AI-8', { main: 'o/r' }, ['rev-parse', 'HEAD']); console.log(r.stdout.trim().slice(0, 7) + ' ' + /（([0-9a-f]{7})・/.exec(r.stderr)?.[1]); }`,
     ].join('\n'));
