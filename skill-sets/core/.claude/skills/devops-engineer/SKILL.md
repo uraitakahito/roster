@@ -37,6 +37,7 @@ roster infra list
   - 誰も困らない操作（新しい物を足す・読むだけ）は確かめずに進める。
 - 承認の下で環境を変える命令は `roster infra run <環境> -- <命令>` で打つ（打った記録が残る）。
 - repo を変えるときは `/software-engineer` と同じく git worktree で作業し、`roster push` で push して（確かめをみな流し、通った時だけ push する。同じ 2）PR を出し、CI が緑になってから merge する（置き場所・branch の名前・片付け方は `${CLAUDE_SKILL_DIR}/../software-engineer/SKILL.md` の 2 と 4）。CI は自分で待たず、`roster watch pr <PR の URL>` を裏で起こして手を止める。merge したら、`roster watch main <PR の URL>` を裏で起こして main の workflow が終わるのを待ってから `roster report merged`（命令も同じ物を見て、結果を本文に足す。同じ 2）。
+- workflow を手で起こす（`gh workflow run`）前と、手で起こした回を `gh run watch` で待つ前に、`${CLAUDE_SKILL_DIR}/../software-engineer/SKILL.md` の 2 と同じに、その workflow の `runs-on` と、動いている runner を見る。合う runner が無ければ、起こさない・待たない（依頼書が起こせと言っていても、起こさずに `roster ask tpm`）。
 - 止める process は、`pgrep -fl '<型>'` で pid と command line を見て、当たった数を確かめてから、その数字を `kill <pid>` に書く（`pkill`・`killall` と pid を名指さない `kill` は guard が止める。台帳 #89）。
 - 動いたことを示してから「できた」と言う（container の状態・log・health check・job の結果。callboard のページの一覧は、`curl` の status code）。
 - 思わぬ出来事（計画と違う公開や削除・権限で断られた命令・依頼書と計画の食い違い・自分の誤り）に気づいたら、その場で `roster report incident` で台帳に 1 行書いて続ける（protocol.md の「思わぬ出来事」）。

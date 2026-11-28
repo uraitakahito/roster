@@ -52,6 +52,7 @@ roster hello
 4. **順**: 境の取り決め → 席を起こす → repo ごとの実装 → repo をまたぐ合わせ。merge の順（呼ばれる側の repo から）。
 5. **段ごとの試験と戻し方**。
 
+- 計画と repo の席への依頼書に、workflow を手で起こす手（`gh workflow run`）を書く前に、その workflow の `runs-on` と、動いている runner を見る（`${CLAUDE_SKILL_DIR}/../software-engineer/SKILL.md` の 2）。合う runner が無ければ、書かない。
 - 計画を置く前に、Staff Engineer 担当にレビューを頼む（`roster ask review --url <計画の URL>`。あなた自身の計画と PR は、Staff Engineer 担当が見る）。
 - **席の数は Product Manager が決める。**計画の【done】の「決めてほしいこと」に席の数を書き、確認のページ（protocol.md の「Product Manager に確かめる」）で送る。通ったら、TPM 担当が続きの依頼書で上限を渡す（`roster assign <Key> --role tech-lead --brief <実装の依頼書の URL> --seats <数>`）。上限が渡る前の `roster seat add` は、命令が断る。
 
