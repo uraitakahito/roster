@@ -1,6 +1,6 @@
 // roster push: repo に宣言した確かめ（push の前に流す物）をみな流し、みな通った時だけ、確かめた commit を push する（t-fcp8。監査 audit-2 の R15）。
-// 確かめの一覧は、push する branch でなく origin の既定の branch の .claude/roles/config.jsonc の push の欄から読む（branch の中で一覧を減らしても、merge まで効かない）。
-// 固めるのは一覧（名と命令）だけで、命令が中で読む物（package.json の scripts・lint や試験の設定・ci/*.sh）は branch の木の物（PR の差分とレビューで見る。review-3 の指摘 4）。
+// 確かめの一覧は、push する commit の .claude/roles/config.jsonc の push の欄から読む（t-f73c。一覧を足す PR・新しい repo の初めの PR も、その一覧で確かめて push できる）。
+// branch が一覧に加えた変更（消した・変えた・足した）は、main と分かれた所（merge-base）の一覧と比べて毎回出し、記録に残す。消す・変えるのを見るのは PR のレビュー（担当は必ず頼む。t-f73c の confirm-1）。
 // push の先は、いつも手元の branch と同じ名（upstream では決めない。origin/main から切った branch は origin/main を追うため。review-3 の指摘 1）。
 // path では選ばず、宣言した確かめを毎回みな流す（4 repo の主な CI は、どれも pull_request に paths が無い）。
 // 確かめは shell を通さずに語の並びで打つ（; や pipe で終了コードが隠れる形を、設定の中にも作らない）。
@@ -70,6 +70,28 @@ export interface PushRecord {
   noChecks?: string
   /** 断った・落ちた訳（1 行）。 */
   reason?: string
+  /** branch が一覧に加えた変更（差が無ければ無い）。 */
+  configDiff?: ConfigDiff
+}
+
+/** branch が確かめの一覧に加えた変更（main と分かれた所の一覧と、push する commit の一覧の比べ）。 */
+export interface ConfigDiff {
+  /** 比べた元: main と分かれた所か、それが取れない・読めない時の origin の既定の branch の先か、origin に既定の branch がまだ無い（初めの push）時の空。 */
+  base: 'merge-base' | 'default-branch' | 'none'
+  /** 消した確かめの名。 */
+  removed: string[]
+  /** 同じ名で run・dir・env・timeoutSeconds のどれかを変えた確かめの名。 */
+  changed: string[]
+  /** 足した確かめの名。 */
+  added: string[]
+  /** push の欄ごと消した。 */
+  sectionRemoved?: true
+  /** 分かれた後に main に足され、この branch に無い確かめの名（取り込めば流れる。差には数えない）。 */
+  mainAdded?: string[]
+  /** 分かれた後に main が中身を変え、この branch では古いままの確かめの名（取り込めば新しい中身で流れる。差には数えない）。 */
+  mainChanged?: string[]
+  /** 比べる元の一覧が読めない（形が違う・object が無い。差は出していない）。 */
+  baseUnreadable?: true
 }
 
 /** 確かめ 1 つの時間の限りの既定（秒）。止まったまま返らない確かめで、roster push が返らなくならないため（review-3 の指摘 2）。 */
@@ -118,6 +140,122 @@ export function parsePushChecks(text: string, where: string): PushCheck[] | unde
     }
     return check;
   });
+}
+
+/** 設定の file の、repo の根からの path。 */
+const CONFIG_PATH = '.claude/roles/config.jsonc';
+
+/** 一覧を読んだ結果: 在る・無い（file か欄が無い）・読めない（形が違う・object が無い）。 */
+export type ReadChecks = { kind: 'some', checks: PushCheck[] } | { kind: 'none' } | { kind: 'bad', message: string };
+
+/** commit（rev）の設定の push の欄を読む。file の無さと読めなさ（shallow な clone で object が無いなど）を分ける（review-2 の指摘 4）。 */
+function readChecks(ctx: Context, root: string, rev: string, where: string): ReadChecks {
+  const listed = git(ctx, root, ['ls-tree', '--name-only', rev, '--', CONFIG_PATH]);
+  if (listed.status !== 0) return { kind: 'bad', message: `${where} を読めない（git ls-tree が落ちた）` };
+  if (listed.stdout.trim() === '') return { kind: 'none' };
+  const shown = git(ctx, root, ['show', `${rev}:${CONFIG_PATH}`]);
+  if (shown.status !== 0) return { kind: 'bad', message: `${where} を読めない（git show が落ちた）` };
+  try {
+    const checks = parsePushChecks(shown.stdout, where);
+    return checks === undefined ? { kind: 'none' } : { kind: 'some', checks };
+  }
+  catch (e) {
+    return { kind: 'bad', message: (e as Error).message };
+  }
+}
+
+/** 確かめ 1 つの、変えた欄の名。 */
+function changedFields(a: PushCheck, b: PushCheck): string[] {
+  const same = (x: unknown, y: unknown): boolean => JSON.stringify(x) === JSON.stringify(y);
+  const sorted = (env?: Record<string, string>) => env === undefined ? undefined : Object.fromEntries(Object.entries(env).sort(([k], [l]) => k.localeCompare(l)));
+  return [
+    ...(same(a.run, b.run) ? [] : ['run']),
+    ...((a.dir ?? '.') === (b.dir ?? '.') ? [] : ['dir']),
+    ...(same(sorted(a.env), sorted(b.env)) ? [] : ['env']),
+    ...(a.timeoutSeconds === b.timeoutSeconds ? [] : ['timeoutSeconds']),
+  ];
+}
+
+/** 差と、変えた欄の名を添えた字（出す行のため）。 */
+export interface DiffResult {
+  diff: ConfigDiff
+  changedDetail: string[]
+  mainChangedDetail: string[]
+}
+
+/**
+ * branch が一覧に加えた変更を、比べる元（main と分かれた所）の一覧と比べて出す。差も注意も無ければ undefined。
+ * main の先と比べないのは、取り込んでいない branch で、main に後から足された確かめを「消した」と読まないため（t-f73c の plan-2）。
+ * 分かれた後に main が足した・変えた確かめは、branch に無い・古いままなら、差に数えずに mainAdded・mainChanged に出す（review-2 の指摘 1）。
+ */
+export function diffChecks(baseRef: ConfigDiff['base'], base: ReadChecks, head: PushCheck[] | undefined, main: ReadChecks): DiffResult | undefined {
+  if (base.kind === 'bad') return { diff: { base: baseRef, removed: [], changed: [], added: [], baseUnreadable: true }, changedDetail: [], mainChangedDetail: [] };
+  const before = base.kind === 'some' ? base.checks : [];
+  const after = head ?? [];
+  const beforeByName = new Map(before.map(c => [c.name, c]));
+  const afterByName = new Map(after.map(c => [c.name, c]));
+  const removed = before.filter(c => !afterByName.has(c.name)).map(c => c.name);
+  const added = after.filter(c => !beforeByName.has(c.name)).map(c => c.name);
+  const changed: string[] = [];
+  const changedDetail: string[] = [];
+  for (const c of after) {
+    const old = beforeByName.get(c.name);
+    const fields = old === undefined ? [] : changedFields(old, c);
+    if (fields.length === 0) continue;
+    changed.push(c.name);
+    changedDetail.push(`${c.name}（${fields.join('・')}）`);
+  }
+  const mainAdded: string[] = [];
+  const mainChanged: string[] = [];
+  const mainChangedDetail: string[] = [];
+  if (baseRef === 'merge-base' && main.kind === 'some') {
+    for (const m of main.checks) {
+      const old = beforeByName.get(m.name);
+      const mine = afterByName.get(m.name);
+      if (old === undefined) {
+        if (mine === undefined) mainAdded.push(m.name);
+        continue;
+      }
+      const fields = changedFields(old, m);
+      if (fields.length === 0 || mine === undefined || changedFields(old, mine).length > 0) continue;
+      mainChanged.push(m.name);
+      mainChangedDetail.push(`${m.name}（${fields.join('・')}）`);
+    }
+  }
+  const sectionRemoved = before.length > 0 && head === undefined;
+  if (removed.length + changed.length + added.length + mainAdded.length + mainChanged.length === 0) return undefined;
+  return {
+    diff: {
+      base: baseRef,
+      removed,
+      changed,
+      added,
+      ...(sectionRemoved ? { sectionRemoved: true as const } : {}),
+      ...(mainAdded.length > 0 ? { mainAdded } : {}),
+      ...(mainChanged.length > 0 ? { mainChanged } : {}),
+    },
+    changedDetail,
+    mainChangedDetail,
+  };
+}
+
+/** 差を出す行。from は比べた元の字。消した・変えたがあれば、PR の本文に訳を書き、レビューを必ず頼む案内も出す。 */
+function diffLines(d: DiffResult, from: string): string[] {
+  const { diff } = d;
+  if (diff.baseUnreadable === true) return [`注意: 確かめの一覧の差は出していない（${from}、その一覧が読めない）`];
+  const parts = [
+    ...(diff.sectionRemoved === true ? [`push の欄ごと消した（あった確かめ: ${diff.removed.join('・')}）`] : diff.removed.length > 0 ? [`消した: ${diff.removed.join('・')}`] : []),
+    ...(d.changedDetail.length > 0 ? [`変えた: ${d.changedDetail.join('・')}`] : []),
+    ...(diff.added.length > 0 ? [`足した: ${diff.added.join('・')}`] : []),
+  ];
+  const lines = parts.length > 0 ? [`確かめの一覧の差（${from}）: ${parts.join('／')}`] : [];
+  if (diff.removed.length + diff.changed.length > 0) lines.push('  → PR の本文に差と訳を書き、依頼書に無くてもレビューを必ず頼む（--focus に「push の一覧の変更」）。判定が届くまで merge しない');
+  const behind = [
+    ...(diff.mainAdded === undefined ? [] : [`足された: ${diff.mainAdded.join('・')}`]),
+    ...(d.mainChangedDetail.length === 0 ? [] : [`変えられた: ${d.mainChangedDetail.join('・')}`]),
+  ];
+  if (behind.length > 0) lines.push(`注意: main に後から足された確かめ・変えられた確かめが、この branch に無いか古いまま（流していない・古い中身で流した。origin の既定の branch を取り込めば流れる）: ${behind.join('／')}`);
+  return lines;
 }
 
 /** git を打つ（cwd で）。 */
@@ -194,7 +332,7 @@ function runCheck(root: string, logDir: string, check: PushCheck, now: () => Dat
   const limit = check.timeoutSeconds ?? CHECK_TIMEOUT_SECONDS;
   try {
     if (!existsSync(cwd)) {
-      appendFileSync(log, `dir（${check.dir ?? '.'}）が、この木に無い（branch で folder の名を替えたなら、origin/main の一覧と合っていない）\n`);
+      appendFileSync(log, `dir（${check.dir ?? '.'}）が、この木に無い（一覧の dir と木の folder が合っていない）\n`);
       return { name: check.name, code: 127, seconds: 0, log };
     }
     const r = spawnSync(check.run[0] as string, check.run.slice(1), {
@@ -246,20 +384,26 @@ export function push(ctx: Context, options: PushOptions): PushResult {
   };
   if (root === undefined) return { code: PUSH_EXIT.error, lines: [`断った: ${options.cwd} は git の worktree の中でない`] };
   const repo = repoName(ctx, root);
-  const refuse = (target: string, reason: string, sha?: string): PushResult =>
-    finish({ repo, target, ...(sha === undefined ? {} : { sha }), checks: [], code: PUSH_EXIT.error, result: 'refused', reason }, [`断った: ${reason}`]);
+  const refuse = (target: string, reason: string, sha?: string, diff?: { result: DiffResult, from: string }): PushResult =>
+    finish({ repo, target, ...(sha === undefined ? {} : { sha }), checks: [], code: PUSH_EXIT.error, result: 'refused', reason, ...(diff === undefined ? {} : { configDiff: diff.result.diff }) }, [...(diff === undefined ? [] : diffLines(diff.result, diff.from)), `断った: ${reason}`]);
   const main = defaultBranch(ctx, root);
   const fetched = git(ctx, root, ['fetch', '--quiet', 'origin', main]);
-  if (fetched.status !== 0) {
+  // origin が空（ref が 1 つも無い。空の repo の初めの push）: fetch は落ちるが、名指し無しの ls-remote は繋がって「無い」（2）を返す。
+  // 網の誤り（128）と、中身は在って main だけが無い repo（既定の branch の名を替えた・手元の origin/HEAD が古い）とは分ける（台帳 #531・review-5 の指摘 1）。
+  const firstPush = fetched.status !== 0 && git(ctx, root, ['ls-remote', '--exit-code', 'origin']).status === 2;
+  if (fetched.status !== 0 && !firstPush) {
     return finish({ repo, target: options.tag === undefined ? '' : `tags/${options.tag}`, checks: [], code: PUSH_EXIT.pushFailed, result: 'push-failed', reason: 'fetch が落ちた' }, [`git fetch origin ${main} が落ちた（確かめは流していない・push していない）: ${fetched.stderr.trim().split('\n').pop() ?? ''}`, '網の誤り（5xx・繋がらない）なら、roster watch github を裏で起こして待ち、戻ってから打ち直す']);
   }
 
+  if (options.tag !== undefined && firstPush) return refuse(`tags/${options.tag}`, `origin に既定の branch（${main}）がまだ無い。release の tag は、main に merge した commit に打つ`);
   if (options.tag !== undefined) return pushTag(ctx, root, main, options.tag, refuse, finish, repo);
 
   const branch = gitLine(ctx, root, ['symbolic-ref', '--quiet', '--short', 'HEAD']);
   if (branch === undefined) return refuse('', 'HEAD が branch でない（detached）。branch を作ってから打つ');
   const target = branch;
-  if (target === main) return refuse(target, `既定の branch（${main}）の上にいる。main から branch を切り（git switch -c <名>）、その branch で打つ`);
+  // 空の repo の初めの push は、既定の branch を作る push なので、main の上からだけ打つ（ほかの名の branch を先に出すと、GitHub はそれを既定の branch にする。review-5 の指摘 2）。
+  if (firstPush && target !== main) return refuse(target, `origin が空（ref が 1 つも無い）。初めの push は ${main} の上から打つ（既定の branch を作るため。ほかの名の branch を先に出すと、それが既定の branch になる）`);
+  if (target === main && !firstPush) return refuse(target, `既定の branch（${main}）の上にいる。main から branch を切り（git switch -c <名>）、その branch で打つ`);
   if (options.noChecks?.trim() === '') return refuse(target, '--no-checks には訳を書く（空は受けない）');
   const changes = trackedChanges(ctx, root);
   if (changes === undefined) return refuse(target, 'git status が読めない（index.lock など）。git status を見てから打ち直す');
@@ -267,22 +411,38 @@ export function push(ctx: Context, options: PushOptions): PushResult {
   const sha = gitLine(ctx, root, ['rev-parse', '--verify', '--quiet', 'HEAD']);
   if (sha === undefined) return refuse(target, 'HEAD に commit が無い');
 
-  const shown = git(ctx, root, ['show', `origin/${main}:.claude/roles/config.jsonc`]);
-  let checks: PushCheck[] | undefined;
-  try {
-    checks = shown.status === 0 ? parsePushChecks(shown.stdout, `origin/${main} の .claude/roles/config.jsonc`) : undefined;
-  }
-  catch (e) {
-    return refuse(target, (e as Error).message, sha);
+  const head = readChecks(ctx, root, sha, `push する commit（${sha.slice(0, 7)}）の ${CONFIG_PATH}`);
+  if (head.kind === 'bad') return refuse(target, head.message, sha);
+  const checks = head.kind === 'some' ? head.checks : undefined;
+  // 比べる元は main と分かれた所。取れない（共通の祖先が無い）・読めない時は、origin の既定の branch の先（review-1 の指摘 3・review-2 の指摘 3）。
+  // 初めの push では origin に main が無いので、空の一覧と比べる（手元に古い origin/main が残っていても読まない）。
+  const mergeBase = firstPush ? undefined : gitLine(ctx, root, ['merge-base', sha, `origin/${main}`]);
+  const mainChecks: ReadChecks = firstPush ? { kind: 'none' } : readChecks(ctx, root, `origin/${main}`, `origin/${main} の ${CONFIG_PATH}`);
+  const baseChecks = mergeBase === undefined ? undefined : readChecks(ctx, root, mergeBase, `main と分かれた所（${mergeBase.slice(0, 7)}）の ${CONFIG_PATH}`);
+  const atMergeBase = baseChecks !== undefined && baseChecks.kind !== 'bad';
+  const from = firstPush
+    ? `origin に ${main} がまだ無い（初めの push）ので、空の一覧と比べて`
+    : atMergeBase
+      ? 'main と分かれた所と比べて'
+      : `main と分かれた所が${mergeBase === undefined ? '取れない' : '読めない'}ので、origin/${main} の先と比べて`;
+  const result = firstPush
+    ? diffChecks('none', { kind: 'none' }, checks, mainChecks)
+    : atMergeBase ? diffChecks('merge-base', baseChecks, checks, mainChecks) : diffChecks('default-branch', mainChecks, checks, mainChecks);
+  const diff = result === undefined ? undefined : { result, from };
+  // 宣言を足す前に切った branch: main の守りを --no-checks で外させず、取り込ませる（欄ごと消した branch は、分かれた所に宣言があるので、ここに当たらない。review-2 の指摘 2）。
+  if (checks === undefined && mainChecks.kind === 'some' && !(atMergeBase && baseChecks.kind === 'some')) {
+    return refuse(target, `push する commit（${sha.slice(0, 7)}）に確かめの宣言が無いが、origin/${main} には在る（${mergeBase === undefined ? 'main と分かれた所が取れない branch' : '宣言が足される前に切った branch'}）。origin/${main} を取り込んでから打つ（--no-checks は受けない）`, sha, diff);
   }
   if (checks === undefined && options.noChecks === undefined) {
-    return refuse(target, `この repo（${repo}）の origin/${main} の設定に、push の前に流す確かめ（push の欄）が無い。宣言を足すか、--no-checks "<訳>" を付けて打つ（担当は、自分で付けずに roster ask tpm で聞く）`, sha);
+    const untracked = existsSync(join(root, CONFIG_PATH)) && git(ctx, root, ['ls-files', '--error-unmatch', CONFIG_PATH]).status !== 0;
+    return refuse(target, `この repo（${repo}）の push する commit（${sha.slice(0, 7)}）の設定に、push の前に流す確かめ（push の欄）が無い。${untracked ? `${CONFIG_PATH} は作業の木に在るが git に入っていない（git add して commit してから打つ）。` : ''}宣言を足すか、--no-checks "<訳>" を付けて打つ（担当は、自分で付けずに roster ask tpm で聞く）`, sha, diff);
   }
   if (checks !== undefined && options.noChecks !== undefined) {
-    return refuse(target, 'この repo には確かめの宣言があるので、--no-checks は受けない（確かめを外す道にしない）', sha);
+    return refuse(target, 'この repo には確かめの宣言があるので、--no-checks は受けない（確かめを外す道にしない）', sha, diff);
   }
 
-  const lines: string[] = [];
+  const lines: string[] = diff === undefined ? [] : diffLines(diff.result, diff.from);
+  const configDiff = diff === undefined ? {} : { configDiff: diff.result.diff };
   const results: CheckResult[] = [];
   if (checks !== undefined) {
     const logDir = join(ctx.state.dir, 'push', `${at.toISOString().replace(/[:.]/g, '-')}-${key ?? 'tpm'}`);
@@ -299,13 +459,13 @@ export function push(ctx: Context, options: PushOptions): PushResult {
       const bare = [...new Set(checks.filter(c => failed.some(f => f.name === c.name)).flatMap(c => bareDeps(root, c.dir ?? '.')))];
       if (bare.length > 0) lines.push('', `注意: ${bare.join('・')} に node_modules が無い（作ったばかりの worktree なら、依存を入れてから打ち直す。入れ方は repo の設定の push の欄の注）`);
       lines.push('', `push していない: 確かめ ${failed.length} つが落ちた（${failed.map(r => r.name).join('・')}）。直して commit し、もう 1 度 roster push`);
-      return finish({ repo, target, sha, checks: results.map(({ name, code, seconds }) => ({ name, code, seconds })), code: PUSH_EXIT.failed, result: 'failed' }, lines);
+      return finish({ repo, target, sha, checks: results.map(({ name, code, seconds }) => ({ name, code, seconds })), code: PUSH_EXIT.failed, result: 'failed', ...configDiff }, lines);
     }
   }
 
   // 確かめを裏で流す間に、担当が commit を足しうる。確かめた commit と木のままかを、もう 1 度見る。
   if (gitLine(ctx, root, ['rev-parse', 'HEAD']) !== sha || trackedChanges(ctx, root) !== '') {
-    return finish({ repo, target, sha, checks: results.map(({ name, code, seconds }) => ({ name, code, seconds })), code: PUSH_EXIT.error, result: 'refused', reason: '確かめの間に HEAD か追われた file が動いた' }, [...lines, '断った: 確かめを流す間に HEAD か追われている file が動いた（確かめた物と push する物が食い違う）。もう 1 度 roster push']);
+    return finish({ repo, target, sha, checks: results.map(({ name, code, seconds }) => ({ name, code, seconds })), code: PUSH_EXIT.error, result: 'refused', reason: '確かめの間に HEAD か追われた file が動いた', ...configDiff }, [...lines, '断った: 確かめを流す間に HEAD か追われている file が動いた（確かめた物と push する物が食い違う）。もう 1 度 roster push']);
   }
   const untracked = git(ctx, root, ['ls-files', '--others', '--exclude-standard']).stdout.split('\n').filter(f => f !== '');
   if (untracked.length > 0) {
@@ -314,7 +474,7 @@ export function push(ctx: Context, options: PushOptions): PushResult {
   }
   const args = ['push', ...(options.forceWithLease === true ? [`--force-with-lease=refs/heads/${target}`] : []), 'origin', `${sha}:refs/heads/${target}`];
   const pushed = git(ctx, root, args);
-  const record = { repo, target, sha, checks: results.map(({ name, code, seconds }) => ({ name, code, seconds })), ...(options.noChecks === undefined ? {} : { noChecks: options.noChecks }) };
+  const record = { repo, target, sha, checks: results.map(({ name, code, seconds }) => ({ name, code, seconds })), ...(options.noChecks === undefined ? {} : { noChecks: options.noChecks }), ...configDiff };
   if (pushed.status !== 0) {
     return finish({ ...record, code: PUSH_EXIT.pushFailed, result: 'push-failed', reason: pushed.stderr.trim().split('\n').pop() ?? '' }, [...lines, `git push が落ちた（確かめは通った）: ${pushed.stderr.trim().split('\n').pop() ?? ''}`, '網の誤り（5xx・繋がらない）なら、roster watch github を裏で起こして待ち、戻ってから打ち直す。remote が先に進んでいる（rejected）なら、取り込んでから打ち直す']);
   }

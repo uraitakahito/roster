@@ -7,14 +7,14 @@ import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { askTpm, dismiss, notify, reportDone, toPeer } from '../src/commands/messages.ts';
 import { pageList, pagePath, pagePut, pageReply, type PageRecord } from '../src/commands/page.ts';
-import { reviewAllow, reviewList } from '../src/commands/review.ts';
+import { reviewAllow, reviewCheckout, reviewList } from '../src/commands/review.ts';
 import { markBrief } from '../src/commands/review-marks.ts';
 import { hello } from '../src/commands/role-side.ts';
 import { askReview, reportReview } from '../src/commands/staff.ts';
 import { collect } from '../src/commands/timeline.ts';
 import { assign, close } from '../src/commands/tpm-side.ts';
 import type { Context } from '../src/context.ts';
-import { readReviews, recordHead, reviewLabel, type Review } from '../src/reviews.ts';
+import { readHead, readReviews, recordHead, reviewLabel, type Review } from '../src/reviews.ts';
 import { readRole, requireRole, writeRole } from '../src/roster.ts';
 import { DELIVERED_FILE, type DeliveredLine } from '../src/mail.ts';
 import type { MessageTrace } from '../src/seen.ts';
@@ -128,7 +128,7 @@ describe('roster ask review（席が無い時: 命令が席を起こす）', () 
 
   test('見る物は、置き場のページか PR の URL。同じ物は 2 度頼めない。Staff と Auditor からは頼めない', async () => {
     const w = await asked();
-    await expect(askReview(w.se, { url: 'cli/src/guard.ts' })).rejects.toThrow(/--url は、置き場のページか PR の URL にしてください/);
+    await expect(askReview(w.se, { url: 'cli/src/guard.ts' })).rejects.toThrow(/--url は、置き場のページか github\.com の PR の URL にしてください/);
     await expect(askReview(w.se, { url: w.plan })).rejects.toThrow(/同じ物のレビューを、もう頼んであります（#1。[\s\S]*判定は Staff Engineer 担当から【review】で届きます/);
     await expect(askReview(w.staff, { url: w.plan })).rejects.toThrow(/Staff Engineer 担当は roster ask review を打ちません/);
     const auditor = { ...w.se, env: { ...w.se.env, ROSTER_KEY: 'audit', ROSTER_ROLE: 'auditor' } };
@@ -180,7 +180,7 @@ describe('roster ask review（席が居る時: じかに届ける）', () => {
     expect(readReviews(w.tpm).map(r => [r.n, r.verdict])).toEqual([[1, 'reject'], [2, undefined]]);
     w.staff.now = () => new Date('2026-11-20T12:30:00.000Z');
     await reportReview(w.staff, { url: await w.put(w.staff, 'review'), verdict: 'approve', summary: 'よい' });
-    expect(texts(w, 'file:1').at(-1)).toMatch(/／頼み: #2$/);
+    expect(texts(w, 'file:1').at(-1)).toMatch(/／頼み: #2／見た commit を記録できなかった（頼んだ時の head を読めず、頼みの後の checkout も無い）。merge の前に見直しが要る$/);
     expect(readReviews(w.tpm).map(r => [r.n, r.verdict, r.page === first])).toEqual([[1, 'reject', true], [2, 'approve', false]]);
   });
 
@@ -287,7 +287,7 @@ describe('roster assign --role staff-engineer（TPM 担当の起こし直し）'
     expect(w.wire.look('file:2')?.title).toBe('レビュー AI-8: PR #7 +1');
     w.staff.now = () => new Date('2026-11-20T12:20:00.000Z');
     await reportReview(w.staff, { url: await w.put(w.staff, 'review'), verdict: 'concerns', summary: '2 つとも見た' });
-    expect(texts(w, 'file:1').at(-1)).toMatch(/／頼み: #1 #2$/);
+    expect(texts(w, 'file:1').at(-1)).toMatch(/／頼み: #1 #2／見た commit を記録できなかった（#2: 頼んだ時の head を読めず、頼みの後の checkout も無い）。merge の前に見直しが要る$/);
   });
 });
 
@@ -676,10 +676,43 @@ describe('見た commit・まとめた頼み・軽い見方・review allow（t-p
   test('report review の見た commit: 頼みの後に checkout した head があれば、それ（checkout）', async () => {
     const w = await prAsked();
     at(w.staff, '12:15');
-    recordHead(w.staff, 'AI-8', `${PR}/files`, H2);
+    recordHead(w.staff, 'AI-8', `${PR}/files`, H2, 'AI-8.staff');
     at(w.staff, '12:30');
     await verdictOf(w);
     expect(readReviews(w.tpm)[1]).toMatchObject({ verdict: 'approve', head: H2, headFrom: 'checkout' });
+  });
+
+  test('表に書くのは Staff の席の roster review checkout だけ。課題の担当が push の後に打った checkout は、見た commit にならない', async () => {
+    const w = await prAsked();
+    w.prFields.set(PR, { headRefOid: H2 });
+    at(w.se, '12:20');
+    expect(reviewCheckout(w.se, PR)[0]).toMatch(/^PR の head を出した: /);
+    expect(readHead(w.tpm, 'AI-8', PR)).toBeUndefined();
+    await verdictOf(w);
+    expect(readReviews(w.tpm)[1]?.head).toBeUndefined();
+    expect(texts(w, 'file:1').at(-1)).toMatch(/見た commit を記録できなかった（頼んだ後に push があった）。merge の前に見直しが要る$/);
+    // Staff の席の checkout は、書いた席の Key と一緒に書く（偽の git の head は '{}'）
+    at(w.staff, '12:40');
+    reviewCheckout(w.staff, PR);
+    expect(readHead(w.tpm, 'AI-8', PR)).toEqual({ head: '{}', at: '2026-11-20T12:40:00.000Z', by: 'AI-8.staff' });
+  });
+
+  test('頼んだ時の head を読めない時も、判定の時の head を読めない時も、head を書かず、【review】と出す行に訳を書く', async () => {
+    const w = await asked();
+    await reportReview(w.staff, { url: await w.put(w.staff, 'review'), verdict: 'approve', summary: 'よい' });
+    at(w.se, '12:10');
+    await askReview(w.se, { url: PR });
+    at(w.staff, '12:20');
+    expect(await verdictOf(w)).toContain('見た commit を記録できなかった（頼んだ時の head を読めず、頼みの後の checkout も無い）。merge の前に見直しが要る');
+    w.prs.set(PR2, 'OPEN');
+    w.prFields.set(PR2, { headRefOid: H1 });
+    at(w.se, '12:30');
+    await askReview(w.se, { url: PR2 });
+    w.prs.set(PR2, undefined);
+    at(w.staff, '12:40');
+    await verdictOf(w);
+    expect(texts(w, 'file:1').at(-1)).toMatch(/見た commit を記録できなかった（判定の時の PR の head を読めなかった）。merge の前に見直しが要る$/);
+    expect(readReviews(w.tpm).slice(1).map(r => r.head)).toEqual([undefined, undefined]);
   });
 
   test('checkout が無く、判定の時の head が頼んだ時と同じなら、それ（asked）', async () => {
@@ -698,18 +731,43 @@ describe('見た commit・まとめた頼み・軽い見方・review allow（t-p
     expect(readReviews(w.tpm)[1]?.head).toBeUndefined();
   });
 
-  test('頼みより前に出した古い head（表に残った物）は写らない', async () => {
+  test('頼みより前に出した古い head は写らない。それが頼んだ時の head と違えば（席の作業の木が古い）、asked の道も使わない', async () => {
+    const stale = async (old: string): Promise<Seats & { staff: Context }> => {
+      const w = await asked();
+      await reportReview(w.staff, { url: await w.put(w.staff, 'review'), verdict: 'approve', summary: 'よい' });
+      at(w.staff, '12:05');
+      recordHead(w.staff, 'AI-8', PR, old, 'AI-8.staff');
+      w.prs.set(PR, 'OPEN');
+      w.prFields.set(PR, { headRefOid: H1 });
+      at(w.se, '12:10');
+      await askReview(w.se, { url: PR });
+      at(w.staff, '12:30');
+      return w;
+    };
+    const w = await stale('f'.repeat(40));
+    expect(await verdictOf(w)).toContain('見た commit を記録できなかった（席の作業の木が前の head のまま。roster review checkout で出し直してから見直す）。merge の前に見直しが要る');
+    expect(readReviews(w.tpm)[1]?.head).toBeUndefined();
+    // 前に出した head が、頼んだ時の head と同じなら、作業の木は今の head なので asked の道で書く
+    const same = await stale(H1);
+    await verdictOf(same);
+    expect(readReviews(same.tpm)[1]).toMatchObject({ head: H1, headFrom: 'asked' });
+  });
+
+  test('Staff の --review は、いちばん古い依頼書の頼みだけを名指せる。後ろの依頼書の頼みは断り、状態も判定も替えない', async () => {
     const w = await asked();
-    await reportReview(w.staff, { url: await w.put(w.staff, 'review'), verdict: 'approve', summary: 'よい' });
-    at(w.staff, '12:05');
-    recordHead(w.staff, 'AI-8', PR, 'f'.repeat(40));
-    w.prs.set(PR, 'OPEN');
-    w.prFields.set(PR, { headRefOid: H1 });
     at(w.se, '12:10');
     await askReview(w.se, { url: PR });
-    at(w.staff, '12:30');
-    await verdictOf(w);
-    expect(readReviews(w.tpm)[1]).toMatchObject({ head: H1, headFrom: 'asked' });
+    const wait = w.wire.status('file:2')?.wait;
+    await expect(verdictOf(w, 'approve', 2)).rejects.toThrow(/^--review の #2 は、いちばん古い依頼書の頼みではありません。依頼書は積まれた順に返します。送っていません。今の依頼書の頼み:\n#1 /);
+    expect(readReviews(w.tpm).map(r => r.verdict)).toEqual([undefined, undefined]);
+    expect(w.wire.status('file:2')?.wait).toBe(wait);
+    expect((await verdictOf(w, 'approve', 1)).at(-1)).toBe('状態: 回答待ち(レビュー): 次の頼み');
+  });
+
+  test('github.com でない PR の URL は、見る物にしない（名を揃えると取り違える）', async () => {
+    const w = await asked();
+    await expect(askReview(w.se, { url: 'https://ghe.example.com/o/r/pull/7' })).rejects.toThrow(/--url は、置き場のページか github\.com の PR の URL にしてください/);
+    await expect(askReview(w.se, { url: 'o/r#7' })).rejects.toThrow(/--url は、置き場のページか github\.com の PR の URL にしてください/);
   });
 
   test('--url をいくつも: PR ごとに頼み 1 件、依頼書と【ask-review】は 1 つ。--light は依頼書と本文に載る。ページとは混ぜない', async () => {
@@ -732,6 +790,10 @@ describe('見た commit・まとめた頼み・軽い見方・review allow（t-p
   test('Staff は --review で PR ごとに返せる。名指さずに返すと、まだ返していない頼みにだけ書く', async () => {
     const w = await asked();
     await reportReview(w.staff, { url: await w.put(w.staff, 'review'), verdict: 'approve', summary: 'よい' });
+    for (const pr of [PR, PR2]) {
+      w.prs.set(pr, 'OPEN');
+      w.prFields.set(pr, { headRefOid: H1 });
+    }
     at(w.se, '12:10');
     await askReview(w.se, { url: [PR, PR2] });
     at(w.staff, '12:20');
@@ -757,7 +819,7 @@ describe('見た commit・まとめた頼み・軽い見方・review allow（t-p
     const again = readReviews(w.tpm)[2];
     expect(again).toMatchObject({ n: 3, askedHead: H2, light: true });
     const html = readFileSync((await pagePath(w.tpm, again?.brief ?? ''))[0] ?? '', 'utf8');
-    expect(html).toContain(`見直し: 前の頼み #2（気になる所あり・見た 1a2b3c4。前の判定からの差分を見る: <code>roster review git -- diff ${H1}..HEAD</code>）`);
+    expect(html).toContain(`見直し: 前の頼み #2（気になる所あり・見た 1a2b3c4。前の判定からの差分を見る（roster review checkout で出してから）: <code>roster review git --repo r -- diff ${H1}..refs/remotes/pull/7</code>）`);
   });
 
   test('review allow: 役割の無い session から、上げた「直すべき」だけを受け、allowed を書いてページを「決まった」にする', async () => {
@@ -785,5 +847,23 @@ describe('見た commit・まとめた頼み・軽い見方・review allow（t-p
     ]);
     expect(readReviews(w.tpm)[1]?.allowed).toEqual({ by: 'tpm', at: '2026-11-20T12:30:00.000Z', note: '指摘は範囲の外。次の課題で直す', page: w.plan });
     expect((await pageList(w.tpm, { key: 'AI-8', reply: 'waiting', on: 'tpm' }))).toEqual(['合うページは無い']);
+    // 2 度目は、前に決めた事を消さずに断る
+    await expect(reviewAllow(w.tpm, 2, { note: '書き替える' })).rejects.toThrow(/^レビュー #2 は、もう進めると決めてあります（\S+・2026-11-20T12:30:00\.000Z: 指摘は範囲の外。次の課題で直す）。書き替えていません$/);
+    expect(readReviews(w.tpm)[1]?.allowed?.note).toBe('指摘は範囲の外。次の課題で直す');
+  });
+
+  test('review allow: その PR のいちばん新しい頼みでなければ断る（roster pr merge は、いちばん新しい頼みで判じる）', async () => {
+    const w = await asked();
+    await reportReview(w.staff, { url: await w.put(w.staff, 'review'), verdict: 'approve', summary: 'よい' });
+    at(w.se, '12:10');
+    await askReview(w.se, { url: PR });
+    at(w.staff, '12:20');
+    await reportReview(w.staff, { url: await w.put(w.staff, 'review'), verdict: 'reject', summary: '依頼と違う' });
+    at(w.se, '12:25');
+    await askTpm(w.se, { text: '範囲の外', waitingFor: 'レビューの食い違い', review: 2 });
+    at(w.se, '12:30');
+    await askReview(w.se, { url: `${PR}/files` });
+    await expect(reviewAllow(w.tpm, 2, { note: '進める' })).rejects.toThrow('レビュー #2 は、その見る物のいちばん新しい頼みではありません（いちばん新しいのは #3）。roster pr merge は、いちばん新しい頼みで判じます');
+    expect(readReviews(w.tpm)[1]?.allowed).toBeUndefined();
   });
 });
