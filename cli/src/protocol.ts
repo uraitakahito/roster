@@ -226,37 +226,44 @@ export interface Heading {
   from: 'role' | 'tpm'
   record?: NoteKind
   peer?: true
+  /**
+   * やり取りの中での役: request は返事を待つ頼み、oneway は返事の要らない片道の知らせ、answers は返事（どの見出しの頼みへの返事か）。
+   * 返事を送る命令は、返事の先（頼みのメッセージの id。Sent の replyTo）を自分で引いて付ける（旗に頼らない。commands/messages.ts の「返事の先」）。
+   * optional は、返事のことも片道のこともある見出し（【notify】）。
+   * 欄は必ず書く: 見出しを足して役を決め忘れると、型の検査（tsc）で止まる。
+   */
+  turn: 'request' | 'oneway' | { answers: readonly string[], optional?: true }
 }
 
 /** 見出しの表。鍵は見出しの名（【ask-tpm】など）で、命令の中での呼び名と同じ。 */
 export const HEADINGS = {
-  'ask-tpm': { from: 'role' },
-  'ask-pm': { from: 'role', record: '確認' },
-  'ask-devops': { from: 'role' },
+  'ask-tpm': { from: 'role', turn: 'request' },
+  'ask-pm': { from: 'role', record: '確認', turn: 'request' },
+  'ask-devops': { from: 'role', turn: 'request' },
   // 課題の担当が、計画や PR のレビューを頼む。Staff Engineer 担当の席へじかに届く（席が無ければ、命令が起こして依頼書で渡す）。
-  'ask-review': { from: 'role', peer: true },
+  'ask-review': { from: 'role', peer: true, turn: 'request' },
   // repo の席（Tech Lead 担当が起こした席）が、Tech Lead 担当に問いを送る。答えは【notify】で返る。
-  'ask-lead': { from: 'role' },
-  'doc-fix': { from: 'role', record: '文書の修正' },
-  'merged': { from: 'role' },
-  'done': { from: 'role' },
-  'end': { from: 'role', record: '結果' },
+  'ask-lead': { from: 'role', turn: 'request' },
+  'doc-fix': { from: 'role', record: '文書の修正', turn: 'oneway' },
+  'merged': { from: 'role', turn: 'oneway' },
+  'done': { from: 'role', turn: { answers: ['brief'] } },
+  'end': { from: 'role', record: '結果', turn: { answers: ['dismiss'] } },
   // 課題管理には書かない（台帳の中身は、roster を動かす機械の外に出さない）。
-  'incident': { from: 'role' },
+  'incident': { from: 'role', turn: 'oneway' },
   // Auditor だけが送る。audit は Product Manager へじかに出した報告の写し、decided は Product Manager の決定。
-  'audit': { from: 'role' },
-  'decided': { from: 'role' },
+  'audit': { from: 'role', turn: 'oneway' },
+  'decided': { from: 'role', turn: 'oneway' },
   // Staff Engineer 担当だけが送る。レビューのページと判定。頼んだ課題の担当へじかに届く。
-  'review': { from: 'role', record: 'レビュー', peer: true },
+  'review': { from: 'role', record: 'レビュー', peer: true, turn: { answers: ['ask-review'] } },
   // 前の版で、session の始まりの hook（roster returned check）が、前の session 宛てに届いたメッセージを TPM 担当へ返した見出し。今は送らない（古い行を読む・見せるために残す）。
-  'returned': { from: 'role' },
-  'merge-request': { from: 'role' },
-  'not-yet': { from: 'role' },
-  'recreated': { from: 'role' },
-  'brief': { from: 'tpm' },
-  'answer': { from: 'tpm', record: '決定' },
-  'notify': { from: 'tpm' },
-  'dismiss': { from: 'tpm' },
+  'returned': { from: 'role', turn: 'oneway' },
+  'merge-request': { from: 'role', turn: 'oneway' },
+  'not-yet': { from: 'role', turn: 'oneway' },
+  'recreated': { from: 'role', turn: 'oneway' },
+  'brief': { from: 'tpm', turn: 'request' },
+  'answer': { from: 'tpm', record: '決定', turn: { answers: ['ask-pm'] } },
+  'notify': { from: 'tpm', turn: { answers: ['ask-tpm', 'ask-devops', 'ask-lead'], optional: true } },
+  'dismiss': { from: 'tpm', turn: 'request' },
 } as const satisfies Record<string, Heading>;
 
 /** 見出しの名（`ask-tpm` など）。 */

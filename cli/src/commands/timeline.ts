@@ -36,6 +36,8 @@ interface Sent {
   sender?: { key: string }
   /** 届く担当。前の版の行には無い。 */
   recipient?: { key: string }
+  /** 席を起こす時の依頼書で渡した頼みの行（メッセージとしては送っていない）。 */
+  launch?: true
 }
 
 /** infra.jsonl の 1 行（読む欄だけ）。 */
@@ -70,6 +72,7 @@ const cut = (text: string): string => text.length > TEXT_LIMIT ? `${text.slice(0
 /** 見た時刻の欄。配った時刻は「届いた」、見せた時刻は「見た」と書き分ける。 */
 function seenNote(m: Sent, seen: Seen | undefined, returned: Set<string>): string {
   if (returned.has(m.id)) return '届け違いで返した（宛先の担当は見ていない。roster returned show）';
+  if (m.launch === true) return '席を起こす時の依頼書で渡した頼み（メッセージとしては送っていない）';
   // 後ろ半分は、前の版の行が送った時に「まだ届いていない」と書いた時だけ（今の版の行は、送る時に見ない）。
   if (seen === undefined) return `届いた時刻: 分からない${m.delivered === false ? '（送った時は、まだ届いていない）' : ''}`;
   if (seen.by === 'legacy') return '送った時に届いた';

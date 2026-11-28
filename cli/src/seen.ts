@@ -58,8 +58,8 @@ export interface SentRef {
   to: string
   /** 前の版が送った時に書いた「届いたか」。 */
   delivered?: boolean
-  /** 運んだ道。NATS で運んだ行に在る（無い行は、前の版で連携の道具（cmux）が運んだ古い行）。 */
-  carrier?: 'nats'
+  /** 運んだ道。NATS で運んだ行は nats、席を起こす時の依頼書で渡した頼みの行は launch（無い行は、前の版で連携の道具（cmux）が運んだ古い行）。 */
+  carrier?: 'nats' | 'launch'
 }
 
 /** 送った記録の行 1 つの、受け手が見た時刻。undefined はまだ見ていない（検査用）か、分からない（記録用）。 */

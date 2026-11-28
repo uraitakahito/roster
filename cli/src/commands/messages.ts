@@ -48,7 +48,7 @@ export interface Sent {
   id: string
   /** 前の版の行だけ: 送った後 2 秒の内に届いたのを見たか。今の版は書かない（見た時刻は seen.ts の口が引き、前の行のこの欄も読む）。 */
   delivered?: boolean
-  /** 返事の先のメッセージの id（--reply-to）。 */
+  /** 返事の先のメッセージの id。返事を送る命令が、頼みの行から自分で引く（返事の先の節）。【notify】などは旗（--reply-to）でも受ける。 */
   replyTo?: string
   /**
    * 【brief】の行だけ: 送った時に、済んでいない前の依頼書をどう扱ったか（none は扱う物が無かった）。
@@ -63,8 +63,17 @@ export interface Sent {
    * 届く担当。前の版の行には無い。前の版の、返事の形（--reply-to）の行では、元の行の送り手（cmux が、返事を元のメッセージの送り手の居場所へ届けた）。
    */
   recipient?: Party
-  /** 運んだ道。今の版の行は、いつも nats（配りの口）。無い行は、前の版で連携の道具（cmux）が運んだ古い行。 */
-  carrier?: 'nats'
+  /**
+   * 運んだ道。配りの口で送った行は nats。launch は、席を起こす時の依頼書で渡した頼みの行（配りの口には置いていない）。
+   * 無い行は、前の版で連携の道具（cmux）が運んだ古い行。
+   */
+  carrier?: 'nats' | 'launch'
+  /**
+   * 席を起こす時に渡した頼みの行（新しい席への最初の依頼書・Staff Engineer 担当の席を起こす時のレビューの頼み）。メッセージとしては送っていない。
+   * 返事（【done】【review】）の先にするために残す。依頼書の数え（openBriefs）は、この行を積まない（最初の依頼書は名簿の firstBrief で 1 つだけ数え、
+   * この行からは id だけを借りる）。まだ見ていない物（unsettled）にも数えない。
+   */
+  launch?: true
   /** NATS で運んだ行: 配りの受け手の名（受け手の担当の組から作った字）。 */
   box?: Recipient
   /** 置いた直後に送る命令が落ちて書けなかった行を、TPM 担当の側の片付けが、置いた物から足した行（commands/mail.ts の tidyMail）。 */
@@ -80,7 +89,7 @@ export const SENT_LABEL = 'sent';
 const REPEAT_SECONDS = 30;
 
 /**
- * 同じ差出人が、同じ宛先に、同じ見出し・本文・返事の先のメッセージを REPEAT_SECONDS 秒の内に送っていたら止まる。
+ * 同じ差出人が、同じ宛先に、同じ見出し・本文のメッセージを REPEAT_SECONDS 秒の内に送っていたら止まる（返事の先を名指した時は、返事の先も同じ物だけ）。
  * 止まった命令の打ち直しを `;` や `||` で 1 行に続けて書くと、止まらなかった時にも 2 度目が動く（課題の記録も 2 件になる）。
  * 課題に記録を書く命令は、記録の前にもこれを呼ぶ。
  */
@@ -89,7 +98,9 @@ const REPEAT_SECONDS = 30;
 async function assertNotRepeat(ctx: Context, id: HeadingId, from: string, to: string, body: string, replyTo?: string): Promise<void> {
   const text = message(id, body);
   const since = ctx.now().getTime() - REPEAT_SECONDS * 1000;
-  const same = ctx.state.lines<Sent>('log.jsonl').findLast(l => l.from === from && l.to === to && l.text === text && l.replyTo === replyTo);
+  // 返事の先を名指さずに呼んだ時（送る前の検査。返事の先は、送る所で命令が引く）は、返事の先を問わずに比べる:
+  // 命令が引いた返事の先は、1 度目が頼みを済ませると 2 度目には違う物になるので、比べると 2 度送りを見逃す。
+  const same = ctx.state.lines<Sent>('log.jsonl').findLast(l => l.from === from && l.to === to && l.text === text && (replyTo === undefined || l.replyTo === replyTo));
   if (same === undefined || Date.parse(same.at) < since) return;
   recordGateStop(ctx, 'repeat', same.id);
   throw new TpmError(`同じ【${id}】を、${same.at} にもう送っています（id ${same.id}）。2 度目は送っていません。\n打ち直しを ; や || で 1 行に続けて書いていないか確かめてください。もう 1 度送る必要があれば、${REPEAT_SECONDS} 秒待つか、中身を変えて打つ。`);
@@ -165,6 +176,14 @@ async function assertReachable(ctx: Context, party: Party): Promise<void> {
  * to は、記録の行に残す居場所の宛先（運ぶのには使わない）。
  */
 async function deliver(ctx: Context, id: HeadingId, key: string, from: string, to: string, body: string, recipient: Party, replyTo?: string, extra: Pick<Sent, 'settle' | 'peer' | 'briefs'> = {}): Promise<string> {
+  return sentNote(await deliverSent(ctx, id, key, from, to, body, recipient, replyTo, extra));
+}
+
+/** 送った命令の結果に出す 1 行。 */
+const sentNote = (sent: Sent): string => `送った: 【${sent.heading}】→ ${sent.to}（${SENT_NOTE}）`;
+
+/** {@link deliver} と同じに送り、送った記録の行を返す（送った id を、頼みの記録に書く所が使う）。 */
+async function deliverSent(ctx: Context, id: HeadingId, key: string, from: string, to: string, body: string, recipient: Party, replyTo?: string, extra: Pick<Sent, 'settle' | 'peer' | 'briefs'> = {}): Promise<Sent> {
   await assertNotRepeat(ctx, id, from, to, body, replyTo);
   const text = message(id, body);
   const box = recipientName(recipient);
@@ -191,7 +210,7 @@ async function deliver(ctx: Context, id: HeadingId, key: string, from: string, t
   const sent: Sent = { ...line, text, id: sentId };
   ctx.state.append('log.jsonl', sent);
   copyMessageRecord(ctx, sent);
-  return `送った: 【${id}】→ ${to}（${SENT_NOTE}）`;
+  return sent;
 }
 
 /** 担当から TPM 担当へ。 */
@@ -223,10 +242,10 @@ function bossOf(ctx: Context, self: RoleRecord): Boss {
   return { address, party: partyOf(lead), lead };
 }
 
-/** 担当から、自分に仕事を振った者（bossOf）へ。 */
-async function toBoss(ctx: Context, self: RoleRecord, id: HeadingId, body: string, extra: Pick<Sent, 'briefs'> = {}): Promise<string> {
+/** 担当から、自分に仕事を振った者（bossOf）へ。replyTo は返事の先（【done】【end】）。 */
+async function toBoss(ctx: Context, self: RoleRecord, id: HeadingId, body: string, extra: Pick<Sent, 'briefs'> = {}, replyTo?: string): Promise<string> {
   const boss = bossOf(ctx, self);
-  return deliver(ctx, id, self.key, self.title, boss.address, body, boss.party, undefined, extra);
+  return deliver(ctx, id, self.key, self.title, boss.address, body, boss.party, replyTo, extra);
 }
 
 /** 担当が、自分に仕事を振った者へ送る物の 2 度送りを見る（課題に記録を書く前に呼ぶ）。Tech Lead 担当へ送る時は、その箱に置けるかも確かめる。 */
@@ -267,9 +286,13 @@ function peerSeat(ctx: Context, peer: RoleRecord): string {
   return address;
 }
 
-/** 担当から担当へ、じかに（レビューの頼みと判定だけ）。送り手の名は名簿の題。相手の居場所が無ければ止まる。 */
-export async function toPeer(ctx: Context, self: RoleRecord, peer: RoleRecord, id: HeadingId, body: string): Promise<string> {
-  return deliver(ctx, id, self.key, self.title, peerSeat(ctx, peer), body, partyOf(peer), undefined, { peer: true });
+/**
+ * 担当から担当へ、じかに（レビューの頼みと判定だけ）。送り手の名は名簿の題。相手の居場所が無ければ止まる。
+ * replyTo は返事の先（【review】の、頼みの id）。返すのは、結果に出す 1 行と、送った id（【ask-review】の id を、頼みの記録に書く）。
+ */
+export async function toPeer(ctx: Context, self: RoleRecord, peer: RoleRecord, id: HeadingId, body: string, replyTo?: string): Promise<{ note: string, id: string }> {
+  const sent = await deliverSent(ctx, id, self.key, self.title, peerSeat(ctx, peer), body, partyOf(peer), replyTo, { peer: true });
+  return { note: sentNote(sent), id: sent.id };
 }
 
 /** 担当が担当へじかに送る物の 2 度送りを見る（課題に記録を書く前に呼ぶ。相手の宛先で数える）。配りの口に置けるかも確かめる。 */
@@ -570,10 +593,14 @@ function openBriefs(role: RoleRecord, address: string, log: Sent[], seenAt: Seen
   const assigned = fromAssigner(role);
   // 前の版で起こした担当（名簿に firstBrief の欄が無い）の最初の依頼書は数えない（止めすぎるより、見逃す側に倒す）。
   const first = role.firstBrief;
-  let open: OpenBrief[] = first === undefined ? [] : [{ url: first, ...(role.helloAt === undefined ? {} : { seen: role.helloAt }) }];
+  // 起こす時の頼みの行（launch）が在れば、その id を最初の依頼書に借りる（【done】の返事の先になる）。行そのものは、下で積まない（2 つに数えない）。
+  const launched = first === undefined ? undefined : log.findLast(l => l.launch === true && l.heading === 'brief' && l.key === role.key && briefUrl(l) === first)?.id;
+  let open: OpenBrief[] = first === undefined ? [] : [{ url: first, ...(launched === undefined ? {} : { id: launched }), ...(role.helloAt === undefined ? {} : { seen: role.helloAt }) }];
   // 送った時刻の順に読む（同じ時刻は、file の順のまま）。後から足した行（置いた直後に落ちた送る命令の行。commands/mail.ts の tidyMail）は
   // file の末尾に入るので、file の順に読むと、足した【dismiss】・【brief】が、時刻と違う所で効く。
   for (const l of [...log].sort((a, b) => a.at.localeCompare(b.at))) {
+    // 起こす時の頼みの行は積まない（最初の依頼書は、上の firstBrief で数えてある）。
+    if (l.launch === true) continue;
     // 課題の担当がじかに送ったレビューの頼み（【ask-review】。記録の Key は送った課題の担当）も、Staff Engineer 担当の席の依頼書に積む。
     // Tech Lead 担当に届く repo の席の頼みは、依頼書に積まない（Tech Lead 担当の【done】は、TPM 担当の依頼書だけを済ませる。頼みは reviews.ts の記録で数える）。
     if (l.peer === true && l.heading === 'ask-review' && l.to === address && role.role === 'staff-engineer') {
@@ -588,7 +615,7 @@ function openBriefs(role: RoleRecord, address: string, log: Sent[], seenAt: Seen
       if (l.heading !== 'brief') continue;
       if ((l.settle ?? (l.text.includes(' 取り消す: ') ? 'supersede' : 'none')) === 'supersede') open = [];
       const at = seen(l);
-      open.push({ url: l.text.slice('【brief】'.length).split(' ')[0] ?? '', id: l.id, ...(at === undefined ? {} : { seen: at }) });
+      open.push({ url: briefUrl(l), id: l.id, ...(at === undefined ? {} : { seen: at }) });
     }
     else if (role.helloAt !== undefined && l.at >= role.helloAt) {
       // 前の居場所（担当の交代の前）が出した物は数えない。
@@ -606,6 +633,9 @@ function openBriefs(role: RoleRecord, address: string, log: Sent[], seenAt: Seen
   }
   return open;
 }
+
+/** 【brief】の行の、依頼書の URL（本文の頭）。 */
+const briefUrl = (l: Pick<Sent, 'text'>): string => l.text.slice('【brief】'.length).split(' ')[0] ?? '';
 
 /**
  * 記録の行が、その担当に仕事を振る者（TPM 担当。repo の席には、その Tech Lead 担当）の送った物か、を見る関数。
@@ -625,7 +655,8 @@ function unsettled(ctx: Context, role: RoleRecord, address: string, headings?: H
   const log = ctx.state.lines<Sent>('log.jsonl');
   const seenAt = seenTimes(ctx, { live: true });
   const assigned = fromAssigner(role);
-  const unseen = log.filter(l => l.key === role.key && assigned(l) && l.to === address && (headings === undefined || headings.includes(l.heading as HeadingId)) && seenAt(l) === undefined);
+  // 起こす時の頼みの行（launch）は、送った物ではないので数えない（起きたかは、名乗りで見る）。
+  const unseen = log.filter(l => l.launch !== true && l.key === role.key && assigned(l) && l.to === address && (headings === undefined || headings.includes(l.heading as HeadingId)) && seenAt(l) === undefined);
   return { unseen, briefs: openBriefs(role, address, log, seenAt) };
 }
 
@@ -951,7 +982,8 @@ export async function askPm(ctx: Context, options: { url: string, items: string[
     links: [{ label: '確認', url: options.url }, ...supersede.map(url => ({ label: '置き換えた確認', url }))],
     points: options.items,
   });
-  const sent = await toTpm(ctx, self, 'ask-pm', body);
+  // 前の確認を置き換える時は、置き換えた【ask-pm】を返事の先にする（頼みが、前の頼みを閉じる）。
+  const sent = await toTpm(ctx, self, 'ask-pm', body, askedPm(ctx, self.key, supersede));
   // 置き場の確認のページを返事待ちにする（Product Manager が、callboard のページの一覧の印と件数で気づく）。書けなくても、送った事は変わらない。
   // 置き換えた古い確認は、返事待ちから外す（残すと、答える要の無いページが「返事待ち」に出続ける）。
   const marks = await replyLine(ctx, options.url, 'waiting');
@@ -1075,7 +1107,10 @@ export async function reportDone(ctx: Context, options: DoneOptions): Promise<st
     links: options.url === undefined ? [] : [{ label: kind, url: options.url }],
     points: options.points,
   });
-  const sent = await toBoss(ctx, self, 'done', body, named === undefined ? {} : { briefs: named });
+  // 返事の先は、この【done】が済ませる依頼書（名指した物、無ければ見ていたいちばん古い 1 つ。openBriefs と同じ決め方）のうち、送った id の分かるいちばん古い物。
+  const at = ctx.now().toISOString();
+  const settles = named === undefined ? open.filter(b => b.seen !== undefined && b.seen <= at).slice(0, 1) : open.filter(b => named.includes(b.url));
+  const sent = await toBoss(ctx, self, 'done', body, named === undefined ? {} : { briefs: named }, settles.find(b => b.id !== undefined)?.id);
   // repo の席は、次の依頼書を Tech Lead 担当から受ける。
   const next = isRepoSeat(self) ? WAIT_NEXT_BRIEF_LEAD : WAIT_NEXT_BRIEF;
   showWait(ctx, next);
@@ -1128,12 +1163,18 @@ export async function reportEnd(ctx: Context, options: EndOptions): Promise<stri
       out.push(`課題を閉じた: ${self.issue}`);
     }
   }
-  out.push(await toBoss(ctx, self, 'end', body), ...keepRemaining(ctx, self, 'end', left));
+  out.push(await toBoss(ctx, self, 'end', body, {}, lastDismiss(ctx, self)), ...keepRemaining(ctx, self, 'end', left));
   // repo の席を閉じるのは、Tech Lead 担当（roster seat close）。
   const closing = isRepoSeat(self) ? WAIT_SEAT_CLOSE : WAIT_CLOSE;
   showWait(ctx, closing);
   out.push(`状態: ${closing}（居場所は自分で閉じない）`);
   return out;
+}
+
+/** その担当（今の居場所）が受けた、いちばん新しい【dismiss】の id（【end】の返事の先）。無ければ undefined（【dismiss】を待たずに終える役割など）。 */
+function lastDismiss(ctx: Context, self: RoleRecord): string | undefined {
+  const assigned = fromAssigner(self);
+  return ctx.state.lines<Sent>('log.jsonl').findLast(l => l.heading === 'dismiss' && l.key === self.key && assigned(l) && (self.address === undefined || l.to === self.address))?.id;
 }
 
 /** Dependabot の PR だけで使う見出し。recreated は、新しい番号の題に替える。 */
@@ -1213,7 +1254,9 @@ export async function reportDecided(ctx: Context, options: DecidedOptions): Prom
 export async function brief(ctx: Context, role: RoleRecord, url: string, note?: string, settled?: { text: string, choice: SettleChoice }, from: string = TPM_TITLE): Promise<string[]> {
   await assertRead(ctx, `${role.key} の担当`, role.title);
   const body = [url, issueCopyLine(role), note, settled?.text].filter(v => v !== undefined).join(' ');
-  const sent = await toRole(ctx, role, 'brief', body, undefined, { settle: settled?.choice ?? 'none' }, from);
+  // 前の依頼書を取り消す時は、取り消した依頼書（送った id の分かるいちばん古い物）を返事の先にする（頼みが、前の頼みを閉じる）。
+  const superseded = settled?.choice === 'supersede' ? unsettled(ctx, role, seatOf(ctx, role)).briefs.find(b => b.id !== undefined)?.id : undefined;
+  const sent = await toRole(ctx, role, 'brief', body, superseded, { settle: settled?.choice ?? 'none' }, from);
   role.brief = url;
   delete role.dismissed;
   writeRole(ctx, role);
@@ -1258,6 +1301,15 @@ async function answeredPages(ctx: Context, key: string, options: AnswerOptions):
   return waiting;
 }
 
+/** 【ask-pm】の行の、確認のページの URL（本文の頭）。 */
+const askPmUrl = (l: Pick<Sent, 'text'>): string => l.text.slice('【ask-pm】'.length).split(' ')[0] ?? '';
+
+/** その Key の担当が、urls の確認のページを送った【ask-pm】のうち、いちばん古い物の id（【answer】と、置き換える【ask-pm】の返事の先）。無ければ undefined。 */
+function askedPm(ctx: Context, key: string, urls: string[]): string | undefined {
+  if (urls.length === 0) return undefined;
+  return ctx.state.lines<Sent>('log.jsonl').find(l => l.heading === 'ask-pm' && l.key === key && urls.some(u => samePage(ctx, askPmUrl(l), u)))?.id;
+}
+
 /** Product Manager の答えを返す。課題があれば、返す前に「決定」の記録を書く。返した後、置き場の返事待ちのページを答えたにする。 */
 export async function answer(ctx: Context, key: string, options: AnswerOptions): Promise<string[]> {
   requireTpmSide(ctx, 'roster answer');
@@ -1265,7 +1317,8 @@ export async function answer(ctx: Context, key: string, options: AnswerOptions):
   if (role.address !== undefined) await assertNotRepeat(ctx, 'answer', TPM_TITLE, role.address, options.text, options.replyTo);
   const pages = await answeredPages(ctx, key, options);
   const recorded = record(ctx, role, { kind: '決定', role: 'TPM', summary: oneLine(options.text), links: [], points: [] });
-  const sent = await toRole(ctx, role, 'answer', options.text, options.replyTo);
+  // 返事の先は、旗が無ければ、答えた確認を送った【ask-pm】（いくつもあれば、いちばん古い物）。
+  const sent = await toRole(ctx, role, 'answer', options.text, options.replyTo ?? askedPm(ctx, key, pages));
   const marks: string[] = [];
   for (const url of pages) marks.push(...await replyLine(ctx, url, 'answered'));
   return [...recorded, sent, ...marks];

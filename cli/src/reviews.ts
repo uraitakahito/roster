@@ -33,6 +33,11 @@ export interface Review {
    * 席の今の id と違えば、前の回に渡した頼み（roster review list が見分ける）。
    */
   launch?: string
+  /**
+   * 頼みを渡したメッセージの id（【ask-review】の行。1 通でいくつかの頼みを渡した時は、同じ id）。判定（【review】）の返事の先になる。
+   * 前の版の頼みには無い（その判定は、返事の先を持たない）。
+   */
+  ask?: string
   verdict?: Verdict
   /** レビューのページの URL。 */
   page?: string
