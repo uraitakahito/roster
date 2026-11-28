@@ -17,6 +17,7 @@ import { putPage } from './page.ts';
 import { pageOwner } from './reply.ts';
 import { markBrief, markVerdict } from './review-marks.ts';
 import { isPageUrl } from './store.ts';
+import { checkoutPull, ensurePlace, parsePull, placeDir, prunePlaces } from '../review-place.ts';
 
 /** Staff Engineer 担当の役割の名。 */
 export const STAFF: RoleName = 'staff-engineer';
@@ -40,7 +41,7 @@ const escapeHtml = (text: string): string => text.replace(/[&<>"']/g, c => ({ '&
  * レビューの依頼書（レビューの頼みから作る）。課題の概要の節を持つ。文は、見る者の役割で分ける:
  * Staff Engineer 担当には今までの文、Tech Lead 担当（repo の席の頼み）には、自分の計画と境の取り決めに照らす文。
  */
-function staffBriefPage(subject: RoleRecord, asks: Review[]): string {
+function staffBriefPage(subject: RoleRecord, asks: Review[], place?: string): string {
   const e = escapeHtml;
   const link = (url: string): string => `<a href="${e(url)}">${e(url)}</a>`;
   const [who, how] = isRepoSeat(subject)
@@ -57,12 +58,18 @@ function staffBriefPage(subject: RoleRecord, asks: Review[]): string {
     '<ul>',
     ...asks.map(r => `<li>頼み #${r.n}: ${link(r.url)}${r.focus === undefined ? '' : `（見てほしい所: ${e(r.focus)}）`}</li>`),
     '</ul>',
+    ...(place === undefined
+      ? []
+      : [
+          '<h2>自分の場所</h2>',
+          `<p>${e(place)}（席が起きる folder。PR の head は、その下の repo の名の folder に roster review checkout &lt;PR の URL&gt; が出す。clone は roster review git で読む）</p>`,
+        ]),
     '</body></html>',
   ].join('\n');
 }
 
 /** レビューの頼みから依頼書のページを作って置き、URL を返す。置く folder は、頼んだ担当の課題の Key（repo の席は、親の課題の folder）。 */
-export const putStaffBrief = async (ctx: Context, subject: RoleRecord, asks: Review[]): Promise<string> => (await putPage(ctx, { text: staffBriefPage(subject, asks) }, 'brief', subjectOf(subject))).url;
+export const putStaffBrief = async (ctx: Context, subject: RoleRecord, asks: Review[]): Promise<string> => (await putPage(ctx, { text: staffBriefPage(subject, asks, isRepoSeat(subject) ? undefined : placeDir(ctx, subject.key)) }, 'brief', subjectOf(subject))).url;
 
 /**
  * 頼みに、渡した依頼書の URL を書く（渡した後に呼ぶ。渡せなかった回に、依頼書にした事にしない）。
@@ -127,8 +134,10 @@ export interface LaunchStaffOptions {
 export async function launchStaff(ctx: Context, subject: RoleRecord, asks: Review[], options: LaunchStaffOptions): Promise<string[]> {
   // Staff Engineer 担当の記録は、見ている課題の課題管理の課題に書く。
   const issue = options.issue ?? subject.issue;
-  const cwd = options.cwd ?? ctx.project;
-  const settings = resolveSettings(STAFF, { flags: options.flags ?? {}, config: roleDefaults(ctx, STAFF, cwd), env: ctx.env });
+  // 席は、課題ごとの自分の場所（project の folder の外）で起こす。手伝いもそこで起き、PR の head を探しに行かない（t-n4j9 の段 2）。
+  // 設定（model など）は、今までどおり project の folder（か、--cwd で名指した folder）から読む。
+  const cwd = options.cwd ?? ensurePlace(ctx, subject.key);
+  const settings = resolveSettings(STAFF, { flags: options.flags ?? {}, config: roleDefaults(ctx, STAFF, options.cwd ?? ctx.project), env: ctx.env });
   // castlist を設定していれば、起きているかを、写しを置く前に見る（止まっていれば、席を起こさずに止まる）。
   const skew = await requireUp(ctx, '担当は起こしていません。', options.castlistHint);
   // 居場所を作る前に読む（読めなければ、席を起こさずに止まる）。
@@ -205,6 +214,7 @@ export async function askReview(ctx: Context, options: { url: string, focus?: st
   const loose = open.filter(r => r.brief === undefined);
   const review = addReview(ctx, { key: self.key, url: options.url, ...(focus === undefined ? {} : { focus }), by: self.title });
   const asks = [...loose, review];
+  const place = preparePlace(ctx, self.key, options.url, !(seat !== undefined && alive));
   let out: string[];
   if (seat !== undefined && alive) {
     let url: string;
@@ -229,7 +239,7 @@ export async function askReview(ctx: Context, options: { url: string, focus?: st
     seat.brief = url;
     writeRole(ctx, seat);
     // 席の題は、返っていない頼みをみな数える（新しい頼みと +<残りの数>）。
-    out = [sent, ...relabelStaff(ctx, seat, self.key, [...before, ...asks]), ...await markBrief(ctx, url, asks, previous)];
+    out = [sent, ...relabelStaff(ctx, seat, self.key, [...before, ...asks]), ...await markBrief(ctx, url, asks, previous), ...place];
   }
   else {
     try {
@@ -239,6 +249,7 @@ export async function askReview(ctx: Context, options: { url: string, focus?: st
         again: seat !== undefined,
         castlistHint: ['この 1 行は自分で打たない。roster ask tpm で、castlist が止まっていることを TPM 担当に知らせ、起きた後にもう 1 度 roster ask review を打ってください。'],
       });
+      out.push(...place);
     }
     catch (e) {
       // 居場所を作った後の失敗（名乗らなかった など）は、頼みを残す（依頼書は名簿の行で渡してある）。その前に止まった回は、頼みを取り消す（打ち直せる）。
@@ -253,6 +264,25 @@ export async function askReview(ctx: Context, options: { url: string, focus?: st
     }
   }
   return [...out, ...wait(ctx, 'review', reviewLabel([review]).target)];
+}
+
+/**
+ * レビューの席の場所を用意する（t-n4j9 の段 2）: 名簿に居ない古い課題の場所を片付け、この課題の場所を作る。
+ * 席を起こす時（checkout が true）だけ、見る物が PR なら head を出す。席が居る時は出し直さない（前の頼みを見ている途中で作業の木を替えない。
+ * 席が頼みに取りかかる時に roster review checkout を打つ。review-8 の指摘 5）。head を出せなくても頼みは止めない。出す行を返す。
+ */
+function preparePlace(ctx: Context, key: string, url: string, checkout: boolean): string[] {
+  const pruned = prunePlaces(ctx, k => readRole(ctx, staffKey(k)) !== undefined);
+  const dir = ensurePlace(ctx, key);
+  const lines = pruned.map(p => `名簿に居ない課題のレビューの場所を消した: ${p}`);
+  if (!checkout || parsePull(url) === undefined) return lines;
+  try {
+    const { tree, head } = checkoutPull(ctx, key, url);
+    return [...lines, `レビューの場所に PR の head を出した: ${tree}（${head.slice(0, 7)}）`];
+  }
+  catch (e) {
+    return [...lines, `レビューの場所（${dir}）に PR の head を出せませんでした（席が roster review checkout で打ち直せます）: ${e instanceof Error ? e.message : String(e)}`];
+  }
 }
 
 /**

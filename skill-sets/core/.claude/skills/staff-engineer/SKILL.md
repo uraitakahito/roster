@@ -26,7 +26,7 @@ roster hello
 - **課題の担当の依頼書**（何が求められたか）と、`roster hello` が返した課題の写し・課題の中身（`roster issue view <Key>`）を読む。レビューは、これに照らしてする。
 - 見る物を読む:
   - 置き場のページ（計画・提案）: `roster page path <URL>` で読む。
-  - PR: `gh pr view <URL>`・`gh pr diff <URL>` で読む。CI の結果は `roster watch pr <URL> --timeout 0` で読む（今の様子を 1 回見て、待たずに終わる。0 = 通った・10 = 落ちた・20 = まだ・30 = check が付いていない）。CI がまだなら、待たずに、ほかを先に読む。周りのコードは、`git fetch` の後に `git show <commit>:<path>`・`git diff` で読む。**checkout しない・worktree を作らない**（guard が止める）。試験は手元で流さず、CI の結果を見る。
+  - PR: `gh pr view <URL>`・`gh pr diff <URL>` で読む。CI の結果は `roster watch pr <URL> --timeout 0` で読む（今の様子を 1 回見て、待たずに終わる。0 = 通った・10 = 落ちた・20 = まだ・30 = check が付いていない）。CI がまだなら、待たずに、ほかを先に読む。周りのコードは、**自分の場所**（席が起きた folder。`roster ask review` が、その下の repo の名の folder に PR の head を出してある。無ければ `roster review checkout <URL>`）の clone を、`roster review git -- <show|diff|log|grep…>` で読む（file は Read tool と `cat`・`rg` でも読める）。project の本体は `roster review git --main <repo> -- …`。頼みに取りかかる時に `roster review checkout <URL>` を打って、その頼みの head にする（席が居る間に届いた頼みでは、命令は head を出し直さない。同じ head なら何もしない）。素の `git` は打たない（container が書き替えうる clone の `.git` を読まないため。今は記録に残るだけで、段 1b からは guard が止める）。**ほかの担当の worktree に入らない**。試験は手元で流さず、CI の結果を見る。
 - 見る物の repo の `CLAUDE.md`・`.claude/rules/`・教訓（`tasks/lessons.md` など）を読む。決まりに合っているかも見る。
 - 新しい頼みが【ask-review】で届いたら（TPM 担当が起こし直した時などは【brief】で届く）、同じように依頼書を読んで続ける。見直しなら、前のレビューのページも読む。「#<番号> を済ませてから、これをする」とあれば、前の頼みを先に返す（`roster report review` は、いちばん古い依頼書の頼みから返す）。
 
@@ -36,7 +36,7 @@ roster hello
 
 - **求められたことに合っているか**: 課題の担当の依頼書と課題の項ごとに、合う・合わない・見ていない、を出す。依頼に無いことを足していないか、依頼の一部を落としていないかも見る。
 - **計画・提案**: 段の順・直す所の抜け・前提の誤り・試し方・戻し方・もっと小さく済む道が無いか。挙げた file や行は、自分で開いて確かめる。
-- **PR**: 差分のバグ探しは、Claude Code の `/code-review` を使う（要れば `/security-review` も）。その指摘は、自分で差分を開いて確かめてから載せる。`/code-review` が見ない所（依頼書・計画との合い、repo の決まり、試験が求めを確かめているか、文書とコードの食い違い）は自分で見る。
+- **PR**: 差分のバグ探しは、Claude Code の `/code-review` を、自分の場所（席が起きた folder）のまま使う（手伝いも同じ folder で起き、PR の head を手元に持つ）（要れば `/security-review` も）。その指摘は、自分で差分を開いて確かめてから載せる。`/code-review` が見ない所（依頼書・計画との合い、repo の決まり、試験が求めを確かめているか、文書とコードの食い違い）は自分で見る。
 - **見ていない所を隠さない**: 読めなかった物・時間の都合で見なかった所は、レビューのページの「見ていない所」に書く。材料が足りず判じられなければ、判定は「見られなかった」にする（「よい」と見分ける）。
 - 見る物が読めない・依頼書が足りない時は、判定「見られなかった」で返すか、`roster ask tpm "<何が足りないか>" --waiting-for "<何を>"`。課題の担当に、じかに問いを送る道は無い（じかに届くのは、頼みと判定だけ）。
 

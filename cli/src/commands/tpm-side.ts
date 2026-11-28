@@ -11,7 +11,8 @@ import { lastAuditLine } from '../audits.ts';
 import { openLine } from '../incidents.ts';
 import { openReviews } from '../reviews.ts';
 import { resolveSettings } from '../settings.ts';
-import { allRoles, assertKey, isRepoSeat, isStaffKey, LOCAL_KEY, readRole, removeRole, repoSeats, requireTpmSide, staffKey, type RoleRecord, type TpmRecord } from '../roster.ts';
+import { removePlace } from '../review-place.ts';
+import { allRoles, assertKey, isRepoSeat, isStaffKey, LOCAL_KEY, readRole, removeRole, repoSeats, requireTpmSide, staffKey, subjectOfStaffKey, type RoleRecord, type TpmRecord } from '../roster.ts';
 import { readSkillSets, skillSetDir, TpmError } from '../skill-sets.ts';
 import { route } from '../tracker/routed.ts';
 import { findHook, oldBannerConfigNotice, staleHook } from './banner.ts';
@@ -306,7 +307,9 @@ export async function closeSeat(ctx: Context, record: RoleRecord): Promise<strin
   // この受け手の取り口と残りを消し、残っていた物を記録する。
   const mail = await clearSeat(ctx, record);
   removeRole(ctx, record.key);
-  return [`閉じた: ${record.title}${alive ? `（${record.address}）` : '（居場所はもう無かった）'}`, ...castlist, ...mail];
+  // レビューの席の場所（clone）も消す（t-n4j9 の段 2）。
+  const place = record.role === 'staff-engineer' && isStaffKey(record.key) ? removePlace(ctx, subjectOfStaffKey(record.key)) : undefined;
+  return [`閉じた: ${record.title}${alive ? `（${record.address}）` : '（居場所はもう無かった）'}`, ...castlist, ...mail, ...(place === undefined ? [] : [`レビューの場所を消した: ${place}`])];
 }
 
 /**
