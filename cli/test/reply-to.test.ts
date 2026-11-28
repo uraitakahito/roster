@@ -133,11 +133,28 @@ describe('席を起こす時の頼みの行（launch）の読み方', () => {
     expect(last(w, 'done')?.replyTo).toBe(idOf(last(w, 'brief')));
   });
 
-  test('別の依頼書の行（前の担当の分）からは、id を借りない', async () => {
+  test('別の依頼書の行・別の宛先の行（前の担当の分）からは、id を借りない', async () => {
     const w = await started();
     launchRow(w, 'launch-old', B(9));
+    w.tpm.state.append('log.jsonl', { at: '2026-11-20T11:00:00.000Z', key: KEY, heading: 'brief', from: TPM_TITLE, to: 'file:0', text: `【brief】${BRIEF}`, id: 'launch-before', carrier: 'launch', launch: true } satisfies Sent);
     await reportDone(w.se, { ...DONE, summary: '1 つ目' });
     expect(last(w, 'done')?.replyTo).toBeUndefined();
+  });
+
+  test('Staff Engineer 担当の席を起こす時の頼みの行（【ask-review】）も積まない: 開いている頼みは 1 つで、【review】1 つで済む', async () => {
+    const w = await started();
+    const plan = await w.put(w.se, 'plan');
+    await askReview(w.se, { url: plan, wait: 0 });
+    const staff = w.staffAt('file:2');
+    await hello(staff);
+    const brief = readReviews(w.tpm)[0]?.brief ?? '';
+    w.tpm.state.append('log.jsonl', { at: '2026-11-20T11:59:30.000Z', key: KEY, heading: 'ask-review', from: 'SWE AI-8: 計画と実装', to: 'file:2', text: `【ask-review】${brief} 頼み: #1 ${plan}`, id: 'launch-ask', carrier: 'launch', launch: true, peer: true } satisfies Sent);
+    staff.now = () => new Date('2026-11-20T12:05:00.000Z');
+    await reportReview(staff, { url: await w.put(staff, 'review'), verdict: 'approve', summary: 'よい' });
+    // 返していない頼みは、頼みの記録（reviews/）で数える。行が在っても 2 つにならず、次の【review】は送れない
+    staff.now = () => new Date('2026-11-20T12:06:00.000Z');
+    await expect(reportReview(staff, { url: await w.put(staff, 'review'), verdict: 'approve', summary: 'もう 1 度' })).rejects.toThrow(/返していないレビューの頼みがありません/);
+    expect(rows(w, 'review')).toHaveLength(1);
   });
 });
 
@@ -160,6 +177,16 @@ describe('【end】の返事の先は、受けた【dismiss】', () => {
     await dismiss(w.tpm, KEY, { handover: false });
     await reportEnd(w.se, { prs: [], removed: [], left: 'なし' });
     expect(last(w, 'end')?.replyTo).toBe(idOf(last(w, 'dismiss')));
+  });
+
+  test('後から足された行（file の末尾に入る）が在っても、送った時刻の順で引く', async () => {
+    const w = await started();
+    await reportDone(w.se, { ...DONE, summary: '済み' });
+    await dismiss(w.tpm, KEY, { handover: false });
+    const real = idOf(last(w, 'dismiss'));
+    w.tpm.state.append('log.jsonl', { at: '2026-11-20T10:00:00.000Z', key: KEY, heading: 'dismiss', from: TPM_TITLE, to: 'file:1', text: '【dismiss】前の物', id: 'old-dismiss', carrier: 'nats' } satisfies Sent);
+    await reportEnd(w.se, { prs: [], removed: [], left: 'なし' });
+    expect(last(w, 'end')?.replyTo).toBe(real);
   });
 });
 

@@ -594,7 +594,8 @@ function openBriefs(role: RoleRecord, address: string, log: Sent[], seenAt: Seen
   // 前の版で起こした担当（名簿に firstBrief の欄が無い）の最初の依頼書は数えない（止めすぎるより、見逃す側に倒す）。
   const first = role.firstBrief;
   // 起こす時の頼みの行（launch）が在れば、その id を最初の依頼書に借りる（【done】の返事の先になる）。行そのものは、下で積まない（2 つに数えない）。
-  const launched = first === undefined ? undefined : log.findLast(l => l.launch === true && l.heading === 'brief' && l.key === role.key && briefUrl(l) === first)?.id;
+  // 宛先も見る（担当の交代で、同じ依頼書の URL のまま起こし直した時に、前の席の行から借りない）。
+  const launched = first === undefined ? undefined : log.findLast(l => l.launch === true && l.heading === 'brief' && l.key === role.key && l.to === address && briefUrl(l) === first)?.id;
   let open: OpenBrief[] = first === undefined ? [] : [{ url: first, ...(launched === undefined ? {} : { id: launched }), ...(role.helloAt === undefined ? {} : { seen: role.helloAt }) }];
   // 送った時刻の順に読む（同じ時刻は、file の順のまま）。後から足した行（置いた直後に落ちた送る命令の行。commands/mail.ts の tidyMail）は
   // file の末尾に入るので、file の順に読むと、足した【dismiss】・【brief】が、時刻と違う所で効く。
@@ -1173,9 +1174,14 @@ export async function reportEnd(ctx: Context, options: EndOptions): Promise<stri
 
 /** その担当（今の居場所）が受けた、いちばん新しい【dismiss】の id（【end】の返事の先）。無ければ undefined（【dismiss】を待たずに終える役割など）。 */
 function lastDismiss(ctx: Context, self: RoleRecord): string | undefined {
+  // 【dismiss】を受けていない席（【dismiss】を待たずに終える役割・【dismiss】の後に【brief】で戻された席）は、前の【dismiss】を先にしない。
+  if (self.dismissed === undefined) return undefined;
   const assigned = fromAssigner(self);
-  return ctx.state.lines<Sent>('log.jsonl').findLast(l => l.heading === 'dismiss' && l.key === self.key && assigned(l) && (self.address === undefined || l.to === self.address))?.id;
+  return byTime(ctx.state.lines<Sent>('log.jsonl')).findLast(l => l.heading === 'dismiss' && l.key === self.key && assigned(l) && (self.address === undefined || l.to === self.address))?.id;
 }
+
+/** 送った時刻の順（同じ時刻は file の順のまま）。後から足した行（commands/mail.ts の tidyMail）は file の末尾に入るので、file の順では引かない。 */
+const byTime = (log: Sent[]): Sent[] => [...log].sort((a, b) => a.at.localeCompare(b.at));
 
 /** Dependabot の PR だけで使う見出し。recreated は、新しい番号の題に替える。 */
 export async function reportDependabot(ctx: Context, id: 'merge-request' | 'not-yet' | 'recreated', options: { text: string, title?: string }): Promise<string[]> {
@@ -1304,10 +1310,15 @@ async function answeredPages(ctx: Context, key: string, options: AnswerOptions):
 /** 【ask-pm】の行の、確認のページの URL（本文の頭）。 */
 const askPmUrl = (l: Pick<Sent, 'text'>): string => l.text.slice('【ask-pm】'.length).split(' ')[0] ?? '';
 
-/** その Key の担当が、urls の確認のページを送った【ask-pm】のうち、いちばん古い物の id（【answer】と、置き換える【ask-pm】の返事の先）。無ければ undefined。 */
+/**
+ * その Key の担当が、urls の確認のページを送った【ask-pm】の id（【answer】と、置き換える【ask-pm】の返事の先）。無ければ undefined。
+ * 同じページを 2 度送っていれば新しい方（古い方は、答え済みかもしれない）。ページがいくつもあれば、そのうちいちばん古い物。
+ */
 function askedPm(ctx: Context, key: string, urls: string[]): string | undefined {
   if (urls.length === 0) return undefined;
-  return ctx.state.lines<Sent>('log.jsonl').find(l => l.heading === 'ask-pm' && l.key === key && urls.some(u => samePage(ctx, askPmUrl(l), u)))?.id;
+  const asked = byTime(ctx.state.lines<Sent>('log.jsonl')).filter(l => l.heading === 'ask-pm' && l.key === key);
+  const latest = urls.flatMap(u => asked.findLast(l => samePage(ctx, askPmUrl(l), u)) ?? []);
+  return byTime(latest)[0]?.id;
 }
 
 /** Product Manager の答えを返す。課題があれば、返す前に「決定」の記録を書く。返した後、置き場の返事待ちのページを答えたにする。 */

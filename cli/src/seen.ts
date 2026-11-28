@@ -76,6 +76,7 @@ const earliest = (candidates: (Seen | undefined)[]): Seen | undefined =>
  * NATS で運んだ行（carrier が nats）は、手元の渡した記録（delivered.jsonl）だけで決める: hook が渡した行があれば、
  * そのいちばん早い時刻に届いた。命令の結果に出した行（output）は、見せた時刻。どちらも無ければ undefined
  * （配りの口にまだ残っているか、届かないまま終わった物。どちらも、受け手は見ていない）。
+ * 席を起こす時の頼みの行（carrier が launch）も、下の古い行の道で読む（live で読む依頼書の数えと送る前の検査は、その行を先に飛ばす）。
  * 古い行（carrier の無い行。前の版で cmux が運んだ物）は、配った時刻（道具の記録の写しの deliveries.jsonl。無ければ前の版の行の delivered:true）と、
  * 見せた時刻（shown/ の受け手の file）の早い方。どれも、もう増えない古い記録（読むだけ。連携の道具には聞かない）。
  * どれも無い時は、live（送る前の検査と依頼書の数え）なら送った時刻に倒す（assumed。古い行の受け手の席は、もう残っていない）。
