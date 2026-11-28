@@ -877,10 +877,13 @@ export function removeApproval(state: State, name: string): void {
   state.remove(approvalFile(name));
 }
 
-/** hook の標準入力（PreToolUse）から、shell の命令を取り出す。Bash でなければ undefined。 */
+/** shell の命令を動かす道具（Monitor も入力の command を shell で動かす。t-n4j9 の段 0）。 */
+export const SHELL_TOOLS = ['Bash', 'Monitor'] as const;
+
+/** hook の標準入力（PreToolUse）から、shell の命令を取り出す。SHELL_TOOLS でなければ undefined。 */
 export function commandOf(stdin: string): string | undefined {
   const input = JSON.parse(stdin) as { tool_name?: string, tool_input?: { command?: unknown } };
-  if (input.tool_name !== 'Bash' || typeof input.tool_input?.command !== 'string') return undefined;
+  if (!(SHELL_TOOLS as readonly string[]).includes(input.tool_name ?? '') || typeof input.tool_input?.command !== 'string') return undefined;
   return input.tool_input.command;
 }
 
@@ -932,7 +935,7 @@ export function judgeWrite(call: WriteCall, role: RoleName | undefined, roots: P
 
 /**
  * 担当の claude に渡す settings（--settings）。道具の前に roster guard を呼ぶ hook。hook の命令は shell が読むので、path を引用する。
- * 見る道具は Bash。読むだけの担当の席だけ、file を書き替える道具（WRITE_TOOLS）も見る（ほかの担当では、書くたびに hook を動かさない）。
+ * 見る道具は、shell の命令を動かす道具（SHELL_TOOLS: Bash・Monitor）。読むだけの担当の席だけ、file を書き替える道具（WRITE_TOOLS）も見る（ほかの担当では、書くたびに hook を動かさない）。
  * どの席にも、session の始まりと終わりに castlist に送る hook（roster castlist session-start・session-end）を付ける。castlist を設定していなければ、その命令は何もしない。
  * Auditor の席には、session の始まりに roster audit fresh を呼ぶ hook も付ける。
  * どの席にも、メッセージを NATS で渡す hook（roster mail …）を、その後ろに付ける:
@@ -946,7 +949,8 @@ export function guardSettings(tpmBin: string, role?: RoleName): string {
   const hook = (command: string) => ({ type: 'command', command: `${shellQuote(tpmBin)} ${command}` });
   // 待つ命令: 背景で動かし（async）、exit 2 で終わった時に stderr の字で session を起こさせる（asyncRewake）。待つのは長くて 1 日。
   const waiting = { type: 'command', async: true, asyncRewake: true, timeout: 86400, command: `${shellQuote(tpmBin)} mail wait` };
-  const matcher = readOnly(role) === undefined ? 'Bash' : ['Bash', ...WRITE_TOOLS].join('|');
+  // どの席も、shell の命令を動かす道具（Bash・Monitor）を見る（Monitor で打った命令が guard を通らなかった。台帳 #416）。
+  const matcher = (readOnly(role) === undefined ? [...SHELL_TOOLS] : [...SHELL_TOOLS, ...WRITE_TOOLS]).join('|');
   return JSON.stringify({
     hooks: {
       PreToolUse: [{ matcher, hooks: [hook('guard')] }],

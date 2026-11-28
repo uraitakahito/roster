@@ -25,6 +25,27 @@ export function recordGuardStop(ctx: Context, command: string, reason: string): 
   ctx.state.append('guard.jsonl', { at: ctx.now().toISOString(), ...actor(ctx.env), command: command.slice(0, COMMAND_LIMIT), reason } satisfies GuardStop);
 }
 
+/** レビューの席の、通す側の表に無い命令 1 件（review-guard.jsonl。段 1a は止めずに記録するだけ。t-n4j9）。 */
+export interface ReviewGuardHit {
+  at: string
+  by: string
+  role: string
+  /** 打った手: 席なら main、手伝いなら hook の入力の agent_type（無ければ agent_id）。 */
+  agent: string
+  /** 道具（Bash・Monitor）。 */
+  tool: string
+  command: string
+  /** 表に無い形の訳。 */
+  outside: string[]
+  /** redirect の書く先（/dev/null を除く）。 */
+  writes: string[]
+}
+
+/** レビューの席の、表に無い命令を review-guard.jsonl に残す（guard.jsonl と分けるのは、止めた件の数に混ぜないため）。 */
+export function recordReviewGuardHit(ctx: Context, hit: Omit<ReviewGuardHit, 'at' | 'by' | 'role'>): void {
+  ctx.state.append('review-guard.jsonl', { at: ctx.now().toISOString(), ...actor(ctx.env), ...hit, command: hit.command.slice(0, COMMAND_LIMIT) } satisfies ReviewGuardHit);
+}
+
 /**
  * 入口の検査の種類: 読んでいないメッセージ・merge していない PR・状態を読めない PR・同じメッセージの 2 度送り・TPM 担当が送って済んでいない物・
  * 前の監査の文脈が残ったまま始めようとした監査・担当の session から打った TPM 担当だけの命令・
