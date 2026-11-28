@@ -149,6 +149,24 @@ describe('Tech Lead 担当から下へ（roster seat brief・notify・dismiss）
     expect(w.posted('file:2').at(-1)?.text).toBe(`【brief】${BRIEF2} 課題の写し: http://127.0.0.1:8801/p/AI-36/issue-9.html`);
   });
 
+  test('席のまだ応えていない【ask-lead】が 1 つなら、Tech Lead 担当の【notify】がそれを返事の先にする（--no-reply なら付けない）', async () => {
+    const w = await split();
+    const rows = (): { id: string, heading: string, replyTo?: string }[] => w.tpm.state.lines('log.jsonl');
+    w.pass(60_000);
+    await askLead(w.seat, { text: '境の取り決めの欄の名は？', waitingFor: '欄の名' });
+    const asked = rows().findLast(l => l.heading === 'ask-lead')?.id ?? 'no-ask';
+    w.pass(60_000);
+    expect(await seatNotify(w.lead, 'pagetray', { text: '別の知らせ', noReply: true })).toEqual(['送った: 【notify】→ file:2（相手の手が空いた時に届く。送り直さない）']);
+    expect(rows().findLast(l => l.heading === 'notify')?.replyTo).toBeUndefined();
+    w.pass(60_000);
+    await askLead(w.seat, { text: 'もう 1 度: 欄の名は？', waitingFor: '欄の名' });
+    const again = rows().findLast(l => l.heading === 'ask-lead')?.id ?? 'no-ask';
+    w.pass(60_000);
+    expect(await seatNotify(w.lead, 'pagetray', { text: '欄の名は actorRef' })).toEqual(['送った: 【notify】→ file:2（相手の手が空いた時に届く。送り直さない）', `返事の先: 【ask-lead】もう 1 度: 欄の名は？（id ${again}）を付けた`]);
+    expect(rows().findLast(l => l.heading === 'notify')?.replyTo).toBe(again);
+    expect(again).not.toBe(asked);
+  });
+
   test('席を起こす時の依頼書は、印の行で残り（送り手は Tech Lead 担当）、席の最初の【done】がそれを先にする', async () => {
     const w = await split();
     const rows = (): { id: string, heading: string, key: string, from: string, launch?: true, replyTo?: string, sender?: { key: string } }[] => w.tpm.state.lines('log.jsonl');

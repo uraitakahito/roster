@@ -121,9 +121,10 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
     .option('--supersede', '済んでいない前の依頼書を取り消す（本文に「取り消す: …」と載る）')
     .option('--after', '済んでいない前の依頼書を済ませてから、これをさせる（本文に載る）')
     .action(async (name: string, options: { brief: string, note?: string, supersede?: boolean, after?: boolean }) => print(await seatBrief(createContext(), name, options)));
-  seat.command('notify <name> <text>').description('【notify】repo の席に、知らせ・問いへの答えを送る（返事は要らない）')
-    .option('--reply-to <id>', '返事の先のメッセージの id')
-    .action(async (name: string, text: string, options: { replyTo?: string }) => print(await seatNotify(createContext(), name, { text, ...options })));
+  seat.command('notify <name> <text>').description('【notify】repo の席に、知らせ・問いへの答えを送る（返事は要らない）。席に、まだ応えていない【ask-lead】が 1 つあれば、それを返事の先にする')
+    .option('--reply-to <id>', '返事の先のメッセージの id（まだ応えていない問いがいくつもある時に、名指す）')
+    .option('--no-reply', '問いへの返事でない（返事の先を付けない）')
+    .action(async (name: string, text: string, options: { replyTo?: string, reply: boolean }) => print(await seatNotify(createContext(), name, { text, ...(options.replyTo === undefined ? {} : { replyTo: options.replyTo }), ...(options.reply ? {} : { noReply: true }) })));
   seat.command('dismiss <name>').description('【dismiss】repo の席に、片付けの指示を送る（席は【end】を返す。受けたら roster seat close）')
     .option('--supersede', '済んでいない依頼書・まだ見ていないメッセージを取り消す')
     .action(async (name: string, options: { supersede?: boolean }) => print(await seatDismiss(createContext(), name, options)));

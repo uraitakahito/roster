@@ -85,7 +85,7 @@ roster seat add <名> --brief <依頼書の URL> [--cwd <受け持つ repo の f
 | すること | 命令 |
 |---|---|
 | 次の依頼書を送る | `roster seat brief <名> --brief <URL> [--note "<一言>"]`。済んでいない前の依頼書があれば止まる。済ませてからさせるなら `--after`、取り消すなら `--supersede` |
-| 知らせる・問い（【ask-lead】）に答える | `roster seat notify <名> "<本文>" [--reply-to <id>]` |
+| 知らせる・問い（【ask-lead】）に答える | `roster seat notify <名> "<本文>" [--reply-to <id>\|--no-reply]`（席のまだ応えていない【ask-lead】が 1 つなら、命令がそれを返事の先にする。問いへの答えでない知らせは `--no-reply`。問いが 2 つ以上あると止まるので `--reply-to <id>` で名指す） |
 | 片付けさせる | `roster seat dismiss <名>`（下の 8） |
 
 - 「受け取った」だけの返事は送らない。返すのは、中身（答え・決定・次の手）がある時だけ。
@@ -98,7 +98,7 @@ repo の席の成果・merge・問い・レビューの頼みは、TPM 担当を
 
 | 見出し | すること |
 |---|---|
-| 【ask-lead】 | 計画と境の取り決めをもとに答える（`roster seat notify <名> "<答え>" --reply-to <id>`）。Product Manager の判断が要る物は、あなたが確認のページにまとめて `roster ask pm` で送り、答え（【answer】）を席に伝える |
+| 【ask-lead】 | 計画と境の取り決めをもとに答える（`roster seat notify <名> "<答え>"`。返事の先は命令が付ける）。Product Manager の判断が要る物は、あなたが確認のページにまとめて `roster ask pm` で送り、答え（【answer】）を席に伝える |
 | 【ask-review】 | 下の 6 |
 | 【merged】【doc-fix】 | merge の順と、合わせの始め時を見る。返事は要らない |
 | 【done】 | 成果のページを読む。続きがあれば `roster seat brief`、無ければ `roster seat dismiss` |

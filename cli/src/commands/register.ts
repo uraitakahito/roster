@@ -117,9 +117,10 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
     .option('--url <URL>', '答えた確認のページ（何度でも。その Key の返事待ちが 2 枚以上ある時に、どれへの答えかを書く）', collect, [] as string[])
     .option('--all', 'その Key の返事待ちのページの、みなへの答え')
     .action(async (key: string, text: string, options: { replyTo?: string, url: string[], all?: boolean }) => print(await answer(createContext(), key, { text, urls: options.url, ...(options.replyTo === undefined ? {} : { replyTo: options.replyTo }), ...(options.all ? { all: true } : {}) })));
-  program.command('notify <key> <text>').description('TPM 担当が【notify】を送る（返事は要らない）')
-    .option('--reply-to <id>', '返事の先のメッセージの id')
-    .action(async (key: string, text: string, options: { replyTo?: string }) => print(await notify(createContext(), key, { text, ...options })));
+  program.command('notify <key> <text>').description('TPM 担当が【notify】を送る（返事は要らない）。相手に、まだ応えていない問いが 1 つあれば、それを返事の先にする')
+    .option('--reply-to <id>', '返事の先のメッセージの id（まだ応えていない問いがいくつもある時に、名指す）')
+    .option('--no-reply', '問いへの返事でない（返事の先を付けない）')
+    .action(async (key: string, text: string, options: { replyTo?: string, reply: boolean }) => print(await notify(createContext(), key, { text, ...(options.replyTo === undefined ? {} : { replyTo: options.replyTo }), ...(options.reply ? {} : { noReply: true }) })));
   program.command('dismiss <key>').description('TPM 担当が【dismiss】を送る')
     .option('--handover', '担当の交代のため（担当は課題を閉じない）', false)
     .option('--supersede', '済んでいない依頼書・まだ見ていないメッセージを取り消して送る（本文に「取り消す: …」と載る）', false)
