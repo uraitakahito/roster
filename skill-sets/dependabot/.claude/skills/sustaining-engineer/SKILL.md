@@ -53,7 +53,7 @@ node "${CLAUDE_SKILL_DIR}/../../../../../cli/src/release-age.ts" <config.owner>/
 
 - CI が緑なら、直しは無し。4 へ。
 - 赤なら、**この repo の git worktree** で直す。本体の checkout は触らない・pull もしない。置き場所は `rules.md` に従う。worktree は PR の branch を追う手元の branch で作る（`git worktree add -b <PR の branch の名> <置き場所> --track origin/<PR の branch の名>`）。
-- 直しは `roster push` で push する（確かめをみな流し、通った時だけ、同じ名の branch（＝ PR の branch）へ push する。素の `git push` は guard が止める。終了コードと打ち方は `/software-engineer` の 2）。repo に確かめの宣言が無くて断られたら、`--no-checks` を自分で付けず `roster ask tpm` で聞く。
+- 直しは `roster push` で push する（確かめをみな流し、通った時だけ、同じ名の branch（＝ PR の branch）へ push する。素の `git push` は guard が止める。終了コードと打ち方は `/software-engineer` の 2）。repo に確かめの宣言が無くて断られたら、`--no-checks` を自分で付けず `roster ask tpm` で聞く。`main に後から足された確かめ` と出たら（古い main から切られた PR。確かめの一覧は push する commit の物を読む）、worktree で `git merge origin/main` してから `roster push` で打ち直す。
 - Dependabot の PR に commit を足すか、別の PR にするかは、その repo の作法に従う（`git log` と最近の PR を見る）。
 - `@dependabot rebase` を打つ前に、下の 3a を読む。
 - `git add -A`・`git add .` は使わない。ファイルを名指して add する。

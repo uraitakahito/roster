@@ -68,7 +68,8 @@ roster push --no-checks "<訳>"    # 確かめの宣言の無い repo だけ（�
 - 確かめは、落ちても残りをみな流す（1 度で全部の落ちを見せる）。1 つにつき時間の限りがあり（既定 600 秒。設定の `timeoutSeconds`）、過ぎたら止めて落ちた（時間切れ）とする（止まったまま返らない確かめで、裏の `roster push` が返らなくならないため）。出力は状態の folder の `push/` の下の log に書き、画面には 1 つにつき 1 行（名・終了コード・秒）を出す。
 - 初めに HEAD の sha を取り、確かめの後に HEAD と追われた file が同じかをもう 1 度見てから、その sha を push する（裏で流す間に commit を足しても、確かめていない commit は出ない）。git に入っていない file（`.gitignore` に無い物）は、確かめの木には在るが commit には無いので、名を注意に出す（断らない）。
 - push の先は、いつも手元の branch と同じ名（upstream では決めない。`origin/main` から `-b` で切った branch は `origin/main` を追うため）。push の後、upstream を push した branch に付け直す。Dependabot の PR を直す時は、PR の branch と同じ名の手元の branch を作る（`git worktree add -b <PR の branch の名> <置き場所> --track origin/<PR の branch の名>`）。
-- 1 回につき 1 行が、状態の folder の `pushes.jsonl` に残る（時刻・Key・repo・先・sha・確かめごとの終了コードと秒・結果・`--no-checks` の訳）。確かめが落ちて止めた回（10）は、前なら CI で落ちていた回として数えられる。
+- 確かめの一覧は push する commit の物を読み（[設定](/configuration/#push-の前の確かめpush)）、branch が一覧に加えた変更を、確かめの前に `確かめの一覧の差（main と分かれた所と比べて）: 消した: …／変えた: …（run・env）／足した: …` の 1 行で出す。消した・変えたがあれば、PR の本文に差と訳を書き、レビューを必ず頼む案内も出す。push の欄ごと消した branch は、宣言の無い repo と同じに断る（`--no-checks "<訳>"` なら push する）。main に後から足され、branch に無い確かめは、流さずに注意に名を出す（取り込めば流れる）。
+- 1 回につき 1 行が、状態の folder の `pushes.jsonl` に残る（時刻・Key・repo・先・sha・確かめごとの終了コードと秒・結果・`--no-checks` の訳・一覧の差 `configDiff`（`base`（`merge-base` か `origin/main`）・`removed`・`changed`・`added`・`sectionRemoved`・`mainAdded`・`baseUnreadable`。差が無ければ無い））。確かめが落ちて止めた回（10）は、前なら CI で落ちていた回として数えられる。
 
 ## 移す手順
 
