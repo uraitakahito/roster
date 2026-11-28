@@ -266,6 +266,8 @@ const ENV_READERS = new Set(['git', 'gh', 'pnpm', 'npx', 'python', 'python3', 'n
 const SHELL_WORDS = new Set(['{', '}', 'do', 'done', 'then', 'else', 'fi', '!']);
 /** 頭の代入（FOO=1）。 */
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+/** `${名}` のほかの形の展開（引用の中の字も当てる。止める側に倒れる）。 */
+const EXPANSION_BEYOND_NAME = /\$\{(?![A-Za-z_][A-Za-z0-9_]*\})/;
 
 /**
  * python・node の、命令を起こす呼び出しの字（案 B。t-y67q）。止める側を並べる表なので、並べていない API（言い換え・版で増える API）は通る。言語の版を上げる時に見直す。
@@ -296,9 +298,10 @@ function withoutShellWords(words: string[]): string[] {
 /** git の命令（書いたままの語）が、字を命令として動かさない形か。 */
 function gitPasses(words: string[]): boolean {
   // 命令の名を探す前に、設定の旗を語の全体で見る（`git -c … --help` は命令の名が無く、help が設定の命令を動かす。review-4 の指摘 3）。
-  if (words.some(a => a === '-c' || abbreviates(a, GIT_CONFIG_FLAGS))) return false;
   const git = gitCommand(words);
   if (git === undefined) return false;
+  // 設定の旗は命令の名より前だけ（命令の後ろの -c は git grep -c などの別の旗）。
+  if (words.slice(1, words.length - git.args.length - 1).some(a => a === '-c' || abbreviates(a, GIT_CONFIG_FLAGS))) return false;
   if (git.args.some(a => abbreviates(a, GIT_RUN_FLAGS) || (git.name === 'grep' && /^-[A-Za-z]*O/.test(a)))) return false;
   return GIT_TEXT.has(git.name);
 }
@@ -383,12 +386,15 @@ const OUTPUT_FILE = /\.(?:log|txt|out)$/;
 
 /**
  * 字の含みを効かせなくてよい命令か（t-y67q の案 B）: どの単純な命令も passesText に当たり、引用しない here-document に置き換えが無い時。
- * 設定を読む道具（git・pnpm・npx）は、同じ命令に、log でない file への書き出し（redirect・tee）か python・node があれば外す
+ * 設定を読む道具（git・gh・pnpm・npx）は、同じ命令に、log でない file への書き出し（redirect・tee）か python・node があれば外す
  * （.git/config・.git/hooks・package.json を書いて読ませる形。python は書く先を読めない。review-2 の指摘 1）。
  */
 function textStays(command: string): boolean {
   const { commands, writes, heredocRuns, marked } = scanCommand(command);
   if (heredocRuns) return false;
+  // `$名`・`${名}` のほかの展開（`${名:=字}`・`${名::=字}`・`${(…)名}` など）は、変数を替えうるので、書き方を並べずに類で止める（review-5 の指摘 1）。
+  // 見るのは命令の語だけ（here-document の本文は shell が展開しないか、引用しない本文なら字のまま書く先に入るだけ。python で書き替える code の `${a.b}` で止めない）。
+  if (commands.some(words => words.some(word => EXPANSION_BEYOND_NAME.test(word)))) return false;
   // 命令の名の位置の置き換え（`$(…)echo`）は、出力が命令の語になる（review-4 の指摘 8）。
   if (marked.some(words => (withoutShellWords(words).find(w => !ASSIGNMENT.test(w)) ?? '').includes(SUBSTITUTED))) return false;
   const tees = commands.flatMap((raw) => {
@@ -406,7 +412,8 @@ function textStays(command: string): boolean {
     if (words[0] === 'printf') return words.flatMap((w, i) => (w === '-v' ? [words[i + 1] ?? ''] : w.startsWith('-v') ? [w.slice(2)] : []));
     return words.length > 0 && words.every(w => ASSIGNMENT.test(w)) ? words.map(w => w.slice(0, w.indexOf('='))) : [];
   });
-  if (assigned.includes('PATH') || (assigned.length > 0 && names.some(name => ENV_READERS.has(name)))) return false;
+  // PATH は zsh の path（結び付いた配列）も（review-5 の指摘 2）。
+  if (assigned.some(name => name.toUpperCase() === 'PATH') || (assigned.length > 0 && names.some(name => ENV_READERS.has(name)))) return false;
   return commands.every(words => passesText(words, command, configWrites));
 }
 

@@ -39,16 +39,21 @@ function heredocMark(s: string, i: number): { doc: Heredoc | undefined, next: nu
   return { doc: { end: m[1] ?? m[2] ?? (m[3] ?? '').replace(/['"\\]/g, ''), strip, quoted }, next: j + m[0].length };
 }
 
-/** 改行の後ろ（i）から、here-document の中身を、終わりの印の行まで（いくつもあれば順に）読み飛ばした位置。 */
-function skipHeredocBodies(s: string, i: number, docs: Heredoc[]): number {
+/**
+ * 改行の後ろ（i）から、here-document の中身を、終わりの印の行まで（いくつもあれば順に）読み飛ばした位置。
+ * strict なら、終わりの印の行が無い時に -1 を返す（命令の置き換えの中の `$((1<<2))` を here-document と読み違えた時に、読み飛ばさないため。review-5 の指摘 3）。
+ */
+function skipHeredocBodies(s: string, i: number, docs: Heredoc[], strict = false): number {
   let at = i;
   for (const doc of docs) {
-    while (at < s.length) {
+    let found = false;
+    while (at < s.length && !found) {
       const end = s.indexOf('\n', at);
       const line = s.slice(at, end === -1 ? s.length : end);
       at = end === -1 ? s.length : end + 1;
-      if ((doc.strip ? line.replace(/^\t+/, '') : line) === doc.end) break;
+      found = (doc.strip ? line.replace(/^\t+/, '') : line) === doc.end;
     }
+    if (strict && !found) return -1;
   }
   return at;
 }
@@ -179,7 +184,8 @@ class Lexer {
         else if (c === quote) quote = undefined;
       }
       else if (c === '\n' && docs.length > 0) {
-        j = skipHeredocBodies(s, j + 1, docs) - 1;
+        const after = skipHeredocBodies(s, j + 1, docs, true);
+        if (after !== -1) j = after - 1;
         docs.length = 0;
       }
       else if (s.startsWith('<<<', j)) j += 2;

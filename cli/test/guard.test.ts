@@ -82,6 +82,10 @@ describe('scanCommand（t-y67q）', () => {
     expect(splitCommands('git commit -m "$(GIT_EDITOR=x git commit --amend)"')).toEqual([['git', 'commit', '--amend'], ['git', 'commit', '-m', '']]);
   });
 
+  test('命令の置き換えの中の算術の << は、終わりの印の行が無ければ here-document と読まない（review-5 の指摘 3）', () => {
+    expect(scanCommand('x="$(\necho $((1<<2))\n)"\nbash -c \'y\'').commands.at(-1)).toEqual(['bash', '-c', 'y']);
+  });
+
   test('命令の置き換えの中の here-document の本文は、字のまま読み飛ばす（本文の \' と ) で崩れない。review-3 の指摘 4）', () => {
     const body = 'gh pr create --title t --body "$(cat <<\'EOF\'\nit\'s done (see #1)\nEOF\n)"';
     expect(scanCommand(body).commands).toEqual([['cat'], ['gh', 'pr', 'create', '--title', 't', '--body', '']]);
@@ -1612,6 +1616,9 @@ describe('字の含みを効かせる形（t-y67q）', () => {
     ['git diff --text（--textconv の略でない）', `git diff --text | grep "${C}"`],
     ['引用した印が数字の here-document', `cat > /tmp/x <<'1'\n$(${C})\n1`],
     ['node -e（呼び出しの無い字）', `node -e "console.log('${C}')"`],
+    ['git grep -c（命令の後ろの -c は設定の旗でない）', `git grep -c "${C}" -- docs | head`],
+    ['${名} と $名', `S=/tmp/s; grep -n "${C}" \${S}/x.md $S/y.md`],
+    ['python の here-document の本文の ${a.b}', `python3 - <<'EOF'\ns = "\${a.b} ${C}"\nEOF`],
   ])('通る: %s', (_, command) => {
     expect(stops(command)).toBe(false);
   });
@@ -1725,6 +1732,11 @@ describe('字の含みを効かせる形（t-y67q）', () => {
     ['python -m', `python3 -m x # ${C}`],
     ['命令の名の位置の置き換え', `$(printf 'eval x #')echo '${C}'`],
     ['rg --hostname-bin', `rg --hostname-bin=/tmp/s/h.sh --hyperlink-format=default x # ${C}`],
+    // review-5 の指摘 1・2
+    ['${名::=字} で GIT_EDITOR', `echo \${GIT_EDITOR::=${C} #} >/dev/null; git commit --amend`],
+    ['${名:=字} で GIT_EDITOR', `echo "\${GIT_EDITOR:=${C}}"; git commit --amend`],
+    ['${名::=字} で PATH', `echo \${PATH::=/tmp/e} >/dev/null; grep -n x f # ${C}`],
+    ['zsh の path=', `path=/tmp/e; grep -n x f # ${C}`],
     ['zsh の typeset で PATH（表に無い）', `typeset PATH=/tmp/e; grep x f # ${C}`],
     ['置き換えの中の here-document の後ろの bash', `gh pr create --title t --body "$(cat <<'EOF'\nit's done\nEOF\n)"\nprintf '%s' '${C}' | bash`],
     // 置き換えの中は、頭の代入・path を書いたままで見る
