@@ -42,8 +42,9 @@ export const projectReviewDir = (ctx: Context): string => join(reviewRoot(ctx.en
 /** 課題ごとの場所（席の起きる folder。repo でない folder）。 */
 export const placeDir = (ctx: Context, key: string): string => join(projectReviewDir(ctx), key);
 
-/** 場所の中の、repo ごとの作業の木と git の folder。 */
+/** 場所の中の、repo ごとの作業の木（container に見せるのはここだけ）。 */
 export const workTree = (ctx: Context, key: string, repo: string): string => join(placeDir(ctx, key), repo);
+/** 場所の中の、repo ごとの git の folder（作業の木の外。container に見せない）。 */
 export const gitDir = (ctx: Context, key: string, repo: string): string => join(placeDir(ctx, key), `.git-${repo}`);
 
 /** GitHub の repo の URL（試験では $ROSTER_REVIEW_REMOTE で、手元の bare repo の置き場に替える）。 */
