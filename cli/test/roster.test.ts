@@ -469,7 +469,7 @@ describe('run-role', () => {
       '--settings',
       JSON.stringify({
         hooks: {
-          PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: '/r/cli/bin/roster guard' }] }],
+          PreToolUse: [{ matcher: 'Bash|Monitor', hooks: [{ type: 'command', command: '/r/cli/bin/roster guard' }] }],
           SessionStart: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-start' }, { type: 'command', command: '/r/cli/bin/roster mail claim' }, WAITING] }],
           SessionEnd: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-end' }, { type: 'command', command: '/r/cli/bin/roster mail release' }] }],
           ...MAIL_HOOKS,
@@ -493,7 +493,7 @@ describe('run-role', () => {
     const args = claudeArgs({ key: 'audit', role: 'auditor', title: 'Audit', cwd: '/p', addDirs: ['/r/skill-sets/core'], ...ROLES.auditor.defaults }, '/r');
     expect(JSON.parse(args[1] ?? '')).toEqual({
       hooks: {
-        PreToolUse: [{ matcher: 'Bash|Edit|Write|NotebookEdit', hooks: [{ type: 'command', command: '/r/cli/bin/roster guard' }] }],
+        PreToolUse: [{ matcher: 'Bash|Monitor|Edit|Write|NotebookEdit', hooks: [{ type: 'command', command: '/r/cli/bin/roster guard' }] }],
         SessionStart: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster audit fresh' }, { type: 'command', command: '/r/cli/bin/roster castlist session-start' }, { type: 'command', command: '/r/cli/bin/roster mail claim' }, WAITING] }],
         SessionEnd: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-end' }, { type: 'command', command: '/r/cli/bin/roster mail release' }] }],
         ...MAIL_HOOKS,
