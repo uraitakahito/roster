@@ -898,7 +898,7 @@ export function judge(asked: Asked): Verdict {
       return { allow: false, reason: `${reader.name}は repo を変えません（${change.slice(0, 3).join(' ')}）。${reader.instead}` };
     }
   }
-  // 担当の席の push は roster push で（t-fcp8）。ROSTER_RAW=1 でも外さない（確かめを外す道にしない）。Product Manager の terminal（役割の無い session）には効かない。
+  // 担当の席の push は roster push で（t-fcp8）。ROSTER_RAW=1 でも外さない（確かめを外す道にしない）。役割の無い session（Product Manager の terminal・TPM 担当の席。TPM 担当は repo を触らない）には効かない。
   const bare = asked.role === undefined ? undefined : pushesBare(asked.command);
   if (bare !== undefined) {
     return { allow: false, reason: `push は roster push で打ってください（${bare.slice(0, 3).join(' ')}）。roster push は repo に宣言した確かめをみな流し、みな通った時だけ、確かめた commit を push します（Bash の run_in_background で起こして手を止め、終了コードで結果を見る: 0 push した・10 確かめが落ちた・1 断った・2 git push が落ちた）。release の tag は roster push --tag <tag>。branch を消す push（git push origin --delete <branch>）はそのまま打てます。` };

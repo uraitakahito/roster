@@ -347,7 +347,7 @@ describe('道具の直打ち', () => {
     'roster report done --summary "cmux の adapter を直した"',
     // 道具の名が、命令でない字（文・型・中身）に入るだけなら止めない。
     'git commit -m "acli jira workitem comment create と cmux set-status を止める"',
-    'git commit -F msg.txt && git push',
+    'git commit -F msg.txt && roster push',
     'echo \'cmux agent message を使わない\'',
     'grep -rn "acli jira workitem transition" cli/src',
     'grep -n cmux\\ set-status f',
@@ -661,7 +661,7 @@ describe('担当の席の素の git push（t-fcp8。監査 audit-2 の R15）', 
     'git push origin v1.2.3',
     'ROSTER_RAW=1 git push',
   ])('止める: %s', (command) => {
-    for (const role of ['software-engineer', 'devops-engineer', 'tech-lead', 'sustaining-engineer', 'tpm'] as const) {
+    for (const role of ['software-engineer', 'devops-engineer', 'tech-lead', 'sustaining-engineer'] as const) {
       expect(ask(command, role), role).toEqual({ allow: false, reason: PUSH_HINT });
     }
   });
@@ -686,7 +686,7 @@ describe('担当の席の素の git push（t-fcp8。監査 audit-2 の R15）', 
     expect(ask(command, 'software-engineer')).toEqual({ allow: true });
   });
 
-  test('Product Manager の terminal（役割の無い session）の push は止めない', () => {
+  test('役割の無い session（Product Manager の terminal・TPM 担当の席）の push は止めない', () => {
     expect(ask('git push origin v1.2.3', undefined)).toEqual({ allow: true });
     expect(ask('pnpm run check; git push', undefined)).toEqual({ allow: true });
   });
@@ -741,7 +741,7 @@ describe('Auditor は repo を変えない', () => {
   });
 
   test('ほかの担当と TPM 担当の git・gh は止めない。止めた訳に、勧告に書くよう言う', () => {
-    expect(ask('git commit -m x && git push', 'software-engineer').allow).toBe(true);
+    expect(ask('git commit -m x && git push origin --delete t-x/impl', 'software-engineer').allow).toBe(true);
     expect(ask('gh pr merge 141 --squash').allow).toBe(true);
     expect(ask('git -C /w/skills pull --ff-only', 'auditor')).toEqual({ allow: false, reason: expect.stringContaining('Auditor は repo を変えません（git -C /w/skills）。直すことは、監査のページの勧告に') as string });
   });
