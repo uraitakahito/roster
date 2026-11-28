@@ -144,10 +144,11 @@ describe('レビューの場所（t-n4j9 の段 2）', () => {
   test('git の長い旗の略しと submodule の旗も断る（review-8 の指摘 3・4）', () => {
     const { ctx } = setup();
     checkoutPull(ctx, 'AI-8', PR);
-    for (const flag of ['--open-files=sh', '--outp=/tmp/x', '--ext', '--textc', '--recurse-sub', '--submodule=diff', '--ignore-sub=none', '-Ovim']) {
+    for (const flag of ['--open-files=sh', '--outp=/tmp/x', '--ext', '--textc', '--recurse-sub', '--submodule=diff', '--ignore-sub=none', '-Ovim', '-nOsh']) {
       expect(() => reviewGit(ctx, 'AI-8', {}, ['diff', flag])).toThrow(/旗を通しません/);
     }
     expect(reviewGit(ctx, 'AI-8', {}, ['log', '--oneline', '-1']).status).toBe(0);
+    expect(reviewGit(ctx, 'AI-8', {}, ['diff', '--text']).status).toBe(0);
   });
 
   test('gitlink の path に置いた .git があっても、手元の git は子の git を起こさない（review-8 の指摘 3）', () => {

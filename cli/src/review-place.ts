@@ -26,11 +26,15 @@ const REVIEW_GIT_BAD_LONG = ['--ext-diff', '--textconv', '--open-files-in-pager'
  * 短い旗は `-O`（file を開く道具）。
  */
 function badGitFlag(arg: string): boolean {
-  if (/^-O/.test(arg)) return true;
+  // まとめた短い旗（`-nOsh`）の中の O も当たる（review-9）。
+  if (/^-[A-Za-z]*O/.test(arg)) return true;
   if (!arg.startsWith('--') || arg === '--') return false;
   const name = arg.split('=')[0] ?? '';
-  return name.length >= 4 && REVIEW_GIT_BAD_LONG.some(bad => bad.startsWith(name));
+  return name.length >= 4 && !GIT_OK_LONG.has(name) && REVIEW_GIT_BAD_LONG.some(bad => bad.startsWith(name));
 }
+
+/** 断る名の頭に当たるが、それ自体が git の旗の名（略しでない）物（`--text` は `--textconv` の頭。review-9）。 */
+const GIT_OK_LONG = new Set(['--text']);
 
 /** 名（repo・Key）が、1 つの folder の名で、path を外へ出ない字か（英数字で始まり、英数字と . _ # - だけ）。 */
 const SAFE_NAME = /^[A-Za-z0-9][A-Za-z0-9._#-]*$/;
@@ -129,7 +133,7 @@ export function checkoutPull(ctx: Context, key: string, url: string): { tree: st
     run(ctx, ['clone', '--quiet', '--no-checkout', ...(main === undefined ? [] : ['--reference', main, '--dissociate']), `--separate-git-dir=${git}`, remoteUrl(ctx, pull), tree], 'clone');
     run(ctx, safeGitArgs(git, tree, ['remote', 'set-url', '--push', 'origin', 'no-push']), 'push の先を外すの');
   }
-  run(ctx, safeGitArgs(git, tree, ['fetch', '--quiet', 'origin', `+refs/pull/${pull.number}/head:refs/remotes/pull/${pull.number}`]), 'PR の head の fetch');
+  run(ctx, safeGitArgs(git, tree, ['fetch', '--quiet', '--no-recurse-submodules', 'origin', `+refs/pull/${pull.number}/head:refs/remotes/pull/${pull.number}`]), 'PR の head の fetch');
   run(ctx, safeGitArgs(git, tree, ['checkout', '--quiet', '--force', '--detach', `refs/remotes/pull/${pull.number}`]), 'head を出すの');
   const head = run(ctx, safeGitArgs(git, tree, ['rev-parse', 'HEAD']), 'head を読むの').trim();
   return { tree, head };
