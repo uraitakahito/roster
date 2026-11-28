@@ -49,7 +49,7 @@ roster watch pr <PR の URL> --timeout 0  # 今の様子を 1 回見て、待た
 
 ## push の前の確かめ（roster push）
 
-担当の push は `roster push` で打つ（2026-11-28 t-fcp8。監査 audit-2 の R15。確かめと `git commit`・`git push` を 1 行に続け、確かめが落ちたまま push した件が 2 日で 4 件あった）。`roster push` は、repo の設定に宣言した確かめ（[設定](/configuration/#push-の前の確かめpush)）をみな流し、みな通った時だけ、確かめた commit を push する。確かめは数十秒かかりうるので、担当は `roster watch` と同じく**裏で起こして**手を止める。
+担当の push は `roster push` で打つ（2026-11-28 t-fcp8。監査 audit-2 の R15。確かめと `git commit`・`git push` を 1 行に続け、確かめが落ちたまま push した件が 2 日で 4 件あった）。`roster push` は、repo の設定に宣言した確かめ（[設定](/configuration/#push-の前の確かめpush)）をみな流し、みな通った時だけ、確かめた commit を push する。確かめは数十秒かかりうるので、担当は `roster watch` と同じく**裏で起こして**手を止める。担当の席の素の `git push` は guard が止める（branch を消すだけの push は通す。[決まり](/protocol/)）。
 
 ```sh
 roster push                       # 今の branch を、origin の同じ名の branch へ
