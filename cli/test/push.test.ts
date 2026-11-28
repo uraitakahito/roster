@@ -188,6 +188,35 @@ describe('roster push', () => {
     expect(res.lines.join('\n')).toContain('pkg に node_modules が無い');
   });
 
+  test('根で流す確かめが落ち、直下の folder（docs-site）に node_modules が無ければ、その folder を注意に出す（result-2 の残り）', () => {
+    const r = repo([{ name: 'site', run: FAIL }]);
+    mkdirSync(join(r.work, 'docs-site'));
+    writeFileSync(join(r.work, 'docs-site', 'package.json'), '{}');
+    const res = push(r.ctx, { cwd: r.work });
+    expect(res.code).toBe(PUSH_EXIT.failed);
+    expect(res.lines.join('\n')).toContain('docs-site に node_modules が無い');
+  });
+
+  test('submodule の指す commit がずれていれば、断る訳にその submodule と直し方を出す（result-2 の残り）', () => {
+    const r = repo([{ name: 'one', run: PASS }]);
+    const dir = mkdtempSync(join(tmpdir(), 'roster-push-sub-'));
+    const sub = join(dir, 'sub.git');
+    const subWork = join(dir, 'sub');
+    sh(dir, 'init', '--quiet', '--bare', '-b', 'main', sub);
+    sh(dir, 'clone', '--quiet', sub, subWork);
+    sh(subWork, 'commit', '--quiet', '--allow-empty', '-m', 's1');
+    sh(subWork, 'push', '--quiet', 'origin', 'HEAD:main');
+    sh(r.work, '-c', 'protocol.file.allow=always', 'submodule', 'add', '--quiet', sub, 'vendor/sub');
+    sh(r.work, 'commit', '--quiet', '-m', 'add sub');
+    sh(subWork, 'commit', '--quiet', '--allow-empty', '-m', 's2');
+    sh(subWork, 'push', '--quiet', 'origin', 'HEAD:main');
+    sh(join(r.work, 'vendor', 'sub'), 'pull', '--quiet', 'origin', 'main');
+    const res = push(r.ctx, { cwd: r.work });
+    expect(res.code).toBe(PUSH_EXIT.error);
+    expect(res.lines.join('\n')).toContain('submodule の vendor/sub は、指す commit が checkout とずれている');
+    expect(res.lines.join('\n')).toContain('git submodule update --init --recursive');
+  });
+
   test('--no-checks の空の訳と、commit の無い branch は断る（review-3 の指摘 6・8）', () => {
     const none = repo();
     expect(push(none.ctx, { cwd: none.work, noChecks: '  ' }).code).toBe(PUSH_EXIT.error);
