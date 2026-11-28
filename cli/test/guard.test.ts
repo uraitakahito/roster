@@ -470,7 +470,7 @@ describe('hook の入力と settings', () => {
   test('settings は Bash の前に roster guard を呼ぶ hook と、session の始まりと終わりに roster castlist を呼ぶ hook と、メッセージを渡す hook（roster mail …）と、TPM 担当の席の返事の言葉を数える hook', () => {
     const waiting = { type: 'command', async: true, asyncRewake: true, timeout: 86400, command: '/r/cli/bin/roster mail wait' };
     const gate = [{ matcher: 'Bash', hooks: [{ type: 'command', command: '/r/cli/bin/roster mail gate' }] }];
-    expect(JSON.parse(guardSettings('/r/cli/bin/roster'))).toEqual({ hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: '/r/cli/bin/roster guard' }] }], SessionStart: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-start' }, { type: 'command', command: '/r/cli/bin/roster mail claim' }, waiting] }], SessionEnd: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-end' }, { type: 'command', command: '/r/cli/bin/roster mail release' }] }], PostToolUse: gate, PostToolUseFailure: gate, Stop: [{ hooks: [waiting, { type: 'command', command: '/r/cli/bin/roster reply-language check || true' }] }], UserPromptSubmit: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster mail prompt' }] }] } });
+    expect(JSON.parse(guardSettings('/r/cli/bin/roster'))).toEqual({ hooks: { PreToolUse: [{ matcher: 'Bash|Monitor', hooks: [{ type: 'command', command: '/r/cli/bin/roster guard' }] }], SessionStart: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-start' }, { type: 'command', command: '/r/cli/bin/roster mail claim' }, waiting] }], SessionEnd: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-end' }, { type: 'command', command: '/r/cli/bin/roster mail release' }] }], PostToolUse: gate, PostToolUseFailure: gate, Stop: [{ hooks: [waiting, { type: 'command', command: '/r/cli/bin/roster reply-language check || true' }] }], UserPromptSubmit: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster mail prompt' }] }] } });
   });
 
   test('path に空白などがあれば、hook の命令の中で引用する', () => {
@@ -498,7 +498,7 @@ describe('hook の入力と settings', () => {
   test('Auditor の席の settings は、file を書き替える道具の前にも roster guard を呼ぶ', () => {
     const matcher = (role?: RoleName): string => (JSON.parse(guardSettings('/r/cli/bin/roster', role)) as { hooks: { PreToolUse: { matcher: string }[] } }).hooks.PreToolUse[0]?.matcher ?? '';
     expect(matcher('auditor')).toBe('Bash|Monitor|Edit|Write|NotebookEdit');
-    expect(matcher('software-engineer')).toBe('Bash');
+    expect(matcher('software-engineer')).toBe('Bash|Monitor');
   });
 
   test('file を書き替える道具の、書く先を取り出す', () => {

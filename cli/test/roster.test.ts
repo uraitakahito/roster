@@ -469,7 +469,7 @@ describe('run-role', () => {
       '--settings',
       JSON.stringify({
         hooks: {
-          PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: '/r/cli/bin/roster guard' }] }],
+          PreToolUse: [{ matcher: 'Bash|Monitor', hooks: [{ type: 'command', command: '/r/cli/bin/roster guard' }] }],
           SessionStart: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-start' }, { type: 'command', command: '/r/cli/bin/roster mail claim' }, WAITING] }],
           SessionEnd: [{ hooks: [{ type: 'command', command: '/r/cli/bin/roster castlist session-end' }, { type: 'command', command: '/r/cli/bin/roster mail release' }] }],
           ...MAIL_HOOKS,

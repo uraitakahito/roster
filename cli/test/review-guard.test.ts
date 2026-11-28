@@ -2,7 +2,8 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { guard } from '../src/commands/infra.ts';
-import { commandOf } from '../src/guard.ts';
+import { commandOf, guardSettings } from '../src/guard.ts';
+import { ROLE_NAMES } from '../src/protocol.ts';
 import { checkReviewCommand } from '../src/review-guard.ts';
 import { world } from './helpers.ts';
 
@@ -159,5 +160,21 @@ describe('roster guard: レビューの席の命令の記録（段 1a は止め�
     const se = { ...w.role('t-x7k2', 'file:2'), env: { ROSTER_KEY: 't-x7k2', ROSTER_ROLE: 'software-engineer' } };
     expect(await guard(se, input('Bash', 'npx vitest run'))).toEqual({ allow: true });
     expect(hits(w)).toEqual([]);
+  });
+});
+
+describe('どの席の guard も Monitor の命令を見る（台帳 #416）', () => {
+  const monitor = (command: string) => JSON.stringify({ tool_name: 'Monitor', tool_input: { command, description: 'x', timeout_ms: 1000 } });
+
+  test.each([undefined, ...ROLE_NAMES])('%s の席の settings は Monitor の前にも roster guard を呼ぶ', (role) => {
+    const settings = JSON.parse(guardSettings('/r/cli/bin/roster', role)) as { hooks: { PreToolUse: { matcher: string }[] } };
+    expect(settings.hooks.PreToolUse[0]?.matcher.split('|')).toEqual(expect.arrayContaining(['Bash', 'Monitor']));
+  });
+
+  test.each([undefined, ...ROLE_NAMES])('%s の席で、Monitor の pkill を止める', async (role) => {
+    const w = world({});
+    const seat = role === undefined ? w.tpm : { ...w.role('t-x7k2', 'file:2'), env: { ROSTER_KEY: 't-x7k2', ROSTER_ROLE: role } };
+    expect((await guard(seat, monitor('pkill -f vitest'))).allow).toBe(false);
+    expect((await guard(seat, monitor('tail -f x.log'))).allow).toBe(true);
   });
 });
