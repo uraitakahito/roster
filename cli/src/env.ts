@@ -23,6 +23,8 @@ export const ENV_NAMES = [
   'CALLBOARD_URL',
   'NATS_URL',
   'ADDRESS',
+  'REVIEW_DIR',
+  'REVIEW_REMOTE',
 ] as const;
 
 /** roster の環境変数の名の 1 つ（頭の ROSTER_ を除いた所）。 */

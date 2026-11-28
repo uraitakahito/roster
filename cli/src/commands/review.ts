@@ -2,7 +2,10 @@
 import type { Command } from 'commander';
 import { createContext, type Context } from '../context.ts';
 import { readReviews, VERDICTS, type Review, type Verdict } from '../reviews.ts';
-import { readRole, repoSeatKeys, staffKey } from '../roster.ts';
+import { envOf } from '../env.ts';
+import { checkoutPull, prunePlaces, removePlace, reviewGit } from '../review-place.ts';
+import { isStaffKey, readRole, repoSeatKeys, staffKey, subjectOfStaffKey } from '../roster.ts';
+import { TpmError } from '../skill-sets.ts';
 
 /** 時刻の字（ISO）を、月日と時分にする。 */
 const short = (iso: string): string => iso.slice(5, 16).replace('T', ' ');
@@ -60,4 +63,39 @@ export function registerReview(program: Command, print: (lines: string[]) => voi
   review.command('list').description('頼みごとの行と、合わせた数（頼んだ回数・判定ごとの数・レビューを頼んでいない課題）')
     .option('--key <Key>', 'その課題の頼みだけ')
     .action((options: { key?: string }) => print(reviewList(createContext(), options)));
+  // レビューの席の自分の場所（t-n4j9 の段 2。review-place.ts）。
+  review.command('checkout <url>').description('課題のレビューの場所に、PR の head を出す（clone が無ければ作る。見直しでは新しい head に替える）')
+    .action((url: string) => {
+      const ctx = createContext();
+      const { tree, head } = checkoutPull(ctx, placeKey(ctx), url);
+      print([`PR の head を出した: ${tree}（${head.slice(0, 7)}）`]);
+    });
+  review.command('git <args...>').description('レビューの場所の clone（--main なら project の本体）を、読むだけの git で読む（roster review git -- log --oneline -3）')
+    .option('--repo <名>', 'clone が 2 つ以上ある時の repo の名')
+    .option('--main <名>', 'project の folder の直下の、その名の本体を読む')
+    .action((args: string[], options: { repo?: string, main?: string }) => {
+      const ctx = createContext();
+      const r = reviewGit(ctx, placeKey(ctx), options, args);
+      process.stdout.write(r.stdout);
+      process.stderr.write(r.stderr);
+      process.exit(r.status);
+    });
+  review.command('clean [key]').description('課題のレビューの場所を消す（Key を書かなければ、名簿に居ない課題の場所のうち 1 時間より古い物）')
+    .action((key: string | undefined) => {
+      const ctx = createContext();
+      if (key !== undefined) {
+        const removed = removePlace(ctx, key);
+        print([removed === undefined ? `${key} のレビューの場所は無い` : `消した: ${removed}`]);
+        return;
+      }
+      const removed = prunePlaces(ctx, k => readRole(ctx, staffKey(k)) !== undefined);
+      print(removed.length === 0 ? ['消す場所は無い'] : removed.map(p => `消した: ${p}`));
+    });
+}
+
+/** 打った担当の、レビューの場所の Key（Staff Engineer 担当の席なら、見ている課題の Key）。 */
+function placeKey(ctx: Context): string {
+  const key = envOf(ctx.env, 'KEY');
+  if (key === undefined) throw new TpmError('レビューの場所は、課題の担当と Staff Engineer 担当の席から使います（$ROSTER_KEY がありません）');
+  return isStaffKey(key) ? subjectOfStaffKey(key) : key;
 }
