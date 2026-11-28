@@ -38,7 +38,7 @@ roster hello
 - **計画・提案**: 段の順・直す所の抜け・前提の誤り・試し方・戻し方・もっと小さく済む道が無いか。挙げた file や行は、自分で開いて確かめる。
 - **PR**: 差分のバグ探しは、Claude Code の `/code-review` を、自分の場所（席が起きた folder）のまま使う（手伝いも同じ folder で起き、PR の head を手元に持つ）（要れば `/security-review` も）。その指摘は、自分で差分を開いて確かめてから載せる。`/code-review` が見ない所（依頼書・計画との合い、repo の決まり、試験が求めを確かめているか、文書とコードの食い違い）は自分で見る。
 - **軽い見方**（依頼書に「軽い見方でよい」とある時）: 版の番号が揃っているか（`package.json`・CHANGELOG・tag など）・CHANGELOG の字・link・秘密が無いか・差分が本当に版上げ・CHANGELOG・文書・lock だけか、を見る。それを超える差分があれば、普段の見方で見る（ページにそう書く）。
-- **見直し**: 依頼書に前の頼みの番号と見た commit があれば、`roster review checkout` で出し直してから、依頼書の 1 行（`roster review git --repo <repo> -- diff <前の head>..refs/remotes/pull/<番号>`）で前の判定からの差分を見る。前の指摘が直ったかと、足した commit が新しく壊していないかを見る。
+- **見直し**: 依頼書に前の頼みの番号と見た commit があれば、`roster review checkout` で出し直してから、依頼書の 1 行（`roster review git --repo <repo> -- diff <前の head>..refs/remotes/pull/<番号>`）で前の判定からの差分を見る。依頼書に並んだ commit と file（GitHub の compare の数）は、どこを見るかの目安。前に見た commit が head の祖先でない（rebase）と書いてあれば、依頼書の `range-diff` の 1 行で、commit ごとに前と何が違うかを見る（diff の方は main の分も含む）。前の指摘が直ったかと、足した commit が新しく壊していないかを見る。
 - **まとめた頼み**（依頼書に PR がいくつも）: 頼みは PR ごとに 1 件。PR ごとに `roster review checkout` してから見る。判定が PR で違えば、`roster report review … --review <番号>` で PR ごとに返す（下の 3）。
 - **push の前の確かめの一覧**: PR が `.claude/roles/config.jsonc` の `push` の欄を変えていたら（`roster push` は push する commit の一覧を読むので、branch で消した・緩めた確かめはその PR から流れない）、消した・変えた確かめごとに、訳が PR の本文に在るか、変えた後も CI の中の確かめを手元で流す形のままか、を見る。訳が無い・CI より狭める訳が通らなければ、判定は「気になる所あり」以上にする。
 - **workflow を手で起こす手**: workflow を手で起こして確かめるよう勧める前と、計画・PR のその手を通す前に、その workflow の `runs-on` と、動いている runner を見る（`${CLAUDE_SKILL_DIR}/../software-engineer/SKILL.md` の 2。見る命令は読むだけ）。合う runner が無ければ、手元の手順を勧める。

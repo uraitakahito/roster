@@ -101,6 +101,11 @@ describe('レビューの場所（t-n4j9 の段 2）', () => {
     expect(() => reviewGit(ctx, 'AI-8', {}, ['checkout', 'main'])).toThrow(/読むだけの命令だけ/);
     expect(() => reviewGit(ctx, 'AI-8', {}, ['config', 'core.fsmonitor', 'x'])).toThrow(/読むだけの命令だけ/);
     expect(() => reviewGit(ctx, 'AI-8', {}, ['diff', '--ext-diff'])).toThrow(/--ext-diff/);
+    // range-diff は見直しの依頼書が載せる（rebase の後。t-vqhy）。外の diff を切って打つ。
+    const range = reviewGit(ctx, 'AI-8', {}, ['range-diff', 'refs/remotes/origin/main', 'HEAD', 'HEAD']);
+    expect(range.status, range.stderr).toBe(0);
+    expect(range.stdout).toMatch(/ = /);
+    expect(() => reviewGit(ctx, 'AI-8', {}, ['range-diff', '--ext-diff', 'a...b'])).toThrow(/--ext-diff/);
     expect(() => reviewGit(ctx, 'AI-8', {}, ['grep', '-Oless', 'x'])).toThrow(/-Oless/);
     expect(() => reviewGit(ctx, 'AI-8', {}, ['log', '--output=/tmp/x'])).toThrow(/--output/);
     expect(() => reviewGit(ctx, 'AI-8', { repo: 'other' }, ['log'])).toThrow(/other の clone がありません/);

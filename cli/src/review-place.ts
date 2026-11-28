@@ -17,12 +17,12 @@ import { TpmError } from './skill-sets.ts';
 export const SAFE_GIT_CONFIG = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'core.pager=cat', '-c', 'diff.ignoreSubmodules=all', '-c', 'submodule.recurse=false', '-c', 'status.submoduleSummary=false'];
 
 /** roster review git が通す、読むだけの git の命令。 */
-export const REVIEW_GIT_READS = new Set(['show', 'diff', 'log', 'status', 'rev-parse', 'ls-files', 'ls-tree', 'blame', 'grep', 'cat-file', 'merge-base']);
+export const REVIEW_GIT_READS = new Set(['show', 'diff', 'log', 'status', 'rev-parse', 'ls-files', 'ls-tree', 'blame', 'grep', 'cat-file', 'merge-base', 'range-diff']);
 /**
  * 外の diff（diff.external・GIT_EXTERNAL_DIFF）を動かしうる、読む命令。--no-ext-diff を付けて打つ（`-c diff.external=` の空の値は、
  * git 2.56 の `git diff` が「cannot run」で落ちる。台帳 #493）。
  */
-const EXT_DIFF_READS = new Set(['diff', 'show', 'log']);
+const EXT_DIFF_READS = new Set(['diff', 'show', 'log', 'range-diff']);
 
 /** roster review git が断る長い旗（外の道具・file を開く道具・書き出し・取り寄せの命令を動かす・submodule に降りる）。 */
 const REVIEW_GIT_BAD_LONG = ['--ext-diff', '--textconv', '--open-files-in-pager', '--output', '--output-directory', '--upload-pack', '--exec', '--recurse-submodules', '--submodule', '--ignore-submodules'];

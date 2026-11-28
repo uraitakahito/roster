@@ -698,7 +698,25 @@ describe('担当の席の素の git push（t-fcp8。監査 audit-2 の R15）', 
 
   test('役割の無い session（Product Manager の terminal・TPM 担当の席）の push は、既定の branch を的にしなければ止めない', () => {
     expect(ask('git push origin v1.2.3', undefined)).toEqual({ allow: true });
-    expect(ask('pnpm run check; git push', undefined)).toEqual({ allow: true });
+    expect(ask('pnpm run check; git push origin t-x/impl', undefined)).toEqual({ allow: true });
+  });
+
+  test.each([
+    'git push',
+    'git push origin',
+    'pnpm run check; git push',
+    'git push --force',
+    'git push -u origin HEAD',
+    'git push origin +HEAD',
+    'git push origin @',
+    'git push --follow-tags',
+    'git -C /w/roster push',
+    'cd /w && git push origin',
+    'git push origin "$(git branch --show-current)"',
+    'git push origin $BRANCH',
+    'git push origin HEAD:"${B}"',
+  ])('役割の無い session の、送る branch を字で書かない push は止める（今の branch が main かを読めない。t-vqhy）: %s', (command) => {
+    expect(ask(command, undefined)).toEqual({ allow: false, reason: expect.stringContaining('送る branch を字で書かない push') as string });
   });
 
   test.each([
@@ -727,8 +745,9 @@ describe('担当の席の素の git push（t-fcp8。監査 audit-2 の R15）', 
     'git push -o ci.skip origin t-x/a',
     'git push origin --delete t-x/impl',
     'git push origin :t-x/impl',
-    'git push',
-    'git push origin',
+    'git push origin HEAD:t-x/impl',
+    'git push --tags',
+    'git push origin --tags',
     'git commit -m "git push origin main を止める"',
     'echo git push origin main',
   ])('役割の無い session の、ほかの branch への push と消す push は通す: %s', (command) => {
@@ -795,6 +814,16 @@ describe('merge の直打ち（t-pq5v の段 3）', () => {
     'gh api -X PUT repos/o/r/contents/a.md -f message=x -f content=eA== -f branch=main',
     'gh api -X PUT repos/o/r/contents/a.md -f message=x --field branch=refs/heads/master',
     'gh api -X PUT repos/o/r/contents/a.md --input body.json',
+    // 欄を重ねた形と、--input の本文（review-10 の提案 2。t-vqhy）。
+    'gh api -X PUT repos/o/r/contents/a.md -f branch=t-x/impl -f branch=main -f message=x -f content=eA==',
+    'gh api -X PUT repos/o/r/contents/a.md -f branch=main -f branch=t-x/impl -f message=x -f content=eA==',
+    'gh api -X PUT repos/o/r/contents/a.md -F branch=t-x/impl --field branch=refs/heads/master -f message=x',
+    'gh api -X PUT repos/o/r/contents/a.md -fbranch=t-x/impl --raw-field=branch=main -f message=x',
+    'gh api -X PUT repos/o/r/contents/a.md -f branch=t-x/impl --input body.json',
+    'gh api -X PUT repos/o/r/contents/a.md -f branch=t-x/impl --input=body.json',
+    'gh api -X PUT repos/o/r/contents/a.md -f branch= -f message=x -f content=eA==',
+    'gh api -X PUT repos/o/r/contents/a.md -F branch=@b.txt -f message=x',
+    'gh api -X PUT repos/o/r/contents/a.md --field branch=@- -f message=x',
     // URL の形（review-9 の指摘 2）。
     'gh api -X PUT https://api.github.com/repos/o/r/pulls/1/merge',
     'gh api https://api.github.com/repos/o/r/merges -f base=main -f head=b',
@@ -834,6 +863,7 @@ describe('merge の直打ち（t-pq5v の段 3）', () => {
     'gh api -X PUT repos/o/r/contents/a.md -f message=x -f content=eA== -f branch=t-x/impl',
     'gh api --method DELETE repos/o/r/contents/a.md -f message=x -f sha=abc -f branch=t-x/impl',
     'gh api -X PUT https://api.github.com/repos/o/r/contents/a.md -F branch=t-x/impl -f message=x',
+    'gh api -X PUT repos/o/r/contents/a.md -f branch=t-x/a -f branch=t-x/b -f message=x',
     'gh api https://api.github.com/repos/o/r/pulls/1',
     'gh api -X DELETE https://api.github.com/repos/o/r/git/refs/heads/t-x/impl',
     'gh api graphql -f query=\'query { repository(owner: "o", name: "r") { pullRequest(number: 1) { mergeable } } }\'',
@@ -867,6 +897,9 @@ describe('役割の有る席の、判定の守りを外す命令（t-pq5v の段
     'ROSTER_RAW=1 roster review allow 3 --note x',
     '/r/cli/bin/roster review allow 3 --note x',
     'cd /w && roster review allow 3 --note x',
+    // script を動かす道具の形（t-vqhy）。
+    'node /r/cli/src/cli.ts review allow 3 --note x',
+    'sh /r/cli/bin/roster review allow 3 --note x',
   ])('roster review allow を止める: %s', (command) => {
     for (const role of SEATS) expect(ask(command, role), role).toEqual({ allow: false, reason: ALLOW_HINT });
   });
@@ -898,6 +931,46 @@ describe('役割の有る席の、判定の守りを外す命令（t-pq5v の段
     'ROSTER_ROLE= xargs -n1 roster pr merge < urls',
     'env -i roster pr merge x',
     'cd /w/roster && ROSTER_ROLE= roster pr merge x',
+    // script を動かす道具で roster を動かす形（review-10 の提案 1 の (a)。t-vqhy）。
+    'ROSTER_ROLE= node /w/roster/cli/src/cli.ts pr merge x',
+    'ROSTER_ROLE= node --experimental-strip-types /w/roster/cli/src/cli.ts pr merge x',
+    'ROSTER_ROLE= node --import tsx /w/roster/cli/src/cli.ts pr merge x',
+    'cd /w/roster/cli && ROSTER_ROLE= node src/cli.ts pr merge x',
+    'env -u ROSTER_ROLE node /w/roster/cli/src/cli.ts pr merge x',
+    'ROSTER_ROLE= node /w/roster/cli/bin/roster pr merge x',
+    'ROSTER_ROLE= sh /w/roster/cli/bin/roster pr merge x',
+    'ROSTER_ROLE= bash -x /w/roster/cli/bin/roster pr merge x',
+    'ROSTER_KEY=t-1.staff npx roster review checkout 1',
+    'ROSTER_KEY=t-1.staff npx --yes roster review checkout 1',
+    'ROSTER_KEY=t-1.staff npx -p some-pkg roster review checkout 1',
+    'ROSTER_ROLE= pnpm exec roster pr merge x',
+    'ROSTER_ROLE= pnpm --dir /w/roster/cli exec roster pr merge x',
+    'ROSTER_ROLE= npm exec roster pr merge x',
+    'ROSTER_ROLE= timeout 60 node /w/roster/cli/src/cli.ts pr merge x',
+    // 前置きの後ろの env（review-10 の提案 1 の (b)。t-vqhy）。
+    'xargs -n 1 env -u ROSTER_ROLE roster pr merge < urls',
+    'echo x | xargs -n 1 env -u ROSTER_ROLE roster pr merge',
+    'timeout 60 env -u ROSTER_ROLE roster pr merge x',
+    'nice env ROSTER_ROLE= roster pr merge x',
+    'nohup env -i roster pr merge x',
+    'xargs env ROSTER_KEY=t-1.staff roster review checkout < x',
+    'sudo ROSTER_ROLE= roster pr merge x',
+    'timeout 60 sh -c \'ROSTER_ROLE= roster pr merge x\'',
+    // review-1 の指摘 1・2・3・5（t-vqhy）。
+    'env -u ROSTER_ROLE -u PATH roster pr merge x',
+    'ROSTER_ROLE= env -u PATH roster pr merge x',
+    'env -i -u PATH roster pr merge x',
+    'env --unset ROSTER_KEY --unset HOME roster review checkout 1',
+    'ROSTER_ROLE= bash -e /w/roster/cli/bin/roster pr merge x',
+    'ROSTER_ROLE= bash -o pipefail /w/roster/cli/bin/roster pr merge x',
+    'ROSTER_ROLE= sh -eu /w/roster/cli/bin/roster pr merge x',
+    'ROSTER_ROLE= npx tsx /w/roster/cli/src/cli.ts pr merge x',
+    'ROSTER_ROLE= pnpm tsx /w/roster/cli/src/cli.ts pr merge x',
+    'ROSTER_ROLE= pnpm exec node /w/roster/cli/src/cli.ts pr merge x',
+    'ROSTER_ROLE= node --env-file .env /w/roster/cli/src/cli.ts pr merge x',
+    'ROSTER_ROLE= node --some-new-flag /w/roster/cli/src/cli.ts pr merge x',
+    'ROSTER_ROLE= sudo -u bun env roster pr merge x',
+    'ROSTER_ROLE= nice -n 5 node /w/roster/cli/src/cli.ts pr merge x',
   ])('役割と Key の替えを止める: %s', (command) => {
     for (const role of SEATS) expect(ask(command, role), role).toEqual({ allow: false, reason: SPOOF_HINT });
   });
@@ -914,6 +987,21 @@ describe('役割の有る席の、判定の守りを外す命令（t-pq5v の段
     'cd /w/roster && ROSTER_ROLE=software-engineer node cli/bin/x.js',
     'ROSTER_KEY=t-1 ls /w/roster',
     'env -u ROSTER_ROLE git -C /w/roster status',
+    // roster の script でない物を動かす道具（t-vqhy）。
+    'cd /w/roster/cli && ROSTER_KEY=t-1 node scripts/gen.ts',
+    'ROSTER_KEY=t-1 node -e "console.log(1)" roster',
+    'ROSTER_KEY=t-1 node -p 1 roster',
+    'ROSTER_KEY=t-1 npx -c "echo 1" roster',
+    'ROSTER_KEY=t-1 node --eval=1 roster',
+    'ROSTER_KEY=t-1 node --test test/a.test.ts',
+    'ROSTER_KEY=t-1 pnpm -C cli test',
+    'ROSTER_KEY=t-1 bash -e scripts/check.sh',
+    'ROSTER_KEY=t-1 npx vitest run test/roster.test.ts',
+    'ROSTER_KEY=t-1 pnpm vitest run',
+    'ROSTER_ROLE= sh scripts/check.sh',
+    'node /w/roster/cli/src/cli.ts hello',
+    'xargs -n 1 env -u ROSTER_ROLE git status',
+    'timeout 60 env -u ROSTER_KEY pnpm test',
   ])('役割の有る席でも通す: %s', (command) => {
     for (const role of SEATS) expect(ask(command, role), role).toEqual({ allow: true });
   });
