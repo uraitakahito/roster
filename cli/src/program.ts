@@ -163,7 +163,7 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
   program.command('push').description('repo に宣言した確かめ（push する commit の .claude/roles/config.jsonc の push の欄。branch が一覧を変えていれば、main と分かれた所からの差を出す）をみな流し、みな通った時だけ、確かめた commit を origin の同じ名の branch へ push する（裏で起こして手を止める。終了コード: 0 push した・10 確かめが落ちた・1 断った・2 git fetch か git push が落ちた（fetch なら確かめは流していない））')
     .option('--tag <tag>', 'release の tag を push する（確かめは流さない。tag の commit が origin の既定の branch に在る時だけ）')
     .option('--force-with-lease', 'rebase した branch を、remote が動いていない時だけ上書きする（--force は受けない）')
-    .option('--no-checks <訳>', '確かめの宣言の無い repo で、確かめを流さずに push する訳（宣言のある repo では断る。担当は自分で付けず、roster ask tpm で聞く）')
+    .option('--no-checks <訳>', 'push する commit に確かめの宣言が無い時に、確かめを流さずに push する訳（push する commit に宣言があれば断る。宣言が足される前に切った branch も断る。担当は自分で付けず、roster ask tpm で聞く）')
     .action((options: { tag?: string, forceWithLease?: boolean, checks?: string | boolean }) => {
       const noChecks = typeof options.checks === 'string' ? options.checks : undefined;
       const r = push(createContext(), { cwd: process.cwd(), ...(options.tag === undefined ? {} : { tag: options.tag }), ...(options.forceWithLease === true ? { forceWithLease: true } : {}), ...(noChecks === undefined ? {} : { noChecks }) });

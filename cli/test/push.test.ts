@@ -146,7 +146,8 @@ describe('roster push', () => {
     const res = push(r.ctx, { cwd: r.work });
     expect(res.code).toBe(PUSH_EXIT.pushed);
     const out = res.lines.join('\n');
-    expect(out).toContain('main に後から足された確かめが、この branch に無い');
+    expect(out).toContain('main に後から足された確かめ・変えられた確かめが、この branch に無いか古いまま');
+    expect(out).toContain('足された: late');
     expect(out).not.toContain('消した');
     expect(r.records().at(-1)?.configDiff).toEqual({ base: 'merge-base', removed: [], changed: [], added: [], mainAdded: ['late'] });
   });
@@ -182,7 +183,7 @@ describe('roster push', () => {
     commitConfig(r, configText([{ name: 'one', run: PASS }]));
     const res = push(r.ctx, { cwd: r.work });
     expect(res.code).toBe(PUSH_EXIT.pushed);
-    expect(res.lines.join('\n')).toContain('読めない');
+    expect(res.lines.join('\n')).toContain('その一覧が読めない');
     expect(r.records().at(-1)?.configDiff).toMatchObject({ baseUnreadable: true });
   });
 
@@ -193,7 +194,43 @@ describe('roster push', () => {
     const res = push(r.ctx, { cwd: r.work });
     expect(res.code).toBe(PUSH_EXIT.pushed);
     expect(res.lines.join('\n')).toContain('main と分かれた所が取れないので');
-    expect(r.records().at(-1)?.configDiff).toEqual({ base: 'origin/main', removed: ['two'], changed: [], added: [] });
+    expect(r.records().at(-1)?.configDiff).toEqual({ base: 'default-branch', removed: ['two'], changed: [], added: [] });
+  });
+
+  /** main で config.jsonc を書き替えて push し、branch b に戻る。 */
+  const advanceMain = (r: Repo, text: string): void => {
+    sh(r.work, 'checkout', '--quiet', 'main');
+    commitConfig(r, text, 'main config');
+    sh(r.work, 'push', '--quiet', 'origin', 'main');
+    sh(r.work, 'checkout', '--quiet', 'b');
+  };
+
+  test('分かれた後に main が確かめの中身を変えたら、取り込んでいない branch では古いままと出す（review-2 の指摘 1）', () => {
+    const r = repo([{ name: 'one', run: PASS }]);
+    advanceMain(r, configText([{ name: 'one', run: FAIL }]));
+    const res = push(r.ctx, { cwd: r.work });
+    expect(res.code).toBe(PUSH_EXIT.pushed);
+    expect(res.lines.join('\n')).toContain('変えられた: one（run）');
+    expect(r.records().at(-1)?.configDiff).toEqual({ base: 'merge-base', removed: [], changed: [], added: [], mainChanged: ['one'] });
+  });
+
+  test('main が宣言を足す前に切った branch は、--no-checks でも断り、取り込むよう言う（review-2 の指摘 2）', () => {
+    const r = repo();
+    advanceMain(r, configText([{ name: 'one', run: PASS }]));
+    const refused = push(r.ctx, { cwd: r.work, noChecks: '古い branch' });
+    expect(refused.code).toBe(PUSH_EXIT.error);
+    expect(refused.lines.join('\n')).toContain('取り込んでから打つ（--no-checks は受けない）');
+    expect(remoteSha(r, 'refs/heads/b')).toBeUndefined();
+  });
+
+  test('分かれた所の一覧が読めなければ、origin の既定の branch の先と比べる（review-2 の指摘 3）', () => {
+    const r = repo([]);
+    advanceMain(r, configText([{ name: 'one', run: PASS }]));
+    commitConfig(r, configText([{ name: 'one', run: PASS }, { name: 'two', run: PASS }]));
+    const res = push(r.ctx, { cwd: r.work });
+    expect(res.code).toBe(PUSH_EXIT.pushed);
+    expect(res.lines.join('\n')).toContain('main と分かれた所が読めないので、origin/main の先と比べて');
+    expect(r.records().at(-1)?.configDiff).toEqual({ base: 'default-branch', removed: [], changed: [], added: ['two'] });
   });
 
   test('dir の下で流し、env を足す', () => {
