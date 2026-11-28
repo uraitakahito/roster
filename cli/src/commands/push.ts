@@ -164,11 +164,22 @@ function changesReason(ctx: Context, root: string): string {
   return `${base}。うち submodule の ${drifted.join('・')} は、指す commit が checkout とずれている（branch を替えた後なら git submodule update --init --recursive で合わせる。submodule を進めたなら、その commit を git add して commit する）`;
 }
 
-/** 依存の入っていない folder（dir と、その直下の folder の package.json のうち、隣に node_modules が無い物）。dir は repo の根からの path。 */
+/** package.json が依存を書いているか（dependencies などに 1 つでも在るか）。読めなければ書いていないとみなす（依存の無い package.json を拾わない。review-13）。 */
+function declaresDeps(file: string): boolean {
+  try {
+    const pkg = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+    return ['dependencies', 'devDependencies', 'optionalDependencies'].some(k => typeof pkg[k] === 'object' && pkg[k] !== null && Object.keys(pkg[k]).length > 0);
+  }
+  catch {
+    return false;
+  }
+}
+
+/** 依存の入っていない folder（dir と、その直下の folder の package.json のうち、依存を書いていて、隣に node_modules が無い物）。dir は repo の根からの path。 */
 function bareDeps(root: string, dir: string): string[] {
   const base = join(root, dir);
   const candidates = [dir, ...(existsSync(base) ? readdirSync(base, { withFileTypes: true }).filter(e => e.isDirectory() && e.name !== 'node_modules' && !e.name.startsWith('.')).map(e => dir === '.' ? e.name : join(dir, e.name)) : [])];
-  return candidates.filter(d => existsSync(join(root, d, 'package.json')) && !existsSync(join(root, d, 'node_modules')));
+  return candidates.filter(d => existsSync(join(root, d, 'package.json')) && declaresDeps(join(root, d, 'package.json')) && !existsSync(join(root, d, 'node_modules')));
 }
 
 /** 秒の字。 */

@@ -61,7 +61,7 @@ roster push --no-checks "<訳>"    # 確かめの宣言の無い repo だけ（�
 | 終了コード | 意味 |
 |---|---|
 | 0 | push した |
-| 10 | 確かめが落ちた（push していない）。落ちた確かめの名・終了コード（時間切れは 124）・出力の終わり 40 行と、全部の log の path を出す。落ちた確かめの dir とその直下の folder に、`package.json` があって `node_modules` が無ければ、依存を入れる注意も出す（根で流す確かめが `docs-site` の依存を使う形も拾う） |
+| 10 | 確かめが落ちた（push していない）。落ちた確かめの名・終了コード（時間切れは 124）・出力の終わり 40 行と、全部の log の path を出す。落ちた確かめの dir とその直下の folder に、依存を書いた `package.json` があって `node_modules` が無ければ、依存を入れる注意も出す（根で流す確かめが `docs-site` の依存を使う形も拾う） |
 | 1 | 断った（git の worktree の外・detached・既定の branch の上・HEAD に commit が無い・追われている file に commit していない変更がある（submodule の指す commit が checkout とずれていれば、その submodule の名と `git submodule update --init --recursive` を出す）・`git status` が読めない・宣言が無い・宣言の形が違う・`--no-checks` の訳が空・確かめの間に HEAD か追われた file が動いた） |
 | 2 | `git fetch` が落ちた（確かめは流していない）か、`git push` が落ちた（確かめは通った）。どちらかは出る行で分かる。網の誤りなら `roster watch github` で待って打ち直す（remote が先に進んで断られたなら、取り込んでから打ち直す） |
 

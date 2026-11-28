@@ -183,7 +183,7 @@ describe('roster push', () => {
   test('package.json があって node_modules が無い dir の確かめが落ちたら、依存を入れる注意を出す（review-3 の指摘 10）', () => {
     const r = repo([{ name: 'deps', dir: 'pkg', run: FAIL }]);
     mkdirSync(join(r.work, 'pkg'));
-    writeFileSync(join(r.work, 'pkg', 'package.json'), '{}');
+    writeFileSync(join(r.work, 'pkg', 'package.json'), '{"devDependencies":{"x":"1.0.0"}}');
     const res = push(r.ctx, { cwd: r.work });
     expect(res.lines.join('\n')).toContain('pkg に node_modules が無い');
   });
@@ -191,10 +191,14 @@ describe('roster push', () => {
   test('根で流す確かめが落ち、直下の folder（docs-site）に node_modules が無ければ、その folder を注意に出す（result-2 の残り）', () => {
     const r = repo([{ name: 'site', run: FAIL }]);
     mkdirSync(join(r.work, 'docs-site'));
-    writeFileSync(join(r.work, 'docs-site', 'package.json'), '{}');
+    writeFileSync(join(r.work, 'docs-site', 'package.json'), '{"devDependencies":{"x":"1.0.0"}}');
+    mkdirSync(join(r.work, 'generated'));
+    writeFileSync(join(r.work, 'generated', 'package.json'), '{"name":"generated"}');
     const res = push(r.ctx, { cwd: r.work });
     expect(res.code).toBe(PUSH_EXIT.failed);
     expect(res.lines.join('\n')).toContain('docs-site に node_modules が無い');
+    // 依存を書いていない package.json（生成物の置き場など）は拾わない（review-13）。
+    expect(res.lines.join('\n')).not.toContain('generated');
   });
 
   test('submodule の指す commit がずれていれば、断る訳にその submodule と直し方を出す（result-2 の残り）', () => {
