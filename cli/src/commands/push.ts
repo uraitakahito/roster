@@ -144,7 +144,7 @@ export function parsePushChecks(text: string, where: string): PushCheck[] | unde
 const CONFIG_PATH = '.claude/roles/config.jsonc';
 
 /** 一覧を読んだ結果: 在る・無い（file か欄が無い）・形が違う。 */
-type ReadChecks = { kind: 'some', checks: PushCheck[] } | { kind: 'none' } | { kind: 'bad', message: string };
+export type ReadChecks = { kind: 'some', checks: PushCheck[] } | { kind: 'none' } | { kind: 'bad', message: string };
 
 /** commit（rev）の設定の push の欄を読む。 */
 function readChecks(ctx: Context, root: string, rev: string, where: string): ReadChecks {
