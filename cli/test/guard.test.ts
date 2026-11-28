@@ -695,6 +695,10 @@ describe('担当の席の素の git push（t-fcp8。監査 audit-2 の R15）', 
     expect(ask('pnpm run check; git push', undefined)).toEqual({ allow: true });
   });
 
+  test('止めた訳の終了コード 2 は、fetch の落ちも言う（skill・docs と同じ字）', () => {
+    expect(ask('git push', 'software-engineer')).toEqual({ allow: false, reason: expect.stringContaining('2 git fetch か git push が落ちた（fetch なら確かめは流していない）') as string });
+  });
+
   test('読むだけの担当には、今までの「repo を変えません」が先に当たる', () => {
     expect(ask('git push', 'staff-engineer')).toEqual({ allow: false, reason: expect.stringContaining('repo を変えません') as string });
   });
