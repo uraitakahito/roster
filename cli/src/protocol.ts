@@ -51,6 +51,8 @@ export const COMMANDS = [
   'review serve',
   'review stop',
   'review build',
+  'review allow',
+  'pr merge',
   'time',
   'watch pr',
   'watch main',

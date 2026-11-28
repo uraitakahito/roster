@@ -4,7 +4,7 @@ import { hello, inboxNow } from '../src/commands/role-side.ts';
 import { deliveredLines } from '../src/mail.ts';
 import { assign, close, roles } from '../src/commands/tpm-side.ts';
 import { requireRole } from '../src/roster.ts';
-import { BRIEF, finish, MAIN_PASSED, mainRun, world, type World } from './helpers.ts';
+import { BRIEF, finish, MAIN_PASSED, mainRun, REVIEW_NONE, world, type World } from './helpers.ts';
 
 const OUT = 'https://claude.ai/artifact/o1';
 const PR = 'https://github.com/o/r/pull/7';
@@ -61,7 +61,7 @@ describe('1 つの課題の 1 周（課題管理なし）', () => {
 
     expect(texts(w, 'file:tpm')).toEqual([
       '【ask-tpm】案 A と B で迷う。お勧めは A',
-      `【merged】${PR} 段 1 を入れた${MAIN_PASSED}`,
+      `【merged】${PR} 段 1 を入れた${MAIN_PASSED}${REVIEW_NONE}`,
       `【done】${OUT} 要点: PR 2 本の計画／残り: なし／決めてほしいこと: なし`,
       `【done】${OUT} 要点: 実装した／残り: なし／決めてほしいこと: なし`,
       `【end】成果: ${OUT}／merge した PR: ${PR}／消した worktree: skills-worktrees/t-x-impl／残っている物: なし`,
@@ -317,7 +317,17 @@ describe('merge の後の main の workflow を、命令が見て本文に足す
   test.each(senders)('%s: みな通っていれば、結果を足して送る', async (_, send) => {
     const w = await started({ tracker: 'github' }, 'gh-12');
     await send(w);
-    expect(texts(w, 'file:tpm')[0]).toMatch(/／main: workflow 2 つ通った$/);
+    expect(texts(w, 'file:tpm')[0]).toMatch(/／main: workflow 2 つ通った／レビュー: 記録無し$/);
+  });
+
+  test.each(senders)('%s: その PR のいちばん新しいレビューの番号・判定・見た commit を足す（t-pq5v）', async (_, send) => {
+    const w = await started({ tracker: 'github' }, 'gh-12');
+    const review = { key: 't-x7k2', by: 'SWE', askedAt: '2026-11-20T11:00:00.000Z' };
+    w.tpm.state.write('reviews/1.jsonc', { n: 1, url: PR, verdict: 'reject', head: 'f'.repeat(40), ...review });
+    w.tpm.state.write('reviews/2.jsonc', { n: 2, url: `${PR}/files`, verdict: 'approve', head: '1a2b3c4d5e6f', ...review });
+    w.tpm.state.write('reviews/3.jsonc', { n: 3, url: 'https://github.com/o/r/pull/8', verdict: 'concerns', ...review });
+    await send(w);
+    expect(texts(w, 'file:tpm')[0]).toMatch(/／main: workflow 2 つ通った／レビュー: #2 よい（見た 1a2b3c4）$/);
   });
 
   test.each(senders)('%s: まだ動いている間は送らずに止まり、roster watch main を勧め、止まった記録を書く', async (_, send) => {
@@ -336,7 +346,7 @@ describe('merge の後の main の workflow を、命令が見て本文に足す
     const w = await started();
     w.mainRuns.list = [mainRun('test', 'completed', 'success'), mainRun('docs', 'completed', 'failure')];
     await reportMerged(w.se, { pr: PR, note: '入れた' });
-    expect(texts(w, 'file:tpm')[0]).toBe(`【merged】${PR} 入れた／main: 落ちた docs（https://github.com/o/r/actions/runs/docs）（ほか: 通った 1）`);
+    expect(texts(w, 'file:tpm')[0]).toBe(`【merged】${PR} 入れた／main: 落ちた docs（https://github.com/o/r/actions/runs/docs）（ほか: 通った 1）${REVIEW_NONE}`);
   });
 
   test('落ちた回があっても、ほかがまだ動いている間・merge から 2 分の内は送らない（みな終わってから送る）', async () => {
@@ -363,7 +373,7 @@ describe('merge の後の main の workflow を、命令が見て本文に足す
     const w = await started();
     w.mainRuns.list = [mainRun('docs', 'completed', 'failure', '2020-01-01T00:00:10Z'), mainRun('docs', 'completed', 'success', '2020-01-01T00:05:00Z', 'workflow_dispatch'), mainRun('test', 'completed', 'success')];
     await reportMerged(w.se, { pr: PR, note: '入れた' });
-    expect(texts(w, 'file:tpm')[0]).toBe(`【merged】${PR} 入れた${MAIN_PASSED}`);
+    expect(texts(w, 'file:tpm')[0]).toBe(`【merged】${PR} 入れた${MAIN_PASSED}${REVIEW_NONE}`);
   });
 
   test('回が 1 つも無い: merge の直後（2 分の内）は止まり、過ぎていれば「無い」と書いて送る', async () => {
@@ -374,14 +384,14 @@ describe('merge の後の main の workflow を、命令が見て本文に足す
     expect(texts(w, 'file:tpm')).toEqual([]);
     w.mainRuns.mergedAt = new Date(w.se.now().getTime() - 180_000).toISOString();
     await reportMerged(w.se, { pr: PR, note: '入れた' });
-    expect(texts(w, 'file:tpm')[0]).toBe(`【merged】${PR} 入れた／main: この merge で動いた workflow は無い`);
+    expect(texts(w, 'file:tpm')[0]).toBe(`【merged】${PR} 入れた／main: この merge で動いた workflow は無い${REVIEW_NONE}`);
   });
 
   test('取り消された回（後の回に寄った docs）は、落ちたと書かずに送る', async () => {
     const w = await started();
     w.mainRuns.list = [mainRun('test', 'completed', 'success'), mainRun('docs', 'completed', 'cancelled')];
     await reportMerged(w.se, { pr: PR, note: '入れた' });
-    expect(texts(w, 'file:tpm')[0]).toBe(`【merged】${PR} 入れた／main: workflow 1 つ通った・取り消し 1 つ（後の回が済ませたかは見ていない）`);
+    expect(texts(w, 'file:tpm')[0]).toBe(`【merged】${PR} 入れた／main: workflow 1 つ通った・取り消し 1 つ（後の回が済ませたかは見ていない）${REVIEW_NONE}`);
   });
 
   test('merge から 2 分の内は、在る回がみな終わっていても止まる', async () => {

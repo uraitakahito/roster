@@ -1,8 +1,11 @@
 // roster review list: レビューの頼みと判定を、数で読む（reviews.ts の記録）。読むだけなので、どの担当も打てる。
+// roster review allow: 担当が上げた「直すべき」を、TPM 担当が受けずに進めると決めた時に書く（役割の無い session だけ）。
 import type { Command } from 'commander';
 import { createContext, type Context } from '../context.ts';
-import { readReviews, VERDICTS, type Review, type Verdict } from '../reviews.ts';
+import { patchReview, readReviews, VERDICTS, type Review, type Verdict } from '../reviews.ts';
 import { envOf } from '../env.ts';
+import { actor } from '../evidence.ts';
+import { markAllowed } from './review-marks.ts';
 import { checkoutPull, removePlace, reviewGit } from '../review-place.ts';
 import { ensureImage, pruneReview, REVIEW_IMAGES, reviewRun, reviewServe, reviewStop, type ReviewImage, type RunOptions } from '../review-run.ts';
 import { isStaffKey, readRole, repoSeatKeys, staffKey, subjectOfStaffKey } from '../roster.ts';
@@ -58,12 +61,40 @@ export function reviewList(ctx: Context, options: { key?: string }): string[] {
   return [...lines, `結果の【done】を出した課題 ${results.length} 件のうち、レビューを頼んでいない課題: ${without.length} 件${without.length === 0 ? '' : `（${without.join('・')}）`}`];
 }
 
+/**
+ * 担当が roster ask tpm --review で上げた「直すべき」を、TPM 担当が受けずに進めると決めた事を、頼みの記録（allowed）に書き、
+ * レビューのページの「上げた」を「決まった」にする（roster page reply --answered --on tpm と同じ）。roster pr merge は、これがあれば
+ * 「直すべき」でも通す（見た commit の確かめは残る）。打てるのは役割の無い session（TPM 担当の席・Product Manager の terminal）だけ。
+ */
+export async function reviewAllow(ctx: Context, n: number, options: { note: string, url?: string }): Promise<string[]> {
+  if (envOf(ctx.env, 'ROLE')) throw new TpmError('roster review allow は、役割の無い session（TPM 担当の席・Product Manager の terminal）だけが打ちます。担当は roster ask tpm --review <番号> で TPM 担当に上げてください');
+  const review = readReviews(ctx).find(r => r.n === n);
+  if (review === undefined) throw new TpmError(`レビューの頼み #${n} はありません（roster review list で見る）`);
+  if (review.verdict !== 'reject') throw new TpmError(`レビュー #${n} の判定は「${review.verdict === undefined ? 'まだ' : VERDICTS[review.verdict]}」です。roster review allow が受けるのは「直すべき」だけです`);
+  if (review.escalatedAt === undefined) throw new TpmError(`レビュー #${n} は、TPM 担当に上げられていません。受けるのは、担当が roster ask tpm --review ${n} で上げた頼みだけです`);
+  const note = options.note.trim();
+  if (note === '') throw new TpmError('--note に、決めたことを書いてください');
+  const at = ctx.now().toISOString();
+  patchReview(ctx, n, { allowed: { by: actor(ctx.env).by, at, note, ...(options.url === undefined ? {} : { page: options.url }) } });
+  return [
+    `レビュー #${n} の「直すべき」を受けずに進めると書いた（${review.url}）。merge は roster pr merge で打つ（見た commit の後に commit が入れば止まる）`,
+    ...(review.page === undefined ? [] : await markAllowed(ctx, review.page)),
+  ];
+}
+
 /** `roster review` の命令を命令の木に足す。 */
 export function registerReview(program: Command, print: (lines: string[]) => void): void {
   const review = program.command('review').description('レビューの頼みと判定を読む（頼むのは roster ask review、返すのは roster report review）');
   review.command('list').description('頼みごとの行と、合わせた数（頼んだ回数・判定ごとの数・レビューを頼んでいない課題）')
     .option('--key <Key>', 'その課題の頼みだけ')
     .action((options: { key?: string }) => print(reviewList(createContext(), options)));
+  review.command('allow <番号>').description('（役割の無い session）担当が上げた「直すべき」を、受けずに進めると決めた事を書き、レビューのページを「決まった」にする（roster pr merge が通す）')
+    .requiredOption('--note <決めたこと>', '決めたこと')
+    .option('--url <ページ>', '決めたことを書いたページ')
+    .action(async (n: string, options: { note: string, url?: string }) => {
+      if (!/^[1-9]\d*$/.test(n)) throw new TpmError('番号は、レビューの頼みの番号（1 以上の数）にしてください');
+      print(await reviewAllow(createContext(), Number(n), options));
+    });
   // レビューの席の自分の場所（t-n4j9 の段 2。review-place.ts）。
   review.command('checkout <url>').description('課題のレビューの場所に、PR の head を出す（clone が無ければ作る。見直しでは新しい head に替える）')
     .action((url: string) => {

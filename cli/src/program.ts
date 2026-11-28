@@ -21,6 +21,7 @@ import { PAGE_KINDS, pageDelete, pageImport, pageList, pagePath, pagePut, pageRe
 import { mailArm, mailCheck, mailClaim, mailGate, mailLeft, mailPrompt, mailRelease, mailWait, WAIT_STEP, type StepResult, type WaitResult } from './commands/mail.ts';
 import { registerMessages } from './commands/register.ts';
 import { replyLanguageCheck } from './commands/reply-language.ts';
+import { registerPr } from './commands/pr.ts';
 import { registerReview } from './commands/review.ts';
 import { hello, inboxNow } from './commands/role-side.ts';
 import { seatAdd, seatBrief, seatClose, seatDismiss, seatNotify } from './commands/seat.ts';
@@ -137,6 +138,7 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
   program.command('inbox').description('自分宛てで、まだ届いていないメッセージを出す（段の区切りに見る）').action(async () => print(await inboxNow(createContext())));
   registerMessages(program, print);
   registerReview(program, print);
+  registerPr(program, print);
   program.command('time <key>').description('課題にかかった時間を、状態の移りの記録から分けて出す（席ごとの作業中・待ちの時間と、どの席の記録も動かなかった長い空き）')
     .option('--gap <分>', `長い空きとみなす長さ（分。既定は ${GAP_MINUTES}）`)
     .action((key: string, options: { gap?: string }) => print(time(createContext(), key, options.gap === undefined ? {} : { gapMinutes: Number(options.gap) })));

@@ -43,9 +43,10 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
     .requiredOption('--waiting-for <何を>', '状態に出す、待っている物')
     .action(async (text: string, options: { waitingFor: string }) => print(await askLead(createContext(), { text, ...options })));
   ask.command('review').description('【ask-review】計画・提案のページか PR のレビューを頼む（Staff Engineer 担当の席へじかに届く。席が無ければ起こす。レビューは助言）')
-    .requiredOption('--url <URL>', '見る物（置き場のページか PR の URL）')
+    .requiredOption('--url <URL>', '見る物（置き場のページか PR の URL）。PR なら繰り返せる（PR ごとに頼み 1 件。依頼書と【ask-review】は 1 つ）', collect, [] as string[])
     .option('--focus <見てほしい所>', '特に見てほしい所')
-    .action(async (options: { url: string, focus?: string }) => print(await askReview(createContext(), options)));
+    .option('--light', '軽い見方でよい（版上げ・CHANGELOG・文書・lock だけの差分）', false)
+    .action(async (options: { url: string[], focus?: string, light: boolean }) => print(await askReview(createContext(), options)));
 
   const report = program.command('report').description('担当が TPM 担当に知らせる');
   report.command('merged').description('【merged】自分の PR を 1 本 merge した（PR が merge 済みでなければ送らない）')
@@ -96,7 +97,7 @@ export function registerMessages(program: Command, print: (lines: string[]) => v
     .requiredOption('--url <URL>', 'レビューのページ（roster page put --kind review で置いた URL）')
     .requiredOption('--verdict <判定>', Object.entries(VERDICTS).map(([id, label]) => `${id}（${label}）`).join('・'))
     .requiredOption('--summary <一言>')
-    .option('--review <番号>', '（Tech Lead 担当）判定を返す頼みの番号。返していない頼みがいくつもある時は、名指す（roster review list で見る）')
+    .option('--review <番号>', '判定を返す頼みの番号（その頼みだけに書く）。Tech Lead 担当は返していない頼みがいくつもある時、Staff Engineer 担当はまとめた頼みの PR ごとに返す時に名指す（roster review list で見る）')
     .action(async (options: { url: string, verdict: string, summary: string, review?: string }) => {
       const { review, ...rest } = options;
       if (review !== undefined && !/^[1-9]\d*$/.test(review)) throw new TpmError('--review は、レビューの頼みの番号（1 以上の数）にしてください');

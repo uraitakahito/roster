@@ -155,14 +155,16 @@ describe('Tech Lead 担当の roster report review', () => {
     expect((await hello(w.pagetray)).some(l => l.startsWith('返していないレビューの頼み'))).toBe(false);
   });
 
-  test('--review は、返していない頼みの番号だけ。Staff Engineer 担当には付けられない', async () => {
+  test('--review は、返していない頼みの番号だけ。Staff Engineer 担当も、自分の頼みの番号なら付けられる（t-pq5v）', async () => {
     const w = await split();
     await askReview(w.pagetray, { url: PR1 });
     await expect(reportReview(w.lead, { url: await w.put(w.lead, 'review'), verdict: 'approve', summary: 'x', review: 9 })).rejects.toThrow(/^--review の #9 は、返していない頼みにありません。送っていません。\n#1 AI-36\.pagetray/);
     await askReview(w.lead, { url: await w.put(w.lead, 'plan'), wait: 0 });
     const staff = { ...w.role('AI-36.staff', 'file:4'), root: w.lead.root };
     await hello(staff);
-    await expect(reportReview(staff, { url: await w.put(staff, 'review'), verdict: 'approve', summary: 'x', review: 2 })).rejects.toThrow(/^--review は、Tech Lead 担当が、返す頼みを名指す時だけに付ける/);
+    // repo の席の頼み（#1）は、Staff の頼みに無い。
+    await expect(reportReview(staff, { url: await w.put(staff, 'review'), verdict: 'approve', summary: 'x', review: 1 })).rejects.toThrow(/^--review の #1 は、返していない頼みにありません。送っていません。/);
+    expect((await reportReview(staff, { url: await w.put(staff, 'review'), verdict: 'approve', summary: 'x', review: 2 })).at(-1)).toBe('状態: 回答待ち(レビュー): 次の頼み');
   });
 
   test('頼んだ席を閉じる: 居る席は、返っていない頼みがあれば閉じない。居場所の無い席の頼みは取り下げる', async () => {

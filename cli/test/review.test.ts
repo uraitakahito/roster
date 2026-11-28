@@ -7,14 +7,14 @@ import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { askTpm, dismiss, notify, reportDone, toPeer } from '../src/commands/messages.ts';
 import { pageList, pagePath, pagePut, pageReply, type PageRecord } from '../src/commands/page.ts';
-import { reviewList } from '../src/commands/review.ts';
+import { reviewAllow, reviewList } from '../src/commands/review.ts';
 import { markBrief } from '../src/commands/review-marks.ts';
 import { hello } from '../src/commands/role-side.ts';
 import { askReview, reportReview } from '../src/commands/staff.ts';
 import { collect } from '../src/commands/timeline.ts';
 import { assign, close } from '../src/commands/tpm-side.ts';
 import type { Context } from '../src/context.ts';
-import { readReviews, reviewLabel, type Review } from '../src/reviews.ts';
+import { readReviews, recordHead, reviewLabel, type Review } from '../src/reviews.ts';
 import { readRole, requireRole, writeRole } from '../src/roster.ts';
 import { DELIVERED_FILE, type DeliveredLine } from '../src/mail.ts';
 import type { MessageTrace } from '../src/seen.ts';
@@ -638,5 +638,152 @@ describe('置き場の印を付けられない時（review-3 の指摘）', () =
     const brief = requireRole(w.tpm, 'AI-8.staff').brief ?? '';
     await expect(pageReply(w.tpm, [brief], { waiting: true })).rejects.toThrow(/今ほかの相手の返事を待っています（置き場は待ちを移さない。何も替えていない）/);
     expect(record(w, 'brief-1')).toMatchObject({ waits_on: 'review' });
+  });
+});
+
+describe('見た commit・まとめた頼み・軽い見方・review allow（t-pq5v の段 1）', () => {
+  const H1 = '1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b';
+  const H2 = '5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e';
+  const PR2 = 'https://github.com/o/r/pull/8';
+  const at = (ctx: Context, hhmm: string): void => {
+    ctx.now = () => new Date(`2026-11-20T${hhmm}:00.000Z`);
+  };
+
+  /** asked の席が #1（計画）を返し、12:10 に PR #7（head は H1）のレビューを頼んだ世界（席は居るので checkout はしない）。 */
+  async function prAsked(): Promise<Seats & { staff: Context }> {
+    const w = await asked();
+    await reportReview(w.staff, { url: await w.put(w.staff, 'review'), verdict: 'approve', summary: 'よい' });
+    w.prs.set(PR, 'OPEN');
+    w.prFields.set(PR, { headRefOid: H1 });
+    at(w.se, '12:10');
+    await askReview(w.se, { url: PR });
+    at(w.staff, '12:30');
+    return w;
+  }
+  const verdictOf = async (w: Seats & { staff: Context }, verdict = 'approve', review?: number): Promise<string[]> =>
+    await reportReview(w.staff, { url: await w.put(w.staff, 'review'), verdict, summary: '見た', ...(review === undefined ? {} : { review }) });
+
+  test('ask review は、PR の頼みに頼んだ時の head を書く。gh で読めなくても頼む（askedHead を書かない）', async () => {
+    const w = await prAsked();
+    expect(readReviews(w.tpm)[1]).toMatchObject({ n: 2, url: PR, askedHead: H1 });
+    w.prs.set(PR2, undefined);
+    at(w.se, '12:11');
+    expect((await askReview(w.se, { url: PR2 }))[0]).toMatch(/^送った: 【ask-review】/);
+    expect(readReviews(w.tpm)[2]).toMatchObject({ n: 3, url: PR2 });
+    expect(readReviews(w.tpm)[2]?.askedHead).toBeUndefined();
+  });
+
+  test('report review の見た commit: 頼みの後に checkout した head があれば、それ（checkout）', async () => {
+    const w = await prAsked();
+    at(w.staff, '12:15');
+    recordHead(w.staff, 'AI-8', `${PR}/files`, H2);
+    at(w.staff, '12:30');
+    await verdictOf(w);
+    expect(readReviews(w.tpm)[1]).toMatchObject({ verdict: 'approve', head: H2, headFrom: 'checkout' });
+  });
+
+  test('checkout が無く、判定の時の head が頼んだ時と同じなら、それ（asked）', async () => {
+    const w = await prAsked();
+    await verdictOf(w);
+    expect(readReviews(w.tpm)[1]).toMatchObject({ verdict: 'approve', head: H1, headFrom: 'asked' });
+    expect(texts(w, 'file:1').at(-1)).toMatch(/／頼み: #2$/);
+  });
+
+  test('頼んだ後・判定の前に push されたら、head を書かず、【review】に見直しが要ると書く', async () => {
+    const w = await prAsked();
+    w.prFields.set(PR, { headRefOid: H2 });
+    const out = await verdictOf(w);
+    expect(out).toContain('見た commit を記録できなかった（頼んだ後に push があった）。merge の前に見直しが要る');
+    expect(texts(w, 'file:1').at(-1)).toMatch(/／頼み: #2／見た commit を記録できなかった（頼んだ後に push があった）。merge の前に見直しが要る$/);
+    expect(readReviews(w.tpm)[1]?.head).toBeUndefined();
+  });
+
+  test('頼みより前に出した古い head（表に残った物）は写らない', async () => {
+    const w = await asked();
+    await reportReview(w.staff, { url: await w.put(w.staff, 'review'), verdict: 'approve', summary: 'よい' });
+    at(w.staff, '12:05');
+    recordHead(w.staff, 'AI-8', PR, 'f'.repeat(40));
+    w.prs.set(PR, 'OPEN');
+    w.prFields.set(PR, { headRefOid: H1 });
+    at(w.se, '12:10');
+    await askReview(w.se, { url: PR });
+    at(w.staff, '12:30');
+    await verdictOf(w);
+    expect(readReviews(w.tpm)[1]).toMatchObject({ head: H1, headFrom: 'asked' });
+  });
+
+  test('--url をいくつも: PR ごとに頼み 1 件、依頼書と【ask-review】は 1 つ。--light は依頼書と本文に載る。ページとは混ぜない', async () => {
+    const w = await asked();
+    await reportReview(w.staff, { url: await w.put(w.staff, 'review'), verdict: 'approve', summary: 'よい' });
+    await expect(askReview(w.se, { url: [PR, w.plan] })).rejects.toThrow(/--url をいくつも書けるのは PR だけです/);
+    await expect(askReview(w.se, { url: [PR, `${PR}/files`] })).rejects.toThrow(/--url に同じ PR を 2 度書いています/);
+    const before = w.posted('file:2').length;
+    at(w.se, '12:10');
+    await askReview(w.se, { url: [PR, PR2], light: true });
+    expect(w.posted('file:2').length).toBe(before + 1);
+    expect(texts(w, 'file:2').at(-1)).toMatch(new RegExp(`brief-2\\.html 頼み: #2 #3 ${PR} ${PR2} 軽い見方でよい$`));
+    const [, two, three] = readReviews(w.tpm);
+    expect(two).toMatchObject({ n: 2, url: PR, light: true });
+    expect(three).toMatchObject({ n: 3, url: PR2, light: true, brief: two?.brief, ask: two?.ask });
+    const html = readFileSync((await pagePath(w.tpm, two?.brief ?? ''))[0] ?? '', 'utf8');
+    expect(html).toContain('頼み #2・頼み #3は、軽い見方でよい（版上げ・CHANGELOG・文書・lock だけの差分。超えていれば普段の見方）。');
+  });
+
+  test('Staff は --review で PR ごとに返せる。名指さずに返すと、まだ返していない頼みにだけ書く', async () => {
+    const w = await asked();
+    await reportReview(w.staff, { url: await w.put(w.staff, 'review'), verdict: 'approve', summary: 'よい' });
+    at(w.se, '12:10');
+    await askReview(w.se, { url: [PR, PR2] });
+    at(w.staff, '12:20');
+    const first = await verdictOf(w, 'reject', 3);
+    expect(first.at(-1)).toBe('同じ依頼書の頼みが、あと 1 件返っていません（#2。roster report review --review <番号>）');
+    expect(texts(w, 'file:1').at(-1)).toMatch(/判定: 直すべき（reject）／一言: 見た／頼み: #3$/);
+    // 依頼書のレビュー待ちは、残りを返すまで外さない
+    expect(first.some(l => l.startsWith('置き場の印: レビュー済みにした'))).toBe(false);
+    at(w.staff, '12:30');
+    const second = await verdictOf(w, 'approve');
+    expect(second.at(-1)).toBe('状態: 回答待ち(レビュー): 次の頼み');
+    expect(second.some(l => l.startsWith('置き場の印: レビュー済みにした'))).toBe(true);
+    expect(readReviews(w.tpm).map(r => [r.n, r.verdict])).toEqual([[1, 'approve'], [2, 'approve'], [3, 'reject']]);
+  });
+
+  test('同じ PR は、判定待ちの間だけ断る（書き方が違っても）。判定の後の見直しは通り、依頼書に前の頼みと差分の 1 行が載る', async () => {
+    const w = await prAsked();
+    await expect(askReview(w.se, { url: 'https://github.com/O/R/pull/7/files' })).rejects.toThrow(/同じ物のレビューを、もう頼んであります（#2。/);
+    await verdictOf(w, 'concerns');
+    w.prFields.set(PR, { headRefOid: H2 });
+    at(w.se, '12:40');
+    await askReview(w.se, { url: `${PR}/files`, light: true });
+    const again = readReviews(w.tpm)[2];
+    expect(again).toMatchObject({ n: 3, askedHead: H2, light: true });
+    const html = readFileSync((await pagePath(w.tpm, again?.brief ?? ''))[0] ?? '', 'utf8');
+    expect(html).toContain(`見直し: 前の頼み #2（気になる所あり・見た 1a2b3c4。前の判定からの差分を見る: <code>roster review git -- diff ${H1}..HEAD</code>）`);
+  });
+
+  test('review allow: 役割の無い session から、上げた「直すべき」だけを受け、allowed を書いてページを「決まった」にする', async () => {
+    const w = await asked();
+    const page = await w.put(w.staff, 'review');
+    await reportReview(w.staff, { url: page, verdict: 'approve', summary: 'よい' });
+    w.prs.set(PR, 'OPEN');
+    w.prFields.set(PR, { headRefOid: H1 });
+    at(w.se, '12:10');
+    await askReview(w.se, { url: PR });
+    at(w.staff, '12:20');
+    const rejected = await w.put(w.staff, 'review');
+    await reportReview(w.staff, { url: rejected, verdict: 'reject', summary: '依頼と違う' });
+    // 役割の有る席からは打てない
+    await expect(reviewAllow(w.se, 2, { note: '進める' })).rejects.toThrow(/役割の無い session（TPM 担当の席・Product Manager の terminal）だけが打ちます/);
+    // 「直すべき」でない頼み・上げていない頼みは受けない
+    await expect(reviewAllow(w.tpm, 1, { note: '進める' })).rejects.toThrow('レビュー #1 の判定は「よい」です。roster review allow が受けるのは「直すべき」だけです');
+    await expect(reviewAllow(w.tpm, 2, { note: '進める' })).rejects.toThrow(/レビュー #2 は、TPM 担当に上げられていません/);
+    at(w.se, '12:25');
+    await askTpm(w.se, { text: '範囲の外', waitingFor: 'レビューの食い違い', review: 2 });
+    at(w.tpm, '12:30');
+    expect(await reviewAllow(w.tpm, 2, { note: '指摘は範囲の外。次の課題で直す', url: w.plan })).toEqual([
+      `レビュー #2 の「直すべき」を受けずに進めると書いた（${PR}）。merge は roster pr merge で打つ（見た commit の後に commit が入れば止まる）`,
+      `置き場の印: 決まったにした ${rejected}`,
+    ]);
+    expect(readReviews(w.tpm)[1]?.allowed).toEqual({ by: 'tpm', at: '2026-11-20T12:30:00.000Z', note: '指摘は範囲の外。次の課題で直す', page: w.plan });
+    expect((await pageList(w.tpm, { key: 'AI-8', reply: 'waiting', on: 'tpm' }))).toEqual(['合うページは無い']);
   });
 });

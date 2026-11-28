@@ -4,7 +4,7 @@
 // 印を付けられなくても（置き場が応えない・誤りを返す）、命令は止めない（印が付かないだけ。メッセージを送った後に呼ばれるため）。
 // 応えない時は、待ちの印を TPM 担当が後で直す手（roster page reply … --on review）を、直す依頼書ごとに出す。判定と見た物は手では書けない。
 import type { Context } from '../context.ts';
-import { openReviews, type Review, type Verdict } from '../reviews.ts';
+import { openReviews, readReviews, type Review, type Verdict } from '../reviews.ts';
 import { TpmError } from '../skill-sets.ts';
 import { markFailure, pageParts, setReply, type ReplyResult } from './reply.ts';
 import { inStore, pagesRequest, reason } from './store.ts';
@@ -85,10 +85,14 @@ export async function markBrief(ctx: Context, url: string, asks: Review[], previ
   });
 }
 
-/** 判定を返した時（roster report review）: レビューのページに判定と見た物を書き、済ませた頼みの依頼書の「レビュー待ち」を外す。 */
+/**
+ * 判定を返した時（roster report review）: レビューのページに判定と見た物を書き、済ませた頼みの依頼書の「レビュー待ち」を外す。
+ * 同じ依頼書に、まだ返していない頼み（PR ごとに返す時の残り）があれば、その依頼書の待ちは外さない。判定を頼みに書いた後に呼ぶ。
+ */
 export async function markVerdict(ctx: Context, page: string, verdict: Verdict, asks: Review[]): Promise<string[]> {
   return await safely(async () => {
-    const briefs = [...new Set(asks.flatMap(r => r.brief === undefined ? [] : [r.brief]))];
+    const left = new Set(readReviews(ctx).filter(r => r.verdict === undefined).map(r => r.brief));
+    const briefs = [...new Set(asks.flatMap(r => r.brief === undefined || left.has(r.brief) ? [] : [r.brief]))];
     const wrote = await postMarks(ctx, page, { verdict, targets: asks.map(r => target(ctx, r.url)) });
     if (wrote.result === 'down') return unmarked(briefs.map(brief => `roster page reply ${brief} --answered --on review`));
     const lines = wrote.result === 'done'
@@ -111,4 +115,9 @@ export async function markWithdrawn(ctx: Context, asks: Review[]): Promise<strin
 /** 判定を受けずに TPM 担当に上げた時（roster ask tpm --review）: レビューのページを「上げた」（TPM 担当の返事待ち）にする。TPM 担当が決めたら roster page reply --answered --on tpm で外す。 */
 export async function markEscalated(ctx: Context, page: string): Promise<string[]> {
   return await replyMark(ctx, page, 'waiting', 'tpm', '上げた（TPM 担当の返事待ち）にした');
+}
+
+/** TPM 担当が「直すべき」を受けずに進めると決めた時（roster review allow）: レビューのページの「上げた」を「決まった」にする（roster page reply --answered --on tpm と同じ）。 */
+export async function markAllowed(ctx: Context, page: string): Promise<string[]> {
+  return await replyMark(ctx, page, 'answered', 'tpm', '決まったにした');
 }
