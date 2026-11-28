@@ -272,7 +272,8 @@ describe.skipIf(URL === '')('cli と pagetray のつなぎ（送った記録）'
     await messageRecordsSettled();
     await askTpm(s.real(s.w.role('K-40', 'file:1')), { text: 'B でよいか', waitingFor: '答え' });
     await messageRecordsSettled();
-    const log = s.tpm.state.lines<Sent>('log.jsonl');
+    // 席を起こす時の頼みの行（launch）は、偽の置き場に写してある（起こしは偽の置き場で済ませた）。ここでは、送った 2 件を見る。
+    const log = s.tpm.state.lines<Sent>('log.jsonl').filter(l => l.launch !== true);
     // 前の版の行（連携の道具が運んだ。carrier が無い）。今の送る命令は、8000 字を超える本文を置かないので、長い本文はこの形で見る。
     const old: Sent = { at: log[0]?.at ?? '', key: 'K-40', heading: 'done', from: 'SWE K-40: 計画と実装', to: 'file:tpm', text: `【done】${'長'.repeat(9000)}`, id: 'old-1', sender: { key: 'K-40' }, recipient: { key: TPM_PARTY } };
     copyMessageRecord(s.tpm, old);
