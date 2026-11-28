@@ -186,7 +186,7 @@ cd <TPM 担当を起こした folder>
 担当と Product Manager のアクターを残す、roster を動かす機械の中だけのサーバー（別の repo の [castlist](https://uraitakahito.github.io/castlist/)。`roster` が何を送るかは [担当のあいだの決まり](/protocol/#アクターの台帳castlist)、つなぐ設定は [設定](/configuration/#アクターの台帳castlist任意)）。**起こす・止める・data の volume を消すのは Product Manager だけ**で、命令は Product Manager が自分の terminal で直に打つ（手順は castlist の docs の「[動かす](https://uraitakahito.github.io/castlist/run.html)」）。
 
 - castlist を設定した project で castlist が止まっていると、`roster start`・`roster assign`・`roster audit start`・`roster hello` は起こさず・名乗らずに止まり、打つ 1 行を出す。container（名は `castlist.box`。castlist 0.1.1 から）が在れば `container start castlist.box`、0.1.0 の docs の名 `castlist` の container だけが在ればその名で起こし直し、次に版を上げる時に名を替えるよう添える。どちらも無ければ `container run -d --name castlist.box -p 127.0.0.1:<port>:8080 -v castlist-data-v1:/data -m 200M -c 1 ghcr.io/uraitakahito/castlist:<版>`（`<port>` は設定の URL の port、`<版>` は `cli/src/castlist.ts` の `CASTLIST_VERSION`。今は `v2.1.1`）。初めて起こす時は、先に castlist の docs の「初めて起こす」（image の digest を見る・volume を作る）をする。
-- 担当の居場所では、guard が Bash を止め、担当が TPM 担当に 1 行を渡す。TPM 担当は `roster wait pm "castlist を起こす" --hand` で Product Manager に頼む。
+- 担当の居場所では、guard が shell の命令（Bash・Monitor）を止め、担当が TPM 担当に 1 行を渡す。TPM 担当は `roster wait pm "castlist を起こす" --hand` で Product Manager に頼む。
 - roster を動かす機械を起こし直すと止まったままになる。`container system start` の後に `container start castlist.box` を打つ。
 - 止めている間の session の始まりと終わりは、castlist に残らない（hook は送らずに終わる）。起きた後の初めの Bash で、guard が登録する。
 - 監査では、Auditor が `roster castlist find`・`roster castlist show`・`roster castlist lineage`・`roster castlist events`・`roster castlist settings` でアクターを引く（読むだけ。[担当のあいだの決まり](/protocol/#監査の検索を読む)）。止まっている間は `castlist に聞けない` の 1 行で止まり、`roster incident timeline` はアクターの欄に「castlist に聞けない」と書いてページを置く。

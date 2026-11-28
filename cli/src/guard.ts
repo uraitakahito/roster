@@ -95,8 +95,8 @@ const GIT_READ_ARGS: Record<string, RegExp> = {
   tag: /^(?:-l|-n\d*|--list)$/,
   worktree: /^list$|^--porcelain$/,
 };
-/** gh の、変える命令（`gh <語> <語>` の 2 語）。 */
-const GH_CHANGES = /^gh (?:pr (?:create|merge|close|edit|ready|reopen|review|comment)|issue (?:create|edit|delete|reopen|close|comment)|release (?:create|delete|edit|upload)|repo (?:create|delete|edit|rename|archive|sync)|workflow (?:run|enable|disable)|run (?:rerun|cancel|delete)|(?:secret|variable|label) (?:set|delete|create|edit))\b/;
+/** gh の、変える命令（`gh <語> <語>` の 2 語）。`gh pr checkout` は手元の checkout を、`update-branch`・`revert` は GitHub の側を変える（t-xdmv）。 */
+const GH_CHANGES = /^gh (?:pr (?:create|merge|close|edit|ready|reopen|review|comment|checkout|update-branch|revert)|issue (?:create|edit|delete|reopen|close|comment)|release (?:create|delete|edit|upload)|repo (?:create|delete|edit|rename|archive|sync)|workflow (?:run|enable|disable)|run (?:rerun|cancel|delete)|(?:secret|variable|label) (?:set|delete|create|edit))\b/;
 /** gh api の、書き込みになる旗（-X GET のほかの method と、欄を送る旗。欄を送ると POST になる）。 */
 const GH_API_WRITES = /^(?:-f|-F|--field|--raw-field|--input)$/;
 

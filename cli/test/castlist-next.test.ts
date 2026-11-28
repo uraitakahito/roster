@@ -283,6 +283,23 @@ describe('書く道', () => {
     expect(verdict.allow === false && verdict.reason).toMatch(/が応えません。castlist に送れないので、Bash を止めました。/);
   });
 
+  test('Monitor の命令も Bash と同じに見る: つながらなければ止め、ほかの道具は castlist に聞かずに通す（t-xdmv）', async () => {
+    const { ctx, seen } = nextSeat(() => ({ throws: Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }) }));
+    const verdict = await castlistGuard(ctx, bashInput({ tool_name: 'Monitor', tool_input: { command: 'tail -f x.log', description: 'x', timeout_ms: 1000 } }));
+    expect(verdict.allow).toBe(false);
+    expect(verdict.allow === false && verdict.reason).toMatch(/が応えません。castlist に送れないので、Monitor を止めました。/);
+    const asked = seen.length;
+    expect(await castlistGuard(ctx, bashInput({ tool_name: 'Read', tool_input: { file_path: '/x' } }))).toEqual({ allow: true });
+    expect(seen.length).toBe(asked);
+  });
+
+  test('Monitor の命令でも、控えの無い session を登録する（t-xdmv）', async () => {
+    const { ctx } = nextSeat();
+    expect(readSession(ctx, SID)).toBeUndefined();
+    expect(await castlistGuard(ctx, bashInput({ tool_name: 'Monitor', tool_input: { command: 'tail -f x.log' } }))).toEqual({ allow: true });
+    expect(readSession(ctx, SID)?.present).toBe(true);
+  });
+
   test('409（Conflict）は、もう在るので済んだとみなす（stderr に書かない）。400（ValidationException）は断られた訳を stderr に書いて進む', async () => {
     const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     try {

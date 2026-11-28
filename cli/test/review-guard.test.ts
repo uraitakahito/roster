@@ -177,4 +177,25 @@ describe('どの席の guard も Monitor の命令を見る（台帳 #416）', (
     expect((await guard(seat, monitor('pkill -f vitest'))).allow).toBe(false);
     expect((await guard(seat, monitor('tail -f x.log'))).allow).toBe(true);
   });
+
+  // castlist は Product Manager だけの環境（volume は消えると戻らない）。Monitor で打っても、Bash と同じに止める（t-xdmv）。guard の判じだけを見る（本物の命令は動かさない）。
+  test.each([undefined, ...ROLE_NAMES])('%s の席で、Monitor の castlist の命令を Bash と同じに止める', async (role) => {
+    const castlist = { guard: 'pm-only', match: ['--name castlist.box', 'container stop castlist.box', 'container volume delete castlist-data*', 'container volume rm castlist-data*', '-v castlist-data*'] };
+    const w = world({ infra: { castlist } });
+    const seat = role === undefined ? w.tpm : { ...w.role('t-x7k2', 'file:2'), env: { ROSTER_KEY: 't-x7k2', ROSTER_ROLE: role } };
+    const bash = (command: string) => JSON.stringify({ tool_name: 'Bash', tool_input: { command } });
+    for (const command of ['container volume delete castlist-data-v1', 'container stop castlist.box', 'container logs -f castlist.box; container volume rm castlist-data-v1']) {
+      const byMonitor = await guard(seat, monitor(command));
+      expect(byMonitor.allow).toBe(false);
+      expect(byMonitor).toEqual(await guard(seat, bash(command)));
+    }
+    expect((await guard(seat, monitor('container logs -f pagetray.box'))).allow).toBe(true);
+  });
+
+  test.each(['auditor', 'staff-engineer'])('%s の席で、Monitor の gh pr checkout を止める（読むだけの席。t-xdmv）', async (role) => {
+    const w = world({});
+    const seat = { ...w.role('t-x7k2', 'file:2'), env: { ROSTER_KEY: 't-x7k2', ROSTER_ROLE: role } };
+    expect(await guard(seat, monitor('gh pr checkout 141'))).toEqual({ allow: false, reason: expect.stringContaining('repo を変えません（gh pr checkout）') as string });
+    expect((await guard(seat, monitor('gh pr checks 141 --watch'))).allow).toBe(true);
+  });
 });
