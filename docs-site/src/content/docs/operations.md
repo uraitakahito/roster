@@ -416,6 +416,20 @@ castlist と pagetray は、1.0.0 で API も DB も替えた（AI-36 の切り�
 - **担当は `container build` に `-c`（`--cpus`）・`-m`（`--memory`）・`--ssh`・`--dns`・`--dns-domain`・`--dns-search`・`--dns-option` を付けない。**build も `container builder start` も、動いている builder の CPU・メモリ・DNS・ssh の転送が頼んだ物と違うと、builder を止めて消し、作り直す（ほかの担当の build が落ちる）。guard の `match` は環境の名の付いた命令に当てるので、名の無いこの旗の付いた build は止められない。builder の大きさや DNS を変える要があれば、`roster ask devops` で頼む。今の builder は既定の CPU 2・メモリ 2048 MB。
 - 起こし直す（中から名前が引けないなど）のは DevOps Engineer 担当で、先に【ask-tpm】で何が止まるか（その間の build）を送る。`roster infra run builder -- container builder stop` の後に `roster infra run builder -- container builder start`。旗を付けずに起こすと既定の大きさになる。
 
+## レビューの container（roster-review）
+
+Staff Engineer 担当の席が、PR を試す使い捨ての container（`roster review run`・`serve`。[担当のあいだの決まり](/protocol/#staff-engineer-担当の席)）と、その周り。設定の `infra` の `review`（手続きは自由。名の頭が `roster-review` の物だけ）。
+
+| 物 | 名 | いつ作られ、いつ消えるか |
+|---|---|---|
+| container | `roster-review-<Key>-<run\|serve>-<時刻>` | `run` は流し終えると消える（`--rm`）。`serve` は `roster review stop` か、席を `roster close` で閉じた時に止まって消える |
+| network | `roster-review` | 初めての `run`・`serve` が作る。残しておく（default・ほかの network の container と手元の口には届かない） |
+| image | `roster-review-node:<hash>`・`roster-review-rust:<hash>` | 無ければ `run` が作る（`review/images/` の Containerfile の中身が替われば、次の `run` が新しい名で作る）。古い版の image は残る |
+| 作業の木と cache | `${XDG_CACHE_HOME:-~/.cache}/roster/review/<project>/<Key>/` | 席を閉じる時に消える。課題ごとで共有しない（Apple の container の volume は同時に 2 つに付かず、host の folder の共有は cargo の lock が効かない） |
+
+- 消す時は、名を `container ls`・`container image ls`・`container network ls` で見て、名を書いて 1 つずつ消す（`container rm roster-review-…`・`container image delete roster-review-node:<hash>`・`container network delete roster-review`）。`prune`・`--all` は使わない（PM だけの環境に当たる）。
+- disk の目安（2026-11-28 の段 0）: rust の image 1.3 GB ほど、castlist の clone の `target/` 4.4 GB ほど（課題ごと）。
+
 ## 担当が落ちた後の調べ方
 
 担当の Claude Code の session・cmux・container が思わず止まった時に、何が・いつ・どの process の合図で止まったかを、後から引く手順。2026-11-23 の朝（05:33:17 JST）に、担当の session が打った `pkill -f "castlist-server" -n` が、command line に `-n` を含む process すべてに SIGTERM を送り、担当の session 3 つ・cmux-cua の helper・container がいっせいに止まった件（台帳 #89）は、この 3 つの手で元まで追えた。見張りは置いていないので、記録は macOS と Claude Code が元から残す物だけ。

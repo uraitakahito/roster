@@ -4,6 +4,7 @@ import { createContext, type Context } from '../context.ts';
 import { readReviews, VERDICTS, type Review, type Verdict } from '../reviews.ts';
 import { envOf } from '../env.ts';
 import { checkoutPull, prunePlaces, removePlace, reviewGit } from '../review-place.ts';
+import { ensureImage, REVIEW_IMAGES, reviewRun, reviewServe, reviewStop, type ReviewImage, type RunOptions } from '../review-run.ts';
 import { isStaffKey, readRole, repoSeatKeys, staffKey, subjectOfStaffKey } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
 
@@ -80,6 +81,41 @@ export function registerReview(program: Command, print: (lines: string[]) => voi
       process.stderr.write(r.stderr);
       process.exit(r.status);
     });
+  // 使い捨ての container で流す（t-n4j9 の段 3。review-run.ts）。
+  const runOptions = (c: Command): Command => c
+    .option('--repo <名>', 'clone が 2 つ以上ある時の repo の名')
+    .option('--image <種類>', `image の種類（${Object.keys(REVIEW_IMAGES).join('・')}。既定は作業の木の file で決める）`)
+    .option('--memory <量>', 'container のメモリ（既定 4G）');
+  const opts = (o: { repo?: string, image?: string, memory?: string }): RunOptions => ({
+    ...(o.repo === undefined ? {} : { repo: o.repo }),
+    ...(o.image === undefined ? {} : { image: imageOption(o.image) }),
+    ...(o.memory === undefined ? {} : { memory: o.memory }),
+  });
+  runOptions(review.command('run <command...>').description('レビューの場所の clone を、使い捨ての container の中で試す（roster review run -- pnpm test）。mount は作業の木と課題の cache だけ'))
+    .action((command: string[], o: { repo?: string, image?: string, memory?: string }) => {
+      const ctx = createContext();
+      const r = reviewRun(ctx, placeKey(ctx), opts(o), command);
+      print(r.lines);
+      process.exit(r.status);
+    });
+  runOptions(review.command('serve <command...>').description('container を起こしたままにして、名と IP を出す（動かして試す。止めるのは roster review stop）'))
+    .action((command: string[], o: { repo?: string, image?: string, memory?: string }) => {
+      const ctx = createContext();
+      print(reviewServe(ctx, placeKey(ctx), opts(o), command));
+    });
+  review.command('stop [name]').description('この課題の container を止める（名を書かなければ、みな）')
+    .action((name: string | undefined) => {
+      const ctx = createContext();
+      const stopped = reviewStop(ctx, placeKey(ctx), name);
+      print(stopped.length === 0 ? ['止める container は無い'] : stopped.map(n => `止めた: ${n}`));
+    });
+  review.command('build [kind]').description('レビューの container の image を作る（無ければ。既定はみな）')
+    .action((kind: string | undefined) => {
+      const ctx = createContext();
+      const kinds = kind === undefined ? Object.keys(REVIEW_IMAGES) as ReviewImage[] : [imageOption(kind) as ReviewImage];
+      const out = kinds.flatMap(k => ensureImage(ctx, k));
+      print(out.length === 0 ? ['image はもうある'] : out);
+    });
   review.command('clean [key]').description('課題のレビューの場所を消す（Key を書かなければ、名簿に居ない課題の場所のうち 1 時間より古い物）')
     .action((key: string | undefined) => {
       const ctx = createContext();
@@ -91,6 +127,13 @@ export function registerReview(program: Command, print: (lines: string[]) => voi
       const removed = prunePlaces(ctx, k => readRole(ctx, staffKey(k)) !== undefined);
       print(removed.length === 0 ? ['消す場所は無い'] : removed.map(p => `消した: ${p}`));
     });
+}
+
+/** --image の値を確かめる。 */
+function imageOption(value: string | undefined): ReviewImage | undefined {
+  if (value === undefined) return undefined;
+  if (!(value in REVIEW_IMAGES)) throw new TpmError(`--image は ${Object.keys(REVIEW_IMAGES).join('・')} のどれか: ${value}`);
+  return value as ReviewImage;
 }
 
 /** 打った担当の、レビューの場所の Key（Staff Engineer 担当の席なら、見ている課題の Key）。 */

@@ -12,6 +12,7 @@ import { openLine } from '../incidents.ts';
 import { openReviews } from '../reviews.ts';
 import { resolveSettings } from '../settings.ts';
 import { removePlace } from '../review-place.ts';
+import { reviewStop } from '../review-run.ts';
 import { allRoles, assertKey, isRepoSeat, isStaffKey, LOCAL_KEY, readRole, removeRole, repoSeats, requireTpmSide, staffKey, subjectOfStaffKey, type RoleRecord, type TpmRecord } from '../roster.ts';
 import { readSkillSets, skillSetDir, TpmError } from '../skill-sets.ts';
 import { route } from '../tracker/routed.ts';
@@ -308,8 +309,21 @@ export async function closeSeat(ctx: Context, record: RoleRecord): Promise<strin
   const mail = await clearSeat(ctx, record);
   removeRole(ctx, record.key);
   // レビューの席の場所（clone）も消す（t-n4j9 の段 2）。
-  const place = record.role === 'staff-engineer' && isStaffKey(record.key) ? removePlace(ctx, subjectOfStaffKey(record.key)) : undefined;
-  return [`閉じた: ${record.title}${alive ? `（${record.address}）` : '（居場所はもう無かった）'}`, ...castlist, ...mail, ...(place === undefined ? [] : [`レビューの場所を消した: ${place}`])];
+  const review = record.role === 'staff-engineer' && isStaffKey(record.key) ? closeReviewPlace(ctx, subjectOfStaffKey(record.key)) : [];
+  return [`閉じた: ${record.title}${alive ? `（${record.address}）` : '（居場所はもう無かった）'}`, ...castlist, ...mail, ...review];
+}
+
+/** レビューの席の container を止め、場所を消す（t-n4j9 の段 2・3）。container を止められなくても、場所は消す。出す行。 */
+function closeReviewPlace(ctx: Context, key: string): string[] {
+  const out: string[] = [];
+  try {
+    out.push(...reviewStop(ctx, key, undefined).map(n => `レビューの container を止めた: ${n}`));
+  }
+  catch (e) {
+    out.push(`レビューの container を止められなかった: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  const place = removePlace(ctx, key);
+  return [...out, ...(place === undefined ? [] : [`レビューの場所を消した: ${place}`])];
 }
 
 /**
