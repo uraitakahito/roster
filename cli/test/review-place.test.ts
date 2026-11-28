@@ -1,9 +1,10 @@
-import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import type { Context } from '../src/context.ts';
+import { withoutRosterEnv } from '../src/env.ts';
 import { exec } from '../src/exec.ts';
 import { checkoutPull, clonedRepos, ensurePlace, gitDir, mainGitDir, mainTree, placeDir, prunePlaces, PRUNE_AFTER_MS, removePlace, reviewGit, workTree } from '../src/review-place.ts';
 
@@ -156,6 +157,69 @@ describe('レビューの場所（t-n4j9 の段 2）', () => {
     const second = pushMain(base, 'n2.txt');
     expect(reviewGit(ctx, 'AI-8', { main: 'r' }, ['rev-parse', 'HEAD']).stdout.trim()).toBe(second);
     expect(readFileSync(join(mainTree(ctx, 'AI-8', 'r'), 'n2.txt'), 'utf8')).toBe('n2.txt\n');
+  });
+
+  test('PR の clone の origin/main も、checkout と --main のたびに最新に合わせる（PR の head と今の main を比べる。review-1 の指摘 3）', () => {
+    const { ctx, base } = setup();
+    checkoutPull(ctx, 'AI-8', PR);
+    const first = pushMain(base, 'n1.txt');
+    // checkout の見直しで取り直す。
+    checkoutPull(ctx, 'AI-8', PR);
+    expect(reviewGit(ctx, 'AI-8', {}, ['rev-parse', 'origin/main']).stdout.trim()).toBe(first);
+    // --main で取り直した commit に、PR の clone の origin/main も合う。
+    const second = pushMain(base, 'n2.txt');
+    expect(reviewGit(ctx, 'AI-8', { main: 'r' }, ['rev-parse', 'HEAD']).stdout.trim()).toBe(second);
+    expect(reviewGit(ctx, 'AI-8', {}, ['rev-parse', 'origin/main']).stdout.trim()).toBe(second);
+    expect(reviewGit(ctx, 'AI-8', {}, ['diff', '--name-only', 'origin/main...HEAD']).stdout.trim()).toBe('b.txt');
+  });
+
+  test('--main と checkout を並べて打っても、lock で 1 つずつになり、みな通って読んだ commit と字が合う（review-1 の指摘 1・2）', async () => {
+    const { ctx, base } = setup();
+    checkoutPull(ctx, 'AI-8', PR);
+    const script = join(base, 'many.ts');
+    const src = join(import.meta.dirname, '..', 'src');
+    writeFileSync(script, [
+      `import { exec } from ${JSON.stringify(join(src, 'exec.ts'))};`,
+      `import { checkoutPull, reviewGit } from ${JSON.stringify(join(src, 'review-place.ts'))};`,
+      `const ctx = { env: ${JSON.stringify(ctx.env)}, project: ${JSON.stringify(ctx.project)}, exec, now: () => new Date() };`,
+      `if (process.argv[2] === 'checkout') { checkoutPull(ctx, 'AI-8', ${JSON.stringify(PR)}); console.log('ok'); }`,
+      `else { const r = reviewGit(ctx, 'AI-8', { main: 'o/r' }, ['rev-parse', 'HEAD']); console.log(r.stdout.trim().slice(0, 7) + ' ' + /（([0-9a-f]{7})・/.exec(r.stderr)?.[1]); }`,
+    ].join('\n'));
+    const once = (arg: string): Promise<{ status: number | null, out: string, err: string }> => new Promise((done) => {
+      const child = spawn(process.execPath, [script, arg], { env: withoutRosterEnv(process.env) });
+      let out = '';
+      let err = '';
+      child.stdout.on('data', (d: Buffer) => {
+        out += d.toString();
+      });
+      child.stderr.on('data', (d: Buffer) => {
+        err += d.toString();
+      });
+      child.on('close', status => done({ status, out, err }));
+    });
+    for (let round = 0; round < 2; round += 1) {
+      pushMain(base, `p${round}.txt`);
+      const results = await Promise.all([...['main', 'main', 'checkout', 'main', 'main', 'main'].map(once)]);
+      for (const r of results) {
+        expect(r.err).toBe('');
+        expect(r.status).toBe(0);
+        const [read, said] = r.out.trim().split(' ');
+        if (said !== undefined) expect(read).toBe(said);
+      }
+    }
+    // lock は残らない。
+    expect(readdirSync(placeDir(ctx, 'AI-8')).filter(n => n.startsWith('.lock-'))).toEqual([]);
+  }, 60_000);
+
+  test('取った roster が居ない lock（切られた）は、古い lock とみなして取り直す', () => {
+    const { ctx } = setup();
+    const lock = join(ensurePlace(ctx, 'AI-8'), '.lock-r');
+    mkdirSync(lock);
+    // 居ない pid（終わった子の pid）を書く。
+    const gone = spawnSync(process.execPath, ['-e', 'console.log(process.pid)'], { encoding: 'utf8' }).stdout.trim();
+    writeFileSync(join(lock, 'pid'), gone);
+    expect(reviewGit(ctx, 'AI-8', { main: 'o/r' }, ['log', '--oneline', '-1']).status).toBe(0);
+    expect(existsSync(lock)).toBe(false);
   });
 
   test('--main は、取り直せなければ止まり、前に取った古い main を読まない', () => {

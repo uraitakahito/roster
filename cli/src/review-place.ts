@@ -3,7 +3,7 @@
 // この folder で起きるので、PR の head を探して課題の担当の worktree へ行く訳が無くなる（段 0 の 1 で確かめた）。
 // clone の git の folder は作業の木の外（<場所>/.git-<repo>/）に分け、手元の git はいつも git の folder を名指して打つ。
 // 作業の木の .git の file や入れ子の .git を、container の中のコード（段 3）が書き替えても、手元の git が自前の config を読まないため（review-4 の指摘 1・段 0 の 6）。
-import { existsSync, lstatSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import type { Context } from './context.ts';
@@ -120,6 +120,69 @@ function mainCheckout(ctx: Context, repo: string): string | undefined {
   }
 }
 
+/** 取り直した既定の branch（ふつう main）を置く ref。PR の clone でも同じ名にし、`diff origin/main...HEAD` で比べられるようにする。 */
+const ORIGIN_MAIN = 'refs/remotes/origin/main';
+
+/** repo の lock を待つ長さ（これを過ぎたら止まる）と、見直す間。 */
+export const REPO_LOCK_WAIT_MS = 120_000;
+const REPO_LOCK_STEP_MS = 200;
+/** pid の書かれていない lock を、取った直後とみなす長さ。 */
+const FRESH_REPO_LOCK_MS = 60_000;
+
+/** pid の process が居るか。 */
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  }
+  catch (e) {
+    return (e as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+/**
+ * 課題の場所の、repo ごとの lock（`.lock-<repo>/`）を持って body を打つ。checkout と --main（取り直しから、読む命令が終わるまで）を
+ * 1 つずつにする（並べて打つと、同じ git の folder の index.lock・ref の lock でぶつかり、読んだ commit の字もずれる。review-1 の指摘 1・2）。
+ * ほかが持っていれば待つ。取った roster が居なければ（切られた）、古い lock とみなして取り直す。
+ */
+export function withRepoLock<T>(ctx: Context, key: string, repo: string, body: () => T): T {
+  assertName(repo, 'repo の名');
+  const lock = join(ensurePlace(ctx, key), `.lock-${repo}`);
+  const note = join(lock, 'pid');
+  const until = Date.now() + REPO_LOCK_WAIT_MS;
+  for (;;) {
+    try {
+      mkdirSync(lock);
+      break;
+    }
+    catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
+    }
+    let stale: boolean;
+    try {
+      const pid = Number(readFileSync(note, 'utf8'));
+      stale = Number.isInteger(pid) && pid > 0 ? !alive(pid) : Date.now() - statSync(lock).mtimeMs > FRESH_REPO_LOCK_MS;
+    }
+    catch {
+      // pid がまだ書かれていない（取った直後）か、lock が今消えた。
+      stale = existsSync(lock) && Date.now() - statSync(lock).mtimeMs > FRESH_REPO_LOCK_MS;
+    }
+    if (stale) {
+      rmSync(lock, { recursive: true, force: true });
+      continue;
+    }
+    if (Date.now() > until) throw new TpmError(`ほかの roster review が ${repo} の lock を長く持っています（${lock}）。終わってから打ち直してください`);
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, REPO_LOCK_STEP_MS);
+  }
+  writeFileSync(note, String(process.pid));
+  try {
+    return body();
+  }
+  finally {
+    rmSync(lock, { recursive: true, force: true });
+  }
+}
+
 /**
  * PR の head を、課題の場所に出す。clone が無ければ作り（GitHub の URL から。本体があれば物を借りて --dissociate で切る）、
  * refs/pull/番号/head を fetch して detach で出す。push の先は無い先にする。見直しでは、同じ clone へ新しい head を出し直す
@@ -128,7 +191,11 @@ function mainCheckout(ctx: Context, repo: string): string | undefined {
 export function checkoutPull(ctx: Context, key: string, url: string): { tree: string, head: string } {
   const pull = parsePull(url);
   if (pull === undefined) throw new TpmError(`PR の URL ではありません: ${url}`);
-  ensurePlace(ctx, key);
+  return withRepoLock(ctx, key, pull.repo, () => checkoutLocked(ctx, key, pull));
+}
+
+/** checkoutPull の中身（repo の lock を持って打つ）。 */
+function checkoutLocked(ctx: Context, key: string, pull: PullRef): { tree: string, head: string } {
   const tree = workTree(ctx, key, pull.repo);
   const git = gitDir(ctx, key, pull.repo);
   if (!existsSync(git)) {
@@ -136,7 +203,8 @@ export function checkoutPull(ctx: Context, key: string, url: string): { tree: st
     run(ctx, ['clone', '--quiet', '--no-checkout', ...(main === undefined ? [] : ['--reference', main, '--dissociate']), `--separate-git-dir=${git}`, remoteUrl(ctx, pull), tree], 'clone');
     run(ctx, safeGitArgs(git, tree, ['remote', 'set-url', '--push', 'origin', 'no-push']), 'push の先を外すの');
   }
-  run(ctx, safeGitArgs(git, tree, ['fetch', '--quiet', '--no-recurse-submodules', 'origin', `+refs/pull/${pull.number}/head:refs/remotes/pull/${pull.number}`]), 'PR の head の fetch');
+  // origin/main も一緒に取り直す（PR の head と今の main を、この clone の 1 つの git で比べるため。review-1 の指摘 3）。
+  run(ctx, safeGitArgs(git, tree, ['fetch', '--quiet', '--no-recurse-submodules', 'origin', `+refs/pull/${pull.number}/head:refs/remotes/pull/${pull.number}`, `+HEAD:${ORIGIN_MAIN}`]), 'PR の head の fetch');
   run(ctx, safeGitArgs(git, tree, ['checkout', '--quiet', '--force', '--detach', `refs/remotes/pull/${pull.number}`]), 'head を出すの');
   const head = run(ctx, safeGitArgs(git, tree, ['rev-parse', 'HEAD']), 'head を読むの').trim();
   return { tree, head };
@@ -168,27 +236,48 @@ function mainRemote(ctx: Context, key: string, name: string): { repo: string, ur
   return { repo: name, url: originUrl(ctx, known) };
 }
 
+/** --main で取り直して出した main。 */
+export interface FetchedMain {
+  repo: string
+  tree: string
+  git: string
+  head: string
+}
+
 /**
- * GitHub から既定の branch（ふつう main）を取り直し、--main の作業の木に detach で出す（project の folder の本体は読まない。t-rgd2）。
- * clone が無ければ作る（PR の clone か project の本体があれば物を借り、--dissociate で切る）。取り直せなければ止まる（古い main は読まない）。
+ * GitHub から既定の branch（ふつう main）を取り直し、--main の作業の木に detach で出して、read を打つ（project の folder の本体は読まない。t-rgd2）。
+ * 取り直しから read が終わるまで、repo の lock を持つ（並べて打っても、読んだ commit と字が合う）。clone が無ければ作る（PR の clone か
+ * project の本体があれば物を借り、--dissociate で切る）。PR の clone があれば、その origin/main も同じ commit に合わせる。
+ * 取り直せなければ止まる（古い main は読まない）。
  */
-export function fetchMain(ctx: Context, key: string, name: string): { repo: string, tree: string, git: string, head: string } {
+export function fetchMain<T>(ctx: Context, key: string, name: string, read: (main: FetchedMain) => T): T {
   const { repo, url } = mainRemote(ctx, key, name);
-  ensurePlace(ctx, key);
+  return withRepoLock(ctx, key, repo, () => read(fetchMainLocked(ctx, key, repo, url)));
+}
+
+/** fetchMain の中身（repo の lock を持って打つ）。 */
+function fetchMainLocked(ctx: Context, key: string, repo: string, url: string): FetchedMain {
   const tree = mainTree(ctx, key, repo);
   const git = mainGitDir(ctx, key, repo);
+  const pr = gitDir(ctx, key, repo);
   if (!existsSync(git)) {
-    const pr = gitDir(ctx, key, repo);
     const borrow = existsSync(pr) ? pr : mainCheckout(ctx, repo);
     mkdirSync(dirname(tree), { recursive: true });
     run(ctx, ['clone', '--quiet', '--no-checkout', ...(borrow === undefined ? [] : ['--reference', borrow, '--dissociate']), `--separate-git-dir=${git}`, url, tree], 'main の clone');
     run(ctx, safeGitArgs(git, tree, ['remote', 'set-url', '--push', 'origin', 'no-push']), 'push の先を外すの');
   }
   else if (originUrl(ctx, git) !== url) run(ctx, safeGitArgs(git, tree, ['remote', 'set-url', 'origin', url]), 'origin の URL を替えるの');
-  const fetched = ctx.exec('git', safeGitArgs(git, tree, ['fetch', '--quiet', '--no-recurse-submodules', 'origin', '+HEAD:refs/remotes/origin/main']));
-  if (fetched.status !== 0) throw new TpmError(`${repo} の origin の main を取り直せませんでした（前に取った古い main は読みません。GitHub が応えないなら roster watch github で待ってから打ち直す）: ${fetched.stderr.trim()}`);
-  run(ctx, safeGitArgs(git, tree, ['checkout', '--quiet', '--force', '--detach', 'refs/remotes/origin/main']), 'main を出すの');
+  const fetched = ctx.exec('git', safeGitArgs(git, tree, ['fetch', '--quiet', '--no-recurse-submodules', 'origin', `+HEAD:${ORIGIN_MAIN}`]));
+  if (fetched.status !== 0) {
+    const why = /\.lock\b/.test(fetched.stderr)
+      ? 'git の lock の file が残っています（前の roster review が途中で切られた見込み）'
+      : 'GitHub が応えないなら roster watch github で待ってから打ち直す';
+    throw new TpmError(`${repo} の origin の main を取り直せませんでした（前に取った古い main は読みません。${why}）: ${fetched.stderr.trim()}`);
+  }
+  run(ctx, safeGitArgs(git, tree, ['checkout', '--quiet', '--force', '--detach', ORIGIN_MAIN]), 'main を出すの');
   const head = run(ctx, safeGitArgs(git, tree, ['rev-parse', 'HEAD']), 'main を読むの').trim();
+  // PR の clone の origin/main も、取り直した commit に合わせる（手元の git の folder から。PR の head と今の main を比べるため。review-1 の指摘 3）。
+  if (existsSync(pr)) run(ctx, safeGitArgs(pr, workTree(ctx, key, repo), ['fetch', '--quiet', '--no-recurse-submodules', git, `+${ORIGIN_MAIN}:${ORIGIN_MAIN}`]), 'PR の clone の origin/main を合わせるの');
   return { repo, tree, git, head };
 }
 
@@ -202,9 +291,10 @@ export function reviewGit(ctx: Context, key: string, options: { repo?: string, m
   const bad = rest.find(badGitFlag);
   if (bad !== undefined) throw new TpmError(`roster review git は、外の道具を動かす・書き出す旗を通しません: ${bad}`);
   if (options.main !== undefined) {
-    const main = fetchMain(ctx, key, options.main);
-    const r = ctx.exec('git', safeGitArgs(main.git, main.tree, [sub, ...rest]));
-    return { ...r, stderr: `${main.repo} の origin/main を GitHub から取り直して読む（${main.head.slice(0, 7)}・${main.tree}）\n${r.stderr}` };
+    return fetchMain(ctx, key, options.main, (main) => {
+      const r = ctx.exec('git', safeGitArgs(main.git, main.tree, [sub, ...rest]));
+      return { ...r, stderr: `${main.repo} の origin/main を GitHub から取り直して読む（${main.head.slice(0, 7)}・${main.tree}）\n${r.stderr}` };
+    });
   }
   const repos = clonedRepos(ctx, key);
   const repo = options.repo ?? (repos.length === 1 ? repos[0] : undefined);
