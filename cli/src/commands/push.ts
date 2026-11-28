@@ -76,8 +76,8 @@ export interface PushRecord {
 
 /** branch が確かめの一覧に加えた変更（main と分かれた所の一覧と、push する commit の一覧の比べ）。 */
 export interface ConfigDiff {
-  /** 比べた元: main と分かれた所か、それが取れない・読めない時の origin の既定の branch の先。 */
-  base: 'merge-base' | 'default-branch'
+  /** 比べた元: main と分かれた所か、それが取れない・読めない時の origin の既定の branch の先か、origin に既定の branch がまだ無い（初めの push）時の空。 */
+  base: 'merge-base' | 'default-branch' | 'none'
   /** 消した確かめの名。 */
   removed: string[]
   /** 同じ名で run・dir・env・timeoutSeconds のどれかを変えた確かめの名。 */
@@ -388,16 +388,20 @@ export function push(ctx: Context, options: PushOptions): PushResult {
     finish({ repo, target, ...(sha === undefined ? {} : { sha }), checks: [], code: PUSH_EXIT.error, result: 'refused', reason, ...(diff === undefined ? {} : { configDiff: diff.result.diff }) }, [...(diff === undefined ? [] : diffLines(diff.result, diff.from)), `断った: ${reason}`]);
   const main = defaultBranch(ctx, root);
   const fetched = git(ctx, root, ['fetch', '--quiet', 'origin', main]);
-  if (fetched.status !== 0) {
+  // origin に既定の branch がまだ無い（空の repo の初めの push）: fetch は落ちるが、ls-remote は繋がって「無い」（2）を返す。網の誤りと分ける（台帳 #531）。
+  const firstPush = fetched.status !== 0 && git(ctx, root, ['ls-remote', '--exit-code', '--heads', 'origin', main]).status === 2;
+  if (fetched.status !== 0 && !firstPush) {
     return finish({ repo, target: options.tag === undefined ? '' : `tags/${options.tag}`, checks: [], code: PUSH_EXIT.pushFailed, result: 'push-failed', reason: 'fetch が落ちた' }, [`git fetch origin ${main} が落ちた（確かめは流していない・push していない）: ${fetched.stderr.trim().split('\n').pop() ?? ''}`, '網の誤り（5xx・繋がらない）なら、roster watch github を裏で起こして待ち、戻ってから打ち直す']);
   }
 
+  if (options.tag !== undefined && firstPush) return refuse(`tags/${options.tag}`, `origin に既定の branch（${main}）がまだ無い。release の tag は、main に merge した commit に打つ`);
   if (options.tag !== undefined) return pushTag(ctx, root, main, options.tag, refuse, finish, repo);
 
   const branch = gitLine(ctx, root, ['symbolic-ref', '--quiet', '--short', 'HEAD']);
   if (branch === undefined) return refuse('', 'HEAD が branch でない（detached）。branch を作ってから打つ');
   const target = branch;
-  if (target === main) return refuse(target, `既定の branch（${main}）の上にいる。main から branch を切り（git switch -c <名>）、その branch で打つ`);
+  // 空の repo の初めの push は、既定の branch を作る push なので、main の上から打ってよい（ほかの名の branch を先に出すと、GitHub はそれを既定の branch にする）。
+  if (target === main && !firstPush) return refuse(target, `既定の branch（${main}）の上にいる。main から branch を切り（git switch -c <名>）、その branch で打つ`);
   if (options.noChecks?.trim() === '') return refuse(target, '--no-checks には訳を書く（空は受けない）');
   const changes = trackedChanges(ctx, root);
   if (changes === undefined) return refuse(target, 'git status が読めない（index.lock など）。git status を見てから打ち直す');
@@ -409,14 +413,19 @@ export function push(ctx: Context, options: PushOptions): PushResult {
   if (head.kind === 'bad') return refuse(target, head.message, sha);
   const checks = head.kind === 'some' ? head.checks : undefined;
   // 比べる元は main と分かれた所。取れない（共通の祖先が無い）・読めない時は、origin の既定の branch の先（review-1 の指摘 3・review-2 の指摘 3）。
-  const mergeBase = gitLine(ctx, root, ['merge-base', sha, `origin/${main}`]);
-  const mainChecks = readChecks(ctx, root, `origin/${main}`, `origin/${main} の ${CONFIG_PATH}`);
+  // 初めの push では origin に main が無いので、空の一覧と比べる（手元に古い origin/main が残っていても読まない）。
+  const mergeBase = firstPush ? undefined : gitLine(ctx, root, ['merge-base', sha, `origin/${main}`]);
+  const mainChecks: ReadChecks = firstPush ? { kind: 'none' } : readChecks(ctx, root, `origin/${main}`, `origin/${main} の ${CONFIG_PATH}`);
   const baseChecks = mergeBase === undefined ? undefined : readChecks(ctx, root, mergeBase, `main と分かれた所（${mergeBase.slice(0, 7)}）の ${CONFIG_PATH}`);
   const atMergeBase = baseChecks !== undefined && baseChecks.kind !== 'bad';
-  const from = atMergeBase
-    ? 'main と分かれた所と比べて'
-    : `main と分かれた所が${mergeBase === undefined ? '取れない' : '読めない'}ので、origin/${main} の先と比べて`;
-  const result = atMergeBase ? diffChecks('merge-base', baseChecks, checks, mainChecks) : diffChecks('default-branch', mainChecks, checks, mainChecks);
+  const from = firstPush
+    ? `origin に ${main} がまだ無い（初めの push）ので、空の一覧と比べて`
+    : atMergeBase
+      ? 'main と分かれた所と比べて'
+      : `main と分かれた所が${mergeBase === undefined ? '取れない' : '読めない'}ので、origin/${main} の先と比べて`;
+  const result = firstPush
+    ? diffChecks('none', { kind: 'none' }, checks, mainChecks)
+    : atMergeBase ? diffChecks('merge-base', baseChecks, checks, mainChecks) : diffChecks('default-branch', mainChecks, checks, mainChecks);
   const diff = result === undefined ? undefined : { result, from };
   // 宣言を足す前に切った branch: main の守りを --no-checks で外させず、取り込ませる（欄ごと消した branch は、分かれた所に宣言があるので、ここに当たらない。review-2 の指摘 2）。
   if (checks === undefined && mainChecks.kind === 'some' && !(atMergeBase && baseChecks.kind === 'some')) {

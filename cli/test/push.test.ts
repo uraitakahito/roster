@@ -398,6 +398,47 @@ describe('roster push', () => {
     expect(push(r.ctx, { cwd: r.work }).code).toBe(PUSH_EXIT.pushFailed);
   });
 
+  /** 空の remote（main がまだ無い）と、main に初めの commit を作った clone（台帳 #531 の空の repo の初めの push）。 */
+  function emptyRepo(checks?: unknown[]): Repo {
+    const dir = mkdtempSync(join(tmpdir(), 'roster-push-empty-'));
+    const remote = join(dir, 'remote.git');
+    const work = join(dir, 'work');
+    sh(dir, 'init', '--quiet', '--bare', '-b', 'main', remote);
+    sh(dir, 'clone', '--quiet', remote, work);
+    sh(work, 'checkout', '--quiet', '-b', 'main');
+    mkdirSync(join(work, '.claude', 'roles'), { recursive: true });
+    writeFileSync(join(work, '.claude', 'roles', 'config.jsonc'), configText(checks));
+    sh(work, 'add', '.claude/roles/config.jsonc');
+    sh(work, 'commit', '--quiet', '-m', 'init');
+    const w = world();
+    const ctx: Context = { ...w.role('t-x', 'file:swe'), exec };
+    return { remote, work, ctx, records: () => ctx.state.lines<PushRecord>(PUSH_LOG) };
+  }
+
+  test('origin に main がまだ無い空の repo では、main の上から、push する commit の一覧で確かめて初めの push をする', () => {
+    const r = emptyRepo([{ name: 'one', run: PASS }]);
+    const res = push(r.ctx, { cwd: r.work });
+    expect(res.code).toBe(PUSH_EXIT.pushed);
+    expect(remoteSha(r, 'refs/heads/main')).toBe(sh(r.work, 'rev-parse', 'HEAD'));
+    expect(res.lines.join('\n')).toContain('確かめの一覧の差（origin に main がまだ無い（初めの push）ので、空の一覧と比べて）: 足した: one');
+    expect(r.records().at(-1)?.configDiff).toEqual({ base: 'none', removed: [], changed: [], added: ['one'] });
+  });
+
+  test('空の repo で宣言が無ければ断り、--no-checks なら初めの push をする', () => {
+    const r = emptyRepo();
+    expect(push(r.ctx, { cwd: r.work }).code).toBe(PUSH_EXIT.error);
+    expect(push(r.ctx, { cwd: r.work, noChecks: '初めの push' }).code).toBe(PUSH_EXIT.pushed);
+    expect(remoteSha(r, 'refs/heads/main')).toBe(sh(r.work, 'rev-parse', 'HEAD'));
+  });
+
+  test('空の repo でも確かめが落ちれば push しない。tag は断る', () => {
+    const r = emptyRepo([{ name: 'bad', run: FAIL }]);
+    expect(push(r.ctx, { cwd: r.work }).code).toBe(PUSH_EXIT.failed);
+    expect(remoteSha(r, 'refs/heads/main')).toBeUndefined();
+    sh(r.work, 'tag', 'v0.0.1');
+    expect(push(r.ctx, { cwd: r.work, tag: 'v0.0.1' }).code).toBe(PUSH_EXIT.error);
+  });
+
   test('git の worktree の外では断る', () => {
     const w = world();
     const res = push({ ...w.role('t-x', 'file:swe'), exec }, { cwd: mkdtempSync(join(tmpdir(), 'roster-push-out-')) });
