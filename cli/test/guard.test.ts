@@ -739,6 +739,27 @@ describe('Auditor は repo を変えない', () => {
     ['git worktree add ../w t-x/y', false],
     ['gh pr create --title x', false],
     ['gh pr merge 141 --squash', false],
+    // 手元の checkout と GitHub の側の branch を変える（t-xdmv）。
+    ['gh pr checkout 141', false],
+    ['gh co 141', false],
+    ['gh co 141 --detach', false],
+    ['gh pr -R o/r checkout 141', false],
+    ['gh pr --repo o/r checkout 141', false],
+    ['gh pr --repo=o/r merge 141', false],
+    ['gh pr -Ro/r review 141 --approve', false],
+    ['gh issue -R o/r develop 12 --checkout', false],
+    ['gh pr update-branch 141', false],
+    ['gh pr revert 141', false],
+    ['gh pr lock 141', false],
+    ['gh repo set-default o/r', false],
+    ['gh cache delete --all', false],
+    // 旗を前に置いた読む命令と、co で始まる別の命令は通す。
+    ['gh pr -R o/r view 141', true],
+    ['gh pr --repo o/r checks 141', true],
+    ['gh codespace list', true],
+    ['gh repo set-default --view', true],
+    ['gh issue develop --list 12', true],
+    ['gh issue -R o/r develop -l 12', true],
     ['gh release create v1', false],
     ['gh api -X POST repos/o/r/rulesets', false],
     ['gh api --method=PUT repos/o/r/pages', false],
@@ -757,6 +778,9 @@ describe('Auditor は repo を変えない', () => {
   test('ほかの担当と TPM 担当の git・gh は止めない。止めた訳に、勧告に書くよう言う', () => {
     expect(ask('git commit -m x && git push origin --delete t-x/impl', 'software-engineer').allow).toBe(true);
     expect(ask('gh pr merge 141 --squash').allow).toBe(true);
+    expect(ask('gh pr checkout 141', 'software-engineer').allow).toBe(true);
+    expect(ask('gh co 141', 'software-engineer').allow).toBe(true);
+    expect(ask('gh pr checkout 141').allow).toBe(true);
     expect(ask('git -C /w/skills pull --ff-only', 'auditor')).toEqual({ allow: false, reason: expect.stringContaining('Auditor は repo を変えません（git -C /w/skills）。直すことは、監査のページの勧告に') as string });
   });
 
@@ -803,6 +827,11 @@ describe('Staff Engineer 担当は repo を変えない', () => {
     ['gh pr review 141 --approve', false],
     ['gh pr comment 141 --body x', false],
     ['gh pr merge 141 --squash', false],
+    ['gh pr checkout 141', false],
+    ['gh pr checkout https://github.com/o/r/pull/141 --detach', false],
+    ['gh co 141', false],
+    ['gh pr -R o/r checkout 141', false],
+    ['gh pr -R o/r diff 141', true],
     ['ROSTER_RAW=1 git push', false],
     // 命令の名の途中の置き換え（t-ta2b の review-2 の指摘 2）。
     ['git$(true) push', false],

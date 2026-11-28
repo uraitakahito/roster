@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 import type { Context } from '../context.ts';
 import { busyMessage, castlistUrl, downMessage, issuerOf, lastCompaction, missingCastlistWarning, modelOf, putRecord, registerActor, requireUp, seatOf, sessionRef, type RecordInput, type Reply } from '../castlist.ts';
 import { query } from '../castlist-query.ts';
-import type { Verdict } from '../guard.ts';
+import { SHELL_TOOLS, type Verdict } from '../guard.ts';
 import type { RoleRecord } from '../roster.ts';
 import { TpmError } from '../skill-sets.ts';
 import { envOf } from '../env.ts';
@@ -209,7 +209,7 @@ async function quietly(name: string, run: () => Promise<void>): Promise<void> {
 
 /**
  * SessionStart の hook（`roster castlist session-start`）。session を登録し、source ごとの出来事と線を送る。
- * castlist が止まっていれば何もせずに終わる（hook で Claude Code を止めない。登録まで、guard が Bash を止める）。
+ * castlist が止まっていれば何もせずに終わる（hook で Claude Code を止めない。登録まで、guard が shell の命令（Bash・Monitor）を止める）。
  */
 export async function sessionStart(ctx: Context, stdin: string): Promise<void> {
   await quietly('session-start', async () => {
@@ -242,13 +242,13 @@ export async function sessionEnd(ctx: Context, stdin: string): Promise<void> {
 }
 
 /** guard が castlist のために止める時の文。 */
-function stop(ctx: Context, url: string, sent: Exclude<Sent, 'ok'>): Verdict {
-  const done = 'castlist に送れないので、Bash を止めました。';
+function stop(ctx: Context, url: string, sent: Exclude<Sent, 'ok'>, tool: string): Verdict {
+  const done = `castlist に送れないので、${tool} を止めました。`;
   return { allow: false, reason: sent === 'busy' ? busyMessage(url, done) : downMessage(ctx, url, done, ['この 1 行を Product Manager に渡し、起きたら打ち直してください。']) };
 }
 
 /**
- * guard（PreToolUse の Bash）の castlist の分。控えが無い session は先に登録する。
+ * guard（PreToolUse の shell の命令を動かす道具。SHELL_TOOLS: Bash・Monitor）の castlist の分。Monitor も Bash と同じに見る（t-xdmv）。控えが無い session は先に登録する。
  * 登録した session は、hook の入力の effort と、写しの最後の model を見て、前に送った物と違えば「見た」として送る。model を読めなければ session に 1 度だけ model 不明を送る（止めない）。
  * 送る物があるのに castlist が止まっていれば止める（送る物が無ければ、castlist に聞かない）。
  */
@@ -257,12 +257,13 @@ export async function castlistGuard(ctx: Context, stdin: string): Promise<Verdic
   if (url === undefined) return { allow: true };
   const input = hookInput(stdin);
   const sid = text(input.session_id);
-  if (input.tool_name !== 'Bash' || sid === undefined) return { allow: true };
+  const tool = (SHELL_TOOLS as readonly string[]).find(t => t === input.tool_name);
+  if (tool === undefined || sid === undefined) return { allow: true };
   const had = readSession(ctx, sid);
-  // 控えが無ければ登録する。推しの幕引きで居ないにした session が Bash を打てば、生きていたので、今の居場所で登録し直して再登場を送る。
+  // 控えが無ければ登録する。推しの幕引きで居ないにした session が命令を打てば、生きていたので、今の居場所で登録し直して再登場を送る。
   if (had === undefined || (had.present === false && had.endedBy === 'inferred')) {
     const sent = await enter(ctx, url, sid, 'guard', had !== undefined);
-    if (sent !== 'ok') return stop(ctx, url, sent);
+    if (sent !== 'ok') return stop(ctx, url, sent, tool);
   }
   const record = readSession(ctx, sid);
   if (record === undefined) return { allow: true };
@@ -275,7 +276,7 @@ export async function castlistGuard(ctx: Context, stdin: string): Promise<Verdic
   const seen = modelOf(input.transcript_path);
   if (seen.kind === 'unreadable' && record.modelUnreadable !== true) {
     const sent = await event(ctx, url, record, 'model_unreadable', { reason: seen.reason });
-    if (sent !== 'ok') return stop(ctx, url, sent);
+    if (sent !== 'ok') return stop(ctx, url, sent, tool);
     record.modelUnreadable = true;
     ctx.state.write(sessionFile(sid), record);
   }
@@ -284,7 +285,7 @@ export async function castlistGuard(ctx: Context, stdin: string): Promise<Verdic
   if (record.observed?.model === seen.model && record.observed.effort === effort) return { allow: true };
   const n = (record.seq.observed ?? 0) + 1;
   const sent = await put(ctx, url, 'settings', idOf(ctx, 't', sid, `observed-${n}`), { by: sessionRef(sid), model: seen.model, effort, source: 'observed' });
-  if (sent !== 'ok') return stop(ctx, url, sent);
+  if (sent !== 'ok') return stop(ctx, url, sent, tool);
   record.seq.observed = n;
   record.observed = { model: seen.model, effort };
   ctx.state.write(sessionFile(sid), record);

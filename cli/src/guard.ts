@@ -95,8 +95,30 @@ const GIT_READ_ARGS: Record<string, RegExp> = {
   tag: /^(?:-l|-n\d*|--list)$/,
   worktree: /^list$|^--porcelain$/,
 };
-/** gh の、変える命令（`gh <語> <語>` の 2 語）。 */
-const GH_CHANGES = /^gh (?:pr (?:create|merge|close|edit|ready|reopen|review|comment)|issue (?:create|edit|delete|reopen|close|comment)|release (?:create|delete|edit|upload)|repo (?:create|delete|edit|rename|archive|sync)|workflow (?:run|enable|disable)|run (?:rerun|cancel|delete)|(?:secret|variable|label) (?:set|delete|create|edit))\b/;
+/**
+ * gh の、変える命令（`gh <語> <語>` の 2 語。`-R`・`--repo` を除いた語で当てる。ghWords）。
+ * 手元の checkout か git の設定を変える物（`pr checkout` と gh が初めから持つ別名の `co`・`issue develop`・`repo set-default`）と、GitHub の側を変える物（t-xdmv）。
+ */
+const GH_CHANGES = /^gh (?:co|pr (?:create|merge|close|edit|ready|reopen|review|comment|checkout|update-branch|revert|lock|unlock)|issue (?:create|edit|delete|reopen|close|comment|develop|transfer|pin|unpin|lock|unlock)|release (?:create|delete|edit|upload)|repo (?:create|delete|edit|rename|archive|sync|fork|set-default)|workflow (?:run|enable|disable)|run (?:rerun|cancel|delete)|cache delete|(?:secret|variable|label) (?:set|delete|create|edit))\b/;
+/** GH_CHANGES の命令のうち、この旗があれば出すだけの形（`gh repo set-default --view`・`gh issue develop --list`。review-2 の提案 1）。 */
+const GH_READ_FLAGS: Record<string, RegExp> = {
+  'repo set-default': /^(?:-v|--view)$/,
+  'issue develop': /^(?:-l|--list)$/,
+};
+/** gh の、repo を名指す旗（値を次の語に取る形と、`-Ro/r`・`--repo=o/r` の形）。小命令の前にも置けるので、当てる前に除く（t-xdmv）。 */
+const GH_REPO_FLAG = /^(?:-R|--repo)$/;
+const GH_REPO_JOINED = /^(?:-R.|--repo=)/;
+
+/** gh の命令の語から、repo を名指す旗（GH_REPO_FLAG）とその値を除く（`gh pr -R o/r checkout 1` を `gh pr checkout 1` と読む）。 */
+function ghWords(words: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < words.length; i += 1) {
+    const word = words[i] ?? '';
+    if (i > 0 && GH_REPO_FLAG.test(word)) i += 1;
+    else if (i === 0 || !GH_REPO_JOINED.test(word)) out.push(word);
+  }
+  return out;
+}
 /** gh api の、書き込みになる旗（-X GET のほかの method と、欄を送る旗。欄を送ると POST になる）。 */
 const GH_API_WRITES = /^(?:-f|-F|--field|--raw-field|--input)$/;
 
@@ -118,9 +140,13 @@ function changesRepo(words: string[]): boolean {
     return read !== undefined && git.args.some(a => !read.test(a));
   }
   if (words[0] !== 'gh') return false;
-  if (GH_CHANGES.test(words.join(' '))) return true;
-  if (words[1] !== 'api') return false;
-  const args = words.slice(2);
+  const gh = ghWords(words);
+  if (GH_CHANGES.test(gh.join(' '))) {
+    const read = GH_READ_FLAGS[gh.slice(1, 3).join(' ')];
+    return read === undefined || !gh.slice(3).some(a => read.test(a));
+  }
+  if (gh[1] !== 'api') return false;
+  const args = gh.slice(2);
   const method = args.findIndex(a => a === '-X' || a === '--method');
   const named = args.find(a => /^(?:-X|--method=)./.test(a))?.replace(/^(?:-X|--method=)/, '') ?? (method === -1 ? undefined : args[method + 1]);
   return (named !== undefined && named.toUpperCase() !== 'GET') || (named === undefined && args.some(a => GH_API_WRITES.test(a)));

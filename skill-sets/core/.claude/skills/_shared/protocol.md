@@ -189,7 +189,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 | 依頼書が変えることを求めた課題の欄: コンポーネント・ラベル・題・本文など | コメント（記録は `roster report …`・`roster ask pm` が書く） |
 | | 状態を進める（課題を済みにするのは `roster report end` だけ） |
 
-- guard は Bash の命令だけを見るので、connector のコメントや状態を進める道具は止めない。止められなくても使わない（使うと記録と状態が抜ける）。
+- guard は shell の命令（Bash・Monitor）だけを見るので、connector のコメントや状態を進める道具は止めない。止められなくても使わない（使うと記録と状態が抜ける）。
 - 書いたら、1 件ずつ `roster issue view <Key>` か connector で読み戻して確かめる。
 - connector がつながっていなければ（道具が `/mcp` で認証するようにと返したら）、`roster ask tpm` で Product Manager に認証を頼む。認証は 1 度すれば、ほかの担当の session でも使える。
 - スペースを作る・課題を別のスペースへ移す・コンポーネントを作るなど、`acli` にも connector にも道具の無い操作は、Product Manager の画面の手になる。手順のページでは、移すと変わる Key でなく、題か古い Key の検索で課題を指す。
@@ -216,7 +216,7 @@ Auditor（監査の担当。Product Manager が起こす `Audit` の席）だけ
 - 消す: **消してよいのは TPM 担当だけ**（戻せない。Auditor が置いたページは、Product Manager の言葉を添えなければ TPM 担当も消せない。上の「監査」）。試しに置いた・置き間違えたページは、担当は自分で消さず、`roster ask tpm` で URL と訳を送って頼む（担当の居場所からの `roster page delete` と、置き場に消す要求を直に送る `curl`、置き場の CLI の `pagetray page delete` は止まる）。TPM 担当は `roster page delete <URL>…`（Key ごとなら `--key <Key>`、project ごとなら `--project <名>`。その Key・project の file も一緒に消える）で消す物を見て、`--yes` を付けて消す。控えの file も消える。消したページの URL は 410 を返し、その番号は 2 度使われない。
 - 送り手: project に castlist の設定があれば、`roster page put`・`roster file put` は、自分の session を指す付随する id を付けて置く（置き場が castlist に聞き、ページと file の記録に送り手として残す。担当は何も足さない）。置き場が断ると、ページも file も置かれていない（`roster` は送り直さない）。
   - 「castlist に送り手を聞けませんでした（503）」: 置き場が castlist に届かない。castlist が起きてから打ち直す（止まっていれば、下の「アクターの台帳」のとおり guard も止まる）。castlist が起きているのに続く時は、`roster report incident` で台帳に挙げる。
-  - 「castlist に登録が無いと、置き場が答えました（400）」: この session が castlist にまだ無い。session は guard が Bash の前に登録するので、打ち直す。続く時は `roster report incident` で台帳に挙げる。
+  - 「castlist に登録が無いと、置き場が答えました（400）」: この session が castlist にまだ無い。session は guard が Bash・Monitor の前に登録するので、打ち直す。続く時は `roster report incident` で台帳に挙げる。
 - 置き場が応えなければ、ページは置けない（`roster page put` が止まる。番号を置き場が決めるため）。控えにあるページは読める。`roster ask devops --what "置き場（pagetray）を起こす" --why "<何が置けないか>"` で頼む。自分では container を起こさない。
 - 図: Product Manager が読むページには、下の図を入れる。描く図はページの中に inline の SVG で描く（file に上げない。字で描くので、画面の写しのような写り込みが無い）。file で上げるのは画面の写しだけ。ひな形と描き方は、この folder の `figures.md`。
 
@@ -307,7 +307,7 @@ project の設定に castlist（アクターの台帳）の URL があれば、`
 - 設定が無ければ何も送らず、`roster start` と `roster hello` が「⚠ 警告: castlist（アクターの台帳）を設定していません」の枠を出す（止めない）。担当は何もしなくてよい（TPM 担当が Product Manager に伝える）。
 
 - `roster hello` の出力の頭に `アクター: <名>`（`t-23zs-swe.1` など）が出る。結果のページや報告で自分を名指す時は、この名を使ってよい。
-- castlist が止まっていると、`roster hello` は名乗らずに止まり、guard は Bash を止める。どちらも、Product Manager が自分の terminal で打つ 1 行（`container start castlist.box` か `container run …`。0.1.0 の名 `castlist` で動いている間は、その名の `container start`）を出す。その 1 行は自分で打たない（castlist を起こすのは Product Manager だけ。guard も止める）。Bash が止まると `roster` の命令も打てないので、TPM 担当はその 1 行を返答に書いて Product Manager に頼み（打てれば `roster wait pm "castlist を起こす" --hand`）、担当はその 1 行を返答に書いて止まる（TPM 担当の Bash も同じく止まるので、Product Manager が起こした後に、TPM 担当が `roster notify` で打ち直すよう伝える）。起きたら、止まった命令を打ち直す。
+- castlist が止まっていると、`roster hello` は名乗らずに止まり、guard は shell の命令（Bash・Monitor）を止める。どちらも、Product Manager が自分の terminal で打つ 1 行（`container start castlist.box` か `container run …`。0.1.0 の名 `castlist` で動いている間は、その名の `container start`）を出す。その 1 行は自分で打たない（castlist を起こすのは Product Manager だけ。guard も止める）。Bash・Monitor が止まると `roster` の命令も打てないので、TPM 担当はその 1 行を返答に書いて Product Manager に頼み（打てれば `roster wait pm "castlist を起こす" --hand`）、担当はその 1 行を返答に書いて止まる（TPM 担当の Bash も同じく止まるので、Product Manager が起こした後に、TPM 担当が `roster notify` で打ち直すよう伝える）。起きたら、止まった命令を打ち直す。
 - castlist の時計がずれていると 1 行出る（止まらない）。出たら `roster report incident` で台帳に挙げる。
 
 ## 終わり方

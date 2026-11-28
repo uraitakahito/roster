@@ -78,8 +78,8 @@ export function infraRun(ctx: Context, name: string, command: string[]): { lines
 }
 
 /**
- * hook の標準入力を読んで決める。Bash と、file を書き替える道具のほかは通す。止めた命令は guard.jsonl に残す。
- * Bash は、手続きと道具の直打ちを見て通す物を、続けて castlist の分（castlistGuard。設定が無ければ何もしない）と、
+ * hook の標準入力を読んで決める。shell の命令を動かす道具（Bash・Monitor）と、file を書き替える道具のほかは通す。止めた命令は guard.jsonl に残す。
+ * shell の命令（Bash・Monitor）は、手続きと道具の直打ちを見て通す物を、続けて castlist の分（castlistGuard。設定が無ければ何もしない）と、
  * メッセージの分（mailGuard。手伝いの中からの送る命令と、同じ返答の中で渡した物がある時の送る命令）で見る。
  */
 export async function guard(ctx: Context, stdin: string): Promise<Verdict> {
