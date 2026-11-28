@@ -82,7 +82,7 @@ export const workTree = (ctx: Context, key: string, repo: string): string => joi
 export const gitDir = (ctx: Context, key: string, repo: string): string => join(placeDir(ctx, key), `.git-${repo}`);
 
 /** GitHub の repo の URL（試験では $ROSTER_REVIEW_REMOTE で、手元の bare repo の置き場に替える）。 */
-const remoteUrl = (ctx: Context, pull: PullRef): string => {
+const remoteUrl = (ctx: Context, pull: { owner: string, repo: string }): string => {
   const base = envOf(ctx.env, 'REVIEW_REMOTE');
   return base ? join(base, pull.owner, `${pull.repo}.git`) : `https://github.com/${pull.owner}/${pull.repo}.git`;
 };
@@ -104,7 +104,10 @@ function run(ctx: Context, args: string[], what: string): string {
   return r.stdout;
 }
 
-/** 本体（project の folder の直下の、repo の名の git の checkout）。物を借りて clone を速くする。無ければ undefined。 */
+/**
+ * 本体（project の folder の直下の、repo の名の git の checkout）。clone の物を借りて速くするだけに使う（--dissociate で切るので、
+ * 読む中身は GitHub から取った物。本体が古くても、project の外に在っても、読む物は変わらない）。無ければ undefined。
+ */
 function mainCheckout(ctx: Context, repo: string): string | undefined {
   assertName(repo, 'repo の名');
   const dir = join(ctx.project, repo);
@@ -139,8 +142,58 @@ export function checkoutPull(ctx: Context, key: string, url: string): { tree: st
   return { tree, head };
 }
 
+/** --main の作業の木（場所の .main の下。PR の clone と分け、clonedRepos にも、container にも入らない）。 */
+export const mainTree = (ctx: Context, key: string, repo: string): string => join(placeDir(ctx, key), '.main', repo);
+/** --main の git の folder（作業の木の外）。 */
+export const mainGitDir = (ctx: Context, key: string, repo: string): string => join(placeDir(ctx, key), '.main', `.git-${repo}`);
+
+/** git の folder の origin の URL。 */
+const originUrl = (ctx: Context, git: string): string => run(ctx, [`--git-dir=${git}`, ...SAFE_GIT_CONFIG, 'remote', 'get-url', 'origin'], 'origin の URL を読むの').trim();
+
 /**
- * clone（か、--main なら project の本体）を、読むだけの git で読む。git の folder を名指して打つので、作業の木の .git の file を読まない。
+ * --main の名（`<repo>` か `<owner>/<repo>`）を、repo の名と GitHub の URL にする。`<repo>` だけなら、場所の clone（PR の clone、
+ * 無ければ前に取った main の clone）の origin から引く。どちらも無ければ止まって、`<owner>/<repo>` を求める。
+ */
+function mainRemote(ctx: Context, key: string, name: string): { repo: string, url: string } {
+  const parts = name.split('/');
+  if (parts.length === 2) {
+    const [owner, repo] = [parts[0] ?? '', parts[1] ?? ''];
+    assertName(owner, 'owner の名');
+    assertName(repo, 'repo の名');
+    return { repo, url: remoteUrl(ctx, { owner, repo }) };
+  }
+  assertName(name, 'repo の名');
+  const known = [gitDir(ctx, key, name), mainGitDir(ctx, key, name)].find(g => existsSync(g));
+  if (known === undefined) throw new TpmError(`この課題の場所に ${name} の clone がありません。--main <owner>/${name} で名指してください（GitHub から main を取ります）`);
+  return { repo: name, url: originUrl(ctx, known) };
+}
+
+/**
+ * GitHub から既定の branch（ふつう main）を取り直し、--main の作業の木に detach で出す（project の folder の本体は読まない。t-rgd2）。
+ * clone が無ければ作る（PR の clone か project の本体があれば物を借り、--dissociate で切る）。取り直せなければ止まる（古い main は読まない）。
+ */
+export function fetchMain(ctx: Context, key: string, name: string): { repo: string, tree: string, git: string, head: string } {
+  const { repo, url } = mainRemote(ctx, key, name);
+  ensurePlace(ctx, key);
+  const tree = mainTree(ctx, key, repo);
+  const git = mainGitDir(ctx, key, repo);
+  if (!existsSync(git)) {
+    const pr = gitDir(ctx, key, repo);
+    const borrow = existsSync(pr) ? pr : mainCheckout(ctx, repo);
+    mkdirSync(dirname(tree), { recursive: true });
+    run(ctx, ['clone', '--quiet', '--no-checkout', ...(borrow === undefined ? [] : ['--reference', borrow, '--dissociate']), `--separate-git-dir=${git}`, url, tree], 'main の clone');
+    run(ctx, safeGitArgs(git, tree, ['remote', 'set-url', '--push', 'origin', 'no-push']), 'push の先を外すの');
+  }
+  else if (originUrl(ctx, git) !== url) run(ctx, safeGitArgs(git, tree, ['remote', 'set-url', 'origin', url]), 'origin の URL を替えるの');
+  const fetched = ctx.exec('git', safeGitArgs(git, tree, ['fetch', '--quiet', '--no-recurse-submodules', 'origin', '+HEAD:refs/remotes/origin/main']));
+  if (fetched.status !== 0) throw new TpmError(`${repo} の origin の main を取り直せませんでした（前に取った古い main は読みません。GitHub が応えないなら roster watch github で待ってから打ち直す）: ${fetched.stderr.trim()}`);
+  run(ctx, safeGitArgs(git, tree, ['checkout', '--quiet', '--force', '--detach', 'refs/remotes/origin/main']), 'main を出すの');
+  const head = run(ctx, safeGitArgs(git, tree, ['rev-parse', 'HEAD']), 'main を読むの').trim();
+  return { repo, tree, git, head };
+}
+
+/**
+ * clone（か、--main なら GitHub から取り直した main）を、読むだけの git で読む。git の folder を名指して打つので、作業の木の .git の file を読まない。
  * 通すのは REVIEW_GIT_READS の命令だけで、外の道具を動かす旗は断る。
  */
 export function reviewGit(ctx: Context, key: string, options: { repo?: string, main?: string }, args: string[]): { status: number, stdout: string, stderr: string } {
@@ -149,9 +202,9 @@ export function reviewGit(ctx: Context, key: string, options: { repo?: string, m
   const bad = rest.find(badGitFlag);
   if (bad !== undefined) throw new TpmError(`roster review git は、外の道具を動かす・書き出す旗を通しません: ${bad}`);
   if (options.main !== undefined) {
-    const main = mainCheckout(ctx, options.main);
-    if (main === undefined) throw new TpmError(`project の folder に ${options.main} の本体がありません`);
-    return ctx.exec('git', safeGitArgs(join(main, '.git'), main, [sub, ...rest]));
+    const main = fetchMain(ctx, key, options.main);
+    const r = ctx.exec('git', safeGitArgs(main.git, main.tree, [sub, ...rest]));
+    return { ...r, stderr: `${main.repo} の origin/main を GitHub から取り直して読む（${main.head.slice(0, 7)}・${main.tree}）\n${r.stderr}` };
   }
   const repos = clonedRepos(ctx, key);
   const repo = options.repo ?? (repos.length === 1 ? repos[0] : undefined);
