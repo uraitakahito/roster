@@ -41,8 +41,8 @@ export interface ChromeOps {
 const escapeRegExp = (s: string): string => s.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
- * command line が profile を使っているか。path の前が頭・空白・=、後ろが /・空白・終わりの時だけ当てる（`/tmp/p` で `/x/tmp/p` に当てない。review-4 の提案 1）（`/tmp/p` で `/tmp/p2` に当てない。
- * chrome_crashpad_handler の `--database=<profile>/Crashpad` の形にも当たる。review-3 の指摘 3）。
+ * command line が profile を使っているか。path の前が頭・空白・=、後ろが /・空白・終わりの時だけ当てる。
+ * `/tmp/p` で `/tmp/p2`（review-3 の指摘 3）にも `/x/tmp/p`（review-4 の提案 1）にも当てず、`--database=<profile>/Crashpad` の形には当たる。
  */
 export const usesProfile = (line: string, profile: string): boolean => new RegExp(`(?:^|[ =])${escapeRegExp(profile)}(?:/| |$)`).test(line);
 
