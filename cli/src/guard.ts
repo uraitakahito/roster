@@ -124,8 +124,8 @@ function changesRepo(words: string[]): boolean {
   return (named !== undefined && named.toUpperCase() !== 'GET') || (named === undefined && args.some(a => GH_API_WRITES.test(a)));
 }
 
-/** 消すだけの push で、消してはいけない名（既定の branch と、release の tag の形）。 */
-const KEEP_REFS = /^(?:main|master|HEAD|refs\/tags\/.*|v\d.*)$/;
+/** 消すだけの push で、消してはいけない名（既定の branch と、release の tag の版の形 v1.2.3・1.2.3。review-9 の提案 3）。 */
+const KEEP_REFS = /^(?:main|master|HEAD|refs\/tags\/.*|v?\d+\.\d+.*)$/;
 
 /**
  * push の後ろの語が、branch を消すだけの形か（t-fcp8。commit を外へ出さないので確かめが要らない）。
@@ -172,6 +172,8 @@ function pushesBare(command: string): string[] | undefined {
       const sub = gitCommand(git);
       if (sub?.name === 'config' && sub.args.some(a => /^alias\./.test(a)) && sub.args.some(a => /push/.test(a))) return git;
       if (sub?.name === 'push' && !deletesOnly(sub.args)) return git;
+      // remote に書く、push の外の命令（下の段の send-pack と、subtree push。review-9 の提案 2）。
+      if (sub?.name === 'send-pack' || (sub?.name === 'subtree' && sub.args.includes('push'))) return git;
     }
   }
   return undefined;
