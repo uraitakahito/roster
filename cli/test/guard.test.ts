@@ -647,6 +647,8 @@ describe('担当の席の素の git push（t-fcp8。監査 audit-2 の R15）', 
     // 消すだけの形に見えて、ほかの語が並ぶ・消してはいけない名（review-2 の指摘 3）。
     'git push origin -fd x',
     'git push origin --delete --forc x',
+    'git push -q origin --delete --force x',
+    'git push --qui origin --delete x',
     'git push origin --delete main',
     'git push origin -d master',
     'git push origin :main',
@@ -678,6 +680,10 @@ describe('担当の席の素の git push（t-fcp8。監査 audit-2 の R15）', 
     'git push origin :t-x/impl',
     'git push origin --delete refs/heads/t-x/impl',
     'git push origin --delete v2-cleanup',
+    // 台帳 #430（t-qx3r の片付け）: -C・-q・branch をいくつも並べる消すだけの形。
+    'git -C /w/roster push -q origin --delete t-x/a t-x/b t-x/c',
+    'git push --quiet origin -d t-x/a',
+    'git push -v origin :t-x/a',
     'git commit -m "git push"',
     'git commit -m "roster push の前に git push を打たない"',
     'echo git push',
@@ -693,6 +699,10 @@ describe('担当の席の素の git push（t-fcp8。監査 audit-2 の R15）', 
   test('役割の無い session（Product Manager の terminal・TPM 担当の席）の push は止めない', () => {
     expect(ask('git push origin v1.2.3', undefined)).toEqual({ allow: true });
     expect(ask('pnpm run check; git push', undefined)).toEqual({ allow: true });
+  });
+
+  test('止めた訳の終了コード 2 は、fetch の落ちも言う（skill・docs と同じ字）', () => {
+    expect(ask('git push', 'software-engineer')).toEqual({ allow: false, reason: expect.stringContaining('2 git fetch か git push が落ちた（fetch なら確かめは流していない）') as string });
   });
 
   test('読むだけの担当には、今までの「repo を変えません」が先に当たる', () => {

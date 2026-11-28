@@ -126,6 +126,9 @@ function changesRepo(words: string[]): boolean {
   return (named !== undefined && named.toUpperCase() !== 'GET') || (named === undefined && args.some(a => GH_API_WRITES.test(a)));
 }
 
+/** 消すだけの push に並べてよい、出力の量だけを替える旗（字のまま。略しは数えない）。 */
+const QUIET_FLAGS = new Set(['-q', '--quiet', '-v', '--verbose']);
+
 /** 消すだけの push で、消してはいけない名（既定の branch と、release の tag の版の形 v1.2.3・1.2.3。review-9 の提案 3）。 */
 const KEEP_REFS = /^(?:main|master|HEAD|refs\/tags\/.*|v?\d+\.\d+.*)$/;
 
@@ -135,7 +138,8 @@ const KEEP_REFS = /^(?:main|master|HEAD|refs\/tags\/.*|v?\d+\.\d+.*)$/;
  * （`-fd` のまとめ・`--forc` などの略しも、並べた形に無いので外れる。review-2 の指摘 3）。消す名が既定の branch・tag の形なら外す。
  */
 function deletesOnly(args: string[]): boolean {
-  const flags = args.filter(a => a.startsWith('-'));
+  // 出力の量だけを替える旗は、並べてよい（t-qx3r の片付けの -q が止まった。台帳 #430）。略しは数えない。
+  const flags = args.filter(a => a.startsWith('-') && !QUIET_FLAGS.has(a));
   const words = args.filter(a => !a.startsWith('-'));
   const [remote, ...names] = words;
   if (remote === undefined || remote.startsWith(':') || names.length === 0) return false;
@@ -908,7 +912,7 @@ export function judge(asked: Asked): Verdict {
   // 担当の席の push は roster push で（t-fcp8）。ROSTER_RAW=1 でも外さない（確かめを外す道にしない）。役割の無い session（Product Manager の terminal・TPM 担当の席。TPM 担当は repo を触らない）には効かない。
   const bare = asked.role === undefined ? undefined : pushesBare(asked.command);
   if (bare !== undefined) {
-    return { allow: false, reason: `push は roster push で打ってください（${bare.slice(0, 3).join(' ')}）。roster push は repo に宣言した確かめをみな流し、みな通った時だけ、確かめた commit を push します（Bash の run_in_background で起こして手を止め、終了コードで結果を見る: 0 push した・10 確かめが落ちた・1 断った・2 git push が落ちた）。release の tag は roster push --tag <tag>。branch を消す push（git push origin --delete <branch>）はそのまま打てます。` };
+    return { allow: false, reason: `push は roster push で打ってください（${bare.slice(0, 3).join(' ')}）。roster push は repo に宣言した確かめをみな流し、みな通った時だけ、確かめた commit を push します（Bash の run_in_background で起こして手を止め、終了コードで結果を見る: 0 push した・10 確かめが落ちた・1 断った・2 git fetch か git push が落ちた（fetch なら確かめは流していない））。release の tag は roster push --tag <tag>。branch を消す push（git push origin --delete <branch>）はそのまま打てます。` };
   }
   if (!asked.command.includes(RAW)) {
     const heads = commands.map(words => words.join(' '));
