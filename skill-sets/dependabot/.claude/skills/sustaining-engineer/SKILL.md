@@ -52,7 +52,8 @@ node "${CLAUDE_SKILL_DIR}/../../../../../cli/src/release-age.ts" <config.owner>/
 ## 3. 直す（CI が赤のときだけ）
 
 - CI が緑なら、直しは無し。4 へ。
-- 赤なら、**この repo の git worktree** で直す。本体の checkout は触らない・pull もしない。置き場所は `rules.md` に従う。
+- 赤なら、**この repo の git worktree** で直す。本体の checkout は触らない・pull もしない。置き場所は `rules.md` に従う。worktree は PR の branch を追う手元の branch で作る（`git worktree add -b <PR の branch の名> <置き場所> --track origin/<PR の branch の名>`）。
+- 直しは `roster push` で push する（確かめをみな流し、通った時だけ、同じ名の branch（＝ PR の branch）へ push する。素の `git push` は guard が止める。終了コードと打ち方は `/software-engineer` の 2）。repo に確かめの宣言が無くて断られたら、`--no-checks` を自分で付けず `roster ask tpm` で聞く。
 - Dependabot の PR に commit を足すか、別の PR にするかは、その repo の作法に従う（`git log` と最近の PR を見る）。
 - `@dependabot rebase` を打つ前に、下の 3a を読む。
 - `git add -A`・`git add .` は使わない。ファイルを名指して add する。
@@ -65,7 +66,7 @@ node "${CLAUDE_SKILL_DIR}/../../../../../cli/src/release-age.ts" <config.owner>/
 公式: [Dependabot pull request comment commands](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-pull-request-comment-commands)・[Managing pull requests for dependency updates](https://docs.github.com/en/code-security/dependabot/working-with-dependabot/managing-pull-requests-for-dependency-updates)。
 
 1. **衝突なら、まず数分待つ。** Dependabot は衝突を頼まれなくても自分で rebase する（公式「By default, Dependabot automatically rebases pull requests to resolve any conflicts」）。
-2. **人が commit を足した PR では `@dependabot rebase` を打たない。** Dependabot は余分な commit のある PR をもう rebase しない（公式。`[dependabot skip]` などの印の commit なら上書きされる）。打っても空振りする。代わりに worktree で `git merge origin/main` して push する（**force push はしない**）。
+2. **人が commit を足した PR では `@dependabot rebase` を打たない。** Dependabot は余分な commit のある PR をもう rebase しない（公式。`[dependabot skip]` などの印の commit なら上書きされる）。打っても空振りする。代わりに worktree で `git merge origin/main` して `roster push` で push する（**force push はしない**。`--force-with-lease` も付けない）。
 3. **打ったら、応じた印 👍 を待つ。** 時間は決まっていない（公式は「several minutes」。実測では 1 回目 20 分無反応・2 回目 4 分、10 分無反応のこともあった）。**待つのは `config.rebaseWaitMinutes` 分まで。** 越えたら `roster report not-yet "rebase に <分> 分応じない"` か `roster ask tpm` を送る。待つ間は `roster wait work "rebase を待つ（<打った時刻>）"`。
 4. **rebase で緑が赤になることがある。** audit がいまの勧告の DB で流れ直すため。新しい勧告で audit が赤の間は、衝突していない PR は rebase しない。
 5. **group の PR は閉じて新しい番号で作り直されることがある**（docs には無い・実測）。72 時間は version の公開から数えるので判定は変わらない。作り直されたら、`roster report recreated "旧 #N → 新 #M" --title "Sustaining <repo>#<新>"` で知らせ（居場所の題も替わる。名簿の Key は元の番号のまま）、新しい PR で 2 からやり直す。

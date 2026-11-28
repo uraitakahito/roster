@@ -1,5 +1,5 @@
 // guard: 担当が使う道具を、実行の前に見て、通すか止めるかを決める（Claude Code の PreToolUse hook から呼ばれる）。
-// 止めるのは 6 つ。(1) project の設定（infra。直下の folder の設定の宣言も合わせる）に書いた環境に触る命令で、手続きを踏んでいない物。
+// 止めるのは 7 つ。(1) project の設定（infra。直下の folder の設定の宣言も合わせる）に書いた環境に触る命令で、手続きを踏んでいない物。
 // (2) 連携と課題管理の道具の直打ち（roster を通さないと、記録と状態が抜ける）。
 // (3) 担当が置き場のページと file を消す命令: 消す要求を直に送る curl と、置き場の CLI（pagetray）の消す命令
 //     （消してよいのは TPM 担当だけ。roster page delete・roster file delete も担当からは止まる）。
@@ -7,10 +7,11 @@
 //     git・gh の変える命令（どちらも見て勧めるだけで、直さない）。
 // (5) Audit の席を起こす命令（roster audit start。起こすのは Product Manager）。
 // (6) pattern で選んだ process に合図を送る命令（pkill・killall と、pid を名指さない kill。どの席からも。台帳 #89・#92）。
+// (7) 担当の席の素の git push（push は roster push で打つ。確かめをみな流し、通った時だけ push する。branch を消すだけの push は通す。t-fcp8・監査 audit-2 の R15）。
 // (1) は、命令を単純な命令に分けて match の語で当て、語で当たらなくても命令の字全体に match の字が含まれれば止める（共有の環境は、疑わしければ止める）。
 //     字の含みだけの当たりを通すのは、どの単純な命令も、引数も入力も命令として動かさない道具の表（cat・grep・tail・roster・git の読む命令など。字を動かす旗は外す）か、
 //     命令を起こす呼び出しの字の無い python・node の時だけ（textStays。t-y67q の案 B）。
-// (2)〜(6) の shell の命令は、単純な命令に分け、その頭（実際に打つ道具の命令）だけを見る。commit の文・grep の型・here-document に道具の名が入っても止めない。
+// (2)〜(6) の shell の命令は、単純な命令に分け、その頭（実際に打つ道具の命令）だけを見る（(7) は語の並びの中の git も見る。pushesBare）。commit の文・grep の型・here-document に道具の名が入っても止めない。
 // どれも字で見るので、防げるのは「うっかり」まで。script に包んだ命令や、shell の redirect での書き込みはすり抜ける。確実な守りは、担当に渡す権限の方で行う。
 import { existsSync, realpathSync } from 'node:fs';
 import { basename, dirname, join, resolve, sep } from 'node:path';
@@ -121,6 +122,61 @@ function changesRepo(words: string[]): boolean {
   const method = args.findIndex(a => a === '-X' || a === '--method');
   const named = args.find(a => /^(?:-X|--method=)./.test(a))?.replace(/^(?:-X|--method=)/, '') ?? (method === -1 ? undefined : args[method + 1]);
   return (named !== undefined && named.toUpperCase() !== 'GET') || (named === undefined && args.some(a => GH_API_WRITES.test(a)));
+}
+
+/** 消すだけの push で、消してはいけない名（既定の branch と、release の tag の版の形 v1.2.3・1.2.3。review-9 の提案 3）。 */
+const KEEP_REFS = /^(?:main|master|HEAD|refs\/tags\/.*|v?\d+\.\d+.*)$/;
+
+/**
+ * push の後ろの語が、branch を消すだけの形か（t-fcp8。commit を外へ出さないので確かめが要らない）。
+ * 通す形を並べる: remote 1 つと、`--delete` か `-d` 1 つと消す名（1 つ以上）、または remote 1 つと `:<名>` だけ。ほかの語が 1 つでもあれば消すだけと見ない
+ * （`-fd` のまとめ・`--forc` などの略しも、並べた形に無いので外れる。review-2 の指摘 3）。消す名が既定の branch・tag の形なら外す。
+ */
+function deletesOnly(args: string[]): boolean {
+  const flags = args.filter(a => a.startsWith('-'));
+  const words = args.filter(a => !a.startsWith('-'));
+  const [remote, ...names] = words;
+  if (remote === undefined || remote.startsWith(':') || names.length === 0) return false;
+  const colon = flags.length === 0 && names.every(n => n.startsWith(':') && n.length > 1);
+  const flagged = flags.length === 1 && (flags[0] === '--delete' || flags[0] === '-d') && names.every(n => !n.startsWith(':'));
+  if (!colon && !flagged) return false;
+  return names.every(n => !KEEP_REFS.test(n.replace(/^:/, '').replace(/^refs\/heads\//, '')) && !n.replace(/^:/, '').startsWith('refs/tags/'));
+}
+
+/** git の前に置く旗のうち、別名をその場で作る `-c alias.<名>=…`（値に push を含む物）。 */
+const aliasesPush = (words: string[]): boolean =>
+  words.some((w, i) => (words[i - 1] === '-c' && /^alias\./.test(w) && /push/.test(w)) || (/^-calias\./.test(w) && /push/.test(w)));
+
+/**
+ * 素の git push か（t-fcp8。監査 audit-2 の R15）。担当の push は roster push で打つ（確かめをみな流し、通った時だけ push する）。
+ * 頭だけを見ない: 前置きの語の旗の値（`env -u X`・`nice -n 5`）や、前置きと知らない命令（`timeout 60`・`find … -exec`）の後ろの git も見るため、
+ * 単純な命令の語の並びの中の `git`（path を外した名）から読む（review-2 の指摘 2）。sh -c・eval の中は splitCommandsMarked が、
+ * 名が置き換えだけの命令（`"$(which git)" push`）は scanCommand の頭を整えない形が拾う（review-2 の指摘 1）。
+ * 字を出す・読むだけの道具（echo・grep など）の引数は見ない。branch を消すだけの形は通す。
+ */
+function pushesBare(command: string): string[] | undefined {
+  const lists = [...splitCommandsMarked(command), ...scanCommand(command).marked];
+  for (const marked of lists) {
+    const words = marked.map(w => w.replaceAll(SUBSTITUTED, ''));
+    const name = (words[0] ?? '').split('/').at(-1) ?? '';
+    if (TEXT_TOOLS.has(name)) continue;
+    // 名が置き換えか変数の命令（何が動くか読めない）の後ろに push の語。
+    if ((marked[0] ?? '').includes(SUBSTITUTED) || name === '' || name.startsWith('$')) {
+      if (words.slice(1).includes('push')) return words;
+      continue;
+    }
+    for (let j = 0; j < words.length; j++) {
+      if ((words[j] ?? '').split('/').at(-1) !== 'git') continue;
+      const git = words.slice(j);
+      if (aliasesPush(git)) return git;
+      const sub = gitCommand(git);
+      if (sub?.name === 'config' && sub.args.some(a => /^alias\./.test(a)) && sub.args.some(a => /push/.test(a))) return git;
+      if (sub?.name === 'push' && !deletesOnly(sub.args)) return git;
+      // remote に書く、push の外の命令（下の段の send-pack と、subtree push。review-9 の提案 2）。
+      if (sub?.name === 'send-pack' || (sub?.name === 'subtree' && sub.args.includes('push'))) return git;
+    }
+  }
+  return undefined;
 }
 
 /** Audit の席を起こす命令。Product Manager が自分の手で打つ物なので、TPM 担当と担当が道具として打つのは止める。 */
@@ -843,6 +899,11 @@ export function judge(asked: Asked): Verdict {
     if (change !== undefined) {
       return { allow: false, reason: `${reader.name}は repo を変えません（${change.slice(0, 3).join(' ')}）。${reader.instead}` };
     }
+  }
+  // 担当の席の push は roster push で（t-fcp8）。ROSTER_RAW=1 でも外さない（確かめを外す道にしない）。役割の無い session（Product Manager の terminal・TPM 担当の席。TPM 担当は repo を触らない）には効かない。
+  const bare = asked.role === undefined ? undefined : pushesBare(asked.command);
+  if (bare !== undefined) {
+    return { allow: false, reason: `push は roster push で打ってください（${bare.slice(0, 3).join(' ')}）。roster push は repo に宣言した確かめをみな流し、みな通った時だけ、確かめた commit を push します（Bash の run_in_background で起こして手を止め、終了コードで結果を見る: 0 push した・10 確かめが落ちた・1 断った・2 git push が落ちた）。release の tag は roster push --tag <tag>。branch を消す push（git push origin --delete <branch>）はそのまま打てます。` };
   }
   if (!asked.command.includes(RAW)) {
     const heads = commands.map(words => words.join(' '));
