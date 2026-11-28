@@ -513,6 +513,7 @@ describe('run-role', () => {
       ROSTER_KEY: 't-x7k2',
       ROSTER_ROLE: 'software-engineer',
       PAGETRAY_NO_DELETE: '1',
+      PAGETRAY_LANG: 'ja',
       PATH: '/r/cli/bin:/usr/bin',
     });
   });

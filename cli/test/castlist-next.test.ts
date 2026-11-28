@@ -107,6 +107,8 @@ describe('castlist の client を作る所（castlistClient）', () => {
     expect(seen.length).toBe(1);
     expect(seen[0]?.headers.host).toBe(new URL(url).host);
     expect(seen[0]?.headers.origin).toBeUndefined();
+    // 誤りの文は日本語を頼む（castlist の既定の言語は英語。AI-48）。
+    expect(seen[0]?.headers['accept-language']).toBe('ja');
   });
 
   test('AWS_MAX_ATTEMPTS=5・AWS_RETRY_MODE・~/.aws/config の max_attempts を置いても、1 度しか送らない', async () => {

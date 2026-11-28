@@ -7,7 +7,7 @@ import { guardSettings } from '../src/guard.ts';
 import { shellQuote } from '../src/shell.ts';
 
 // settings の中身は guard.test.ts が見る。ここは 1 行の組み方（引用）を見る。
-const head = (root: string): string => `PATH=${root.includes(' ') ? `'${root}/cli/bin'` : `${root}/cli/bin`}:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings ${shellQuote(guardSettings(`${root}/cli/bin/roster`))} --append-system-prompt ${shellQuote(REPLY_LANGUAGE)}`;
+const head = (root: string): string => `PATH=${root.includes(' ') ? `'${root}/cli/bin'` : `${root}/cli/bin`}:"$PATH" PAGETRAY_LANG=ja claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings ${shellQuote(guardSettings(`${root}/cli/bin/roster`))} --append-system-prompt ${shellQuote(REPLY_LANGUAGE)}`;
 
 describe('buildCommand', () => {
   test('追加の skill セットが無ければ /tpm', () => {
@@ -23,12 +23,12 @@ describe('buildCommand', () => {
   test('ROSTER_MODEL などがあれば、旗にし、1 行の頭（PATH の隣）にも引用して写す', () => {
     const env = { ROSTER_MODEL: 'claude-fable-5-2', ROSTER_EFFORT: 'high', ROSTER_PERMISSION_MODE: 'accept edits' };
     expect(buildCommand('/w', '/r', [], env)).toMatch(
-      /^cd \/w && PATH=\/r\/cli\/bin:"\$PATH" ROSTER_MODEL=claude-fable-5-2 ROSTER_EFFORT=high ROSTER_PERMISSION_MODE='accept edits' claude --model claude-fable-5-2 --effort high --permission-mode 'accept edits' --settings /,
+      /^cd \/w && PATH=\/r\/cli\/bin:"\$PATH" PAGETRAY_LANG=ja ROSTER_MODEL=claude-fable-5-2 ROSTER_EFFORT=high ROSTER_PERMISSION_MODE='accept edits' claude --model claude-fable-5-2 --effort high --permission-mode 'accept edits' --settings /,
     );
   });
 
   test('無い物・空の物は写さない', () => {
-    expect(buildCommand('/w', '/r', [], { ROSTER_MODEL: '', ROSTER_EFFORT: 'high' })).toMatch(/^cd \/w && PATH=\/r\/cli\/bin:"\$PATH" ROSTER_EFFORT=high claude --model claude-opus-5-5 --effort high /);
+    expect(buildCommand('/w', '/r', [], { ROSTER_MODEL: '', ROSTER_EFFORT: 'high' })).toMatch(/^cd \/w && PATH=\/r\/cli\/bin:"\$PATH" PAGETRAY_LANG=ja ROSTER_EFFORT=high claude --model claude-opus-5-5 --effort high /);
   });
 
   test('空白を含む道も引用する', () => {

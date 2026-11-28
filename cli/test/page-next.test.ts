@@ -110,6 +110,8 @@ describe('pagetray の client を作る所（pagetrayClient）', () => {
     expect(seen.map(r => (r.url ?? '').split('?')[0])).toEqual([`/api/projects/${s.project}/keys/t-x7k2/kinds/brief/pages`]);
     expect(seen[0]?.headers.host).toBe(new URL(url).host);
     expect(seen[0]?.headers.origin).toBeUndefined();
+    // 誤りの文は日本語を頼む（置き場の既定の言語は英語。AI-48）。
+    expect(seen[0]?.headers['accept-language']).toBe('ja');
   });
 });
 

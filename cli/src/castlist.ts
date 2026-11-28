@@ -10,7 +10,7 @@ import { createHash } from 'node:crypto';
 import { closeSync, existsSync, fstatSync, openSync, readSync } from 'node:fs';
 import { basename } from 'node:path';
 import type * as Castlist from '../gen/castlist-client/dist-types/index.js';
-import { castlistApi, clientConfig, sendOnce, withoutAwsMiddleware } from './clients.ts';
+import { askingJapanese, castlistApi, clientConfig, sendOnce, withoutAwsMiddleware } from './clients.ts';
 import type { Context } from './context.ts';
 import { ROLE_NAMES, type RoleName } from './protocol.ts';
 import { isRepoSeat, readRole } from './roster.ts';
@@ -140,11 +140,11 @@ export type Reply = { kind: 'ok', code: number, body: unknown, text: string } | 
 
 /**
  * 生成した castlist の client を作る（castlist の client を作る所は、ここだけ）。送り直さず、時間切れは REQUEST_TIMEOUT。
- * Host は URL の名と port（castlist は 127.0.0.1・localhost でない Host を断る）で、Origin は付けない。requestHandler は試験が偽の HTTP を差し込む所。
+ * Host は URL の名と port（castlist は 127.0.0.1・localhost でない Host を断る）で、Origin は付けない。誤りの文は日本語を頼む（askingJapanese）。requestHandler は試験が偽の HTTP を差し込む所。
  */
 export function castlistClient(url: string, requestHandler?: HttpHandler): Castlist.CastlistClient {
   const { CastlistClient } = castlistApi();
-  return withoutAwsMiddleware(new CastlistClient(clientConfig(url, REQUEST_TIMEOUT * 1000, requestHandler)));
+  return askingJapanese(withoutAwsMiddleware(new CastlistClient(clientConfig(url, REQUEST_TIMEOUT * 1000, requestHandler))));
 }
 
 /** NotFound でない 404（UnknownOperationException・誤りの型の無い 404）の訳: この roster の呼ぶ操作を持たない castlist（定義より古い版）が答えた物。 */
