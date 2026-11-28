@@ -25,9 +25,9 @@ skill セットの `.claude/agents/<名>.md` は、手伝い（subagent。Agent 
 
 - 定義し直すと、組み込みの道具の止めは引き継がれない。読むだけの 2 つは、Claude Code 2.1.332 の Agent tool の説明の `Explore` の行（「All tools except …」）から写した 9 つ（`Agent`・`Artifact`・`ArtifactComments`・`ArtifactData`・`ArtifactCheck`・`ExitPlanMode`・`Edit`・`Write`・`NotebookEdit`）を `disallowedTools` に書く。roster の guard は Artifact を見ないので、ここで止める。MCP の道具（課題管理や文書の書き込みなど）は止めていない（組み込みの `Explore` と同じ。guard も MCP を見ない）。版が上がると組み込みの並べが増えうるので、版上げの時に見直す（`check-skills.mjs` の `READ_ONLY_DENIED`）。
 - `omitClaudeMd: true` は、組み込みの `Explore` と同じく CLAUDE.md を読ませない欄（文書に無く、版の中にだけある）。
-- 効くのは、定義を merge して roster の本体の checkout を pull した後に起こした席から。動いている席は、起こし直すまで前の定義のまま。
+- 効くのは、定義を merge して roster の本体の checkout を pull した後から。動いている席も、Claude Code が `--add-dir` の先の定義の変わりを読み直すので、起こし直さずに次の呼び出しから効く（2026-11-28 t-cjj4。pull の直後に、動いている席の `Explore` が `claude-haiku-5-5` で動いた。台帳 #435）。消す時も同じ。
 - Claude Code の版を上げた時は、`--add-dir` の先の定義がまだ読まれるかを確かめる（文書に無い振る舞いなので、黙って読まれなくなりうる。その時は組み込みの `Explore`（Opus）に戻る）。手伝いの写しの `*.meta.json` の `model` が `claude-haiku-5-5` なら効いている。
-- 戻す時は `Explore.md` を消す。
+- 戻す時は `Explore.md` を消す（merge して本体を pull すると、動いている席も組み込みの `Explore` に戻る）。
 
 ## skill
 
