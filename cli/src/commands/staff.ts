@@ -219,7 +219,7 @@ export async function askReview(ctx: Context, options: { url: string, focus?: st
   let out: string[];
   if (seat !== undefined && alive) {
     let url: string;
-    let sent: string;
+    let asked: { note: string, id: string };
     try {
       url = await putStaffBrief(ctx, subject, asks);
       const body = [
@@ -228,19 +228,21 @@ export async function askReview(ctx: Context, options: { url: string, focus?: st
         ...(focus === undefined ? [] : [`見てほしい所: ${focus}`]),
         ...(before.length === 0 ? [] : [`${before.map(r => `#${r.n}`).join('・')}を済ませてから、これをする`]),
       ].join(' ');
-      sent = await toPeer(ctx, self, seat, 'ask-review', body);
+      asked = await toPeer(ctx, self, seat, 'ask-review', body);
     }
     catch (e) {
       // 送る前に止まった頼みを残すと、打ち直しが「もう頼んであります」で止まる。送った後の失敗では消さない（席にはもう届いている）。
       removeReview(ctx, review.n);
       throw e;
     }
+    // 判定（【review】）が、この頼みを返事の先にできるように、送った id を頼みに書く。
+    for (const r of asks) patchReview(ctx, r.n, { ask: asked.id });
     const previous = markBriefed(ctx, asks, url);
     markDelivered(ctx, asks, seat);
     seat.brief = url;
     writeRole(ctx, seat);
     // 席の題は、返っていない頼みをみな数える（新しい頼みと +<残りの数>）。
-    out = [sent, ...relabelStaff(ctx, seat, self.key, [...before, ...asks]), ...await markBrief(ctx, url, asks, previous), ...place];
+    out = [asked.note, ...relabelStaff(ctx, seat, self.key, [...before, ...asks]), ...await markBrief(ctx, url, asks, previous), ...place];
   }
   else {
     try {
@@ -299,7 +301,7 @@ async function askLeadReview(ctx: Context, self: RoleRecord, options: { url: str
   const before = openReviews(ctx, self.key).filter(r => r.brief !== undefined);
   const review = addReview(ctx, { key: self.key, url: options.url, ...(focus === undefined ? {} : { focus }), by: self.title, reviewer: 'tech-lead', lead: lead.key });
   let url: string;
-  let sent: string;
+  let asked: { note: string, id: string };
   try {
     url = await putStaffBrief(ctx, self, [review]);
     const body = [
@@ -308,16 +310,17 @@ async function askLeadReview(ctx: Context, self: RoleRecord, options: { url: str
       ...(focus === undefined ? [] : [`見てほしい所: ${focus}`]),
       ...(before.length === 0 ? [] : [`${before.map(r => `#${r.n}`).join('・')}を済ませてから、これをする`]),
     ].join(' ');
-    sent = await toPeer(ctx, self, lead, 'ask-review', body);
+    asked = await toPeer(ctx, self, lead, 'ask-review', body);
   }
   catch (e) {
     // 送る前に止まった頼みを残すと、打ち直しが「もう頼んであります」で止まる。
     removeReview(ctx, review.n);
     throw e;
   }
+  patchReview(ctx, review.n, { ask: asked.id });
   const previous = markBriefed(ctx, [review], url);
   markDelivered(ctx, [review], lead);
-  return [sent, ...await markBrief(ctx, url, [review], previous), ...wait(ctx, 'review', reviewLabel([review]).target)];
+  return [asked.note, ...await markBrief(ctx, url, [review], previous), ...wait(ctx, 'review', reviewLabel([review]).target)];
 }
 
 /** `roster report review` の旗。 */
@@ -369,7 +372,8 @@ export async function reportReview(ctx: Context, options: ReviewOptions): Promis
   // 相手の居場所と 2 度送りを、課題に記録を書く前に見る。
   await notRepeatToPeer(ctx, self, owner, 'review', body);
   const recorded = record(ctx, self, { kind: 'レビュー', role: ROLES[self.role].label, summary: oneLine(`${label}: ${options.summary}`), links: [{ label: 'レビュー', url: options.url }], points: [] });
-  const sent = await toPeer(ctx, self, owner, 'review', body);
+  // 返事の先は、頼みを渡したメッセージ（頼みの記録の ask。前の版の頼みには無い）。頼みの記録は、渡した後に読み直す（ask は渡した時に書かれる）。
+  const { note: sent } = await toPeer(ctx, self, owner, 'review', body, readReviews(ctx).find(r => r.n === named.n)?.ask);
   const reviewedAt = ctx.now().toISOString();
   for (const r of asks) patchReview(ctx, r.n, { verdict, page: options.url, summary: options.summary, reviewedAt });
   const marks = await markVerdict(ctx, options.url, verdict, asks);
