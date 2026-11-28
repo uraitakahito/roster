@@ -107,7 +107,15 @@ export async function guard(ctx: Context, stdin: string): Promise<Verdict> {
   // 手伝いの中からの送る命令と、同じ返答の中で渡した物がある時の送る命令（mail.ts の mailGuard）。
   const mail = castlist.allow ? mailGuard(ctx, stdin, command) : castlist;
   if (!mail.allow) recordGuardStop(ctx, command, mail.reason);
-  else if (roleOf(ctx.env) === 'staff-engineer') recordReviewCommand(ctx, stdin, command);
+  else if (roleOf(ctx.env) === 'staff-engineer') {
+    // 段 1a は止めない: 記録が書けなくても命令は通す（guard の命令は、guard() の中の例外を「止める」に替えるため。review-6 の指摘 3）。
+    try {
+      recordReviewCommand(ctx, stdin, command);
+    }
+    catch (e) {
+      process.stderr.write(`roster guard: review-guard.jsonl に書けませんでした（命令は通します）: ${e instanceof Error ? e.message : String(e)}\n`);
+    }
+  }
   return mail;
 }
 

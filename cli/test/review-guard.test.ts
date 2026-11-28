@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { guard } from '../src/commands/infra.ts';
@@ -30,6 +30,9 @@ describe('レビューの席の通す側の表（t-n4j9 の段 1a）', () => {
     'if test -f x; then echo y; else echo n; fi',
     'wc -l x 2>/dev/null',
     'cat $(ls *.md)',
+    'sort -t: -k2 -n x',
+    'sort --numeric-sort --reverse x',
+    'tree -L 2 --dirsfirst',
     '( cat x; echo y )',
   ])('通す: %s', (command) => {
     expect(checkReviewCommand(command)).toEqual({ outside: [], writes: [] });
@@ -65,6 +68,13 @@ describe('レビューの席の通す側の表（t-n4j9 の段 1a）', () => {
     ['rg --pre ./x y', 'rg --pre'],
     ['sort -o out x', 'sort -o'],
     ['sort --compress-program=sh x', 'sort --compress-program'],
+    // 略した長い旗・まとめた短い旗・BSD の sed -I（review-6 の指摘 1・2）。
+    ['sort --compress=sh x', 'sort --compress'],
+    ['sort --out=f x', 'sort --out'],
+    ['sort -uo out x', 'sort -uo'],
+    ['tree -ao out', 'tree -ao'],
+    ['sed -I \'\' s/a/b/ x', 'sed'],
+    ['sed -nI.bak s/a/b/p x', 'sed'],
     ['tree -o out', 'tree -o'],
     ['uniq a b', 'uniq の書き出し'],
     ['find . -exec cargo test \\;', 'find -exec'],
@@ -136,6 +146,12 @@ describe('roster guard: レビューの席の命令の記録（段 1a は止め�
     const w = world({});
     expect((await guard(staff(w), input('Bash', 'git push origin x'))).allow).toBe(false);
     expect(hits(w)).toEqual([]);
+  });
+
+  test('記録が書けない時も、命令は通す（段 1a は止めない。review-6 の指摘 3）', async () => {
+    const w = world({});
+    mkdirSync(join(w.tpm.state.dir, 'review-guard.jsonl'), { recursive: true });
+    expect(await guard(staff(w), input('Bash', 'npx vitest run'))).toEqual({ allow: true });
   });
 
   test('ほかの役割は記録しない', async () => {

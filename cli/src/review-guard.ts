@@ -14,10 +14,29 @@ const PLAIN = new Set(['cat', 'head', 'tail', 'wc', 'ls', 'stat', 'file', 'du', 
 /** 道具ごとの、字を動かす旗・書く旗（`--x=v` の形も当てる）。 */
 const BAD_FLAGS: Record<string, RegExp> = {
   rg: /^--pre(?:-glob)?(?:=|$)/,
-  sort: /^(?:-o.*|--output(?:=.*)?|--compress-program(?:=.*)?)$/,
-  tree: /^-o.*$/,
   find: /^-(?:exec|execdir|ok|okdir|delete|fprint|fprint0|fprintf|fls)$/,
 };
+
+/**
+ * 短い旗をまとめた語（`-uo`）に、書く旗の字があるか。値を取る旗の字（`-t:`・`-k2`）の後ろは値なので見ない。
+ * 長い旗は略して書ける（getopt_long。`--compress=sh`）ので、名が通す表に丸ごと無ければ当たりにする（review-6 の指摘 2）。
+ */
+function flagHits(args: string[], writer: string, valued: string, longOk: Set<string>): string | undefined {
+  return args.find((a) => {
+    if (a.startsWith('--')) return a !== '--' && !longOk.has(a.split('=')[0] ?? '');
+    if (!a.startsWith('-') || a === '-') return false;
+    for (const c of a.slice(1)) {
+      if (c === writer) return true;
+      if (valued.includes(c)) return false;
+    }
+    return false;
+  });
+}
+
+/** sort の、通す長い旗。 */
+const SORT_LONG = new Set(['--numeric-sort', '--reverse', '--unique', '--key', '--field-separator', '--ignore-case', '--human-numeric-sort', '--version-sort', '--general-numeric-sort', '--month-sort', '--stable', '--ignore-leading-blanks', '--dictionary-order', '--zero-terminated', '--random-sort', '--check']);
+/** tree の、通す長い旗。 */
+const TREE_LONG = new Set(['--noreport', '--dirsfirst', '--charset', '--prune', '--filelimit', '--gitignore']);
 
 /** gh の、通す命令（`gh <語> <語>`）。api は GET だけ（下で見る）。 */
 const GH_READS = new Set(['pr view', 'pr diff', 'pr checks', 'pr list', 'run view', 'run list', 'issue view']);
@@ -36,7 +55,8 @@ function sedScriptSafe(script: string): boolean {
 
 /** sed の引数が、書き替え（-i）を持たず、命令の字がみな読むだけの形か。 */
 function sedSafe(args: string[]): boolean {
-  if (args.some(a => /^(?:-i.*|--in-place(?:=.*)?|-[a-zA-Z]*i[a-zA-Z]*)$/.test(a))) return false;
+  // GNU の -i と、BSD（macOS）の -I（どちらも file を書き替える。review-6 の指摘 1）。
+  if (args.some(a => /^(?:--in-place(?:=.*)?|-[a-zA-Z]*[iI].*)$/.test(a))) return false;
   const scripts: string[] = [];
   let sawScript = false;
   for (let i = 0; i < args.length; i += 1) {
@@ -83,6 +103,14 @@ function outside(words: string[]): string | undefined {
   if (name === 'gh') return ghSafe(args) ? undefined : `gh ${args.slice(0, 2).join(' ')}`;
   if (name === 'sed') return sedSafe(args) ? undefined : 'sed（-n の p と s の形のほか）';
   if (name === 'uniq') return args.filter(a => !a.startsWith('-')).length > 1 ? 'uniq の書き出し' : undefined;
+  if (name === 'sort') {
+    const flag = flagHits(args, 'o', 'ktST', SORT_LONG);
+    return flag === undefined ? undefined : `sort ${flag}`;
+  }
+  if (name === 'tree') {
+    const flag = flagHits(args, 'o', 'ILPH', TREE_LONG);
+    return flag === undefined ? undefined : `tree ${flag}`;
+  }
   const bad = BAD_FLAGS[name];
   if (bad !== undefined) {
     const flag = args.find(a => bad.test(a));
