@@ -12,8 +12,10 @@
 // (9) merge の直打ち: gh pr merge・gh api の merge の endpoint（pulls/<n>/merge・merges・merge-upstream）と既定の branch（main・master）の ref への書き込み・
 //     既定の branch への Contents API の書き込み・GraphQL の merge の mutation・merge を含む gh alias set と gh alias import
 //     （merge は roster pr merge で打つ。判定と見た commit を確かめる。役割の有る席も、役割の無い session（TPM 担当の席）も。作業の branch の ref を消す DELETE は通す。t-pq5v の段 3）。
-//     役割の無い session の、既定の branch を的にする素の git push（HEAD:main・--all など）も止める（役割の有る席の push は (7) が止める。review-9 の提案 4）。
-// (10) 役割の有る席の、判定の守りを外す命令: roster review allow（役割の無い session だけが打つ）と、roster を動かす命令での ROSTER_ROLE・ROSTER_KEY の替え（命令の前の代入・env -u・env -i・export・unset）。
+//     役割の無い session の、既定の branch を的にする素の git push（HEAD:main・--all など）と、送る branch を字で書かない git push（refspec 無し・HEAD）も止める
+//     （役割の有る席の push は (7) が止める。review-9 の提案 4・t-vqhy）。
+// (10) 役割の有る席の、判定の守りを外す命令: roster review allow（役割の無い session だけが打つ）と、roster を動かす命令（node・sh・npx・pnpm exec で roster の script を動かす形も）での
+//      ROSTER_ROLE・ROSTER_KEY の替え（命令の前の代入・env -u・env -i・export・unset。xargs などの前置きの後ろの env も。t-vqhy）。
 //     役割は hook の process の物で見るので、命令の前の ROSTER_ROLE= では外れない（t-pq5v の段 3。review-2 の指摘 2・review-5 の提案 1）。
 // (1) は、命令を単純な命令に分けて match の語で当て、語で当たらなくても命令の字全体に match の字が含まれれば止める（共有の環境は、疑わしければ止める）。
 //     字の含みだけの当たりを通すのは、どの単純な命令も、引数も入力も命令として動かさない道具の表（cat・grep・tail・roster・git の読む命令など。字を動かす旗は外す）か、
@@ -173,9 +175,19 @@ const MERGE_ENDPOINTS = [
 const CREATES_DEFAULT_REF = { endpoint: /^repos\/[^/]+\/[^/]+\/git\/refs$/, field: /^ref=refs\/heads\/(?:main|master)$/ };
 /** file を commit にして書く endpoint（Contents API）。branch の欄が無ければ、GitHub は既定の branch に commit を作る（review-9 の指摘 1）。 */
 const CONTENTS = /^repos\/[^/]+\/[^/]+\/contents\/./;
-/** branch の欄が、既定の branch（main・master）でない branch を名指すか（旗に繋げた `-fbranch=x`・`--field=branch=x` も）。 */
-const namesOtherBranch = (arg: string): boolean =>
-  /^branch=(?!(?:refs\/heads\/)?(?:main|master)$)./.test(arg.replace(/^(?:-[fF]|--(?:raw-)?field=)/, ''));
+/** 欄の語が branch の欄なら、その値（旗に繋げた `-fbranch=x`・`--field=branch=x` も）。 */
+const branchField = (arg: string): string | undefined => /^branch=(.*)$/.exec(arg.replace(/^(?:-[fF]|--(?:raw-)?field=)/, ''))?.[1];
+/**
+ * Contents API への書き込みが、既定の branch（main・master）でない branch だけを名指すか: branch の欄が 1 つ以上あり、みな既定の branch でなく、
+ * 本文を file から読む `--input` が無い（`--input` の時、欄は本文でなく URL に載り、本文の branch は字で読めない）。
+ * 欄を重ねた形（`-f branch=t-x -f branch=main`）は gh が断る（unexpected override existing field）が、gh の版で変わりうるので、みなを見る（review-10 の提案 2）。
+ */
+const writesOtherBranch = (args: string[]): boolean => {
+  const branches = args.flatMap(a => branchField(a) ?? []);
+  return branches.length > 0
+    && branches.every(b => b !== '' && !/^(?:refs\/heads\/)?(?:main|master)$/.test(b))
+    && !args.some(a => a === '--input' || a.startsWith('--input='));
+};
 
 /**
  * gh api の endpoint の語を、比べる形に揃える: ? の後ろ・URL の頭（`https://<host>/`。gh は :// の入った endpoint をそのまま URL に使う）と、
@@ -206,13 +218,13 @@ function mergesDirect(words: string[], command: string): string[] | undefined {
   if (paths.includes('graphql') || paths.includes('api/graphql')) return MERGE_MUTATIONS.test(command) ? gh : undefined;
   if (ghApiMethod(args) === 'GET') return undefined;
   if (paths.some(p => MERGE_ENDPOINTS.some(e => e.test(p)))) return gh;
-  if (paths.some(p => CONTENTS.test(p))) return args.some(namesOtherBranch) ? undefined : gh;
+  if (paths.some(p => CONTENTS.test(p))) return writesOtherBranch(args) ? undefined : gh;
   return paths.some(p => CREATES_DEFAULT_REF.endpoint.test(p)) && args.some(a => CREATES_DEFAULT_REF.field.test(a)) ? gh : undefined;
 }
 
-/** 単純な命令（語の並び）の中の roster（path を外した名）が `roster review allow` か。字を出す・読むだけの道具の引数は見ない。 */
+/** 単純な命令（語の並び）の中の roster（rosterScript。`node …/src/cli.ts` も）が `roster review allow` か。字を出す・読むだけの道具の引数は見ない。 */
 const allowsReview = (words: string[]): boolean =>
-  !TEXT_TOOLS.has(words[0] ?? '') && words.some((w, i) => w.split('/').at(-1) === 'roster' && words[i + 1] === 'review' && words[i + 2] === 'allow');
+  !TEXT_TOOLS.has(words[0] ?? '') && words.some((w, i) => rosterScript(w) && words[i + 1] === 'review' && words[i + 2] === 'allow');
 
 /** roster の命令が役割と課題を見分ける環境変数（命令の前で替えると、席の物でない役割と Key で動く）。 */
 const SEAT_ENV = /^ROSTER_(?:ROLE|KEY)$/;
@@ -221,65 +233,115 @@ const ENV_SETTERS = new Set(['export', 'unset', 'declare', 'typeset', 'readonly'
 /** env の、環境をみな空にする旗。 */
 const ENV_CLEARS = new Set(['-i', '--ignore-environment', '-']);
 
+/** 後ろの命令を動かす前置きの命令（walkPrefix が、その後ろの命令の名を読む）。 */
+const WRAPPERS = new Set(['env', 'sudo', 'nice', 'nohup', 'timeout', 'gtimeout', 'xargs', 'command', 'exec', 'builtin', 'time', 'caffeinate']);
+/** env の、値を次の語に取る旗（-u・--unset は SEAT_ENV を見るので別に読む）。 */
+const ENV_VALUE_FLAGS = new Set(['-C', '--chdir', '-P', '-S', '--split-string']);
+/** script の file を引数に取って動かす道具（`node …/src/cli.ts`・`npx roster`・`pnpm exec roster`。review-10 の提案 1 の (a)）。shell の `sh <file>` も同じに読む。 */
+const RUNNERS = new Set(['node', 'deno', 'bun', 'tsx', 'npx', 'pnpx', 'bunx', 'pnpm', 'npm', 'yarn']);
+/** RUNNERS の、script の前に置く小命令の語（`pnpm exec`・`npm exec`・`pnpm dlx`・`yarn dlx`・`deno run`・`bun x`）。 */
+const RUNNER_WORDS = new Set(['exec', 'dlx', 'x', 'run']);
+/** RUNNERS のうち、package の bin を動かす道具（旗の読み方が node と違う: `-p` は package の名、`-c` は字を動かす）。 */
+const PACKAGE_RUNNERS = new Set(['npx', 'pnpx', 'bunx', 'pnpm', 'npm', 'yarn']);
+/** 値を次の語に取る旗（値を script と読まない）。node の仲間と、package の bin を動かす道具。 */
+const SCRIPT_VALUE_FLAGS = new Set(['-r', '--require', '--import', '--loader', '--experimental-loader', '--conditions']);
+const PACKAGE_VALUE_FLAGS = new Set(['-C', '--dir', '--filter', '-F', '--prefix', '-w', '--workspace', '-p', '--package']);
+/** script の file でなく字を動かす旗（`node -e`・`npx -c`）。後ろは script と読まない。 */
+const SCRIPT_EVAL_FLAGS = new Set(['-e', '--eval', '-p', '--print']);
+const PACKAGE_EVAL_FLAGS = new Set(['-c', '--call']);
+/** roster を動かす script（path を外した名が roster か、roster の入口の src/cli.ts）。 */
+const rosterScript = (word: string | undefined): boolean => word !== undefined && ((word.split('/').at(-1) ?? '') === 'roster' || /(?:^|\/)src\/cli\.ts$/.test(word));
+
+/** 語の path を外した名。 */
+const baseName = (word: string | undefined): string => (word ?? '').split('/').at(-1) ?? '';
+/** 語が SEAT_ENV の代入か、SEAT_ENV の名そのものか。 */
+const namesSeatEnv = (word: string): boolean => SEAT_ENV.test(word.split('=')[0] ?? '');
+
 /**
- * 単純な命令（書いたままの語）が、SEAT_ENV を替えるか: 頭の代入（`ROSTER_ROLE= …`）・env の代入と `-u`・`--unset`・環境を空にする旗
- * （`env -u ROSTER_ROLE …`・`env -i …`）・変数を書く命令（`export ROSTER_KEY=x`・`unset ROSTER_ROLE`）。sh -c・eval の字の中も見る。
+ * 単純な命令（書いたままの語）の、頭の代入と前置きの命令（WRAPPERS。いくつ重なっても）を辿り、後ろの命令の名の位置と、辿る間に SEAT_ENV を替えたかを返す。
+ * 替える形: 頭の代入（`ROSTER_ROLE= …`）・前置きの後ろの代入（`env ROSTER_ROLE= …`・`sudo ROSTER_KEY=x …`）・env の `-u`・`--unset`・環境を空にする旗
+ * （前置きの後ろの env も。`xargs -n 1 env -u ROSTER_ROLE roster …`。review-10 の提案 1 の (b)）。
+ * 前置きの後ろの旗・旗の値・数（`timeout 60`）は飛ばす。命令の名になる語（roster・前置き・shell・eval・RUNNERS）は旗の値と読まない（`env -i roster`）。
+ */
+function walkPrefix(words: string[]): { at: number, sets: boolean } {
+  let sets = false;
+  let k = 0;
+  for (; k < words.length && ASSIGNMENT.test(words[k] ?? ''); k += 1) sets ||= namesSeatEnv(words[k] ?? '');
+  const heads = (word: string | undefined): boolean => {
+    const name = baseName(word);
+    return name === 'roster' || name === 'eval' || WRAPPERS.has(name) || SHELLS.has(name) || RUNNERS.has(name);
+  };
+  while (WRAPPERS.has(baseName(words[k]))) {
+    const env = baseName(words[k]) === 'env';
+    for (k += 1; k < words.length && !heads(words[k]); k += 1) {
+      const word = words[k] ?? '';
+      if (ASSIGNMENT.test(word)) {
+        sets ||= namesSeatEnv(word);
+        continue;
+      }
+      if (env) {
+        if (ENV_CLEARS.has(word)) sets = true;
+        else if (word === '-u' || word === '--unset') sets ||= SEAT_ENV.test(words[k += 1] ?? '');
+        else if (/^(?:-u|--unset=)./.test(word)) sets ||= SEAT_ENV.test(word.replace(/^(?:-u|--unset=)/, ''));
+        else if (ENV_VALUE_FLAGS.has(word)) k += 1;
+        else if (!word.startsWith('-')) break;
+        continue;
+      }
+      if (!word.startsWith('-') && !/^\d+(?:\.\d+)?[smhd]?$/.test(word) && !(words[k - 1] ?? '').startsWith('-')) break;
+    }
+  }
+  return { at: k, sets };
+}
+
+/** shell の命令（`sh -c '<字>'`）の、-c の字。 */
+function shellScript(words: string[], at: number): string | undefined {
+  const c = words.findIndex((w, k) => k > at && /^-[a-z]*c[a-z]*$/.test(w));
+  return c === -1 ? undefined : words[c + 1];
+}
+
+/** RUNNERS と shell の命令の、動かす script の語（旗・旗の値・小命令の語を飛ばした初めの語）。字を動かす旗（`node -e`）が先にあれば undefined。 */
+function scriptOperand(words: string[], at: number): string | undefined {
+  const pkg = PACKAGE_RUNNERS.has(baseName(words[at]));
+  const [evals, values] = pkg ? [PACKAGE_EVAL_FLAGS, PACKAGE_VALUE_FLAGS] : [SCRIPT_EVAL_FLAGS, SCRIPT_VALUE_FLAGS];
+  for (let k = at + 1; k < words.length; k += 1) {
+    const word = words[k] ?? '';
+    if (evals.has(word)) return undefined;
+    if (values.has(word)) k += 1;
+    else if (!word.startsWith('-') && !RUNNER_WORDS.has(word)) return word;
+  }
+  return undefined;
+}
+
+/**
+ * 単純な命令（書いたままの語）が、SEAT_ENV を替えるか: 頭と前置きの後ろの代入・env の `-u`・`--unset`・環境を空にする旗（walkPrefix）と、
+ * 変数を書く命令（`export ROSTER_KEY=x`・`unset ROSTER_ROLE`）。sh -c・eval の字の中も見る。
  */
 function setsSeatEnv(raw: string[]): boolean {
   const words = withoutShellWords(raw);
-  const named = (word: string): boolean => SEAT_ENV.test(word.split('=')[0] ?? '');
-  if (ENV_SETTERS.has(words[0] ?? '')) return words.slice(1).some(named);
-  let i = 0;
-  for (; i < words.length && ASSIGNMENT.test(words[i] ?? ''); i += 1) if (named(words[i] ?? '')) return true;
-  const name = (words[i] ?? '').split('/').at(-1) ?? '';
-  if (name === 'env') {
-    for (let j = i + 1; j < words.length; j += 1) {
-      const word = words[j] ?? '';
-      if (ENV_CLEARS.has(word) || (ASSIGNMENT.test(word) && named(word))) return true;
-      if (word === '-u' || word === '--unset') {
-        if (SEAT_ENV.test(words[j + 1] ?? '')) return true;
-        j += 1;
-      }
-      else if (/^(?:-u|--unset=)/.test(word) && SEAT_ENV.test(word.replace(/^(?:-u|--unset=)/, ''))) return true;
-      else if (!word.startsWith('-') && !ASSIGNMENT.test(word)) break;
-    }
-  }
+  if (ENV_SETTERS.has(words[0] ?? '')) return words.slice(1).some(namesSeatEnv);
+  const { at, sets } = walkPrefix(words);
+  if (sets) return true;
   // sh -c・eval の字は、中の命令を書いたままの語で見る。
-  if (name === 'eval') return rawCommands(words.slice(i + 1).join(' ')).some(setsSeatEnv);
-  if (!SHELLS.has(name)) return false;
-  const c = words.findIndex((w, k) => k > i && /^-[a-z]*c[a-z]*$/.test(w));
-  const script = c === -1 ? undefined : words[c + 1];
+  const name = baseName(words[at]);
+  if (name === 'eval') return rawCommands(words.slice(at + 1).join(' ')).some(setsSeatEnv);
+  const script = SHELLS.has(name) ? shellScript(words, at) : undefined;
   return script !== undefined && rawCommands(script).some(setsSeatEnv);
 }
 
-/** 後ろの命令を動かす前置きの命令（runsRoster が、その後ろの命令の名を読む）。 */
-const WRAPPERS = new Set(['env', 'sudo', 'nice', 'nohup', 'timeout', 'gtimeout', 'xargs', 'command', 'exec', 'builtin', 'time', 'caffeinate']);
-
 /**
- * 単純な命令（書いたままの語）が roster を動かすか: 命令の名（頭の代入を除いた初めの語）か、前置きの命令（WRAPPERS）の後ろの命令の名が roster
- * （path を外した名）。前置きの後ろの旗・旗の値・代入・数（`timeout 60`）は飛ばす（roster の語は旗の値と読まない。`env -i roster`）。
- * sh -c・eval の字の中も見る。引数に roster の path がある命令（`cd …/roster && …`）は動かさない（review-9 の提案 3）。
+ * 単純な命令（書いたままの語）が roster を動かすか: 頭の代入と前置きの命令（walkPrefix）の後ろの命令の名が roster（path を外した名）か、
+ * 命令が script を動かす道具（RUNNERS と、-c の無い shell）で、その script が roster（rosterScript。`node …/src/cli.ts`・`sh …/bin/roster`・`npx roster`。
+ * review-10 の提案 1 の (a)）。sh -c・eval の字の中も見る。引数に roster の path がある命令（`cd …/roster && …`）は動かさない（review-9 の提案 3）。
  */
 function runsRoster(raw: string[]): boolean {
   const words = withoutShellWords(raw);
-  let i = 0;
-  while (i < words.length && ASSIGNMENT.test(words[i] ?? '')) i += 1;
-  const base = (k: number): string => (words[k] ?? '').split('/').at(-1) ?? '';
-  const name = base(i);
-  if (name === 'eval') return rawCommands(words.slice(i + 1).join(' ')).some(runsRoster);
-  if (SHELLS.has(name)) {
-    const c = words.findIndex((w, k) => k > i && /^-[a-z]*c[a-z]*$/.test(w));
-    const script = c === -1 ? undefined : words[c + 1];
-    return script !== undefined && rawCommands(script).some(runsRoster);
-  }
-  if (!WRAPPERS.has(name)) return name === 'roster';
-  for (let k = i + 1; k < words.length; k += 1) {
-    const word = words[k] ?? '';
-    if (base(k) === 'roster') return true;
-    const skip = word.startsWith('-') || ASSIGNMENT.test(word) || /^\d+(?:\.\d+)?[smhd]?$/.test(word) || WRAPPERS.has(base(k)) || (words[k - 1] ?? '').startsWith('-');
-    if (!skip) return SHELLS.has(base(k)) || base(k) === 'eval' ? runsRoster(words.slice(k)) : false;
-  }
-  return false;
+  const { at } = walkPrefix(words);
+  const name = baseName(words[at]);
+  if (name === 'roster') return true;
+  if (name === 'eval') return rawCommands(words.slice(at + 1).join(' ')).some(runsRoster);
+  const script = SHELLS.has(name) ? shellScript(words, at) : undefined;
+  if (script !== undefined) return rawCommands(script).some(runsRoster);
+  return (SHELLS.has(name) || RUNNERS.has(name)) && rosterScript(scriptOperand(words, at));
 }
 
 /** 命令が roster を動かし（runsRoster）、同じ命令で SEAT_ENV を替えるか（t-pq5v の段 3。review-5 の提案 1）。 */
@@ -351,12 +413,15 @@ function pushesBare(command: string): string[] | undefined {
 const PUSH_VALUE_FLAGS = new Set(['-o', '--push-option', '--repo', '--receive-pack', '--exec']);
 /** 既定の branch の名（refspec の先。`refs/heads/` と強いる印の `+` は除いて比べる）。 */
 const DEFAULT_BRANCH = /^(?:main|master)$/;
+/** 今の branch を指す refspec の先（字では、どの branch か読めない）。 */
+const CURRENT_BRANCH = /^(?:HEAD|@)$/;
 
 /**
  * 素の git push が、既定の branch（main・master）を的にするか（役割の無い session の守り。review-9 の提案 4）。
  * refspec の先（`:` の後ろ、無ければ refspec そのもの）が main・master の物（`main`・`+main`・`HEAD:main`・`x:refs/heads/main`）と、
  * branch をみな送る `--all`・`--mirror`。branch を消すだけの形（deletesOnly）は、ほかの守りと同じく通す（消す名が main なら deletesOnly が外す）。
- * refspec を書かない `git push`（今の branch を送る）は、どの branch か字で読めないので見ない。
+ * 今の branch を送る形（refspec を書かない `git push`・`git push origin` と、先が `HEAD`・`@` の refspec）は、どの branch か字で読めないので止める
+ * （TPM 担当は repo を変えないので、送る先を字で書けば足りる。tag だけを送る `git push --tags` は通す。t-vqhy）。
  */
 function pushesDefault(command: string): string[] | undefined {
   for (const words of splitCommands(command)) {
@@ -371,7 +436,9 @@ function pushesDefault(command: string): string[] | undefined {
       if (deletesOnly(args)) continue;
       const operands = args.filter((a, i) => !a.startsWith('-') && !PUSH_VALUE_FLAGS.has(args[i - 1] ?? ''));
       const target = (spec: string): string => (spec.includes(':') ? spec.slice(spec.indexOf(':') + 1) : spec.replace(/^\+/, '')).replace(/^refs\/heads\//, '');
-      if (operands.slice(1).some(spec => DEFAULT_BRANCH.test(target(spec)))) return git;
+      const specs = operands.slice(1);
+      if (specs.length === 0 && !args.includes('--tags')) return git;
+      if (specs.some(spec => DEFAULT_BRANCH.test(target(spec)) || CURRENT_BRANCH.test(target(spec)))) return git;
     }
   }
   return undefined;
@@ -1109,7 +1176,7 @@ export function judge(asked: Asked): Verdict {
   // 役割の無い session（TPM 担当の席）の、既定の branch を的にする素の git push も (9) に並べて止める（役割の有る席は (7) が止める。review-9 の提案 4）。
   const toDefault = asked.role === undefined ? pushesDefault(asked.command) : undefined;
   if (toDefault !== undefined) {
-    return { allow: false, reason: `main へは PR と roster pr merge で入れてください（${toDefault.slice(0, 3).join(' ')}）。既定の branch（main・master）を的にする push（HEAD:main・+main・refs/heads/main・--all・--mirror も）は、TPM 担当の席でも止めます（${RAW} でも外れません）。ほかの branch への push と、branch を消す push は通します。Product Manager の terminal（hook が無い）は止めません。` };
+    return { allow: false, reason: `main へは PR と roster pr merge で入れてください（${toDefault.slice(0, 3).join(' ')}）。既定の branch（main・master）を的にする push（HEAD:main・+main・refs/heads/main・--all・--mirror も）と、送る branch を字で書かない push（git push・git push origin・HEAD・@。今の branch が main かを読めない）は、TPM 担当の席でも止めます（${RAW} でも外れません）。ほかの branch へ字で名指す push（git push origin <branch>）と、branch を消す push は通します。Product Manager の terminal（hook が無い）は止めません。` };
   }
   // (10) 判定の守りを外す命令（役割の有る席だけ。役割は hook の process の物で見るので、命令の前の ROSTER_ROLE= では外れない）。
   if (asked.role !== undefined && commands.some(allowsReview)) {

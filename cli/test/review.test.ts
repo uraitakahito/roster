@@ -10,7 +10,7 @@ import { pageList, pagePath, pagePut, pageReply, type PageRecord } from '../src/
 import { reviewAllow, reviewCheckout, reviewList } from '../src/commands/review.ts';
 import { markBrief } from '../src/commands/review-marks.ts';
 import { hello } from '../src/commands/role-side.ts';
-import { askReview, reportReview } from '../src/commands/staff.ts';
+import { askReview, COMPARE_JQ, reportReview } from '../src/commands/staff.ts';
 import { collect } from '../src/commands/timeline.ts';
 import { assign, close } from '../src/commands/tpm-side.ts';
 import type { Context } from '../src/context.ts';
@@ -820,6 +820,45 @@ describe('見た commit・まとめた頼み・軽い見方・review allow（t-p
     expect(again).toMatchObject({ n: 3, askedHead: H2, light: true });
     const html = readFileSync((await pagePath(w.tpm, again?.brief ?? ''))[0] ?? '', 'utf8');
     expect(html).toContain(`見直し: 前の頼み #2（気になる所あり・見た 1a2b3c4。前の判定からの差分を見る（roster review checkout で出してから）: <code>roster review git --repo r -- diff ${H1}..refs/remotes/pull/7</code>）`);
+    // compare が読めない（偽の gh の既定は {}）時は、差の数を載せない
+    expect(html).not.toContain('GitHub の compare');
+  });
+
+  /** 見直しの頼みを、compare の答え（無ければ gh が落ちる）で置き、依頼書の字を返す。 */
+  async function againBrief(answer: Record<string, unknown> | undefined): Promise<{ html: string, w: Seats & { staff: Context } }> {
+    const w = await prAsked();
+    await verdictOf(w, 'concerns');
+    w.prFields.set(PR, { headRefOid: H2 });
+    w.answers.set(`gh api repos/o/r/compare/${H1}...${H2} --jq ${COMPARE_JQ}`, answer === undefined ? { status: 1, stdout: '', stderr: 'HTTP 404' } : { status: 0, stdout: JSON.stringify(answer), stderr: '' });
+    at(w.se, '12:40');
+    await askReview(w.se, { url: PR, light: true });
+    const html = readFileSync((await pagePath(w.tpm, readReviews(w.tpm)[2]?.brief ?? ''))[0] ?? '', 'utf8');
+    return { html, w };
+  }
+
+  test('見直しの依頼書に、前に見た commit から頼んだ時の head までの commit と file の数を載せる（t-vqhy）', async () => {
+    const { html } = await againBrief({ status: 'ahead', commits: ['5d6e7f8 review-1 の指摘を直す', '6e7f8a9 <b>試験</b>'], files: [{ filename: 'cli/src/a.ts', additions: 10, deletions: 2 }, { filename: 'cli/test/a.test.ts', additions: 5, deletions: 0 }] });
+    expect(html).toContain('<li>前に見た 1a2b3c4 から頼んだ時の head 5d6e7f8 まで: 2 commit・2 file（+15 −2。GitHub の compare）</li>');
+    expect(html).toContain('<li>commit: 5d6e7f8 review-1 の指摘を直す</li><li>commit: 6e7f8a9 &lt;b&gt;試験&lt;/b&gt;</li>');
+    expect(html).toContain('<li>file: cli/src/a.ts（+10 −2）</li><li>file: cli/test/a.test.ts（+5 −0）</li>');
+    expect(html).not.toContain('range-diff');
+  });
+
+  test('前に見た commit が head の祖先でない（rebase）なら、range-diff の 1 行を足す。並べる数を超えた分は「ほか N」（t-vqhy）', async () => {
+    const commits = Array.from({ length: 32 }, (_, i) => `${String(i).padStart(7, '0')} c${i}`);
+    const { html } = await againBrief({ status: 'diverged', commits, files: [{ filename: 'a.ts', additions: 1, deletions: 1 }] });
+    expect(html).toContain(`<code>roster review git --repo r -- range-diff refs/remotes/origin/main ${H1} refs/remotes/pull/7</code>`);
+    expect(html).toContain('<li>commit: 0000029 c29</li><li>ほか 2</li><li>file: a.ts');
+    expect(html).not.toContain('c30');
+  });
+
+  test('compare が落ちた・形の違う答えなら、差の数を載せずに頼む（t-vqhy）', async () => {
+    for (const answer of [undefined, { message: 'Not Found' }]) {
+      const { html, w } = await againBrief(answer);
+      expect(html).toContain(`diff ${H1}..refs/remotes/pull/7`);
+      expect(html).not.toContain('GitHub の compare');
+      expect(readReviews(w.tpm)[2]).toMatchObject({ n: 3, askedHead: H2 });
+    }
   });
 
   test('review allow: 役割の無い session から、上げた「直すべき」だけを受け、allowed を書いてページを「決まった」にする', async () => {

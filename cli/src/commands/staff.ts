@@ -42,19 +42,39 @@ const escapeHtml = (text: string): string => text.replace(/[&<>"']/g, c => ({ '&
  * レビューの依頼書（レビューの頼みから作る）。課題の概要の節を持つ。文は、見る者の役割で分ける:
  * Staff Engineer 担当には今までの文、Tech Lead 担当（repo の席の頼み）には、自分の計画と境の取り決めに照らす文。
  */
-function staffBriefPage(subject: RoleRecord, asks: Review[], previous: Map<number, Review>, place?: string): string {
+function staffBriefPage(subject: RoleRecord, asks: Review[], previous: Map<number, Review>, changes: Map<number, ChangesSince>, place?: string): string {
   const e = escapeHtml;
   const link = (url: string): string => `<a href="${e(url)}">${e(url)}</a>`;
   const light = asks.filter(r => r.light === true);
   // 見直しの頼み: 前の頼みの番号と判定・前に見た commit と、前の判定からの差分を見る 1 行。右はその PR の head の ref
   // （roster review checkout が refs/remotes/pull/<番号> に取る。HEAD は、最後に出した PR なので、まとめた頼みでは別の PR になりうる）。
+  // 差の数（commit と file）が読めれば、その下に並べ、前に見た commit が今の head の祖先でなければ（rebase・force push）range-diff の 1 行も足す（t-vqhy）。
   const again = (ask: Review, prev: Review | undefined): string => {
     if (prev?.verdict === undefined) return '';
     const pull = parsePullName(ask.url);
     const seen = prev.head === undefined || pull === undefined
       ? '見た commit の記録は無い。全体を見る'
       : `見た ${e(prev.head.slice(0, 7))}。前の判定からの差分を見る（roster review checkout で出してから）: <code>roster review git --repo ${e(pull.repo)} -- diff ${e(prev.head)}..refs/remotes/pull/${pull.number}</code>`;
-    return `。見直し: 前の頼み #${prev.n}（${VERDICTS[prev.verdict]}・${seen}）`;
+    const diff = changes.get(ask.n);
+    return `。見直し: 前の頼み #${prev.n}（${VERDICTS[prev.verdict]}・${seen}）${diff === undefined || prev.head === undefined || pull === undefined ? '' : changesList(diff, prev.head, ask.askedHead ?? '', pull)}`;
+  };
+  const changesList = (diff: ChangesSince, from: string, to: string, pull: { repo: string, number: number }): string => {
+    const plus = diff.files.reduce((n, f) => n + f.additions, 0);
+    const minus = diff.files.reduce((n, f) => n + f.deletions, 0);
+    const more = (shown: number, all: number): string[] => all > shown ? [`<li>ほか ${all - shown}</li>`] : [];
+    const rebased = diff.status === 'diverged'
+      ? [`<li>前に見た commit は、頼んだ時の head の祖先でない（rebase か force push）。数は分かれた所からの物で、main の分も含みうる。commit ごとの差: <code>roster review git --repo ${e(pull.repo)} -- range-diff refs/remotes/origin/main ${e(from)} refs/remotes/pull/${pull.number}</code></li>`]
+      : [];
+    return [
+      '<ul>',
+      `<li>前に見た ${e(from.slice(0, 7))} から頼んだ時の head ${e(to.slice(0, 7))} まで: ${diff.commits.length} commit・${diff.files.length} file（+${plus} −${minus}。GitHub の compare）</li>`,
+      ...rebased,
+      ...diff.commits.slice(0, CHANGES_SHOWN).map(c => `<li>commit: ${e(c)}</li>`),
+      ...more(CHANGES_SHOWN, diff.commits.length),
+      ...diff.files.slice(0, CHANGES_SHOWN).map(f => `<li>file: ${e(f.filename)}（+${f.additions} −${f.deletions}）</li>`),
+      ...more(CHANGES_SHOWN, diff.files.length),
+      '</ul>',
+    ].join('');
   };
   const [who, how] = isRepoSeat(subject)
     ? [`repo の席 ${e(subject.key)}`, '見る物を読み、この席の依頼書と、自分の計画・repo の境の取り決めに照らして、レビューのページを置き、roster report review で返す。レビューでは直さない（直すのは、頼んだ席）。']
@@ -82,8 +102,50 @@ function staffBriefPage(subject: RoleRecord, asks: Review[], previous: Map<numbe
 }
 
 /** レビューの頼みから依頼書のページを作って置き、URL を返す。置く folder は、頼んだ担当の課題の Key（repo の席は、親の課題の folder）。 */
-export const putStaffBrief = async (ctx: Context, subject: RoleRecord, asks: Review[]): Promise<string> =>
-  (await putPage(ctx, { text: staffBriefPage(subject, asks, previousReviews(ctx, asks), isRepoSeat(subject) ? undefined : placeDir(ctx, subject.key)) }, 'brief', subjectOf(subject))).url;
+export async function putStaffBrief(ctx: Context, subject: RoleRecord, asks: Review[]): Promise<string> {
+  const previous = previousReviews(ctx, asks);
+  const changes = new Map<number, ChangesSince>();
+  for (const ask of asks) {
+    const from = previous.get(ask.n)?.head;
+    const pull = parsePullName(ask.url);
+    const diff = from === undefined || ask.askedHead === undefined || pull === undefined ? undefined : changesSince(ctx, pull, from, ask.askedHead);
+    if (diff !== undefined) changes.set(ask.n, diff);
+  }
+  return (await putPage(ctx, { text: staffBriefPage(subject, asks, previous, changes, isRepoSeat(subject) ? undefined : placeDir(ctx, subject.key)) }, 'brief', subjectOf(subject))).url;
+}
+
+/** 見直しの依頼書に並べる commit と file の数（超えた分は「ほか N」）。 */
+const CHANGES_SHOWN = 30;
+
+/** 前に見た commit から頼んだ時の head までの差（GitHub の compare が返す物。commit は 250・file は 300 まで）。 */
+export interface ChangesSince {
+  /** ahead（前に見た commit の後に足した）・diverged（前に見た commit が head の祖先でない）・identical など。 */
+  status: string
+  /** 短い sha と、文の 1 行目。 */
+  commits: string[]
+  files: { filename: string, additions: number, deletions: number }[]
+}
+
+/** compare の答えから、ChangesSince の欄だけを出す jq（patch の字は持ち帰らない）。 */
+export const COMPARE_JQ = '{status, commits: [.commits[] | .sha[0:7] + " " + (.commit.message | split("\\n")[0])], files: [.files[]? | {filename, additions, deletions}]}';
+
+/** 前に見た commit から頼んだ時の head までの差を、GitHub の compare で読む。読めなければ（網の誤り・消えた commit）undefined（依頼書は差の数を載せずに置く）。 */
+function changesSince(ctx: Context, pull: { owner: string, repo: string }, from: string, to: string): ChangesSince | undefined {
+  const r = ctx.exec('gh', ['api', `repos/${pull.owner}/${pull.repo}/compare/${from}...${to}`, '--jq', COMPARE_JQ]);
+  if (r.status !== 0) return undefined;
+  try {
+    const got = JSON.parse(r.stdout) as Partial<ChangesSince>;
+    if (typeof got.status !== 'string' || !Array.isArray(got.commits) || !Array.isArray(got.files)) return undefined;
+    return {
+      status: got.status,
+      commits: got.commits.filter((c): c is string => typeof c === 'string'),
+      files: got.files.filter(f => typeof f.filename === 'string').map(f => ({ filename: f.filename, additions: Number(f.additions) || 0, deletions: Number(f.deletions) || 0 })),
+    };
+  }
+  catch {
+    return undefined;
+  }
+}
 
 /** PR の頼みごとの、同じ PR の前の頼み（判定の返った物のうち、番号のいちばん大きい物）。 */
 function previousReviews(ctx: Context, asks: Review[]): Map<number, Review> {
