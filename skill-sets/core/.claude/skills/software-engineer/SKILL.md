@@ -79,7 +79,7 @@ roster hello
 
 TPM 担当から【dismiss】（この課題に続きは無い）が来たら:
 
-1. 残っている自分の worktree と branch を消す（4 の 1 と同じ手順）。`git worktree list` に本体だけが残ることを確かめる。
+1. 残っている自分の worktree と branch を消す（4 の 1 と同じ手順）。`git worktree list` に本体だけが残ることを確かめる。`roster chrome list` に自分が起こした Chrome が残っていれば、`roster chrome stop <pid>` で止める。
 2. `roster report end` を打つ:
    ```sh
    roster report end --url <成果の URL> --pr <merge した PR の URL> … --removed <消した worktree> … --left "<残っている物>"

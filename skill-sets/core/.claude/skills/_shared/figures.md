@@ -11,7 +11,7 @@
 - `viewBox` の幅は 760 まで、`width="100%"` と `style="max-width:<幅>px"` を付ける（狭い画面では縮む）。字は 13〜14px（「6. Archify で描く」の図だけは、`viewBox` の幅が 760 を超えてよい（映すのは 760 まで）・箱の補いと線の字を 10px にしてよい）。日本語の字は 1 字がおよそ字の大きさの幅になるので、枠や棒の幅は字の数 × 14 より広く取る。
 - 色だけで違いを示さない。棒や枠の横に、字（「0 回」「お勧め」など）も書く。
 - 図は 1 つに言うことを 1 つ。表で言える細かい数は表に任せる。
-- 描いたら、置く前に Chrome の headless で撮って Read で見て、字のはみ出しと重なりがないかを確かめる（下の「画面の写しを撮る」の 1 行。撮った png は上げなくてよい）。「6. Archify で描く」の図は、`figure-fix` が寸法の検査と撮影をするので、書き手は撮らない・開かない。
+- 描いたら、置く前に Chrome の headless で撮って Read で見て、字のはみ出しと重なりがないかを確かめる（下の「画面の写しを撮る」の `roster chrome run` の 1 行。撮った png は上げなくてよい）。「6. Archify で描く」の図は、`figure-fix` が寸法の検査と撮影をするので、書き手は撮らない・開かない。
 
 ## 色の変数（ページの `<style>` に 1 度書く）
 
@@ -246,11 +246,10 @@ JSON の例（帯 2 本の「前と後」）:
 
 ## 画面の写しを撮る（画面を変えた結果）
 
-画面（callboard のページの一覧・docs の site など）を変えた結果は、前と後の写しを png にして `roster file put <file> --reviewed` で上げ、ページから `<img src="files/<語>-<n>.png">` で参照する（`protocol.md` の「ページ」の file の項）。roster を動かす機械の Chrome の headless で撮れる:
+画面（callboard のページの一覧・docs の site など）を変えた結果は、前と後の写しを png にして `roster file put <file> --reviewed` で上げ、ページから `<img src="files/<語>-<n>.png">` で参照する（`protocol.md` の「ページ」の file の項）。roster を動かす機械の Chrome の headless で、`roster chrome run` で撮れる（keychain を読ませない旗・headless・一時の profile は命令が付ける。Chrome のバイナリを直に起こすと guard が止める）:
 
 ```sh
-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --use-mock-keychain --password-store=basic \
-  --headless=new --disable-gpu --hide-scrollbars --user-data-dir="$TMPDIR/shot-chrome" --window-size=900,700 --screenshot="$TMPDIR/shot.png" "<URL か file:// の path>"
+roster chrome run -- --disable-gpu --hide-scrollbars --window-size=900,700 --screenshot="$TMPDIR/shot.png" "<URL か file:// の path>"
 ```
 
 - 写るのは開いたページだけ（ほかの窓や通知は写らない）。それでも上げる前に Read で見て、token・鍵・個人の情報・roster を動かす機械の path が写っていないか確かめる。

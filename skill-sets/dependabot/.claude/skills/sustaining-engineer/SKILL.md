@@ -91,6 +91,6 @@ TPM 担当に【merge-request】が行き、状態が `回答待ち(TPM): merge`
 
 TPM 担当から merge 済みのメッセージ（【notify】）を受けたら:
 
-1. 3 で作った worktree があれば消す。
+1. 3 で作った worktree があれば消す。`roster chrome list` に自分が起こした Chrome が残っていれば、`roster chrome stop <pid>` で止める。
 2. `roster report end --pr <PR の URL> --removed <消した worktree> … --left "<merge の commit／残した物>"` を打つ（PR 1 本の担当は、【dismiss】を待たずに【end】を送ってよい）。
 3. **居場所は自分で閉じない。** TPM 担当が報告を受け取った後に閉じる。

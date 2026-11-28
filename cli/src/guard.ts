@@ -1,5 +1,5 @@
 // guard: 担当が使う道具を、実行の前に見て、通すか止めるかを決める（Claude Code の PreToolUse hook から呼ばれる）。
-// 止めるのは 6 つ。(1) project の設定（infra。直下の folder の設定の宣言も合わせる）に書いた環境に触る命令で、手続きを踏んでいない物。
+// 止めるのは 7 つ。(1) project の設定（infra。直下の folder の設定の宣言も合わせる）に書いた環境に触る命令で、手続きを踏んでいない物。
 // (2) 連携と課題管理の道具の直打ち（roster を通さないと、記録と状態が抜ける）。
 // (3) 担当が置き場のページと file を消す命令: 消す要求を直に送る curl と、置き場の CLI（pagetray）の消す命令
 //     （消してよいのは TPM 担当だけ。roster page delete・roster file delete も担当からは止まる）。
@@ -7,14 +7,16 @@
 //     git・gh の変える命令（どちらも見て勧めるだけで、直さない）。
 // (5) Audit の席を起こす命令（roster audit start。起こすのは Product Manager）。
 // (6) pattern で選んだ process に合図を送る命令（pkill・killall と、pid を名指さない kill。どの席からも。台帳 #89・#92）。
+// (7) Chrome・Chromium のバイナリを直に起こす命令と、open で Chrome を開く命令（旗があっても。起こすのは roster chrome。どの席からも。台帳 #402・#403。guard-chrome.ts）。
 // (1) は、命令を単純な命令に分けて match の語で当て、語で当たらなくても命令の字全体に match の字が含まれれば止める（共有の環境は、疑わしければ止める）。
 //     字の含みだけの当たりを通すのは、どの単純な命令も、引数も入力も命令として動かさない道具の表（cat・grep・tail・roster・git の読む命令など。字を動かす旗は外す）か、
 //     命令を起こす呼び出しの字の無い python・node の時だけ（textStays。t-y67q の案 B）。
-// (2)〜(6) の shell の命令は、単純な命令に分け、その頭（実際に打つ道具の命令）だけを見る。commit の文・grep の型・here-document に道具の名が入っても止めない。
+// (2)〜(7) の shell の命令は、単純な命令に分け、その頭（実際に打つ道具の命令）だけを見る。commit の文・grep の型・here-document に道具の名が入っても止めない。
 // どれも字で見るので、防げるのは「うっかり」まで。script に包んだ命令や、shell の redirect での書き込みはすり抜ける。確実な守りは、担当に渡す権限の方で行う。
 import { existsSync, realpathSync } from 'node:fs';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { envLabel, type InfraEnv, type RolesConfig } from './config.ts';
+import { chromeLaunch, chromeReason } from './guard-chrome.ts';
 import type { RoleName } from './protocol.ts';
 import { rawCommands, scanCommand, shellQuote, splitCommands, splitCommandsMarked, SUBSTITUTED } from './shell.ts';
 import type { State } from './state.ts';
@@ -167,7 +169,7 @@ const SENDS = /^roster (?:(?:ask|report|notify|answer|dismiss|assign|seat)\b|pag
 /** 命令の中に、roster の送る命令（ask・report・notify・answer・dismiss・assign・seat・page put）があるか。単純な命令の頭だけを見る。 */
 export const sendsMessage = (command: string): boolean => splitCommands(command).some(words => SENDS.test(words.join(' ')));
 
-/** 命令の頭にこれを書くと、道具の直打ちを通す（roster 自身の開発と試しのため。環境の手続きと、読むだけの担当の守りと、Audit の席を起こす命令と、pattern で process に合図を送る命令には効かない）。 */
+/** 命令の頭にこれを書くと、道具の直打ちを通す（roster 自身の開発と試しのため。環境の手続きと、読むだけの担当の守りと、Audit の席を起こす命令と、pattern で process に合図を送る命令と、Chrome の直起こしには効かない）。 */
 export const RAW = 'ROSTER_RAW=1';
 
 /** guard に聞く 1 件。打った命令と、決めるのに要る設定・承認・時刻。 */
@@ -837,6 +839,9 @@ export function judge(asked: Asked): Verdict {
   if (killer !== undefined) {
     return { allow: false, reason: `pattern で選んで process に合図を送る命令は止めます（${killer.filter(w => w !== '').slice(0, 3).join(' ')}）。思わぬ process に届くため（macOS の pkill は後ろの旗も pattern に読み、2026-11-23 の朝（JST）に担当の session ごと 29 個を止めた）。pgrep -fl '<型>' で pid と command line を見て、当たった数を確かめてから、その数字を kill <pid> に書いてください（pgrep の出力を変数や $(…) で kill に渡すと、見る手が抜けます）。` };
   }
+  // (7) Chrome の直起こし（guard-chrome.ts。ROSTER_RAW=1 でも外れない）。
+  const chrome = chromeLaunch(asked.command);
+  if (chrome !== undefined) return { allow: false, reason: chromeReason(chrome) };
   const reader = readOnly(asked.role);
   if (reader !== undefined) {
     const change = commands.find(changesRepo);
