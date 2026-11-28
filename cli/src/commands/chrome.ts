@@ -41,10 +41,10 @@ export interface ChromeOps {
 const escapeRegExp = (s: string): string => s.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
- * command line が profile を使っているか。path の後ろが /・空白・終わりの時だけ当てる（`/tmp/p` で `/tmp/p2` に当てない。
+ * command line が profile を使っているか。path の前が頭・空白・=、後ろが /・空白・終わりの時だけ当てる（`/tmp/p` で `/x/tmp/p` に当てない。review-4 の提案 1）（`/tmp/p` で `/tmp/p2` に当てない。
  * chrome_crashpad_handler の `--database=<profile>/Crashpad` の形にも当たる。review-3 の指摘 3）。
  */
-export const usesProfile = (line: string, profile: string): boolean => new RegExp(`${escapeRegExp(profile)}(?:/| |$)`).test(line);
+export const usesProfile = (line: string, profile: string): boolean => new RegExp(`(?:^|[ =])${escapeRegExp(profile)}(?:/| |$)`).test(line);
 
 /** 本物の口。 */
 export const realChromeOps: ChromeOps = {
@@ -81,7 +81,7 @@ export const realChromeOps: ChromeOps = {
   },
   pidsUsing(profile) {
     try {
-      const out = execFileSync('pgrep', ['-f', '--', `${escapeRegExp(profile)}(/| |$)`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 2000 });
+      const out = execFileSync('pgrep', ['-f', '--', `(^|[ =])${escapeRegExp(profile)}(/| |$)`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 2000 });
       return out.split('\n').map(Number).filter(pid => Number.isInteger(pid) && pid > 0 && pid !== process.pid);
     }
     catch {
@@ -204,7 +204,11 @@ export async function chromeStart(ctx: Context, args: string[], options: ChromeO
     pid = ops.spawnDetached(exe, full, log);
   }
   catch (e) {
-    if (own) rmSync(profile, { recursive: true, force: true });
+    if (own) {
+      rmSync(profile, { recursive: true, force: true });
+      // spawnDetached が開いた log も消す（review-4 の提案 2）。
+      rmSync(log, { force: true });
+    }
     throw e;
   }
   let port: number | undefined;
