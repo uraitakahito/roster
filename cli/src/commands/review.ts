@@ -71,9 +71,9 @@ export function registerReview(program: Command, print: (lines: string[]) => voi
       const { tree, head } = checkoutPull(ctx, placeKey(ctx), url);
       print([`PR の head を出した: ${tree}（${head.slice(0, 7)}）`]);
     });
-  review.command('git <args...>').description('レビューの場所の clone（--main なら project の本体）を、読むだけの git で読む（roster review git -- log --oneline -3）')
+  review.command('git <args...>').description('レビューの場所の clone（--main なら GitHub から取り直した main）を、読むだけの git で読む（roster review git -- log --oneline -3）')
     .option('--repo <名>', 'clone が 2 つ以上ある時の repo の名')
-    .option('--main <名>', 'project の folder の直下の、その名の本体を読む')
+    .option('--main <名>', 'GitHub から取り直した main を読む（<repo> は場所の clone の origin から。clone が無ければ <owner>/<repo>）')
     .action((args: string[], options: { repo?: string, main?: string }) => {
       const ctx = createContext();
       const r = reviewGit(ctx, placeKey(ctx), options, args);
