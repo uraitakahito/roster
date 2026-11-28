@@ -11,13 +11,19 @@ import { envOf } from './env.ts';
 import { TpmError } from './skill-sets.ts';
 
 /**
- * 手元の git にいつも付ける守り（hook・fsmonitor・外の diff・pager を動かさない）。submodule に降りない（gitlink の path に container が置いた .git で、
+ * 手元の git にいつも付ける守り（hook・fsmonitor・pager を動かさない。外の diff は、読む命令に付ける --no-ext-diff で切る）。submodule に降りない（gitlink の path に container が置いた .git で、
  * 子の git が起き、その config の filter を動かすため。review-8 の指摘 3）。
  */
-export const SAFE_GIT_CONFIG = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'diff.external=', '-c', 'core.pager=cat', '-c', 'diff.ignoreSubmodules=all', '-c', 'submodule.recurse=false', '-c', 'status.submoduleSummary=false'];
+export const SAFE_GIT_CONFIG = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'core.pager=cat', '-c', 'diff.ignoreSubmodules=all', '-c', 'submodule.recurse=false', '-c', 'status.submoduleSummary=false'];
 
 /** roster review git が通す、読むだけの git の命令。 */
 export const REVIEW_GIT_READS = new Set(['show', 'diff', 'log', 'status', 'rev-parse', 'ls-files', 'ls-tree', 'blame', 'grep', 'cat-file', 'merge-base']);
+/**
+ * 外の diff（diff.external・GIT_EXTERNAL_DIFF）を動かしうる、読む命令。--no-ext-diff を付けて打つ（`-c diff.external=` の空の値は、
+ * git 2.56 の `git diff` が「cannot run」で落ちる。台帳 #493）。
+ */
+const EXT_DIFF_READS = new Set(['diff', 'show', 'log']);
+
 /** roster review git が断る長い旗（外の道具・file を開く道具・書き出し・取り寄せの命令を動かす・submodule に降りる）。 */
 const REVIEW_GIT_BAD_LONG = ['--ext-diff', '--textconv', '--open-files-in-pager', '--output', '--output-directory', '--upload-pack', '--exec', '--recurse-submodules', '--submodule', '--ignore-submodules'];
 
@@ -281,6 +287,9 @@ function fetchMainLocked(ctx: Context, key: string, repo: string, url: string): 
   return { repo, tree, git, head };
 }
 
+/** 読む命令の引数（外の diff を動かしうる命令には、命令のすぐ後に --no-ext-diff を付ける）。 */
+const readArgs = (sub: string, rest: string[]): string[] => EXT_DIFF_READS.has(sub) ? [sub, '--no-ext-diff', ...rest] : [sub, ...rest];
+
 /**
  * clone（か、--main なら GitHub から取り直した main）を、読むだけの git で読む。git の folder を名指して打つので、作業の木の .git の file を読まない。
  * 通すのは REVIEW_GIT_READS の命令だけで、外の道具を動かす旗は断る。
@@ -292,7 +301,7 @@ export function reviewGit(ctx: Context, key: string, options: { repo?: string, m
   if (bad !== undefined) throw new TpmError(`roster review git は、外の道具を動かす・書き出す旗を通しません: ${bad}`);
   if (options.main !== undefined) {
     return fetchMain(ctx, key, options.main, (main) => {
-      const r = ctx.exec('git', safeGitArgs(main.git, main.tree, [sub, ...rest]));
+      const r = ctx.exec('git', safeGitArgs(main.git, main.tree, readArgs(sub, rest)));
       return { ...r, stderr: `${main.repo} の origin/main を GitHub から取り直して読む（${main.head.slice(0, 7)}・${main.tree}）\n${r.stderr}` };
     });
   }
@@ -301,7 +310,7 @@ export function reviewGit(ctx: Context, key: string, options: { repo?: string, m
   if (repo === undefined) throw new TpmError(repos.length === 0 ? 'この課題の場所に clone がありません（roster review checkout <PR の URL> で作る）' : `clone が ${repos.length} つあります。--repo <名> で選んでください: ${repos.join('・')}`);
   assertName(repo, 'repo の名');
   if (!repos.includes(repo)) throw new TpmError(`この課題の場所に ${repo} の clone がありません: ${repos.join('・') || '（無し）'}`);
-  return ctx.exec('git', safeGitArgs(gitDir(ctx, key, repo), workTree(ctx, key, repo), [sub, ...rest]));
+  return ctx.exec('git', safeGitArgs(gitDir(ctx, key, repo), workTree(ctx, key, repo), readArgs(sub, rest)));
 }
 
 /** 課題の場所にある clone の repo の名。 */

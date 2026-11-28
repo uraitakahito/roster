@@ -256,6 +256,25 @@ describe('レビューの場所（t-n4j9 の段 2）', () => {
     expect(() => checkoutPull(ctx, 'AI-8', 'https://github.com/o/../pull/1')).toThrow(/PR の URL ではありません/);
   });
 
+  test('patch を出す diff・show・log -p が通り、git の設定に外の diff があっても動かさない（台帳 #493）', () => {
+    const { ctx, base } = setup();
+    checkoutPull(ctx, 'AI-8', PR);
+    // 外の diff を、clone の git の設定に仕込む（動けば mark を作る）。
+    const mark = join(base, 'ext-diff-ran');
+    const tool = join(base, 'ext-diff.sh');
+    writeFileSync(tool, `#!/bin/sh\ntouch '${mark}'\n`, { mode: 0o755 });
+    git(base, 'config', '--file', join(gitDir(ctx, 'AI-8', 'r'), 'config'), 'diff.external', tool);
+    const diff = reviewGit(ctx, 'AI-8', {}, ['diff', 'origin/main', 'HEAD']);
+    expect(diff.stderr).toBe('');
+    expect(diff.status).toBe(0);
+    expect(diff.stdout).toMatch(/^\+b\.txt$/m);
+    expect(reviewGit(ctx, 'AI-8', {}, ['show', 'HEAD']).stdout).toMatch(/^\+b\.txt$/m);
+    expect(reviewGit(ctx, 'AI-8', {}, ['log', '-p', '-1']).stdout).toMatch(/^\+b\.txt$/m);
+    // --main の道も同じ。
+    expect(reviewGit(ctx, 'AI-8', { main: 'r' }, ['diff', 'HEAD', 'refs/remotes/origin/main']).status).toBe(0);
+    expect(existsSync(mark)).toBe(false);
+  });
+
   test('git の長い旗の略しと submodule の旗も断る（review-8 の指摘 3・4）', () => {
     const { ctx } = setup();
     checkoutPull(ctx, 'AI-8', PR);
