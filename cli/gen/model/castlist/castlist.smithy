@@ -188,7 +188,7 @@ operation RegisterActor {
         @required
         namePrefix: NamePrefix
 
-        /// 札（project など）。新しく作った時だけ書く。
+        /// ラベル（project など）。新しく作った時だけ書く。
         labels: Labels
 
         /// 付随する id。初めの物が鍵（1 つのアクターにだけ付く）。鍵でない物は、同じ種類の最新と違う時だけ足す。
@@ -237,7 +237,7 @@ string NamePrefix
 @pattern("^[^\\x00-\\x1F\\x7F-\\x9F]*$")
 string Text
 
-/// 札（鍵は名の形）。
+/// ラベル（鍵は名の形）。
 map Labels {
     key: Name
     value: Text
@@ -267,8 +267,8 @@ structure RequestedSettings {
     effort: Name
 }
 
-/// 1 つのアクターの全部（札・付随する id・出来事・model と effort・線・今の状態）。1 つの読む transaction の中で、揃った写しを読む。
-/// 札は map（JSON の鍵の順は決まらない。並べる時は client の側で）、ほかの並びは受けた順（seq）。`currentBindings` は種類ごとの最新を種類の順に、`currentSettings` は最新の 1 つ（無ければ無い）。
+/// 1 つのアクターの全部（ラベル・付随する id・出来事・model と effort・線・今の状態）。1 つの読む transaction の中で、揃った写しを読む。
+/// ラベルは map（JSON の鍵の順は決まらない。並べる時は client の側で）、ほかの並びは受けた順（seq）。`currentBindings` は種類ごとの最新を種類の順に、`currentSettings` は最新の 1 つ（無ければ無い）。
 @readonly
 @http(method: "GET", uri: "/api/actors/{actorId}")
 @httpRequestTests([
@@ -388,7 +388,7 @@ operation GetActor {
         @required
         clockSkew: Boolean
 
-        /// 札（登録の時に書いた物）。
+        /// ラベル（登録の時に書いた物）。
         @required
         labels: Labels
 
