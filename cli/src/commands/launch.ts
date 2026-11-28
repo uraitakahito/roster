@@ -38,8 +38,10 @@ export class NotStartedError extends TpmError {}
  * castlist を設定していれば、起こしの id と、起こした者（launchedBy。castlist の付随する id）を名簿に書く（roster run-role が担当の環境変数にする）。
  * 状態の folder は symlink を解いて渡す（古い在り処の symlink を通って起きた担当が起こす席にも、新しい path を渡す。t-6ydg）。
  * description は題の下に出す説明。色は役割の表（ROLES の color）から、宛先を名簿に書いた後に付ける（paint）。
+ * spawned は、居場所を作って宛先を名簿に書いた直後（名乗りを待つ前）に呼ぶ（起こす時に渡した頼みを、送った記録に残す所。messages.ts の recordLaunchAsk）。
+ * 名乗らなかった回にも、頼みは残る（依頼書は名簿の行で渡してある）。spawned が誤りで止まっても、席は起こす（記録は、起こすことより軽い）。
  */
-export async function launch(ctx: Context, record: RoleRecord, again: boolean, wait: number, more: string[] = [], launchedBy?: string, description?: string): Promise<string[]> {
+export async function launch(ctx: Context, record: RoleRecord, again: boolean, wait: number, more: string[] = [], launchedBy?: string, description?: string, spawned?: (record: RoleRecord) => void): Promise<string[]> {
   if (castlistUrl(ctx) !== undefined) {
     record.launch = randomUUID();
     if (launchedBy !== undefined) record.launchedBy = launchedBy;
@@ -48,6 +50,12 @@ export async function launch(ctx: Context, record: RoleRecord, again: boolean, w
   const command = [join(ctx.root, 'cli', 'bin', 'roster'), 'run-role', record.key, '--project', ctx.project, '--state', realpathSync(ctx.state.dir)].map(shellQuote).join(' ');
   record.address = ctx.seats.spawn({ title: record.title, cwd: record.cwd, command, ...(description === undefined ? {} : { description }) });
   writeRole(ctx, record);
+  try {
+    spawned?.(record);
+  }
+  catch {
+    // 記録を書けなくても、席は起こしてある。
+  }
   const head = [`${again ? '起こし直した' : '起こした'}: ${record.title}（${record.address}・${modelStatus(record.model, record.effort)}）`, `folder: ${record.cwd}`, ...more, ...paint(ctx, record.address, ROLES[record.role].color)];
   if (wait === 0) return [...head, '名乗り（roster hello）は待っていない'];
   for (let waited = 0; waited < wait * 1000; waited += HELLO_INTERVAL_MS) {

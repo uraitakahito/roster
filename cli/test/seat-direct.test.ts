@@ -149,14 +149,24 @@ describe('Tech Lead 担当から下へ（roster seat brief・notify・dismiss）
     expect(w.posted('file:2').at(-1)?.text).toBe(`【brief】${BRIEF2} 課題の写し: http://127.0.0.1:8801/p/AI-36/issue-9.html`);
   });
 
+  test('席を起こす時の依頼書は、印の行で残り（送り手は Tech Lead 担当）、席の最初の【done】がそれを先にする', async () => {
+    const w = await split();
+    const rows = (): { id: string, heading: string, key: string, from: string, launch?: true, replyTo?: string, sender?: { key: string } }[] => w.tpm.state.lines('log.jsonl');
+    const launched = rows().find(l => l.launch === true && l.key === 'AI-36.pagetray');
+    expect(launched).toMatchObject({ heading: 'brief', sender: { key: 'AI-36' } });
+    await reportDone(w.seat, DONE);
+    expect(rows().findLast(l => l.heading === 'done')?.replyTo).toBe(launched?.id ?? 'no-launch-row');
+  });
+
   test('時系列の列は、送った担当で決まる（Tech Lead 担当の【brief】は Tech Lead 担当の列。TPM 担当の列に入らない）', async () => {
     const w = await split();
     await reportDone(w.seat, DONE);
     await seatBrief(w.lead, 'pagetray', { brief: BRIEF2 });
     const events = collect(w.tpm, 'AI-36').filter(e => e.kind === 'メッセージ');
-    expect(events.find(e => e.what.startsWith('【brief】'))?.seat).toBe('AI-36');
+    // 頭の【brief】（TPM 担当が Tech Lead 担当を起こした時の依頼書の行）は TPM 担当の列。Tech Lead 担当が席へ送った物（起こす時の行も）は Tech Lead 担当の列
+    expect(events.filter(e => e.what.startsWith('【brief】')).map(e => e.seat)).toEqual(['tpm', 'AI-36', 'AI-36']);
     expect(events.find(e => e.what.startsWith('【done】'))?.seat).toBe('AI-36.pagetray');
-    expect(events.some(e => e.seat === 'tpm')).toBe(false);
+    expect(events.filter(e => e.seat === 'tpm').map(e => e.what.slice(0, 7))).toEqual(['【brief】']);
   });
 
   test('断る: 自分の課題の repo の席でない相手・Tech Lead 担当でない者', async () => {

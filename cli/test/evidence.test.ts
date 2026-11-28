@@ -75,7 +75,7 @@ describe('入口の検査が止めた回（gate.jsonl）と、返事の先（log
     await askTpm(w.se, { text: 'q', waitingFor: 'a' });
     const asked = w.posted('tpm')[0]?.id ?? '';
     await notify(w.tpm, 't-x7k2', { text: 'a', replyTo: asked });
-    expect(w.tpm.state.lines<{ heading: string, replyTo?: string }>('log.jsonl').map(l => [l.heading, l.replyTo])).toEqual([['ask-tpm', undefined], ['notify', asked]]);
+    expect(w.tpm.state.lines<{ heading: string, replyTo?: string }>('log.jsonl').map(l => [l.heading, l.replyTo])).toEqual([['brief', undefined], ['ask-tpm', undefined], ['notify', asked]]);
     // 返事の先は、置く物にも残る。届く担当は、呼ぶ側が名指した担当のまま。
     expect(w.posted('t-x7k2').at(-1)).toMatchObject({ text: '【notify】a', replyTo: asked });
   });

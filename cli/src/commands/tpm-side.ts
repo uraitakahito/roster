@@ -21,7 +21,7 @@ import { castlistHello, closeLaunch, sweep } from './castlist.ts';
 import { issueCopy, launch, paint, roleDefaults } from './launch.ts';
 import { clearSeat, tidyMail } from './mail.ts';
 import { pushLaunch, tidyUsage } from './usage.ts';
-import { assertRead, assertSettled, brief } from './messages.ts';
+import { assertRead, assertSettled, brief, issueCopyLine, recordLaunchAsk } from './messages.ts';
 import { pageFolder } from './page.ts';
 import { markBrief } from './review-marks.ts';
 import { launchStaff, markBriefed, markDelivered, putStaffBrief, relabelStaff, STAFF, staffSubject } from './staff.ts';
@@ -291,7 +291,9 @@ async function assignSeat(ctx: Context, subjectKey: string, options: AssignOptio
   // 担当を起こした folder と、記録の先を出す（上の folder から振ると、どちらも 1 つに決まっていないため）。
   const sid = ctx.env.CLAUDE_CODE_SESSION_ID;
   const more = [...(issue === undefined ? [] : [`課題の記録: ${recordingTo(ctx, issue)}`]), ...skew];
-  return await launch(ctx, record, existing !== undefined, options.wait, more, sid ? sessionRef(sid) : undefined);
+  // 起こす時に渡した依頼書を、送った記録に残す（最初の【done】の返事の先になる）。
+  const spawned = briefUrl === undefined ? undefined : (seat: RoleRecord): void => void recordLaunchAsk(ctx, 'brief', seat.key, TPM_TITLE, seat, [briefUrl, issueCopyLine(seat)].filter(v => v !== undefined).join(' '));
+  return await launch(ctx, record, existing !== undefined, options.wait, more, sid ? sessionRef(sid) : undefined, undefined, spawned);
 }
 
 /**

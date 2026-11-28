@@ -77,8 +77,8 @@ describe('1 つの課題の 1 周（課題管理なし）', () => {
     // Product Manager の分・レビュー待ち・上げた件の順。
     expect(w.calls).toEqual([]);
     expect(w.store.requests.map(r => [r.method, r.path, r.query.reply, r.query.on])).toEqual([['GET', '/api/pages', 'waiting', undefined], ['GET', '/api/pages', 'waiting', 'review'], ['GET', '/api/pages', 'waiting', 'tpm']]);
-    // 送ったメッセージは log.jsonl に残る
-    expect(w.tpm.state.lines<{ heading: string }>('log.jsonl').map(l => l.heading)).toEqual(['ask-tpm', 'notify', 'merged', 'done', 'brief', 'done', 'dismiss', 'end']);
+    // 送ったメッセージは log.jsonl に残る（頭の【brief】は、席を起こす時に渡した依頼書の行。メッセージとしては送っていない）
+    expect(w.tpm.state.lines<{ heading: string, launch?: true }>('log.jsonl').map(l => [l.heading, l.launch])).toEqual([['brief', true], ...['ask-tpm', 'notify', 'merged', 'done', 'brief', 'done', 'dismiss', 'end'].map(h => [h, undefined])]);
   });
 });
 
@@ -641,7 +641,7 @@ describe('入口の検査: TPM 担当が送って済んでいない物（dismiss
     await assign(w.tpm, 't-x7k2', { role: 'software-engineer', brief: B4.replace('brief-4', 'brief-6'), wait: 0, supersede: true });
     // --after で積んだ brief-4 も、まだ済んでいないので一緒に取り消す
     expect(texts(w, 'file:1').at(-1)).toBe(`【brief】${B4.replace('brief-4', 'brief-6')} 取り消す: brief-4（${B4}）・brief-5（${B5}）`);
-    expect(w.tpm.state.lines<{ heading: string, settle?: string }>('log.jsonl').filter(l => l.heading === 'brief').map(l => l.settle)).toEqual(['none', 'after', 'supersede']);
+    expect(w.tpm.state.lines<{ heading: string, settle?: string, launch?: true }>('log.jsonl').filter(l => l.heading === 'brief' && l.launch !== true).map(l => l.settle)).toEqual(['none', 'after', 'supersede']);
     // 取り消した後は、brief-6 だけが済んでいない
     await expect(dismiss(w.tpm, 't-x7k2', { handover: false })).rejects.toThrow(/【done】が返っていない依頼書: brief-6（[^）]*）\n/);
   });

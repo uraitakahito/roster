@@ -12,7 +12,7 @@ import { isRepoSeat, readRole, staffKey, subjectOf, writeRole, type RoleRecord }
 import { resolveSettings, type SettingsLayer } from '../settings.ts';
 import { skillSetDir, TpmError } from '../skill-sets.ts';
 import { issueCopy, launch, NotStartedError, roleDefaults } from './launch.ts';
-import { notAuditor, notRepeatToPeer, oneLine, record, sender, showWait, toPeer, wait } from './messages.ts';
+import { notAuditor, notRepeatToPeer, oneLine, record, recordLaunchAsk, sender, showWait, toPeer, wait } from './messages.ts';
 import { putPage } from './page.ts';
 import { pageOwner } from './reply.ts';
 import { markBrief, markVerdict } from './review-marks.ts';
@@ -164,7 +164,15 @@ export async function launchStaff(ctx: Context, subject: RoleRecord, asks: Revie
   const before = readRole(ctx, seat.key)?.address;
   let out: string[];
   try {
-    out = await launch(ctx, seat, options.again, options.wait, [...(options.more?.(issue) ?? []), ...skew], sid ? sessionRef(sid) : undefined, label.description);
+    // 起こす時に渡した頼みを、送った記録に残す（依頼書 1 つに 1 行。判定は依頼書ごとに 1 通で返るので、その返事の先になる）。
+    // 前に席へじかに送ってあった頼み（ask を持つ物）は、元の【ask-review】を先のままにする。
+    const spawned = (made: RoleRecord): void => {
+      const last = asks.at(-1);
+      if (last === undefined) return;
+      const id = recordLaunchAsk(ctx, 'ask-review', subject.key, subject.title, made, `${briefUrl} 頼み: ${asks.map(r => `#${r.n}`).join(' ')} ${last.url}`);
+      for (const r of asks) if (r.ask === undefined) patchReview(ctx, r.n, { ask: id });
+    };
+    out = await launch(ctx, seat, options.again, options.wait, [...(options.more?.(issue) ?? []), ...skew], sid ? sessionRef(sid) : undefined, label.description, spawned);
     markDelivered(ctx, asks, seat);
   }
   catch (e) {
