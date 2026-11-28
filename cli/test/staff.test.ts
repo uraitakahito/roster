@@ -1,5 +1,6 @@
 // Staff Engineer 担当（課題ごとの、読むだけの席）: 名簿の Key・起こし方・閉じ方・打てない命令・ページの置き先・castlist の名。
-import { mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
+import { placeDir } from '../src/review-place.ts';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { describe, expect, test } from 'vitest';
@@ -144,12 +145,13 @@ describe('Staff の席の名乗り', () => {
 describe('roster close', () => {
   test('課題の席を閉じると、Staff の席も閉じる。Staff の席だけを先に閉じることもできる', async () => {
     const w = await reviewed();
-    expect(await close(w.tpm, 'AI-8')).toEqual(['閉じた: SWE AI-8: 計画と実装（file:1）', '閉じた: レビュー AI-8: 計画 plan-1（file:2）']);
+    expect(await close(w.tpm, 'AI-8')).toEqual(['閉じた: SWE AI-8: 計画と実装（file:1）', '閉じた: レビュー AI-8: 計画 plan-1（file:2）', `レビューの場所を消した: ${placeDir(w.tpm, 'AI-8')}`]);
+    expect(existsSync(placeDir(w.tpm, 'AI-8'))).toBe(false);
     expect((await roles(w.tpm))[0]).toBe('名簿: 担当はいない');
     expect(w.wire.seats()).toEqual([]);
 
     const again = await reviewed();
-    expect(await close(again.tpm, 'AI-8.staff')).toEqual(['閉じた: レビュー AI-8: 計画 plan-1（file:2）']);
+    expect(await close(again.tpm, 'AI-8.staff')).toEqual(['閉じた: レビュー AI-8: 計画 plan-1（file:2）', `レビューの場所を消した: ${placeDir(again.tpm, 'AI-8')}`]);
     expect(await close(again.tpm, 'AI-8')).toEqual(['閉じた: SWE AI-8: 計画と実装（file:1）']);
   });
 });

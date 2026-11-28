@@ -569,8 +569,8 @@ export function world(config: Record<string, unknown> = {}, env: NodeJS.ProcessE
       return result;
     };
     const ctx: Context = {
-      // 控えの folder も一時の folder にする（本物の控えに試験のページを置かない）。
-      ...withStore(createContext({ XDG_STATE_HOME: join(base, 'state'), ROSTER_PAGES_DIR: join(base, 'pages'), ...env }, project, exec), store),
+      // 控えの folder とレビューの場所も一時の folder にする（本物の控えに試験のページを置かない。home の下にレビューの場所を作らない）。
+      ...withStore(createContext({ XDG_STATE_HOME: join(base, 'state'), ROSTER_PAGES_DIR: join(base, 'pages'), ROSTER_REVIEW_DIR: join(base, 'review'), ...env }, project, exec), store),
       now: () => new Date(now),
       sleep: () => {
         slept += 1;
