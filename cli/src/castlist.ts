@@ -19,7 +19,7 @@ import { envOf } from './env.ts';
 
 /**
  * castlist が止まっている時に Product Manager へ出す `container run` の image の版（`.castlist-version` の版と揃える。
- * gen/gen.sh の DEFS の castlist の tag は、定義が替わった版でだけ上げるので、これより古いことがある）。
+ * gen/gen.sh の DEFS の castlist の tag は、定義の file が替わった版（注釈だけの変わりも含む）で上げるので、これより古いことがある）。
  * castlist の release を出したら、ここと試験の版を上げる（決まりは docs の開発の「castlist を上げる時」と、castlist の docs の「release を出す」）。
  */
 export const CASTLIST_VERSION = 'v2.2.0';

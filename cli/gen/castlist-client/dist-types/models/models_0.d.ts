@@ -345,7 +345,7 @@ export interface GetActorOutput {
      */
     clockSkew: boolean | undefined;
     /**
-     * 札（登録の時に書いた物）。
+     * ラベル（登録の時に書いた物）。
      * @public
      */
     labels: Record<string, string> | undefined;
@@ -1788,7 +1788,7 @@ export interface RegisterActorInput {
      */
     namePrefix: string | undefined;
     /**
-     * 札（project など）。新しく作った時だけ書く。
+     * ラベル（project など）。新しく作った時だけ書く。
      * @public
      */
     labels?: Record<string, string> | undefined;
