@@ -26,6 +26,7 @@ import { hello, inboxNow } from './commands/role-side.ts';
 import { seatAdd, seatBrief, seatClose, seatDismiss, seatNotify } from './commands/seat.ts';
 import { GAP_MINUTES, time } from './commands/time.ts';
 import { assign, close, newKey, roles, type AssignOptions } from './commands/tpm-side.ts';
+import { push } from './commands/push.ts';
 import { WATCH_MINUTES, watchGithub, watchMain, watchPr, watchTag, type WatchResult } from './commands/watch.ts';
 import { composeSkillSets, readConfigSources } from './config.ts';
 import { createContext, mailroomsClosed } from './context.ts';
@@ -158,6 +159,16 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
     .option('--repo <owner/repo>', 'この repo を読めるかで見る（無ければ、API が応えるかで見る）')
     .option(...timeout('github'))
     .action(async (options: { repo?: string, timeout?: string }) => watched(await watchGithub(createContext(), { ...(options.repo === undefined ? {} : { repo: options.repo }), ...(options.timeout === undefined ? {} : { timeout: Number(options.timeout) }) })));
+  program.command('push').description('repo に宣言した確かめ（origin の既定の branch の .claude/roles/config.jsonc の push の欄）をみな流し、みな通った時だけ、確かめた commit を origin の同じ名の branch へ push する（裏で起こして手を止める。終了コード: 0 push した・10 確かめが落ちた・1 断った・2 git fetch か git push が落ちた（fetch なら確かめは流していない））')
+    .option('--tag <tag>', 'release の tag を push する（確かめは流さない。tag の commit が origin の既定の branch に在る時だけ）')
+    .option('--force-with-lease', 'rebase した branch を、remote が動いていない時だけ上書きする（--force は受けない）')
+    .option('--no-checks <訳>', '確かめの宣言の無い repo で、確かめを流さずに push する訳（宣言のある repo では断る。担当は自分で付けず、roster ask tpm で聞く）')
+    .action((options: { tag?: string, forceWithLease?: boolean, checks?: string | boolean }) => {
+      const noChecks = typeof options.checks === 'string' ? options.checks : undefined;
+      const r = push(createContext(), { cwd: process.cwd(), ...(options.tag === undefined ? {} : { tag: options.tag }), ...(options.forceWithLease === true ? { forceWithLease: true } : {}), ...(noChecks === undefined ? {} : { noChecks }) });
+      print(r.lines);
+      process.exit(r.code);
+    });
   registerIncident(program, print);
   registerAudit(program, print, readStdin);
 
