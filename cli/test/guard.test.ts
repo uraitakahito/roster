@@ -7,7 +7,7 @@ import { guard, infraApprove, infraList, infraRevoke, infraRun } from '../src/co
 import { readRolesConfig, type ConfigSource, type InfraEnv } from '../src/config.ts';
 import { commandOf, guardSettings, judge, hitsWords, judgeWrite, touched, writeOf, type Approval } from '../src/guard.ts';
 import type { RoleName } from '../src/protocol.ts';
-import { splitCommands, splitCommandsMarked, SUBSTITUTED } from '../src/shell.ts';
+import { scanCommand, splitCommands, splitCommandsMarked, SUBSTITUTED } from '../src/shell.ts';
 import { world } from './helpers.ts';
 import { withoutRosterEnv } from '../src/env.ts';
 
@@ -51,6 +51,47 @@ const expired: Approval = { until: '2026-11-20T11:59:59.000Z' };
 const githubSource: ConfigSource = { name: 'web', dir: '/w/web', file: '/w/web/.claude/roles/config.jsonc', exists: true, written: ['tracker'], config: { tracker: 'github', transport: 'cmux', infra: {}, roles: {} } };
 const ask = (command: string, role?: RoleName, approval?: Approval, tracker: 'none' | 'github' = 'none') =>
   judge({ command, role, config: { infra, trackers: { jira: [], github: tracker === 'github' ? [githubSource] : [] } }, approvals: { 'aws-staging': approval, 'castlist': approval }, now });
+
+describe('scanCommand（t-y67q）', () => {
+  test.each<[string, boolean]>([
+    ['cat > x.md', true],
+    ['echo x >> log', true],
+    ['echo x >| log', true],
+    ['roster file put x >& log', true],
+    ['roster file put x &> log', true],
+    ['git commit -m "$(echo x > y)"', true],
+    ['pnpm test 2>&1', false],
+    ['echo x >&2', false],
+    ['echo x >&-', false],
+    ['echo x > /dev/null 2>&1', false],
+    ['echo "<p>a</p> > b"', false],
+    ['echo \'a > b\'', false],
+    ['cat <<\'EOF\' | grep x\n<p>a > b</p>\nEOF', false],
+    ['grep x < in.txt', false],
+    ['tee >(cat > f)', true],
+    ['printf x 1<> .git/config', true],
+    ['echo x | tee >(grep y)', false],
+  ])('書き出し: %s', (command, writes) => {
+    expect(scanCommand(command).writes.length > 0).toBe(writes);
+  });
+
+  test('命令の置き換えの中も、頭の代入・path を書いたままで返す', () => {
+    expect(scanCommand('git commit -m "$(GIT_EDITOR=x git commit --amend)"').commands).toEqual([['GIT_EDITOR=x', 'git', 'commit', '--amend'], ['git', 'commit', '-m', '']]);
+    expect(scanCommand('echo `/tmp/grep x`').commands).toEqual([['/tmp/grep', 'x'], ['echo', '']]);
+    // splitCommands の形は変えない（頭を整える）。
+    expect(splitCommands('git commit -m "$(GIT_EDITOR=x git commit --amend)"')).toEqual([['git', 'commit', '--amend'], ['git', 'commit', '-m', '']]);
+  });
+
+  test('命令の置き換えの中の算術の << は、終わりの印の行が無ければ here-document と読まない（review-5 の指摘 3）', () => {
+    expect(scanCommand('x="$(\necho $((1<<2))\n)"\nbash -c \'y\'').commands.at(-1)).toEqual(['bash', '-c', 'y']);
+  });
+
+  test('命令の置き換えの中の here-document の本文は、字のまま読み飛ばす（本文の \' と ) で崩れない。review-3 の指摘 4）', () => {
+    const body = 'gh pr create --title t --body "$(cat <<\'EOF\'\nit\'s done (see #1)\nEOF\n)"';
+    expect(scanCommand(body).commands).toEqual([['cat'], ['gh', 'pr', 'create', '--title', 't', '--body', '']]);
+    expect(scanCommand(`${body}\nprintf '%s' x | bash`).commands).toEqual([['cat'], ['gh', 'pr', 'create', '--title', 't', '--body', ''], ['printf', '%s', 'x'], ['bash']]);
+  });
+});
 
 describe('touched', () => {
   test('match のどれかを含む環境を返す', () => {
@@ -115,19 +156,20 @@ describe('touched: 命令の語で当てる（t-7j37。台帳 #253）', () => {
     ['tmux new -d \'container stop pagetray\'', ['pagetray']],
     ['awk \'BEGIN{system("container stop pagetray")}\'', ['pagetray']],
     ['ssh host \'container stop pagetray\'', ['pagetray']],
-    // 通す命令でも、頭の代入・前置き・path の付いた名・git の間の旗・書き出しがあれば止める。
+    // 通す命令でも、頭の代入・前置き・path の付いた名・git の間の旗があれば止める。
     ['GIT_EDITOR=\'container stop pagetray\' git commit --amend', ['pagetray']],
     ['git -c core.editor=\'container stop pagetray\' commit', ['pagetray']],
     ['env FOO=1 roster ask devops --what "container stop pagetray"', ['pagetray']],
     ['/tmp/roster ask devops --what "container stop pagetray"', ['pagetray']],
-    ['roster file put x --reviewed --name callboard-x.png > log', ['callboard']],
+    // 書き出しだけでは止めない（t-y67q。表の道具の書き出しは、字を命令として動かさない）。
+    ['roster file put x --reviewed --name callboard-x.png > log', []],
     ['git commit -m "$(container stop pagetray)"', ['pagetray']],
     // 命令の置き換えの中は、頭の代入・path を見られないので、通す命令だけでも字の含みで止める（review-15）。
     ['git commit -m "$(GIT_EDITOR=\'container stop pagetray\' git commit --amend)"', ['pagetray']],
     ['git commit -m "$(/tmp/grep \'container stop pagetray\')"', ['pagetray']],
     ['git commit -m "`/tmp/grep \'container stop pagetray\'`"', ['pagetray']],
-    ['roster file put x --reviewed --name callboard-x.png >& log', ['callboard']],
-    ['roster file put x --reviewed --name callboard-x.png &> log', ['callboard']],
+    ['roster file put x --reviewed --name callboard-x.png >& log', []],
+    ['roster file put x --reviewed --name callboard-x.png &> log', []],
     ['roster file put x --reviewed --name callboard-x.png >&2', []],
     ['roster file put x --reviewed --name callboard-x.png 2>/dev/null', []],
   ])('%s', (command, expected) => {
@@ -328,9 +370,10 @@ describe('道具の直打ち', () => {
     expect(ask('cd /w && gh issue comment 12 --body x', 'software-engineer', undefined, 'github').allow).toBe(false);
   });
 
-  test('共有の環境は、字の含みだけの当たりも止める。通すのは、引数の字を動かさない命令（roster・git commit・grep・rg）だけの時', () => {
+  test('共有の環境は、字の含みだけの当たりも止める。通すのは、引数の字を動かさない道具の表の命令だけの時（t-y67q）', () => {
     expect(ask('echo "$(wmill sync push)"', 'software-engineer').allow).toBe(false);
-    expect(ask('echo "aws s3 rm を足す"', 'software-engineer').allow).toBe(false);
+    // 字を出すだけの echo は、字の含みで止めない（t-y67q）。
+    expect(ask('echo "aws s3 rm を足す"', 'software-engineer').allow).toBe(true);
     expect(ask('git commit -m "aws s3 rm を足す"', 'software-engineer').allow).toBe(true);
   });
 
@@ -1522,5 +1565,193 @@ describe('設定の項目を外しても、止まる形が変わらない（t-d3
     'grep -- "--name=pagetray" docs',
   ])('この repo の設定: %s', (command) => {
     expect(touchedNames(afterOwn)(command)).toEqual(touchedNames(beforeOwn)(command));
+  });
+});
+
+// 字の含みを効かせるのは、字を命令として動かしうる命令の時だけ（t-y67q。監査 audit-2 の R3 (a)、Product Manager が案 B を選んだ）。
+// 引数も入力も命令として動かさない道具の表（字を動かす旗は外す）と、命令を起こす呼び出しの字の無い python・node だけの命令は、字の含みで止めない。
+describe('字の含みを効かせる形（t-y67q）', () => {
+  const C = 'container stop callboard';
+  const K = 'container volume rm castlist-data-v1';
+  const envs: Record<string, InfraEnv> = {
+    callboard: { guard: 'tpm', match: ['--name callboard', 'container start callboard', 'container stop callboard', 'container rm callboard'] },
+    castlist: { guard: 'pm-only', match: ['--name castlist.box', 'container stop castlist.box', 'container rm castlist.box', 'container volume rm castlist-data*', '-v castlist-data*'] },
+    pagetray: { guard: 'tpm', match: ['--name pagetray.box', 'container stop pagetray.box', 'container volume rm pagetray-data*', '-v pagetray-data*'] },
+    builder: { guard: 'tpm', match: ['--name buildkit', 'container builder start', 'container builder stop'] },
+  };
+  const stops = (command: string): boolean => touched(command, envs).length > 0;
+
+  // 台帳の「guardの字」18 件と #366・11-28 の TPM の命令を写した形（前は止まっていた。#75・#187 は前から通る）。
+  test.each<[string, string]>([
+    ['#253', 'S=/tmp/s; roster file put $S/home.png --name callboard-home.png --reviewed 2>&1 | tail -3'],
+    ['#285', 'git grep -n -E "container [a-z]+ (-[a-z-]+ )*pagetray( |$)|--name pagetray.box( |$)" -- docs/src README.md | grep -v "pagetray\\.box" | head'],
+    ['#59', `cat > /tmp/s/body.md <<'EOF'\n## 起こし方\ncontainer run -d --name castlist.box -v castlist-data-v1:/data img\nEOF`],
+    ['#75', 'roster answer t-23zs "castlist は container run -d --name castlist.box で起こす"'],
+    ['#88', `cd /tmp/s && cat > brief.html <<'EOF'\n<pre>container stop pagetray.box\ncontainer run -d --name pagetray.box -v pagetray-data-v1:/data img</pre>\nEOF\nroster page put brief.html --kind brief --key AI-35`],
+    ['#166', `python3 - <<'EOF'\np='docs/run.md'\ns=open(p).read()\ns=s.replace('container rm castlist.box','container rm castlist.box の前に')\nopen(p,'w').write(s)\nEOF`],
+    ['#169', `cat > /tmp/s/review.html <<'EOF'\n<td>container rm castlist.box</td>\nEOF`],
+    ['#170', `cd /w/castlist; python3 - <<'EOF'\np='docs/src/run.md'\ns=open(p).read()\ns=s.replace('container stop castlist.box\\n','container stop castlist.box -t 5\\n')\nopen(p,'w').write(s)\nEOF`],
+    ['#172', `cd /w/pagetray; python3 - <<'EOF'\np='docs/po/en.po'\ns=open(p).read()\ns=s.replace('msgstr "container stop pagetray.box"','msgstr "container stop pagetray.box -t 5"')\nopen(p,'w').write(s)\nEOF`],
+    ['#185', `cat > /tmp/s/p.html <<'EOF'\n<code>${K}</code>\nEOF\nroster page put /tmp/s/p.html --kind result`],
+    ['#187', 'roster ask tpm --waiting-for "guard の 2 つ" "guard は -v castlist-data で当てる。外すか"'],
+    ['#196', `python3 - <<'EOF'\np='cli/test/guard.test.ts'\ns=open(p).read()\ns=s.replace("it('x'","it('container builder stop は止める'")\nopen(p,'w').write(s)\nEOF`],
+    ['#259', `cat > /tmp/s/plan.html <<'EOF'\n<li>${C}</li>\nEOF`],
+    ['#260', `cd /w/roster/cli && cat > $TMPDIR/sc.ts <<'EOF'\nimport { splitCommands } from './src/shell.ts';\nconsole.log(splitCommands('${K}'));\nEOF\nnode $TMPDIR/sc.ts`],
+    ['#270', `cd /w/roster && gh pr ready 249 >/dev/null && roster ask review --url https://github.com/o/roster/pull/249 --focus "${C}-old は字の含みで止まる"`],
+    ['#276', `python3 - <<'EOF'\np='src/guard.ts'\ns=open(p).read()\ns=s.replace('// ${C}','// ${C} の形')\nopen(p,'w').write(s)\nEOF`],
+    ['#294-1', `cat > /tmp/s/t.ts <<'EOF'\nconst c = '${K}';\nEOF`],
+    ['#294-2', 'git grep -n -e "--name pagetray.box" -e "-v pagetray-data" -- docs | head -20'],
+    ['#304', `cat >> test/guard.test.ts <<'EOF'\nit('${C}', () => {});\nEOF`],
+    ['#366', 'S=/tmp/s; for f in pages-ja pages-en; do roster file put $S/$f.png --reviewed --name callboard-$f.png 2>&1 | grep -E "URL"; done'],
+    ['11-28', `d=/tmp/s; { cat <<'EOF'\n<p>${C}</p>\nEOF\n} > $d/brief.html && roster page put $d/brief.html --kind brief --key t-y67q`],
+    ['検索', `grep -rn "subprocess" python3-tools/ | grep "${C}"`],
+    ['PR の本文', `gh pr create --title x --body "$(cat <<'EOF'\n## 起こし方\n${C}\nEOF\n)"`],
+    ['pnpm test', `pnpm test > /tmp/s/all.log 2>&1; grep -c "${C}" /tmp/s/all.log`],
+    ['pnpm run', `pnpm -C cli run typecheck && grep -n "${C}" docs/x.md`],
+    ['npx vitest', `npx vitest run test/guard.test.ts 2>&1 | grep -E "${C}"`],
+    ['npx --yes', `npx --yes tsc --noEmit | grep "${C}"`],
+    ['PR の本文に \' と )', `gh pr create --title t --body "$(cat <<'EOF'\nit's done (${C})\nEOF\n)"`],
+    ['git の書き出しは fd と /dev/null だけ', `git status >&2; git log 2>/dev/null | grep "${C}"`],
+    ['代入だけの命令と表の道具', `S=/tmp/s; grep -n "${C}" $S/x.md`],
+    ['git diff --text（--textconv の略でない）', `git diff --text | grep "${C}"`],
+    ['引用した印が数字の here-document', `cat > /tmp/x <<'1'\n$(${C})\n1`],
+    ['node -e（呼び出しの無い字）', `node -e "console.log('${C}')"`],
+    ['git grep -c（命令の後ろの -c は設定の旗でない）', `git grep -c "${C}" -- docs | head`],
+    ['${名} と $名', `S=/tmp/s; grep -n "${C}" \${S}/x.md $S/y.md`],
+    ['python の here-document の本文の ${a.b}', `python3 - <<'EOF'\ns = "\${a.b} ${C}"\nEOF`],
+  ])('通る: %s', (_, command) => {
+    expect(stops(command)).toBe(false);
+  });
+
+  // 止めてほしい形（proposal-3 の 61 個を、字を命令として動かす道の類ごとに）。
+  test.each<[string, string]>([
+    // 1. 語で当たる
+    ['語', C],
+    ['sh -c', `sh -c '${C}'`],
+    ['eval', 'eval "container rm castlist.box"'],
+    ['xargs sh -c', `echo x | xargs -I{} sh -c '${C}'`],
+    // 2. shell に字を流す
+    ['ssh', 'ssh host \'container stop pagetray.box\''],
+    ['bash の heredoc', `bash <<'EOF'\n${C}\nEOF`],
+    ['cat | sh', `cat <<'EOF' | sh\n${K}\nEOF`],
+    ['引用しない heredoc の $(…)', `cat > /tmp/x <<EOF\n$(${C})\nEOF`],
+    ['zsh の here-string', `zsh <<< "${C}"`],
+    ['bash <(printf …)', `bash <(printf '${C}')`],
+    ['"$SHELL" -c', `"$SHELL" -c '${C}'`],
+    ['source /dev/stdin', `source /dev/stdin <<'EOF'\n${C}\nEOF`],
+    ['. /dev/stdin', `. /dev/stdin <<< '${C}'`],
+    ['bash /dev/stdin', `bash /dev/stdin <<'EOF'\n${C}\nEOF`],
+    ['bash -s', `bash -s x <<'EOF'\n${C}\nEOF`],
+    ['csh -c', `csh -c '${C}'`],
+    ['fish -c', `fish -c '${C}'`],
+    ['tee >(sh)', `echo '${C}' | tee >(sh)`],
+    ['xargs bash -c', `printf '${C}' | xargs -0 bash -c`],
+    // 3. 同じ命令の中で書いた file を動かす
+    ['書いて bash', `cat > /tmp/s/x.sh <<'EOF'\n${C}\nEOF\nbash /tmp/s/x.sh`],
+    ['書いて bash（castlist）', `cat > /tmp/s/x.sh <<'EOF'\n${K}\nEOF\nbash /tmp/s/x.sh`],
+    ['書いて ./', `cat > x.sh <<'EOF'\n${C}\nEOF\nchmod +x x.sh && ./x.sh`],
+    ['python の file に書いて python', `cat > /tmp/s/x.py <<'EOF'\nimport os\nos.system('${C}')\nEOF\npython3 /tmp/s/x.py`],
+    // 4. 字を動かす旗・動詞のある道具
+    ['git rebase -x', `git rebase -x '${C}' HEAD~1`],
+    ['git -c alias', `git -c alias.z='!${C}' z`],
+    ['git -c core.fsmonitor', `git -c core.fsmonitor='${C}' status`],
+    ['git --config-env の略', `git --config-e=core.pager=X log # ${C}`],
+    ['git grep -O', `git grep -O'${C}' -e x`],
+    ['git grep -nO（束ね）', `git grep -nO'${C}' -e x`],
+    ['git grep --open-files-in=（略）', `git grep --open-files-in='${C}' -e x`],
+    ['git log --ext-diff', `git log -p --ext-diff -1 # ${C}`],
+    ['git diff --textconv', `git diff --textconv # ${C}`],
+    ['git bisect run', `git bisect run sh -c '${C}'`],
+    ['git submodule foreach', `git submodule foreach '${C}'`],
+    ['find -exec', `find . -name x -exec sh -c '${C}' \\;`],
+    ['rg --pre', `rg --pre /tmp/s/pre.sh x # ${C}`],
+    ['rg --pre-glob', `rg --pre-glob '*.md' --pre=/tmp/p x # ${C}`],
+    ['sort --compress-prog=（略）', `sort --compress-prog=/tmp/s/z.sh x # ${C}`],
+    ['watch', `watch -n 5 '${C}'`],
+    ['make -f -', `make -f - <<'EOF'\nall:\n\t${C}\nEOF`],
+    ['at now', `at now <<'EOF'\n${C}\nEOF`],
+    ['sed（GNU の e）', `sed -n '1e ${C}' x`],
+    ['pnpm exec', `pnpm exec sh -c '${C}'`],
+    ['pnpm dlx', `pnpm dlx zx x # ${C}`],
+    ['pnpm の知らない語', `pnpm sh -c '${C}'`],
+    ['npx -c', `npx -c '${C}'`],
+    ['npx zx', `npx zx <<'EOF'\nawait $\`${C}\`\nEOF`],
+    ['npx tsx -e', `npx tsx -e "require('child_process').execSync('${C}')"`],
+    // 5. 字を命令として読む環境変数
+    ['GIT_PAGER', `GIT_PAGER='${C}' git log -1`],
+    ['EDITOR ＋ gh', `EDITOR='${C}' gh pr create`],
+    ['GIT_SSH_COMMAND', `GIT_SSH_COMMAND='${C}' git fetch`],
+    // 6. 別の terminal に打つ道具
+    ['cmux send', `cmux send --workspace workspace:1 '${C}\\n'`],
+    ['tmux send-keys', `tmux send-keys -t 0 '${C}' Enter`],
+    // 7. ほかの言語に包む
+    ['python の subprocess', `python3 - <<'EOF'\nimport subprocess\nsubprocess.run('${C}', shell=True)\nEOF`],
+    ['python -c の os.system', 'python3 -c "import os; os.system(\'container rm castlist.box\')"'],
+    ['node -e の execSync', 'node -e "require(\'child_process\').execSync(\'container stop pagetray.box\')"'],
+    ['perl の backtick', `perl -e '\`${C}\`'`],
+    ['python の list で渡す', 'python3 -c "import subprocess; subprocess.run([\'container\',\'stop\',\'callboard\'])" # container stop callboard'],
+    ['osascript', `osascript -e 'do shell script "${C}"'`],
+    ['awk の pipe', `awk 'BEGIN{print "${C}" | "sh"}'`],
+    ['perl の pipe open', `perl -e 'open(F, "| sh"); print F "${C}"'`],
+    ['python の os.posix_spawnp', `python3 - <<'EOF'\nimport os\nos.posix_spawnp('sh', ['sh','-c','${C}'], os.environ)\nEOF`],
+    ['node の process.execve', `node -e "process.execve('/bin/sh', ['sh','-c','${C}'])"`],
+    ['path の付いた python', `/tmp/python3 - <<'EOF'\nprint('${C}')\nEOF`],
+    // 8. 表の道具が読む設定・hook を同じ命令で書く
+    ['.git/config を書いて git status', `cat >> .git/config <<'EOF'\n[core]\n\tfsmonitor = ${C}\nEOF\ngit status`],
+    ['.git/hooks を書いて git commit', `cat > .git/hooks/pre-commit <<'EOF'\n${C}\nEOF\ngit commit -m x`],
+    ['printf で diff.external を書いて git diff', `printf '[diff]\\n\\texternal = ${C}\\n' >> .git/config && git diff`],
+    ['python で .git/config を書いて git status', `python3 - <<'EOF'\nopen('.git/config','a').write('[core]\\n\\tfsmonitor = ${C}\\n')\nEOF\ngit status`],
+    ['package.json を書いて pnpm test', `cat > package.json <<'EOF'\n{"scripts":{"test":"${C}"}}\nEOF\npnpm test`],
+    ['git status > log', `git status > log # ${C}`],
+    ['git status >& log', `git status >& log # ${C}`],
+    ['git status &> log', `git status &> log # ${C}`],
+    ['sort -o で設定を書いて git', `printf '[core]\\n\\tpager = ${C}\\n' | sort -o .git/config && git log`],
+    ['uniq の 2 つ目の引数で設定を書いて git', `uniq /tmp/s/c .git/config && git log # ${C}`],
+    ['git --output', `git diff --output=.git/config && git log # ${C}`],
+    // 代入だけの命令（書き出し済みの変数なら子の process に渡る）
+    ['GIT_EDITOR=…; git commit', `GIT_EDITOR='${C}'; git commit --amend`],
+    ['EDITOR=… と改行の git', `EDITOR='${C}'\ngit commit`],
+    ['PATH=…; grep', `PATH=/tmp/e:$PATH; grep -n x f # ${C}`],
+    ['npx --node-options', `npx --node-options="--import=data:text/javascript,1" vitest # ${C}`],
+    ['pnpm の並べていない旗', `pnpm --config.x=y test # ${C}`],
+    // review-4 の指摘 1〜9
+    ['印が数字の引用しない here-document', `cat > /tmp/x <<1\n$(${C})\n1`],
+    ['印が @ の引用しない here-document', `cat > /tmp/x <<@\n\`${C}\`\n@`],
+    ['git grep --op=（短い略）', `git grep --op='${C}' -e x`],
+    ['sort --co=（短い略）', `sort --co=/tmp/z.sh x # ${C}`],
+    ['sort --ou= で設定を書いて git', `printf x | sort --ou=.git/config && git log # ${C}`],
+    ['git -c … --help', `git -c man.viewer=z -c man.z.cmd='${C}' --help`],
+    ['gh の設定を書いて gh', `printf 'browser: %s\\n' '${C}' >> ~/.config/gh/config.yml; gh pr view 1 --web`],
+    ['for の変数で GIT_EDITOR', `for GIT_EDITOR in '${C}'; do git commit --amend; done`],
+    ['printf -v で GIT_EDITOR', `printf -v GIT_EDITOR '%s' '${C}'; git commit --amend`],
+    ['for の変数で PATH', `for PATH in /tmp/e; do grep x f; done # ${C}`],
+    ['printf -v で PATH', `printf -v PATH '%s' /tmp/e; grep x f # ${C}`],
+    ['1<> で設定を書いて git', `printf '[core]\\n\\tfsmonitor = ${C}\\n#' 1<> .git/config; git status`],
+    ['package.json を書いて node --run', `cat > package.json <<'EOF'\n{"scripts":{"x":"${C}"}}\nEOF\nnode --run x`],
+    ['node --import', `node --import=data:text/javascript,1 x.js # ${C}`],
+    ['python -m', `python3 -m x # ${C}`],
+    ['命令の名の位置の置き換え', `$(printf 'eval x #')echo '${C}'`],
+    ['rg --hostname-bin', `rg --hostname-bin=/tmp/s/h.sh --hyperlink-format=default x # ${C}`],
+    // review-5 の指摘 1・2
+    ['${名::=字} で GIT_EDITOR', `echo \${GIT_EDITOR::=${C} #} >/dev/null; git commit --amend`],
+    ['${名:=字} で GIT_EDITOR', `echo "\${GIT_EDITOR:=${C}}"; git commit --amend`],
+    ['${名::=字} で PATH', `echo \${PATH::=/tmp/e} >/dev/null; grep -n x f # ${C}`],
+    ['zsh の path=', `path=/tmp/e; grep -n x f # ${C}`],
+    ['zsh の typeset で PATH（表に無い）', `typeset PATH=/tmp/e; grep x f # ${C}`],
+    ['置き換えの中の here-document の後ろの bash', `gh pr create --title t --body "$(cat <<'EOF'\nit's done\nEOF\n)"\nprintf '%s' '${C}' | bash`],
+    // 置き換えの中は、頭の代入・path を書いたままで見る
+    ['置き換えの中の頭の代入', `git commit -m "$(GIT_EDITOR='${C}' git commit --amend)"`],
+    ['置き換えの中の path の名', `git commit -m "$(/tmp/grep '${C}')"`],
+  ])('止まる: %s', (_, command) => {
+    expect(stops(command)).toBe(true);
+  });
+
+  // 弱くなる所（Product Manager が通した物。字で見る守りの限り）。止まらないことを、ここに見える形で残す。
+  test.each<[string, string]>([
+    ['python の呼び出しを言い換える（RUN_CALLS に無い）', `python3 - <<'EOF'\nimport importlib\ngetattr(importlib.import_module('o'+'s'), 'sys'+'tem')('${C}')\nEOF`],
+    ['自ずと動く file に書く（次の命令から動く）', `echo '${C}' | tee -a ~/.zshenv`],
+    ['make の target（中は見えない。前から通る）', 'make stop-callboard'],
+  ])('通る（弱くなる所）: %s', (_, command) => {
+    expect(stops(command)).toBe(false);
   });
 });
