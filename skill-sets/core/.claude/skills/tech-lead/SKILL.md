@@ -125,7 +125,7 @@ repo の席の `roster ask review` は、あなたに【ask-review】で届く�
 - **レビューでは直さない。**直すのは、頼んだ席。取り決めの方が誤りなら、取り決めを直して（3）、関わる席に知らせる。
 - 席が「直すべき」を受けない時は、席が TPM 担当に上げる（`roster ask tpm --review <番号>`）。
 - repo の席の PR を merge するのは、その席（`roster pr merge`）。あなたは merge しない。
-- **見た commit**: PR の判定には、命令が見た commit を書く。`roster review checkout` を打っていなければ、頼んだ時の head が今も同じ時だけ、それを見た commit にする。見ている間に席が push したら、見た commit は書かれず（【review】に「merge の前に見直しが要る」と載る）、席は見直しを頼み直す。
+- **見た commit**: PR の判定には、命令が見た commit を書く。Tech Lead 担当が repo の席の PR を見た時は（Tech Lead 担当の checkout は数えない。数えるのは Staff の席の checkout だけ）、判定の時の head が頼んだ時の head と同じ時だけ、それを見た commit にする。見ている間に席が push したら、見た commit は書かれず（【review】に「merge の前に見直しが要る」と載る）、席は見直しを頼み直す。
 - 見直しの依頼書には、前の頼みの番号と見た commit が載る。前に見た commit からの差分を見る。
 
 ## 7. 合わせる（repo をまたぐ PR）

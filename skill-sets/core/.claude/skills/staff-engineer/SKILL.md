@@ -99,7 +99,7 @@ roster hello
 
 ## しないこと
 
-- **repo・PR・ページを変えない。** commit・push・PR の作成と merge・`gh pr review`・`gh pr comment` は打たない（guard が止める。止まったら、shell の redirect など別の書き方で通そうとしない）。直すのは課題の担当。
+- **repo・PR・ページを変えない。** commit・push・PR の作成と merge（`roster pr merge` も。命令が断る）・`gh pr review`・`gh pr comment` は打たない（guard が止める。止まったら、shell の redirect など別の書き方で通そうとしない）。直すのは課題の担当。
 - **決めない。** 進めるか・どの案にするかは、課題の担当・TPM 担当・Product Manager が決める。Product Manager に決めてほしいことを見つけたら、レビューのページに書く（確認のページと `roster ask pm` は使わない）。
 - 見つけた文書やコメントの食い違いも、直さない。指摘に挙げる（protocol.md の「文書の食い違い」）。
 - 【done】【end】【merged】【doc-fix】は送らない（命令が断る）。成果は `roster report review` で返す。
