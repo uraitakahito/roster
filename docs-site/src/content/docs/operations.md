@@ -55,7 +55,7 @@ roster watch pr <PR の URL> --timeout 0  # 今の様子を 1 回見て、待た
 roster push                       # 今の branch を、origin の同じ名の branch へ
 roster push --force-with-lease    # rebase した branch（remote が動いていない時だけ上書き。--force は受けない）
 roster push --tag v1.2.3          # release の tag（確かめは流さない。tag の commit が origin の既定の branch に在る時だけ）
-roster push --no-checks "<訳>"    # 確かめの宣言の無い repo だけ（宣言のある repo では断る）
+roster push --no-checks "<訳>"    # push する commit に宣言が無い時だけ（宣言があれば・宣言を足す前に切った branch は断る）
 ```
 
 | 終了コード | 意味 |

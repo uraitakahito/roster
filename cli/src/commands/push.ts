@@ -420,7 +420,7 @@ export function push(ctx: Context, options: PushOptions): PushResult {
   const diff = result === undefined ? undefined : { result, from };
   // 宣言を足す前に切った branch: main の守りを --no-checks で外させず、取り込ませる（欄ごと消した branch は、分かれた所に宣言があるので、ここに当たらない。review-2 の指摘 2）。
   if (checks === undefined && mainChecks.kind === 'some' && !(atMergeBase && baseChecks.kind === 'some')) {
-    return refuse(target, `push する commit（${sha.slice(0, 7)}）に確かめの宣言が無いが、origin/${main} には在る（宣言が足される前に切った branch）。origin/${main} を取り込んでから打つ（--no-checks は受けない）`, sha, diff);
+    return refuse(target, `push する commit（${sha.slice(0, 7)}）に確かめの宣言が無いが、origin/${main} には在る（${mergeBase === undefined ? 'main と分かれた所が取れない branch' : '宣言が足される前に切った branch'}）。origin/${main} を取り込んでから打つ（--no-checks は受けない）`, sha, diff);
   }
   if (checks === undefined && options.noChecks === undefined) {
     const untracked = existsSync(join(root, CONFIG_PATH)) && git(ctx, root, ['ls-files', '--error-unmatch', CONFIG_PATH]).status !== 0;
