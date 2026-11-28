@@ -1,6 +1,6 @@
 ---
 title: 運用
-description: この repo を別の folder へ移す手順、Node の version の上げ方、依存が増えた PR を merge した後の手、アクターの台帳（castlist）が止まった時、ページの置き場（pagetray）の起こし方と保ち方、画面のサーバー（callboard）の起こし方、メッセージキュー（NATS）の起こし方と止まった時、手元の builder（buildkit）の守り、レビュー（Staff Engineer 担当の席）と監査（Auditor の席）の運び、課題の時間の分け（roster time）、CI と GitHub の見張り（roster watch）、担当が落ちた後の調べ方
+description: この repo を別の folder へ移す手順、Node の version の上げ方、依存が増えた PR を merge した後の手、アクターの台帳（castlist）が止まった時、ページの置き場（pagetray）の起こし方と保ち方、画面のサーバー（callboard）の起こし方、メッセージキュー（NATS）の起こし方と止まった時、手元の builder（buildkit）の守り、レビュー（Staff Engineer 担当の席）と監査（Auditor の席）の運び、課題の時間の分け（roster time）、CI と GitHub の見張り（roster watch）、push の前の確かめ（roster push）、担当が落ちた後の調べ方
 ---
 
 ## 課題の時間の分け（roster time）
@@ -46,6 +46,29 @@ roster watch pr <PR の URL> --timeout 0  # 今の様子を 1 回見て、待た
 - `watch github` は、続けて 2 度応えたら「戻った」とする（戻りかけの揺れで起こさない）。`--repo` があればその repo を読めるかで、無ければ API が応えるかで見る。GitHub の障害は一部だけのことが多いので、落ちた手に近い repo を `--repo` で名指す（API が応えても、merge・push・Actions がまだ落ちていることはある。「戻った」の後に打ち直した命令がまた落ちたら、もう 1 度見張る）。上限（rate limit）に当たった時も、見張りは止まらずに聞き直す。
 - 聞く間は 20 秒から始め、長く待つほど空ける（長くて 60 秒）。GitHub が応えない間も、`watch pr`・`watch main`・`watch tag` は止まらずに聞き直す。途中の様子は出さない（担当が読む字を増やさないため）。
 - 終わった見張り 1 回につき 1 行が、状態の folder の `watch.jsonl` に残る（始めた時刻とかかった秒を持つ。[決まりの記録](/protocol/)）。課題ごとに、CI を何分待ったかを後から数えられる。途中で止められた見張り（席が閉じた・担当が止めた）は残らない。
+
+## push の前の確かめ（roster push）
+
+担当の push は `roster push` で打つ（2026-11-28 t-fcp8。監査 audit-2 の R15。確かめと `git commit`・`git push` を 1 行に続け、確かめが落ちたまま push した件が 2 日で 4 件あった）。`roster push` は、repo の設定に宣言した確かめ（[設定](/configuration/#push-の前の確かめpush)）をみな流し、みな通った時だけ、確かめた commit を push する。確かめは数十秒かかりうるので、担当は `roster watch` と同じく**裏で起こして**手を止める。
+
+```sh
+roster push                       # 今の branch を、origin の同じ名の branch へ
+roster push --force-with-lease    # rebase した branch（remote が動いていない時だけ上書き。--force は受けない）
+roster push --tag v1.2.3          # release の tag（確かめは流さない。tag の commit が origin の既定の branch に在る時だけ）
+roster push --no-checks "<訳>"    # 確かめの宣言の無い repo だけ（宣言のある repo では断る）
+```
+
+| 終了コード | 意味 |
+|---|---|
+| 0 | push した |
+| 10 | 確かめが落ちた（push していない）。落ちた確かめの名・終了コード（時間切れは 124）・出力の終わり 40 行と、全部の log の path を出す。node_modules の無い dir の確かめが落ちたら、依存を入れる注意も出す |
+| 1 | 断った（git の worktree の外・detached・既定の branch の上・HEAD に commit が無い・追われている file に commit していない変更がある・`git status` が読めない・宣言が無い・宣言の形が違う・`--no-checks` の訳が空・確かめの間に HEAD か追われた file が動いた） |
+| 2 | `git fetch` が落ちた（確かめは流していない）か、`git push` が落ちた（確かめは通った）。どちらかは出る行で分かる。網の誤りなら `roster watch github` で待って打ち直す（remote が先に進んで断られたなら、取り込んでから打ち直す） |
+
+- 確かめは、落ちても残りをみな流す（1 度で全部の落ちを見せる）。1 つにつき時間の限りがあり（既定 600 秒。設定の `timeoutSeconds`）、過ぎたら止めて落ちた（時間切れ）とする（止まったまま返らない確かめで、裏の `roster push` が返らなくならないため）。出力は状態の folder の `push/` の下の log に書き、画面には 1 つにつき 1 行（名・終了コード・秒）を出す。
+- 初めに HEAD の sha を取り、確かめの後に HEAD と追われた file が同じかをもう 1 度見てから、その sha を push する（裏で流す間に commit を足しても、確かめていない commit は出ない）。git に入っていない file（`.gitignore` に無い物）は、確かめの木には在るが commit には無いので、名を注意に出す（断らない）。
+- push の先は、いつも手元の branch と同じ名（upstream では決めない。`origin/main` から `-b` で切った branch は `origin/main` を追うため）。push の後、upstream を push した branch に付け直す。Dependabot の PR を直す時は、PR の branch と同じ名の手元の branch を作る（`git worktree add -b <PR の branch の名> <置き場所> --track origin/<PR の branch の名>`）。
+- 1 回につき 1 行が、状態の folder の `pushes.jsonl` に残る（時刻・Key・repo・先・sha・確かめごとの終了コードと秒・結果・`--no-checks` の訳）。確かめが落ちて止めた回（10）は、前なら CI で落ちていた回として数えられる。
 
 ## 移す手順
 

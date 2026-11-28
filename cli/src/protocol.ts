@@ -49,6 +49,7 @@ export const COMMANDS = [
   'watch main',
   'watch tag',
   'watch github',
+  'push',
   'incident add',
   'incident review',
   'incident tag',

@@ -17,6 +17,7 @@ TPM 担当を起こした folder（project）に置くと、道具の選び方�
 | `infra` | インフラの環境の宣言。環境の名前（英小文字・数字・`-`）ごとに `guard`（手続き）と `match`（その環境に触る命令の語の並びの配列。語の末尾の `*` は前方一致） | 宣言なし（guard は環境を見ない） |
 | `skill-sets` | core のほかに加える、追加の skill セットの名前の配列 | core だけ |
 | `folders` | 設定を集める folder（project の folder からの path）の配列。書くと、直下を探さずに書いた folder だけを集める。`[]` なら集めない | 直下の folder のうち、設定がある物を全部集める |
+| `push` | `roster push` が push の前に流す確かめの一覧（`checks`）。repo の設定に書き、origin の既定の branch の物を読む（下の「[push の前の確かめ](#push-の前の確かめpush)」） | `roster push` は断る（`--no-checks "<訳>"` を付けた時だけ確かめ無しで push） |
 | `castlist` | アクターの台帳（castlist）の URL（`http://127.0.0.1:<port>` か `http://localhost:<port>`）。project の folder の設定だけが効く（下の「[アクターの台帳（castlist）](#アクターの台帳castlist任意)」） | castlist に何も送らない |
 | `software-engineer`・`tech-lead`・`devops-engineer`・`staff-engineer`・`auditor` | 起こす担当の `model`・`effort`・`permissionMode` | [環境変数](#model-などの既定の環境変数任意)、それも無ければ既定（Software Engineer 担当と Tech Lead 担当は Opus 5.5・medium、DevOps Engineer 担当は Opus 5.5・low、Staff Engineer 担当は Opus 5.5・high、Auditor は Fable 5.2・high、どれも `bypassPermissions`） |
 
@@ -160,6 +161,33 @@ container の命令（語のどこかの名が `container` の単純な命令）
 container の命令の `--name`・`-v` の値に、変数（`$N`・`${N}`）・命令の置き換え（`$(…)`・backtick。語の途中の `"$(cat f)":/data` も）・glob の字（`*`・`?`）・xargs と find の置き場（`{}`・`%`）・brace の展開（`{a,b}`）があるか、旗が語の終わりで値が無ければ（`… | xargs container run --name`）、その所を何でも当たるとみなして項目の値と比べる（`--name "$N"`・`-v "$V":/data` は、名か volume を宣言した環境にみな当たる。`--name "test-$N"` は `db` に当たらない）。同じ行の代入（`N=db; …`）と環境変数は読まない（代入が効くかは shell の形で変わり、guard の process の環境変数は Bash の命令の shell の物と違うため）。`$HOME`・`$PWD`・`$OLDPWD`・`$TMPDIR` は、後ろが `/`・`:`・語の終わりの時は path と読むので、`-v "$PWD:/w"` は当たらない（`${TMPDIR}db-data-v1` のように字が続く時は、空でありうるので読まない。命令の字に、その名が `$` の後ろ以外で出る時（`HOME=x`・`export HOME`）は、同じ行で替えうるので path と読まない）。止める・消す動詞の的も、語の途中の置き換え（`container stop x$(echo y)`）を名を書かない的とみなす。
 
 環境の container・volume の名を的にする container の命令は、宣言に無い動詞でも止める（2026-11-28 t-d37r。台帳 #312）。名は、名を宣言する項目（`--name db`・`-v db-data*`）から引く。読むだけの動詞（`logs`・`inspect`・`stats`・`list`（`ls`）と、volume の `inspect`・`ls`）と、名の container を的にしない動詞と群（`run`・`create`（名と volume は `--name`・`-v` の項目が当て、image より後ろは container の中の命令の語）・`image`（`i`）・`registry`（`r`）・`machine`（`m`）・`network`（`n`）・`system`（`s`）・`cluster`・`build`・`builder`・`help`）のほかは、`exec`・`cp`・`commit`・`export` も、宣言にある `stop`・`rm` なども、container の版が上がって足された知らない動詞も当てる（疑わしければ止める）。的は、`exec` は旗と旗の直後の語を読み進め、旗の直後でない初めの語までを候補にする（値を取る旗を数えないので、`-iu root db` の `db` も見落とさない。後ろは container の中の命令なので見ない。`container exec mytest grep db /etc/hosts` は通る）、`cp`（`copy`）は `:` を含む語の `:` より前（`db:/data/x` の `db`。`:` の無い値の分からない語も）、ほかは旗と `-s`・`-t`・`-o` などの値を除いたどの語も（`--` の後ろはみな）。知っている container の動詞の的は container の名と、volume の群（`container volume …`・`container v …`。次の語を動詞と読む）の的は volume の名と、知らない動詞の的は両方と比べる。的が値の分からない語（`"$N"`・`$(…)`・`{}`）・的が無い（`xargs container exec`。知っている動詞だけ）・`--all` の時も、名を宣言した環境にみな当たるとみなす（自分の container は名を字で書けば通る）。`-h`・`--help` は通す（`exec` は exec 自身の旗だけ。`container exec db ls --help` の `--help` は container の中の命令の旗なので止まる）。字を動かさない命令（`grep`・`rg`・`git commit`・`cat`・`echo`・`printf`・`roster`）の引数の `container` の語は container の命令と読まず、知らない動詞は的の語が無ければ当てないので、`grep -n container docs`・`git grep container`・`find . -name container` は通る。`ssh host '…'`・here-document の中は、字で書いた名だけを当てる（`ssh host 'container stop -t 5 db'` も止まる）。だから宣言に `container exec db` や `container rm -f db` のような項目を並べなくてよい（`container stop db` などの項目は、名を書かずに選ぶ命令の動詞を引くのにも使う）。
+
+### push の前の確かめ（`push`）
+
+`roster push`（[運用](/operations/#push-の前の確かめroster-push)）が push の前に流す確かめを、repo ごとの `.claude/roles/config.jsonc` に書く。`roster push` は、push する branch の設定でなく、`git fetch` した後の **origin の既定の branch**（`origin/HEAD`、無ければ `main`）の設定を読む。branch の中で一覧を変えても、merge されるまで効かない（うっかり確かめを減らして push しないため）。新しく足した確かめも、merge の後から効く。固めるのは一覧（名と命令）だけで、命令が中で読む物（`package.json` の scripts・lint や試験の設定・`ci/*.sh`）は branch の木の物を使う（そこを変えた branch は、PR の差分とレビューで見る）。
+
+| `checks` の 1 つの欄 | 中身 |
+|---|---|
+| `name` | 確かめの名（英数字と `_`・`.`・`-`。log の file の名にもなる） |
+| `run` | 打つ命令の語の並び。shell を通さない（`;`・pipe・`&&` で終了コードが隠れる形を作らない。shell の形が要る確かめは、repo の script にして、その path を書く） |
+| `dir` | repo の根からの folder（無ければ根）。`..` と絶対の path は受けない |
+| `env` | 足す環境変数（名 → 字。任意） |
+| `timeoutSeconds` | 時間の限り（秒。任意。既定 600）。過ぎたら止めて落ちた（時間切れ。終了コード 124）とする |
+
+```jsonc
+{
+  "push": {
+    "checks": [
+      { "name": "cli-lint", "dir": "cli", "run": ["pnpm", "run", "lint"] },
+      { "name": "fmt", "run": ["cargo", "fmt", "--all", "--check"] },
+    ],
+  },
+}
+```
+
+- path では選ばず、宣言した確かめを毎回みな流す（この repo と castlist・callboard・pagetray の CI は、どれも `pull_request` に paths の絞りが無く、どの PR でも流れる。path で選ぶと CI より狭くなる）。
+- 入れるのは、CI の中で手元で速く流せる物（型・lint・fmt・docs と字の検査・速い試験）。e2e・image の build・別の OS の job は CI に任せる。長さは、一時の worktree で、作ったばかりの木と 2 回目で測って決める（2026-11-28 t-fcp8: roster は合わせて 40 秒ほど、Rust の repo は clippy の初めの build を入れて 15〜30 秒ほど）。
+- 欄の形が違えば、`roster push` は流さずに断る（どこが違うかを出す）。
 
 ## model などの既定の環境変数（任意）
 
