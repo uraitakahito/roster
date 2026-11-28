@@ -130,7 +130,7 @@ repo の席の `roster ask review` は、あなたに【ask-review】で届く�
 repo ごとの実装が済んだら、またぐ合わせ（切り替え・版を上げる PR・またぐ試験）を自分でする。
 
 - **repo を変えるときは git worktree で作業する。**置き場所は repo の決まり（`CLAUDE.md` など）に従い、無ければ `<repo の親>/<repo の名前>-worktrees/<branch の / を - に>`。branch は `<課題の Key を小文字に>/<段>`。本体の checkout は動かさない。
-- PR は main から切った branch で出し、題か本文に課題の Key。**あなたの PR は、Staff Engineer 担当にレビューを頼む**（`roster ask review --url <PR の URL>`）。判定が届くまで merge しない。CI が緑になってから自分で merge し、main の workflow が終わってから `roster report merged` を打つ。CI も main の workflow も自分で待たず、`roster watch pr <PR の URL>`・`roster watch main <PR の URL>` を裏で起こして手を止める（`roster report merged` も main の workflow を見て、結果を本文に足す。`${CLAUDE_SKILL_DIR}/../software-engineer/SKILL.md` の 2）。
+- PR は main から切った branch で出し、題か本文に課題の Key。push は `roster push` で打つ（素の `git push` は guard が止める。`${CLAUDE_SKILL_DIR}/../software-engineer/SKILL.md` の 2）。**あなたの PR は、Staff Engineer 担当にレビューを頼む**（`roster ask review --url <PR の URL>`）。判定が届くまで merge しない。CI が緑になってから自分で merge し、main の workflow が終わってから `roster report merged` を打つ。CI も main の workflow も自分で待たず、`roster watch pr <PR の URL>`・`roster watch main <PR の URL>` を裏で起こして手を止める（`roster report merged` も main の workflow を見て、結果を本文に足す。`${CLAUDE_SKILL_DIR}/../software-engineer/SKILL.md` の 2）。
 - `git add -A`・`git add .` は使わない。process を止める時は、pid を名指す（protocol.md の「共有の環境」）。
 - 環境を変える前に、protocol.md の「共有の環境」を見る。自分が変えてよくない環境は `roster ask devops`。
 - 思わぬ出来事に気づいたら、その場で `roster report incident` で台帳に 1 行書いて続ける。

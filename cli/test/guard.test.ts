@@ -606,6 +606,96 @@ describe('pattern で process に合図を送る命令（台帳 #89・#92）', (
   });
 });
 
+describe('担当の席の素の git push（t-fcp8。監査 audit-2 の R15）', () => {
+  const PUSH_HINT = expect.stringContaining('push は roster push で') as string;
+  test.each([
+    'git push',
+    'git push -u origin t-x/impl',
+    'git push --force-with-lease',
+    'git -C /w/repo push',
+    'git -c core.hooksPath=/dev/null push',
+    'git --git-dir=/w/.git push origin b',
+    '/usr/bin/git push',
+    'cd /w && git push',
+    // 台帳 #217・#241・#327・#383 の形。
+    'pnpm run lint; git commit -m x; git push',
+    'pnpm run check | tail -3 && git commit -m x && git push',
+    'pnpm run check; echo docs=$?; git commit -m x; git push',
+    'cargo fmt --check; git commit -am x; git push',
+    // 前置きの語（旗の値も）と、前置きと知らない命令（review-2 の指摘 2）。
+    'env A=1 git push',
+    'env -u ROSTER_KEY git push',
+    'sudo -u me git push',
+    'command git push',
+    'nohup git push',
+    'nice -n 5 git push',
+    'timeout 60 git push',
+    'xargs -n1 git push',
+    'find . -exec git push \\;',
+    'sh -c \'git push\'',
+    'bash -lc "cd /w && git push"',
+    'eval git push',
+    'x=$(git push)',
+    // 名が変数か置き換え（review-2 の指摘 1）。
+    '$G push',
+    '"$(which git)" push',
+    '`which git` push',
+    // その場で作る別名・別名を書く命令。
+    'git -c alias.p=push p',
+    'git -c alias.up="push -u origin" up',
+    'git config alias.p push',
+    // 消すだけの形に見えて、ほかの語が並ぶ・消してはいけない名（review-2 の指摘 3）。
+    'git push origin -fd x',
+    'git push origin --delete --forc x',
+    'git push origin --delete main',
+    'git push origin -d master',
+    'git push origin :main',
+    'git push origin :v1.0.0',
+    'git push origin --delete v1.2.3',
+    'git push origin --delete refs/tags/v1',
+    'git push origin :x y',
+    'git push origin --delete',
+    'git push --delete',
+    'git push origin --mirror',
+    'git push origin --tags',
+    'git push origin v1.2.3',
+    'ROSTER_RAW=1 git push',
+  ])('止める: %s', (command) => {
+    for (const role of ['software-engineer', 'devops-engineer', 'tech-lead', 'sustaining-engineer', 'tpm'] as const) {
+      expect(ask(command, role), role).toEqual({ allow: false, reason: PUSH_HINT });
+    }
+  });
+
+  test.each([
+    'roster push',
+    'roster push --tag v1.2.3',
+    'git push origin --delete t-x/impl',
+    'git push --delete origin t-x/impl',
+    'git push origin -d t-x/impl a/b',
+    'git push origin :t-x/impl',
+    'git push origin --delete refs/heads/t-x/impl',
+    'git commit -m "git push"',
+    'git commit -m "roster push の前に git push を打たない"',
+    'echo git push',
+    'grep -n "git push" docs/x.md',
+    'rg "git push" .',
+    'git log --grep push',
+    'git config user.name x',
+    'cat <<EOF\ngit push\nEOF',
+  ])('通す: %s', (command) => {
+    expect(ask(command, 'software-engineer')).toEqual({ allow: true });
+  });
+
+  test('Product Manager の terminal（役割の無い session）の push は止めない', () => {
+    expect(ask('git push origin v1.2.3', undefined)).toEqual({ allow: true });
+    expect(ask('pnpm run check; git push', undefined)).toEqual({ allow: true });
+  });
+
+  test('読むだけの担当には、今までの「repo を変えません」が先に当たる', () => {
+    expect(ask('git push', 'staff-engineer')).toEqual({ allow: false, reason: expect.stringContaining('repo を変えません') as string });
+  });
+});
+
 describe('Auditor は repo を変えない', () => {
   test.each<[string, boolean]>([
     ['git status', true],
