@@ -552,6 +552,21 @@ describe('roster figure shot', () => {
     expect(chrome.pages[2]).toContain('@media all');
   });
 
+  test('Chrome を起こす 3 回とも、keychain を読ませない 2 つの旗を渡す（台帳 #404）', () => {
+    const calls: string[][] = [];
+    const chrome = fakeChrome([]);
+    const exec: Exec = (cmd, args, options) => {
+      calls.push(args);
+      return chrome.exec(cmd, args, options);
+    };
+    const { ctx } = setup(exec);
+    const dir = temp('shot');
+    writeFileSync(join(dir, 'out.html'), page);
+    figureShot(ctx, join(dir, 'out.html'), { dir: join(dir, 'png') });
+    expect(calls).toHaveLength(3);
+    for (const args of calls) expect(args).toEqual(expect.arrayContaining(['--use-mock-keychain', '--password-store=basic']));
+  });
+
   test('寸法の検査で傷があれば、png を撮った上で、傷を並べて止まる', () => {
     const chrome = fakeChrome([{ kind: 'はみ出し', text: '検査と直し', node: 'val' }]);
     const { ctx } = setup(chrome.exec);

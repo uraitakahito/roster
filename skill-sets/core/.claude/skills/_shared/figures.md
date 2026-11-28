@@ -249,8 +249,8 @@ JSON の例（帯 2 本の「前と後」）:
 画面（callboard のページの一覧・docs の site など）を変えた結果は、前と後の写しを png にして `roster file put <file> --reviewed` で上げ、ページから `<img src="files/<語>-<n>.png">` で参照する（`protocol.md` の「ページ」の file の項）。roster を動かす機械の Chrome の headless で撮れる:
 
 ```sh
-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --disable-gpu --hide-scrollbars \
-  --user-data-dir="$TMPDIR/shot-chrome" --window-size=900,700 --screenshot="$TMPDIR/shot.png" "<URL か file:// の path>"
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --use-mock-keychain --password-store=basic \
+  --headless=new --disable-gpu --hide-scrollbars --user-data-dir="$TMPDIR/shot-chrome" --window-size=900,700 --screenshot="$TMPDIR/shot.png" "<URL か file:// の path>"
 ```
 
 - 写るのは開いたページだけ（ほかの窓や通知は写らない）。それでも上げる前に Read で見て、token・鍵・個人の情報・roster を動かす機械の path が写っていないか確かめる。
