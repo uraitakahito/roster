@@ -21,6 +21,11 @@ const MAX_ROUNDS = 8;
 const MIN_SCALE = 0.3;
 /** Chrome の既定の在り処（$ROSTER_CHROME で替える）。 */
 const DEFAULT_CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+/**
+ * Chrome にいつも渡す旗。無いと、Chrome が macOS の keychain の「Chrome Safe Storage」などを読もうとし、
+ * Product Manager の画面に keychain のパスワードを求めるダイアログが出うる（台帳 #402・#403・#404）。
+ */
+export const KEYCHAIN_SAFE_FLAGS = ['--use-mock-keychain', '--password-store=basic'] as const;
 /** 文書に style が無い時の色の変数（_shared/figures.md の「色の変数」の写し。そちらを替えたら、ここも揃える）。 */
 const DEFAULT_STYLE = ':root{--bg:#fff;--fg:#1f2328;--mute:#59636e;--line:#d1d9e0;--card:#f6f8fa;--a:#1f6feb;--ok:#1a7f37;--mid:#bf8700;--ng:#cf222e}@media (prefers-color-scheme: dark){:root{--bg:#0d1117;--fg:#e6edf3;--mute:#9198a1;--line:#3d444d;--card:#151b23;--a:#4493f8;--ok:#3fb950;--mid:#d29922;--ng:#f85149}}body{background:var(--bg);color:var(--fg)}svg text{fill:var(--fg);font-family:inherit}';
 
@@ -293,7 +298,7 @@ export function figureShot(ctx: Context, file: string, options: FigureShotOption
     const shown = Math.min(PAGE_WIDTH, vb[2] ?? PAGE_WIDTH);
     const height = Math.ceil(shown * (vb[3] ?? 280) / (vb[2] ?? PAGE_WIDTH)) + 16;
     const page = (theme: 'light' | 'dark', script = ''): string => `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>${themed(style, theme)}body{margin:0;padding:8px;width:${PAGE_WIDTH}px}</style></head><body>${svg}${script === '' ? '' : `<script>${script}</script>`}</body></html>`;
-    const base = ['--headless=new', '--disable-gpu', '--hide-scrollbars', `--user-data-dir=${join(dir, '.chrome')}`];
+    const base = [...KEYCHAIN_SAFE_FLAGS, '--headless=new', '--disable-gpu', '--hide-scrollbars', `--user-data-dir=${join(dir, '.chrome')}`];
     // 寸法の検査（明るい画面で。色は寸法に効かない）。
     const checkHtml = join(dir, `${name}.check.html`);
     writeFileSync(checkHtml, page('light', CHECK_SCRIPT));
