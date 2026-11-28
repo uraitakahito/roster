@@ -15,6 +15,7 @@ import { guard, infraApprove, infraList, infraRevoke, infraRun } from './command
 import { issueView } from './commands/issue.ts';
 import { messageRecordsSettled } from './commands/message-record.ts';
 import { fileDelete, fileList, filePath, filePut, type FileListOptions, type FilePutOptions } from './commands/file.ts';
+import { chromeList, chromeRun, chromeStart, chromeStop, RUN_TIMEOUT_SECONDS, type ChromeOptions } from './commands/chrome.ts';
 import { figureEmbed, figureGuide, figureSetup, figureShot, figureValidate, type FigureEmbedOptions, type FigureShotOptions } from './commands/figure.ts';
 import { PAGE_KINDS, pageDelete, pageImport, pageList, pagePath, pagePut, pageReply, type PageDeleteOptions, type PageListOptions } from './commands/page.ts';
 import { mailArm, mailCheck, mailClaim, mailGate, mailLeft, mailPrompt, mailRelease, mailWait, WAIT_STEP, type StepResult, type WaitResult } from './commands/mail.ts';
@@ -259,6 +260,42 @@ export function buildProgram(readStdin: () => string = () => readFileSync(0, 'ut
     .option('--dir <folder>', 'png を書く folder（無ければ一時の folder）')
     .option('--figure <json>', '名指した図（JSON の path）だけを検査して撮る')
     .action((path: string, options: FigureShotOptions) => print(figureShot(createContext(), path, options)));
+
+  const chrome = program.command('chrome').description('手元で Chrome を起こす、ただ 1 つの道（keychain を読ませない旗をいつも付け、profile は roster が作って片付ける。Chrome のバイナリを直に起こすと guard が止める）');
+  const bin = ['--bin <path>', '起こす Chrome（実行の file か .app の path。for-testing（for-testing@156）なら puppeteer の置いた Chrome for Testing。既定は $ROSTER_CHROME、無ければ Google Chrome）'] as const;
+  const headed = ['--headed', '窓を出す（headless にしない。窓は Product Manager の画面に出る）'] as const;
+  const profile = ['--profile <dir>', '使う profile の folder（無ければ一時の folder を作り、終わりに消す）'] as const;
+  /** 整数の旗を読む（範囲の外・数でなければ断る。review-3 の指摘 7）。 */
+  const integer = (name: string, value: string, min: number, max: number): number => {
+    const n = Number(value);
+    if (!/^\d+$/.test(value) || n < min || n > max) throw new TpmError(`${name} は ${String(min)}〜${String(max)} の整数で書いてください: ${value}`);
+    return n;
+  };
+  const chromeOptions = (o: { bin?: string, headed?: boolean, profile?: string, port?: string, timeout?: string }): ChromeOptions => ({
+    ...(o.bin === undefined ? {} : { bin: o.bin }),
+    ...(o.headed === true ? { headed: true } : {}),
+    ...(o.profile === undefined ? {} : { profile: o.profile }),
+    ...(o.port === undefined ? {} : { port: integer('--port', o.port, 0, 65535) }),
+    ...(o.timeout === undefined ? {} : { timeout: integer('--timeout', o.timeout, 1, 86400) }),
+  });
+  chrome.command('run <args...>').description('前で動かし、終わるまで待つ（撮り・--dump-dom。roster chrome run -- --screenshot=<png> <URL>）。Chrome の出力と終了コードを返す')
+    .option(...bin).option(...headed).option(...profile)
+    .option('--timeout <秒>', `過ぎたら止める長さ（秒。既定は ${RUN_TIMEOUT_SECONDS}）`)
+    .action(async (args: string[], o: { bin?: string, headed?: boolean, profile?: string, timeout?: string }) => {
+      const r = await chromeRun(createContext(), args, chromeOptions(o));
+      process.stdout.write(r.stdout);
+      process.stderr.write(r.stderr);
+      // process.exit で終えると、pipe への書き出しが書き切る前に切れうる（review-3 の指摘 8）。
+      process.exitCode = r.status;
+    });
+  chrome.command('start [args...]').description('裏で起こし、pid・CDP の URL・profile・log を出す（roster chrome start -- <Chrome の引数>）。止めるのは roster chrome stop <pid>')
+    .option(...bin).option(...headed).option(...profile)
+    .option('--port <n>', 'CDP の口（既定は 0 で Chrome が選ぶ。TPM 担当が口の帯を分けた時は、帯の中を書く）')
+    .action(async (args: string[], o: { bin?: string, headed?: boolean, profile?: string, port?: string }) => print(await chromeStart(createContext(), args, chromeOptions(o))));
+  chrome.command('list').description('自分の Key が roster chrome start で起こし、まだ動いている Chrome')
+    .action(() => print(chromeList(createContext())));
+  chrome.command('stop <pid...>').description('roster chrome start で起こした Chrome を止め、残りの子を止めて、roster の作った profile を消す')
+    .action(async (pids: string[]) => print(await chromeStop(createContext(), pids.map(Number))));
 
   program.command('guard').description('（hook が呼ぶ）標準入力の命令を通すか止めるかを決める')
     .action(async () => {
