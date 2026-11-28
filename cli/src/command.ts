@@ -5,7 +5,7 @@ import type { Context } from './context.ts';
 import { guardSettings } from './guard.ts';
 import { presentSettingsEnv, resolveSettings } from './settings.ts';
 import { shellQuote } from './shell.ts';
-import { envName } from './env.ts';
+import { ASK_LANGUAGE, envName } from './env.ts';
 import { skillSetDir, TpmError } from './skill-sets.ts';
 
 /**
@@ -21,6 +21,7 @@ export const REPLY_LANGUAGE = '画面への返事は、誰の・何への返事�
  * TPM 担当の環境に入り、roster hello の状態と roster assign で起こす担当に効く（profile で export したときと揃う）。
  * core と追加の skill セットを --add-dir で足し、最初の入力は /tpm。--settings で guard（roster guard）の hook を付ける。
  * TPM 担当が roster を名前だけで打てるように、PATH の頭に roster の folder を足す（担当には roster run-role が同じことをする）。
+ * PAGETRAY_LANG=ja も足す（置き場の CLI の言語。担当には roster run-role が同じ物を渡す。AI-48）。
  * --add-dir は後ろの語もまとめて folder として読むので、最初の入力の前に -- を置く。
  * --append-system-prompt で、Claude Code の大本の指示（system prompt）の後ろに、返事の言葉の 1 文（REPLY_LANGUAGE）を足す。--add-dir の前に置く（後ろに置くと folder として読まれる）。
  * launch は、1 行の頭に足す起こしの印（startTpm が castlist を設定した時に渡す。字のまま足す）。
@@ -30,7 +31,7 @@ export function buildCommand(dir: string, root: string, skillSets: string[], env
   const addDirs = ['core', ...skillSets].map(s => skillSetDir(root, s));
   const bin = join(root, 'cli', 'bin');
   const claude = ['claude', '--model', settings.model, '--effort', settings.effort, '--permission-mode', settings.permissionMode, '--settings', guardSettings(join(bin, 'roster')), '--append-system-prompt', REPLY_LANGUAGE, '--add-dir', ...addDirs, '--', '/tpm'];
-  const assigns = [`PATH=${shellQuote(bin)}:"$PATH"`, ...presentSettingsEnv(env).map(([name, value]) => `${name}=${shellQuote(value)}`), ...launch];
+  const assigns = [`PATH=${shellQuote(bin)}:"$PATH"`, `PAGETRAY_LANG=${ASK_LANGUAGE}`, ...presentSettingsEnv(env).map(([name, value]) => `${name}=${shellQuote(value)}`), ...launch];
   return `cd ${shellQuote(dir)} && ${assigns.join(' ')} ${claude.map(shellQuote).join(' ')}`;
 }
 

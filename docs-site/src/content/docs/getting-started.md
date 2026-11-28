@@ -36,12 +36,14 @@ cd </your/workspace> # あなたが作業する場所
 
 ```sh
 # skill-sets が無い（既定）
-cd <folder> && PATH=<repo>/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{…}}' --append-system-prompt '画面への返事は…' --add-dir <repo>/skill-sets/core -- /tpm
+cd <folder> && PATH=<repo>/cli/bin:"$PATH" PAGETRAY_LANG=ja claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{…}}' --append-system-prompt '画面への返事は…' --add-dir <repo>/skill-sets/core -- /tpm
 # "skill-sets": ["dependabot"]
-cd <folder> && PATH=<repo>/cli/bin:"$PATH" claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{…}}' --append-system-prompt '画面への返事は…' --add-dir <repo>/skill-sets/core <repo>/skill-sets/dependabot -- /tpm
+cd <folder> && PATH=<repo>/cli/bin:"$PATH" PAGETRAY_LANG=ja claude --model claude-opus-5-5 --effort medium --permission-mode bypassPermissions --settings '{"hooks":{…}}' --append-system-prompt '画面への返事は…' --add-dir <repo>/skill-sets/core <repo>/skill-sets/dependabot -- /tpm
 ```
 
 **最初の入力は `--` の後に置く**（`--add-dir` は後ろの語もまとめて folder として読むため）。
+
+1 行の頭の `PAGETRAY_LANG=ja` は、置き場の CLI（`pagetray`）の言語を日本語に決める（pagetray 2.1.0 から、言語の環境が無いと英語で出す。担当には `roster` が同じ物を渡す）。
 
 ### model と effort を替える
 
@@ -60,7 +62,7 @@ ROSTER_EFFORT=high /foo/bar/roster/cli/bin/roster start
 
 ```sh
 # ROSTER_EFFORT=high roster start が出す 1 行（skill-sets が無いとき）
-cd <folder> && PATH=<repo>/cli/bin:"$PATH" ROSTER_EFFORT=high claude --model claude-opus-5-5 --effort high --permission-mode bypassPermissions --settings '…' --append-system-prompt '画面への返事は…' --add-dir <repo>/skill-sets/core -- /tpm
+cd <folder> && PATH=<repo>/cli/bin:"$PATH" PAGETRAY_LANG=ja ROSTER_EFFORT=high claude --model claude-opus-5-5 --effort high --permission-mode bypassPermissions --settings '…' --append-system-prompt '画面への返事は…' --add-dir <repo>/skill-sets/core -- /tpm
 ```
 
 欄ごとに、命令の旗（`roster assign --model` など）> `.claude/roles/config.jsonc` の担当の欄 > 環境変数 > コードの既定 の順で、先に値がある物が使われる。project の config に `"devops-engineer": { "effort": "low" }` と書いてあれば、`ROSTER_EFFORT=high` でもその project の DevOps Engineer 担当は low のまま。表は[設定](/configuration/#model-などの既定の環境変数任意)。

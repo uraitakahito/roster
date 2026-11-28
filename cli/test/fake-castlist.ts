@@ -516,6 +516,11 @@ export async function startCastlist(now = '2026-11-20T12:00:00.000Z'): Promise<F
     });
     req.on('end', () => {
       const seen = seenOf(req, text);
+      // roster の client は、どの頼みにも日本語を頼む（clients.ts の askingJapanese）。頭の無い頼みは、残さずに断る（next-fake.ts の偽の handler と同じ。AI-48）。
+      if (seen.headers['accept-language'] !== 'ja') {
+        write(res, { status: 400, type: 'MissingAcceptLanguage', body: `accept-language: ja の無い頼み（${seen.method} ${seen.path}）。client を askingJapanese に通す` });
+        return;
+      }
       const over = fake.intercept?.(seen);
       if (over === 'drop') {
         req.socket.destroy();

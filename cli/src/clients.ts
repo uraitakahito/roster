@@ -2,9 +2,10 @@
 // 生成した client は、使う時だけ読む（module の頭で読まない。送る物の無い guard の起動を遅くしない）。build した JS（dist-cjs/）を createRequire で読み、型は dist-types/ から取る。
 import { createRequire } from 'node:module';
 import type { HttpHandler, HttpHandlerUserInput } from '@smithy/core/protocols';
-import type { Provider, UserAgent } from '@smithy/types';
+import type { BuildMiddleware, Provider, UserAgent } from '@smithy/types';
 import type * as Castlist from '../gen/castlist-client/dist-types/index.js';
 import type * as Pagetray from '../gen/pagetray-client/dist-types/index.js';
+import { ASK_LANGUAGE } from './env.ts';
 import { TpmError } from './skill-sets.ts';
 
 const load = createRequire(import.meta.url);
@@ -62,6 +63,36 @@ export function withoutAwsMiddleware<T extends HasMiddleware>(client: T): T {
   // 外せなければ止める（@aws-sdk/core の更新で名が替わると、黙って環境変数を読む形に戻るため）。
   // install し直しても直らないので、install の訳にしない（sendOnce は TpmError をそのまま投げる）。
   if (!client.middlewareStack.remove('recursionDetectionMiddleware')) throw new TpmError('生成した client から recursionDetectionMiddleware を外せない（@aws-sdk/core の名が替わった。cli/pnpm-lock.yaml の版に戻すか、外す名を直す）。roster ask tpm で知らせてください');
+  return client;
+}
+
+/** {@link askingJapanese} が足す middleware の名。 */
+const LANGUAGE_MIDDLEWARE = 'rosterAcceptLanguage';
+
+/** middleware を足せる物（生成した client はどれも。add の引数の型は client ごとに違うので、ここでは問わない）。 */
+export interface CanAddMiddleware {
+  middlewareStack: {
+    /** middleware を足す。 */
+    add: (...args: never[]) => void
+  }
+}
+
+/**
+ * 作った client が、どの頼みにも `Accept-Language: ja` を付けるようにする（AI-48）。
+ * castlist・pagetray は、言語を付けない頼みに英語の誤りの文を返す（castlist 2.2.0・pagetray 2.1.0 から）。roster は誤りの文を担当にそのまま出し、
+ * 1 か所（commands/store.ts の UNREGISTERED）は日本語の字で見分けるので、いつも日本語を頼む。client を作る所は、みなこれを通す（試験の偽の HTTP が、頭の無い頼みを断る）。
+ */
+export function askingJapanese<T extends CanAddMiddleware>(client: T): T {
+  const language: BuildMiddleware<object, object> = next => (args) => {
+    const request = args.request as { headers?: Record<string, string> } | undefined;
+    // 頼みの形が思ったのと違えば止める（@smithy の更新で形が替わると、黙って言語を付けない頼みに戻るため。withoutAwsMiddleware と同じ訳）。
+    if (request?.headers === undefined) throw new TpmError('生成した client の頼みに headers が無く、Accept-Language を付けられない（@smithy の頼みの形が替わった。cli/pnpm-lock.yaml の版に戻すか、askingJapanese を直す）。roster ask tpm で知らせてください');
+    request.headers['accept-language'] = ASK_LANGUAGE;
+    return next(args);
+  };
+  // 頭を組む段（build）に足す。型は client ごとの入力・出力に結ばれているので、足す口だけを、型を問わない形で受ける。
+  const stack = client.middlewareStack as unknown as { add: (middleware: BuildMiddleware<object, object>, options: { step: 'build', name: string }) => void };
+  stack.add(language, { step: 'build', name: LANGUAGE_MIDDLEWARE });
   return client;
 }
 

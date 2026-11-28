@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type * as Pagetray from '../../gen/pagetray-client/dist-types/index.js';
-import { clientConfig, pagetrayApi, sendOnce, toSnake, withoutAwsMiddleware } from '../clients.ts';
+import { askingJapanese, clientConfig, pagetrayApi, sendOnce, toSnake, withoutAwsMiddleware } from '../clients.ts';
 import type { Context } from '../context.ts';
 import type { RoleRecord, TpmRecord } from '../roster.ts';
 import { castlistUrl, issuerOf, sessionRef } from '../castlist.ts';
@@ -75,15 +75,18 @@ function fetchBody(ctx: Context, storePath: string, out: string): string {
 }
 
 /**
- * 生成した pagetray の client を作る（pagetray の client を作る所は、ここだけ）。送り直さず、時間切れは本文を取る curl と同じ（TIMEOUT）。
+ * 生成した pagetray の client を作る（pagetray の client を作る所は、ここだけ）。送り直さず、時間切れは本文を取る curl と同じ（TIMEOUT）。誤りの文は日本語を頼む（askingJapanese）。
  * requestHandler は試験が偽の HTTP を差し込む所。
  */
 export function pagetrayClient(url: string, requestHandler?: HttpHandler): Pagetray.PagetrayClient {
   const { PagetrayClient } = pagetrayApi();
-  return withoutAwsMiddleware(new PagetrayClient(clientConfig(url, Number(TIMEOUT) * 1000, requestHandler)));
+  return askingJapanese(withoutAwsMiddleware(new PagetrayClient(clientConfig(url, Number(TIMEOUT) * 1000, requestHandler))));
 }
 
-/** 新しい置き場が、castlist に登録の無い送り手を断る訳の頭（pagetray の docs/src/next.md の「送り手」）。 */
+/**
+ * 新しい置き場が、castlist に登録の無い送り手を断る訳の頭（pagetray の docs/src/next.md の「送り手」）。
+ * 日本語の字で見分ける: roster はいつも日本語を頼む（clients.ts の askingJapanese）ので、置き場の既定の言語が英語でも、この字で届く（AI-48）。
+ */
 const UNREGISTERED = 'castlist に登録の無い送り手';
 
 /**

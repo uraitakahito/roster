@@ -89,3 +89,9 @@ export function legacyEnvNotice(env: NodeJS.ProcessEnv): string[] {
 
 /** env から roster の環境変数をみな抜いた物（試験が起こす roster に、試験を流す担当の居場所の物を渡さないため）。 */
 export const withoutRosterEnv = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv => withEnv(env, Object.fromEntries(ENV_NAMES.map(name => [name, undefined])));
+
+/**
+ * roster が、castlist・pagetray とその CLI に頼む言語（AI-48）。roster の出す文と担当が読む誤りの文は日本語なので、いつも日本語。
+ * 頼みの頭（clients.ts の askingJapanese の Accept-Language）と、担当に渡す環境変数（PAGETRAY_LANG）に使う。
+ */
+export const ASK_LANGUAGE = 'ja';

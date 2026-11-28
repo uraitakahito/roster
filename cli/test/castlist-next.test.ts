@@ -13,7 +13,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from 'vite
 import type * as Castlist from '../gen/castlist-client/dist-types/index.js';
 import { castlistClient, castlistIssuer, projectPrefix, registerPm } from '../src/castlist.ts';
 import { TpmError } from '../src/skill-sets.ts';
-import { withoutAwsMiddleware } from '../src/clients.ts';
+import { askingJapanese, withoutAwsMiddleware } from '../src/clients.ts';
 import { castlistGuard, readSession, sessionStart } from '../src/commands/castlist.ts';
 import type { Context } from '../src/context.ts';
 import { withoutRosterEnv } from '../src/env.ts';
@@ -107,6 +107,8 @@ describe('castlist の client を作る所（castlistClient）', () => {
     expect(seen.length).toBe(1);
     expect(seen[0]?.headers.host).toBe(new URL(url).host);
     expect(seen[0]?.headers.origin).toBeUndefined();
+    // 誤りの文は日本語を頼む（castlist の既定の言語は英語。AI-48）。
+    expect(seen[0]?.headers['accept-language']).toBe('ja');
   });
 
   test('AWS_MAX_ATTEMPTS=5・AWS_RETRY_MODE・~/.aws/config の max_attempts を置いても、1 度しか送らない', async () => {
@@ -199,6 +201,24 @@ describe('castlist の client の守り（review-33）', () => {
     const message = await registerPm(seat, dead).then(() => '', (e: unknown) => (e as Error).message);
     expect(message).toMatch(/^生成した client から recursionDetectionMiddleware を外せない（@aws-sdk\/core の名が替わった。/);
     expect(message).not.toMatch(/pnpm install/);
+  });
+
+  test('頼みに headers が無ければ、言語を付けずに通さず、その訳で止まる（@smithy の頼みの形が替わった時。review-3）', () => {
+    let added: ((next: (args: unknown) => unknown) => (args: unknown) => unknown) | undefined;
+    askingJapanese({ middlewareStack: { add: (...args: never[]) => {
+      added = args[0];
+    } } });
+    const sent: unknown[] = [];
+    const run = added?.((args) => {
+      sent.push(args);
+      return 'ok';
+    });
+    const request = { headers: { host: '127.0.0.1' } as Record<string, string> };
+    expect(run?.({ request })).toBe('ok');
+    expect(request.headers['accept-language']).toBe('ja');
+    expect(() => run?.({ request: {} })).toThrow(TpmError);
+    expect(() => run?.({ request: {} })).toThrow(/Accept-Language を付けられない/);
+    expect(sent).toHaveLength(1);
   });
 
   test('AWS の Lambda の頭の middleware を外せなければ止まり、外せば _X_AMZN_TRACE_ID を置いても X-Amzn-Trace-Id を付けない', async () => {
