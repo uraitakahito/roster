@@ -1,4 +1,4 @@
-// guard の (7): Chrome の直起こしを止める（t-qx3r。台帳 #402・#403）。試験は字を judge に渡すだけで、命令は打たない。
+// guard の (8): Chrome の直起こしを止める（t-qx3r。台帳 #402・#403）。試験は字を judge に渡すだけで、命令は打たない。
 import { describe, expect, test } from 'vitest';
 import { judge } from '../src/guard.ts';
 import { chromeLaunch, chromeSuggestion } from '../src/guard-chrome.ts';

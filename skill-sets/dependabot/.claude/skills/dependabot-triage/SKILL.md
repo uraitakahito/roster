@@ -98,7 +98,7 @@ Sustaining Engineer 担当の手順（`${CLAUDE_SKILL_DIR}/../sustaining-enginee
 - 応じた印は 👍。時間は決まっていない（実測で 20 分無反応のことがある）。Sustaining Engineer 担当は `config.rebaseWaitMinutes` 分待って越えたら【not-yet】か【ask-tpm】を送ってくる。
 - group の PR は閉じて新しい番号で作り直されることがある。判定は変わらないので、**新しい番号で引き継ぐ**（【recreated】）。
 - rebase で audit がいまの勧告の DB で流れ直し、緑の PR が赤になることがある。新しい勧告で audit が赤の間は、衝突していない PR を rebase させない。
-- 人が commit を足した PR は Dependabot がもう rebase しない（`[dependabot skip]` の印の commit なら上書きされる）。その PR では rebase を打たせず、worktree で `origin/main` を merge して push させる（force push はしない）。
+- 人が commit を足した PR は Dependabot がもう rebase しない（`[dependabot skip]` の印の commit なら上書きされる）。その PR では rebase を打たせず、worktree で `origin/main` を merge して `roster push` で push させる（force push はしない）。
 - 衝突は Dependabot が頼まなくても自分で rebase する。まず数分待たせる。
 - merge されないまま 30 日たった PR は、Dependabot がもう rebase しない（公式）。
 

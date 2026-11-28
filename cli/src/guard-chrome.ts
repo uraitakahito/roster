@@ -1,4 +1,4 @@
-// guard の (7): Chrome・Chromium のバイナリを Bash で直に起こす命令を、旗があっても止め、roster chrome を案内する（t-qx3r。台帳 #402・#403）。
+// guard の (8): Chrome・Chromium のバイナリを Bash で直に起こす命令を、旗があっても止め、roster chrome を案内する（t-qx3r。台帳 #402・#403）。
 // 直に起こすと、旗を書き忘れた時に Chrome が macOS の keychain を読もうとし、Product Manager の画面にダイアログが出る。
 // 起こす道を roster chrome 1 つにし、旗は roster chrome が付ける。guard.ts とは別の file に置く（同じ時に guard を直す課題とぶつかりにくく）。
 // 見るのは Bash の字だけ。script・node の child_process の中から起こす Chrome は見えない（守りは「うっかり」まで）。

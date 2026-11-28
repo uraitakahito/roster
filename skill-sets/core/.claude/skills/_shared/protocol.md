@@ -296,7 +296,8 @@ GitHub の側が終わるのを待つ仕事（PR の CI・merge の後の main �
 - 20（まだ）で終わったら、もう 1 度見張る。2 度続けて過ぎたら、`roster ask tpm` で知らせる。
 - 今の様子を 1 回だけ見るなら `--timeout 0`（待たずに終わる）。
 - `gh pr checks --watch`・`gh run watch`・`sleep` で待たない。check の数でも待たない。例外は 1 つ: main で落ちた workflow を `gh workflow run` で流し直した回は、新しい回が作られたのを `createdAt` で確かめてから、`gh run watch <回の id> --exit-status` を裏で起こして待つ（表で打たない。打ってすぐの `roster watch main` は、前の落ちた回を見て終わる。手順は `/software-engineer` の 2）。
-- **GitHub が応えない時**: `gh`・`git push`・`git fetch` が、5xx や繋がらない誤りで落ちたら、打ち直しを続けない。`roster watch github --repo <落ちた手の owner/repo>` を裏で起こして手を止め、「戻った」（0）で起こされてから、落ちた命令を打ち直す。GitHub の障害は一部だけのことが多く、「戻った」の後も merge・push がまだ落ちることがある。打ち直しがまた落ちたら、もう 1 度見張る。20 で終わったら `roster ask tpm` で知らせる（既定で 2 時間待った後なので、1 度で知らせる）。PR の CI を見張っている間に GitHub が落ちた時は、`roster watch pr` が聞き直し続けるので、何もしなくてよい。
+- **push は `roster push` を裏で起こす**（確かめを流して数十秒かかりうるため）。担当の席の素の `git push` は guard が止める（branch を消すだけの push は通す。release の tag は `roster push --tag <tag>`）。終了コード: 0 = push した・10 = 確かめが落ちた・1 = 断った・2 = `git fetch` か `git push` が落ちた（fetch なら確かめは流していない。下の「GitHub が応えない時」）。打ち方は `/software-engineer` の 2。
+- **GitHub が応えない時**: `gh`・`roster push`（終了コード 2）・`git fetch` が、5xx や繋がらない誤りで落ちたら、打ち直しを続けない。`roster watch github --repo <落ちた手の owner/repo>` を裏で起こして手を止め、「戻った」（0）で起こされてから、落ちた命令を打ち直す。GitHub の障害は一部だけのことが多く、「戻った」の後も merge・push がまだ落ちることがある。打ち直しがまた落ちたら、もう 1 度見張る。20 で終わったら `roster ask tpm` で知らせる（既定で 2 時間待った後なので、1 度で知らせる）。PR の CI を見張っている間に GitHub が落ちた時は、`roster watch pr` が聞き直し続けるので、何もしなくてよい。
 - merge したら、先に `roster watch main <PR の URL>` を裏で起こして待ち、終わってから `roster report merged`（`roster report doc-fix`）を打つ。命令も、merge の後の main の workflow を見て、結果を本文に足す。merge から 2 分の内と、まだ動いている回がある間は、止まる（落ちた回がもう在っても。みな終わってから送る）。止まったら、`roster watch main <PR の URL>` を裏で起こして待ち、終わってから打ち直す。`--unchecked` は、merge の確かめも main の workflow の確かめも外すので、`gh` で読めない PR の時だけ使う。
 
 ## アクターの台帳（castlist）
